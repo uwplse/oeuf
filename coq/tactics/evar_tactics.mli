@@ -1,0 +1,17 @@
+(************************************************************************)
+(*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2014     *)
+(*   \VV/  **************************************************************)
+(*    //   *      This file is distributed under the terms of the       *)
+(*         *       GNU Lesser General Public License Version 2.1        *)
+(************************************************************************)
+
+open Tacmach
+open Names
+open Tacexpr
+open Termops
+
+val instantiate : int -> Tacinterp.interp_sign * Glob_term.glob_constr ->
+  (identifier * hyp_location_flag, unit) location -> tactic
+
+val let_evar : name -> Term.types -> tactic

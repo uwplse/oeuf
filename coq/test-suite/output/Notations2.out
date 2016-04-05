@@ -1,0 +1,54 @@
+2 3
+     : PAIR
+2[+]3
+     : nat
+forall (A : Set) (le : A -> A -> Prop) (x y : A), le x y \/ le y x
+     : Prop
+match (0, 0, 0) with
+| (x, y, z) => x + y + z
+end
+     : nat
+let '(a, _, _) := (2, 3, 4) in a
+     : nat
+exists myx (y : bool), myx = y
+     : Prop
+fun (P : nat -> nat -> Prop) (x : nat) => exists x0, P x x0
+     : (nat -> nat -> Prop) -> nat -> Prop
+∃ n p : nat, n + p = 0
+     : Prop
+let a := 0 in
+∃ x y : nat,
+let b := 1 in
+let c := b in
+let d := 2 in ∃ z : nat, let e := 3 in let f := 4 in x + y = z + d
+     : Prop
+∀ n p : nat, n + p = 0
+     : Prop
+Identifier 'λ' now a keyword
+λ n p : nat, n + p = 0
+     : nat -> nat -> Prop
+λ (A : Type) (n p : A), n = p
+     : ∀ A : Type, A -> A -> Prop
+λ A : Type, ∃ n p : A, n = p
+     : Type -> Prop
+λ A : Type, ∀ n p : A, n = p
+     : Type -> Prop
+Identifier 'let'' now a keyword
+let' f (x y : nat) (a:=0) (z : nat) (_ : bool) := x + y + z + 1 in f 0 1 2
+     : bool -> nat
+λ (f : nat -> nat) (x : nat), f(x) + S(x)
+     : (nat -> nat) -> nat -> nat
+Notation plus2 n := (S (S n))
+λ n : list(nat),
+match n with
+| nil => 2
+| 0 :: _ => 2
+| list1 => 0
+| 1 :: _ :: _ => 2
+| plus2 _ :: _ => 2
+end
+     : list(nat) -> nat
+# x : nat => x
+     : nat -> nat
+# _ : nat => 2
+     : nat -> nat

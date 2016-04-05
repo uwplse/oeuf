@@ -1,0 +1,138 @@
+true ? 0; 1
+     : nat
+if true as x return (x ? nat; bool) then 0 else true
+     : nat
+Identifier 'proj1' now a keyword
+fun e : nat * nat => proj1 e
+     : nat * nat -> nat
+Identifier 'decomp' now a keyword
+decomp (true, true) as t, u in (t, u)
+     : bool * bool
+!(0 = 0)
+     : Prop
+forall n : nat, n = 0
+     : Prop
+!(0 = 0)
+     : Prop
+forall n : nat, #(n = n)
+     : Prop
+forall n n0 : nat, ##(n = n0)
+     : Prop
+forall n n0 : nat, ###(n = n0)
+     : Prop
+3 + 3
+     : Z
+3 + 3
+     : znat
+[1; 2; 4]
+     : list nat
+(1; 2, 4)
+     : nat * nat * nat
+Identifier 'ifzero' now a keyword
+ifzero 3
+     : bool
+Identifier 'pred' now a keyword
+pred 3
+     : nat
+fun n : nat => pred n
+     : nat -> nat
+fun n : nat => pred n
+     : nat -> nat
+Identifier 'ifn' now a keyword
+Identifier 'is' now a keyword
+fun x : nat => ifn x is succ n then n else 0
+     : nat -> nat
+1-
+     : bool
+-4
+     : Z
+The command has indeed failed with message:
+=> Error: x should not be bound in a recursive pattern of the right-hand side.
+The command has indeed failed with message:
+=> Error: in the right-hand side, y and z should appear in
+   term position as part of a recursive pattern.
+The command has indeed failed with message:
+=> Error: The reference w was not found in the current environment.
+The command has indeed failed with message:
+=> Error: x is unbound in the right-hand side.
+The command has indeed failed with message:
+=> Error: in the right-hand side, y and z should appear in
+   term position as part of a recursive pattern.
+The command has indeed failed with message:
+=> Error: z is expected to occur in binding position in the right-hand side.
+The command has indeed failed with message:
+=> Error: as y is a non-closed binder, no such "," is allowed to occur.
+The command has indeed failed with message:
+=> Error: Cannot find where the recursive pattern starts.
+The command has indeed failed with message:
+=> Error: Cannot find where the recursive pattern starts.
+The command has indeed failed with message:
+=> Error: Cannot find where the recursive pattern starts.
+The command has indeed failed with message:
+=> Error: Cannot find where the recursive pattern starts.
+The command has indeed failed with message:
+=> Error: Both ends of the recursive pattern are the same.
+SUM (nat * nat) nat
+     : Set
+FST (0; 1)
+     : Z
+Nil
+     : forall A : Type, list A
+NIL:list nat
+     : list nat
+Identifier 'I' now a keyword
+(false && I 3)%bool /\ I 6
+     : Prop
+[|1, 2, 3; 4, 5, 6|]
+     : Z * Z * Z * (Z * Z * Z)
+[|0 * (1, 2, 3); (4, 5, 6) * false|]
+     : Z * Z * (Z * Z) * (Z * Z) * (Z * bool * (Z * bool) * (Z * bool))
+fun f : Z -> Z -> Z -> Z => {|f; 0; 1; 2|}:Z
+     : (Z -> Z -> Z -> Z) -> Z
+plus
+     : nat -> nat -> nat
+S
+     : nat -> nat
+mult
+     : nat -> nat -> nat
+le
+     : nat -> nat -> Prop
+plus
+     : nat -> nat -> nat
+succ
+     : nat -> nat
+mult
+     : nat -> nat -> nat
+le
+     : nat -> nat -> Prop
+fun x : option Z => match x with
+                    | SOME x0 => x0
+                    | NONE => 0
+                    end
+     : option Z -> Z
+fun x : option Z => match x with
+                    | SOME2 x0 => x0
+                    | NONE2 => 0
+                    end
+     : option Z -> Z
+fun x : option Z => match x with
+                    | SOME3 x0 => x0
+                    | NONE3 => 0
+                    end
+     : option Z -> Z
+s
+     : s
+Identifier 'foo' now a keyword
+10
+     : nat
+fun _ : nat => 9
+     : nat -> nat
+Identifier 'ONE' now a keyword
+fun (x : nat) (p : x = x) => match p with
+                             | ONE => ONE
+                             end = p
+     : forall x : nat, x = x -> Prop
+fun (x : nat) (p : x = x) => match p with
+                             | 1 => 1
+                             end = p
+     : forall x : nat, x = x -> Prop
