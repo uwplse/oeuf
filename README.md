@@ -1,2 +1,2 @@
-# oeuf
+# Oeuf
 gallina frontend for CompCert
