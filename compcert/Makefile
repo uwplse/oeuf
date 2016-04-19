@@ -17,9 +17,9 @@ include Makefile.config
 
 DIRS=lib common $(ARCH) backend cfrontend driver debug\
   flocq/Core flocq/Prop flocq/Calc flocq/Appli exportclight \
-  cparser cparser/validator
+  cparser cparser/validator gallina
 
-RECDIRS=lib common $(ARCH) backend cfrontend driver flocq exportclight cparser
+RECDIRS=lib common $(ARCH) backend cfrontend driver flocq exportclight cparser gallina
 
 COQINCLUDES=$(foreach d, $(RECDIRS), -R $(d) -as compcert.$(d))
 
@@ -95,7 +95,8 @@ CFRONTEND=Ctypes.v Cop.v Csyntax.v Csem.v Ctyping.v Cstrategy.v Cexec.v \
   SimplExpr.v SimplExprspec.v SimplExprproof.v \
   Clight.v ClightBigstep.v SimplLocals.v SimplLocalsproof.v \
   Cshmgen.v Cshmgenproof.v \
-  Csharpminor.v Cminorgen.v Cminorgenproof.v
+  Csharpminor.v Cminorgen.v Cminorgenproof.v \
+  Gallina.v Fib.v Oeuf.v
 
 # LR(1) parser validator
 

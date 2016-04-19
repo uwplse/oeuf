@@ -564,6 +564,9 @@ Proof.
   traceEq.
 Qed.
 
+Print bigstep_sound.
+Print semantics1.
+
 Theorem bigstep_semantics_sound:
   bigstep_sound (bigstep_semantics prog) (semantics1 prog).
 Proof.

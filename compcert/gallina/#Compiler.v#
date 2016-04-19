@@ -1,0 +1,16 @@
+Require Import Compiler.
+Require Import Gallina.
+Require Import Fib.
+
+
+
+
+Definition transf_program_to_asm := fun x => transf_clight_program (transf_program x).
+
+Eval cbv in (transf_program fib_prog).
+
+Definition transf_fib := transf_program_to_asm fib_prog.
+
+Recursive Extraction transf_fib.
+
+Check transf_fib.

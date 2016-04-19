@@ -31,6 +31,7 @@ Require Compiler.
 Require Parser.
 Require Initializers.
 Require Int31.
+Require Oeuf.
 
 (* Standard lib *)
 Require Import ExtrOcamlBasic.
@@ -165,4 +166,6 @@ Separate Extraction
    Machregs.two_address_op Machregs.is_stack_reg
    AST.signature_main
    AST.transform_partial_ident_program
+   Oeuf.transf_gallina_to_asm
+   Oeuf.test_prog
    Parser.translation_unit_file.
