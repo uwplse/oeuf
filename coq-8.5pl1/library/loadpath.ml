@@ -1,0 +1,118 @@
+(************************************************************************)
+(*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
+(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2016     *)
+(*   \VV/  **************************************************************)
+(*    //   *      This file is distributed under the terms of the       *)
+(*         *       GNU Lesser General Public License Version 2.1        *)
+(************************************************************************)
+
+open Pp
+open Util
+open Errors
+open Names
+open Libnames
+
+(** Load paths. Mapping from physical to logical paths. *)
+
+type t = {
+  path_physical : CUnix.physical_path;
+  path_logical : DirPath.t;
+  path_implicit : bool;
+}
+
+let load_paths = Summary.ref ([] : t list) ~name:"LOADPATHS"
+
+let logical p = p.path_logical
+
+let physical p = p.path_physical
+
+let get_load_paths () = !load_paths
+
+let anomaly_too_many_paths path =
+  anomaly (str "Several logical paths are associated to" ++ spc () ++ str path)
+
+let find_load_path phys_dir =
+  let phys_dir = CUnix.canonical_path_name phys_dir in
+  let filter p = String.equal p.path_physical phys_dir in
+  let paths = List.filter filter !load_paths in
+  match paths with
+  | [] -> raise Not_found
+  | [p] -> p
+  | _ -> anomaly_too_many_paths phys_dir
+
+let is_in_load_paths phys_dir =
+  let dir = CUnix.canonical_path_name phys_dir in
+  let lp = get_load_paths () in
+  let check_p p = String.equal dir p.path_physical in
+  List.exists check_p lp
+
+let remove_load_path dir =
+  let filter p = not (String.equal p.path_physical dir) in
+  load_paths := List.filter filter !load_paths
+
+let add_load_path phys_path coq_path ~implicit =
+  let phys_path = CUnix.canonical_path_name phys_path in
+  let filter p = String.equal p.path_physical phys_path in
+  let binding = {
+    path_logical = coq_path;
+    path_physical = phys_path;
+    path_implicit = implicit;
+  } in
+  match List.filter filter !load_paths with
+  | [] ->
+    load_paths := binding :: !load_paths
+  | [{ path_logical = old_path; path_implicit = old_implicit }] ->
+    let replace =
+      if DirPath.equal coq_path old_path then
+        implicit <> old_implicit
+      else if DirPath.equal coq_path (Nameops.default_root_prefix)
+              && String.equal phys_path (CUnix.canonical_path_name Filename.current_dir_name) then
+        false (* This is the default "-I ." path, don't override the old path *)
+      else
+        let () =
+          (* Do not warn when overriding the default "-I ." path *)
+          if not (DirPath.equal old_path Nameops.default_root_prefix) then
+            msg_warning
+              (str phys_path ++ strbrk " was previously bound to " ++
+                 pr_dirpath old_path ++ strbrk "; it is remapped to " ++
+                 pr_dirpath coq_path) in
+        true in
+    if replace then
+      begin
+        remove_load_path phys_path;
+        load_paths := binding :: !load_paths;
+      end
+  | _ -> anomaly_too_many_paths phys_path
+
+let extend_path_with_dirpath p dir =
+  List.fold_left Filename.concat p
+    (List.rev_map Id.to_string (DirPath.repr dir))
+
+let filter_path f =
+  let rec aux = function
+  | [] -> []
+  | p :: l ->
+    if f p.path_logical then (p.path_physical, p.path_logical) :: aux l
+    else aux l
+  in
+  aux !load_paths
+
+let expand_path dir =
+  let rec aux = function
+  | [] -> []
+  | { path_physical = ph; path_logical = lg; path_implicit = implicit }  :: l ->
+    match implicit with
+    | true ->
+      (** The path is implicit, so that we only want match the logical suffix *)
+      if is_dirpath_suffix_of dir lg then (ph, lg) :: aux l else aux l
+    | false ->
+      (** Otherwise we must match exactly *)
+      if DirPath.equal dir lg then (ph, lg) :: aux l else aux l
+  in
+  aux !load_paths
+
+let locate_file fname =
+  let paths = List.map physical !load_paths in
+  let _,longfname =
+    System.find_file_in_path ~warn:(Flags.is_verbose()) paths fname in
+  longfname

@@ -1,0 +1,143 @@
+
+
+HISTORY:
+-------
+
+* July 2007 (Pierre Corbineau & Lionel Elie Mamane).
+  Inclusion of a build system with 3 explicit phases:
+  - Makefile.stage1: ocamldep, sed, camlp4 without Coq grammar extension
+  - Makefile.stage2: camlp4 with grammar.cma or q_constr.cmo
+  - Makefile.stage3: coqdep (.vo)
+
+* March 2010 (Pierre Letouzey).
+  Revised build system. In particular, no more stage1,2,3 :
+  - Stage3 was removed some time ago when coqdep was splitted into
+    coqdep_boot and full coqdep.
+  - Stage1,2 were replaced by brutal inclusion of all .d at the start
+    of Makefile.build, without trying to guess what could be done at
+    what time. Some initial inclusions hence _fail_, but "make" tries
+    again later and succeed.
+  - Btw, .ml4 are explicitely turned into .ml files, which stay after build.
+    By default, they are in binary ast format, see READABLE_ML4 option.
+
+* February 2014 (Pierre Letouzey).
+  Another revision of the build system. We avoid relying on the awkward
+  include-which-fails-but-works-finally-after-a-retry feature of gnu make.
+  This was working, but was quite hard to understand. Instead, we reuse
+  the idea of two explicit phases, but in a lighter way than in 2007.
+  The main Makefile calls Makefile.build twice :
+  - first for building grammar.cma (and q_constr.cmo), with a
+    restricted set of .ml4 (see variable BUILDGRAMMAR).
+  - then on the true target asked by the user.
+
+    
+---------------------------------------------------------------------------
+
+
+This file documents internals of the implementation of the build
+system. For what a Coq developer needs to know about the build system,
+see build-system.txt .
+
+.ml4 files
+----------
+
+.ml4 are converted to .ml by camlp4. By default, they are produced
+in the binary ast format understood by ocamlc/ocamlopt/ocamldep.
+Pros:
+ - faster than parsing clear-text source file.
+ - no risk of editing them by mistake instead of the .ml4
+ - the location in the binary .ml are those of the initial .ml4,
+   hence errors are properly reported in the .ml4.
+Cons:
+ - This format may depend on your ocaml version, they should be
+   cleaned if you change your build environment.
+ - Unreadable in case you want to inspect this generated code.
+   For that, use make with the READABLE_ML4=1 option to switch to
+   clear-text generated .ml.
+
+
+Makefiles hierachy
+------------------
+
+Le Makefile a été séparé en plusieurs fichiers :
+
+- Makefile: coquille vide qui lançant Makefile.build sauf pour
+  clean et quelques petites choses ne nécessitant par de calculs
+  de dépendances.
+- Makefile.common : définitions des variables (essentiellement des
+  listes de fichiers)
+- Makefile.build : contient les regles de compilation, ainsi que
+  le "include" des dépendances (restreintes ou non selon la variable
+  BUILDGRAMMAR).
+- Makefile.doc : regles specifiques à la compilation de la documentation.
+
+
+Parallélisation
+---------------
+
+Il y a actuellement un double appel interne à "make -f Makefile.build",
+d'abord pour construire grammar.cma/q_constr.cmo, puis le reste.
+Cela signifie que ce makefile est un petit peu moins parallélisable
+que strictement possible en théorie: par exemple, certaines choses
+faites lors du second make pourraient être faites en parallèle avec
+le premier. En pratique, ce premier make va suffisemment vite pour
+que cette limitation soit peu gênante.
+
+
+FIND_VCS_CLAUSE
+---------------
+
+The recommended style of using FIND_VCS_CLAUSE is for example
+
+ find . $(FIND_VCS_CLAUSE) '(' -name '*.example' ')' -print
+ find . $(FIND_VCS_CLAUSE) '(' -name '*.example' -or -name '*.foo' ')' -print
+
+1)
+The parentheses even in the one-criteria case is so that if one adds
+other conditions, e.g. change the first example to the second
+
+ find . $(FIND_VCS_CLAUSE) '(' -name '*.example' -and -not -name '*.bak.example' ')' -print
+
+one is not tempted to write
+
+ find . $(FIND_VCS_CLAUSE) -name '*.example' -and -not -name '*.bak.example' -print
+
+because this will not necessarily work as expected; $(FIND_VCS_CLAUSE)
+ends with an -or, and how it combines with what comes later depends on
+operator precedence and all that. Much safer to override it with
+parentheses.
+
+In short, it protects against the -or one doesn't see.
+
+2)
+As to the -print at the end, yes it is necessary. Here's why.
+
+You are used to write:
+ find . -name '*.example'
+and it works fine. But the following will not:
+ find . $(FIND_VCS_CLAUSE) -name '*.example'
+it will also list things directly matched by FIND_VCS_CLAUSE
+(directories we want to prune, in which we don't want to find
+anything). C'est subtil... Il y a effectivement un -print implicite à
+la fin, qui fait que la commande habituelle sans print fonctionne
+bien, mais dès que l'on introduit d'autres commandes dans le lot (le
+-prune de FIND_VCS_CLAUSE), ça se corse à cause d'histoires de
+parenthèses du -print implicite par rapport au parenthésage dans la
+forme recommandée d'utilisation:
+
+Si on explicite le -print et les parenthèses implicites, cela devient:
+
+find . '(' '(' '(' -name .git -or -name debian ')' -prune ')' -or \
+           '(' -name '*.example' ')'
+       ')'
+       -print
+
+Le print agit TOUT ce qui précède, soit sur ce qui matche "'(' -name
+.git -or -name debian ')'" ET sur ce qui matche "'(' -name '*.example' ')'".
+
+alors qu'ajouter le print explicite change cela en
+
+find . '(' '(' -name .git -or -name debian ')' -prune ')' -or \
+       '(' '(' -name '*.example' ')' -print ')'
+
+Le print n'agit plus que sur ce qui matche "'(' -name '*.example' ')'"

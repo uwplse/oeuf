@@ -1,0 +1,56 @@
+t_rect = 
+fun (P : t -> Type) (f : let x := t in forall x0 : x, P x0 -> P (k x0)) =>
+fix F (t : t) : P t :=
+  match t as t0 return (P t0) with
+  | @k _ x0 => f x0 (F x0)
+  end
+     : forall P : t -> Type,
+       (let x := t in forall x0 : x, P x0 -> P (k x0)) -> forall t : t, P t
+     = fun d : TT => match d with
+                     | @CTT _ _ b => b
+                     end
+     : TT -> 0 = 0
+     = fun d : TT => match d with
+                     | @CTT _ _ b => b
+                     end
+     : TT -> 0 = 0
+proj = 
+fun (x y : nat) (P : nat -> Type) (def : P x) (prf : P y) =>
+match Nat.eq_dec x y with
+| left eqprf => match eqprf in (_ = z) return (P z) with
+                | eq_refl => def
+                end
+| right _ => prf
+end
+     : forall (x y : nat) (P : nat -> Type), P x -> P y -> P y
+
+Argument scopes are [nat_scope nat_scope _ _ _]
+foo = 
+fix foo (A : Type) (l : list A) {struct l} : option A :=
+  match l with
+  | nil => None
+  | x0 :: nil => Some x0
+  | x0 :: (_ :: _) as l0 => foo A l0
+  end
+     : forall A : Type, list A -> option A
+
+Argument scopes are [type_scope list_scope]
+uncast = 
+fun (A : Type) (x : I A) => match x with
+                            | x0 <: _ => x0
+                            end
+     : forall A : Type, I A -> A
+
+Argument scopes are [type_scope _]
+foo' = if A 0 then true else false
+     : bool
+f = 
+fun H : B =>
+match H with
+| AC x =>
+    (let b0 := b in
+     if b0 as b return (P b -> True)
+     then fun _ : P true => Logic.I
+     else fun _ : P false => Logic.I) x
+end
+     : B -> True

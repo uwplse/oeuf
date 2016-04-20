@@ -1,0 +1,7 @@
+#!/bin/sh
+
+MAKE="${MAKE:=make}"
+
+${MAKE} clean > /dev/null 2>&1
+${MAKE} all > /dev/null 2>&1
+cat summary.log
