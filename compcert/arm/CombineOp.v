@@ -83,12 +83,14 @@ Function combine_addr (addr: addressing) (args: list valnum) : option(addressing
   | _, _ => None
   end.
 
+
 Function combine_op (op: operation) (args: list valnum) : option(operation * list valnum) :=
   match op, args with
   | Oaddimm n, x :: nil =>
       match get x with
       | Some(Op (Oaddimm m) ys) => Some(Oaddimm (Int.add m n), ys)
       | Some(Op (Orsubimm m) ys) => Some(Orsubimm (Int.add m n), ys)
+      | Some(Op Onot ys) => Some(Orsubimm (Int.sub n Int.one), ys)
       | _ => None
       end
   | Orsubimm n, x :: nil =>

@@ -129,6 +129,17 @@ Proof.
   UseGetSound. simpl. rewrite <- H0. rewrite Val.add_assoc. auto.
 Qed.
 
+Lemma sub_not :
+  forall n v,
+    Val.sub (Vint (Int.sub n Int.one)) v = Val.add (Val.notint v) (Vint n).
+Proof.
+  intros.
+  unfold Val.sub. unfold Val.add.
+  destruct v; simpl; try reflexivity.
+  f_equal.
+  rewrite Int.sub_add_not. ring.
+Qed.
+
 Theorem combine_op_sound:
   forall op args op' args',
   combine_op get op args = Some(op', args') ->
@@ -143,6 +154,11 @@ Opaque Val.sub.
   UseGetSound. FuncInv. simpl.
   change (Vint (Int.add m0 n)) with (Val.add (Vint m0) (Vint n)).
   rewrite <- H0. rewrite Val.sub_add_l. auto.
+(* not sub -> rsub imm *)
+  UseGetSound. simpl.
+  rewrite <- H0.
+  f_equal.
+  apply sub_not.
 (* subimm - addimm *)
   UseGetSound. FuncInv. simpl. rewrite <- H0.
 Transparent Val.sub.
