@@ -1,7 +1,7 @@
 include ../../Makefile.config
 
 CCOMP=../../ccomp
-CCOMPFLAGS=-stdlib ../../runtime -dc -dclight -dasm
+CCOMPFLAGS=-stdlib ../../runtime -dc -dclight -drtl -dasm
 ifeq ($(CCHECKLINK),true)
 CCHECK=../../cchecklink
 CCOMPFLAGS+= -sdump
