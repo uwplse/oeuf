@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+
+DIRS=(compcert)
+NAMESPACE_compcert=compcert
+DEPS=()
+CANARIES=("compcert.backend.RTL" "Oeuf requires compcert to be built first.")
+EXTRA=()
+
+source ./coqproject.sh
