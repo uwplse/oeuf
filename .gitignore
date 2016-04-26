@@ -4,3 +4,4 @@
 *.aux
 *.v.d
 _CoqProject
+Makefile.coq
