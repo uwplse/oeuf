@@ -46,7 +46,7 @@ for dep in ${DEPS[@]}; do
     echo $LINE >> $COQPROJECT_TMP
 done
 
-for dir in ${DIRS[@]}; do
+for dir in ${LOCALDEPS[@]}; do
     namespace_var=NAMESPACE_"$dir"
     namespace_var=${namespace_var//./_}
     namespace=${!namespace_var:="\"\""}
@@ -68,6 +68,13 @@ while [ $i -lt $len ]; do
     let "i+=2"
 done
 
+for dir in ${DIRS[@]}; do
+    namespace_var=NAMESPACE_"$dir"
+    namespace_var=${namespace_var//./_}
+    namespace=${!namespace_var:="\"\""}
+    LINE="-Q $dir $namespace"
+    echo $LINE >> $COQPROJECT_TMP
+done
 
 for dir in ${DIRS[@]}; do
     echo >> $COQPROJECT_TMP

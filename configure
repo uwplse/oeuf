@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 
-DIRS=(compcert)
+DIRS=(src)
 NAMESPACE_compcert=compcert
+LOCALDEPS=(compcert)
 DEPS=()
 CANARIES=("compcert.backend.RTL" "Oeuf requires compcert to be built first.")
 EXTRA=()
