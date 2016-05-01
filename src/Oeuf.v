@@ -108,14 +108,14 @@ Definition reflection_sim {ty} (reflection : expr.syntax ty) : Prop :=
   forall ge fn c env m,
     let origstate := ExprState fn (ID.id (compiler.compile reflection)) c env m in
     let v :=
-        match ty with
-        | int => (Csyntax.Eval (Values.Vint (expr.denote reflection)) compiler.Tint)
-        | bool =>
-          if (ID.id (expr.denote reflection)) then
+        match ty as ty0 return expr.syntax ty0 -> _ with
+        | type.int => fun r => (Csyntax.Eval (Values.Vint (expr.denote r)) compiler.Tint)
+        | type.bool => fun r =>
+          if (ID.id (expr.denote r)) then
             Csyntax.Eval (Values.Vtrue) compiler.Tint
           else
             Csyntax.Eval (Values.Vfalse) compiler.Tint
-        end
+        end reflection
           in
     let finstate := ExprState fn v c env m in
     star Cstrategy.estep ge origstate Events.E0 finstate.
