@@ -124,10 +124,10 @@ Ltac take_step :=
   eapply star_step with (t1 := Events.E0) (t2 := Events.E0); [| |reflexivity].
 
 Ltac post_step :=
-  try match goal with
-  | [  |- leftcontext _ _ _ ] => solve [constructor]
+  try solve [match goal with
+  | [  |- leftcontext _ _ _ ] => constructor
   | [  |- eval_simple_rvalue _ _ _ _ _ ] => repeat econstructor
-  end.
+  end].
 
 
 (* compiled foo steps to denoted foo *)
@@ -138,17 +138,16 @@ Proof.
   intros.
   simpl.
 
-  take_step.
   (* first step *)
+  take_step.
   eapply step_condition with (b := true); post_step.
   reflexivity.
 
   (* second step *)
   take_step.
-
   eapply step_paren; post_step.
   reflexivity.
 
   (* no more steps *)
-  eapply star_refl.
+  apply star_refl.
 Qed.
