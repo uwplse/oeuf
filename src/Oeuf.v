@@ -120,6 +120,15 @@ Definition reflection_sim {ty} (reflection : expr.syntax ty) : Prop :=
     let finstate := ExprState fn v c env m in
     star Cstrategy.estep ge origstate Events.E0 finstate.
 
+Ltac take_step :=
+  eapply star_step with (t1 := Events.E0) (t2 := Events.E0); [| |reflexivity].
+
+Ltac post_step :=
+  try match goal with
+  | [  |- leftcontext _ _ _ ] => solve [constructor]
+  | [  |- eval_simple_rvalue _ _ _ _ _ ] => repeat econstructor
+  end.
+
 
 (* compiled foo steps to denoted foo *)
 Lemma eval_foo :
@@ -128,32 +137,18 @@ Proof.
   unfold reflection_sim.
   intros.
   simpl.
-  econstructor.
+
+  take_step.
   (* first step *)
-  eapply step_condition.
-  econstructor; eauto.
-  repeat (econstructor; simpl; eauto).
-  simpl.
-  replace (Int.add 3 7) with (Int.repr 10) by ring.
-  rewrite Int.eq_true. simpl.
-  unfold Values.Vtrue. unfold Cop.bool_val.
-  simpl. reflexivity.
-  2: simpl; reflexivity.
+  eapply step_condition with (b := true); post_step.
+  reflexivity.
 
   (* second step *)
-  econstructor.
+  take_step.
 
-  unfold Int.one. unfold Int.zero.
-  replace (Int.eq 1 0) with false. simpl.
-  replace (Int.add 3 7) with (Int.repr 10) by ring.
-  eapply step_paren; eauto. econstructor; eauto.
-  econstructor; eauto. simpl.
-  cbn. reflexivity.
-  unfold Int.eq. unfold Coqlib.zeq.
-  replace (Int.unsigned 1) with (1%Z) by auto.
-  replace (Int.unsigned 0) with (0%Z) by auto.
-  simpl. reflexivity.
+  eapply step_paren; post_step.
+  reflexivity.
 
   (* no more steps *)
-  eapply star_refl. simpl. eauto.
-Qed.  
+  eapply star_refl.
+Qed.
