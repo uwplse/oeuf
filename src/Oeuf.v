@@ -9,7 +9,7 @@ Module type.
   | int : syntax
   | bool : syntax.
 
-  Fixpoint denote (ty : syntax) : Type :=
+  Definition denote (ty : syntax) : Type :=
     match ty with
     | int => Int.int
     | bool => Datatypes.bool
@@ -103,13 +103,22 @@ Module ID.
 End ID.
 
 
-
 (* the compilation steps to the reflection *)
-Definition reflection_sim (reflection : expr.syntax type.int) : Prop :=
+Definition reflection_sim {ty} (reflection : expr.syntax ty) : Prop :=
   forall ge fn c env m,
-    let orig := ExprState fn (ID.id (compiler.compile reflection)) c env m in
-    let res := ExprState fn (Csyntax.Eval (Values.Vint (ID.id (expr.denote reflection))) compiler.Tint) c env m in
-    star Cstrategy.estep ge orig Events.E0 res.
+    let origstate := ExprState fn (ID.id (compiler.compile reflection)) c env m in
+    let v :=
+        match ty with
+        | int => (Csyntax.Eval (Values.Vint (expr.denote reflection)) compiler.Tint)
+        | bool =>
+          if (ID.id (expr.denote reflection)) then
+            Csyntax.Eval (Values.Vtrue) compiler.Tint
+          else
+            Csyntax.Eval (Values.Vfalse) compiler.Tint
+        end
+          in
+    let finstate := ExprState fn v c env m in
+    star Cstrategy.estep ge origstate Events.E0 finstate.
 
 
 (* compiled foo steps to denoted foo *)
