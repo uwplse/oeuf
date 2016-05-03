@@ -121,6 +121,7 @@ Definition reflection_sim {ty} (reflection : expr.syntax ty) : Prop :=
     star Cstrategy.estep ge origstate Events.E0 finstate.
 
 
+
 (* compiled foo steps to denoted foo *)
 Lemma eval_foo :
   reflection_sim reflect_foo.
@@ -157,3 +158,26 @@ Proof.
   (* no more steps *)
   eapply star_refl. simpl. eauto.
 Qed.  
+
+
+Lemma correctness :
+  forall {ty} (r : expr.syntax ty),
+    reflection_sim r.
+Proof.
+  induction r; intros;
+    unfold reflection_sim in *;
+    intros; simpl.
+  (* compiling an int literal *)
+  * eapply star_refl; eauto.
+  (* compiling an addition *)
+  * 
+
+    unfold reflection_sim in *.
+    
+    
+eapply star_one; eauto.
+    econstructor; simpl; eauto.
+    econstructor; eauto.
+    2: simpl.
+  
+  
