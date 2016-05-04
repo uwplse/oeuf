@@ -174,17 +174,18 @@ End ID.
 
 
 (* the compilation steps to the reflection *)
-Definition reflection_sim {ty} (reflection : expr.syntax ty) : Prop :=
+
+Definition reflection_sim {ty} (ctx : Csyntax.expr -> Csyntax.expr) (reflection : expr.syntax ty) : Prop :=
   forall ge fn c env m,
-    let origstate := ExprState fn (ID.id (compiler.compile reflection)) c env m in
+    let origstate := ExprState fn (ctx (compiler.compile reflection)) c env m in
     let v :=
         match ty as ty0 return expr.syntax ty0 -> _ with
-        | type.int => fun r => (Csyntax.Eval (Values.Vint (expr.denote r)) compiler.Tint)
+        | type.int => fun r => (ctx (Csyntax.Eval (Values.Vint (expr.denote r)) compiler.Tint))
         | type.bool => fun r =>
-          if (ID.id (expr.denote r)) then
-            Csyntax.Eval (Values.Vtrue) compiler.Tint
+          if (expr.denote r) then
+            ctx (Csyntax.Eval (Values.Vtrue) compiler.Tint)
           else
-            Csyntax.Eval (Values.Vfalse) compiler.Tint
+            ctx (Csyntax.Eval (Values.Vfalse) compiler.Tint)
         end reflection
           in
     let finstate := ExprState fn v c env m in
@@ -203,7 +204,7 @@ Ltac post_step :=
 
 (* compiled foo steps to denoted foo *)
 Lemma eval_foo :
-  reflection_sim reflect_foo.
+  reflection_sim ID.id reflect_foo.
 Proof.
   unfold reflection_sim.
   intros.
@@ -225,8 +226,8 @@ Qed.
 
 
 Lemma correctness :
-  forall {ty} (r : expr.syntax ty),
-    reflection_sim r.
+  forall {ty} (r : expr.syntax ty) c,
+    reflection_sim c r.
 Proof.
   induction r; intros;
     unfold reflection_sim in *;
@@ -234,7 +235,35 @@ Proof.
   (* compiling an int literal *)
   * eapply star_refl; eauto.
   (* compiling an addition *)
-  * 
+  * eapply star_trans.
+    3: instantiate (2 := Events.E0); simpl; reflexivity.
+    replace (c (Csyntax.Ebinop Cop.Oadd (compiler.compile r1) (compiler.compile r2) compiler.Tint)) with
+    ((fun l => (c (Csyntax.Ebinop Cop.Oadd l (compiler.compile r2) compiler.Tint))) (compiler.compile r1)) by (simpl; auto).
+    eapply (IHr1 (fun l => (c (Csyntax.Ebinop Cop.Oadd l (compiler.compile r2) compiler.Tint)))).
+    eapply star_trans.
+    3: instantiate (2 := Events.E0); simpl; reflexivity.
+    replace (c
+           (Csyntax.Ebinop Cop.Oadd
+              (Csyntax.Eval (Values.Vint (expr.denote r1)) compiler.Tint)
+              (compiler.compile r2) compiler.Tint))
+    with
+    ((fun r => (c
+           (Csyntax.Ebinop Cop.Oadd
+              (Csyntax.Eval (Values.Vint (expr.denote r1)) compiler.Tint)
+              r compiler.Tint))) (compiler.compile r2)) by (simpl; auto).
+    eapply (IHr2 ((fun r => (c
+           (Csyntax.Ebinop Cop.Oadd
+              (Csyntax.Eval (Values.Vint (expr.denote r1)) compiler.Tint)
+              r compiler.Tint))))).
+    eapply star_one.
+    
+    
+
+    SearchAbout star.
+    eapply star_left.
+    SearchAbout Csyntax.Ebinop.
+    
+    Print Cstrategy.estep.
 
     unfold reflection_sim in *.
     
