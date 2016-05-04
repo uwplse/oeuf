@@ -113,25 +113,85 @@ Module expr.
 
 End expr.
 
+Definition bool_to_int (b : bool) : int :=
+  if b then Int.one else Int.zero.
+
+(* Uni-typed IR whose main job is getting rid of the distinction between bool and int. *)
+Module IR.
+  Inductive syntax :=
+  | Const : int -> syntax
+  | Add : syntax -> syntax -> syntax
+  | Eq : syntax -> syntax -> syntax
+  | If : syntax -> syntax -> syntax -> syntax
+  .
+
+  Inductive step : syntax -> syntax -> Prop :=
+  | StepAddL : forall l l' r, step l l' -> step (Add l r) (Add l' r)
+  | StepAddR : forall l r r', step r r' -> step (Add l r) (Add l r')
+  | StepAdd : forall a b, step (Add (Const a) (Const b)) (Const (Int.add a b))
+  | StepEqL :  forall l l' r, step l l' -> step (Eq l r) (Eq l' r)
+  | StepEqR : forall l r r', step r r' -> step (Eq l r) (Eq l r')
+  | StepEq : forall a b, step (Eq (Const a) (Const b)) (Const (bool_to_int (Int.eq a b)))
+  | StepIf : forall e e' e1 e2, step e e' -> step (If e e1 e2) (If e' e1 e2)
+  | StepIfNonZero : forall n e1 e2, n <> Int.zero -> step (If (Const n) e1 e2) e1
+  | StepIfZero : forall e1 e2, step (If (Const Int.zero) e1 e2) e2
+  .
+
+  Inductive star : syntax -> syntax -> Prop :=
+  | StarZero : forall e, star e e
+  | StarMore : forall e e' e'',
+          step e e' ->
+          star e' e'' ->
+          star e e''.
+
+End IR.
+
+
+Module ExprToIR.
+
+  Fixpoint compile {ty} (e : expr.syntax ty) : IR.syntax :=
+    match e with
+    | expr.IntConst z => IR.Const z
+    | expr.IntAdd a b => IR.Add (compile a) (compile b)
+    | expr.IntEq a b => IR.Eq (compile a) (compile b)
+    | expr.BoolConst b => IR.Const (bool_to_int b)
+    | expr.If _ b e1 e2 =>
+      IR.If (compile b) (compile e1) (compile e2)
+    end.
+
+  Lemma forward_sim :
+    forall ty (e e' : expr.syntax ty),
+      expr.step e e' ->
+      IR.step (compile e) (compile e').
+  Proof.
+    induction 1; try solve [simpl; econstructor; auto using Int.one_not_zero].
+  Qed.
+End ExprToIR.
 
 Require compcert.cfrontend.Csyntax.
 
 (* We target Compcert C for now because it has conditional expressions,
    which use as the target for our "If" expressions. *)
 
-Module compiler.
+Module IRToC.
 
   Definition Tint := Ctypes.Tint Ctypes.I32 Ctypes.Signed Ctypes.noattr.
 
-  Fixpoint compile {ty} (e : expr.syntax ty) : Csyntax.expr :=
-    match e with
-    | expr.IntConst z => Csyntax.Eval (Values.Vint z) Tint
-    | expr.IntAdd a b => Csyntax.Ebinop Cop.Oadd (compile a) (compile b) Tint
-    | expr.IntEq a b => Csyntax.Ebinop Cop.Oeq (compile a) (compile b) Tint
-    | expr.BoolConst b => Csyntax.Eval (if b then Values.Vone else Values.Vzero) Tint
-    | expr.If _ b e1 e2 =>
+  Fixpoint compile (ir : IR.syntax) : Csyntax.expr :=
+    match ir with
+    | IR.Const z => Csyntax.Eval (Values.Vint z) Tint
+    | IR.Add a b => Csyntax.Ebinop Cop.Oadd (compile a) (compile b) Tint
+    | IR.Eq a b => Csyntax.Ebinop Cop.Oeq (compile a) (compile b) Tint
+    | IR.If b e1 e2 =>
       Csyntax.Econdition (compile b) (compile e1) (compile e2) Tint
     end.
+
+End IRToC.
+
+Module compiler.
+
+  Definition compile {ty} (e : expr.syntax ty) : Csyntax.expr :=
+    IRToC.compile (ExprToIR.compile e).
 
 End compiler.
 
@@ -179,12 +239,12 @@ Definition reflection_sim {ty} (reflection : expr.syntax ty) : Prop :=
     let origstate := ExprState fn (ID.id (compiler.compile reflection)) c env m in
     let v :=
         match ty as ty0 return expr.syntax ty0 -> _ with
-        | type.int => fun r => (Csyntax.Eval (Values.Vint (expr.denote r)) compiler.Tint)
+        | type.int => fun r => (Csyntax.Eval (Values.Vint (expr.denote r)) IRToC.Tint)
         | type.bool => fun r =>
           if (ID.id (expr.denote r)) then
-            Csyntax.Eval (Values.Vtrue) compiler.Tint
+            Csyntax.Eval (Values.Vtrue) IRToC.Tint
           else
-            Csyntax.Eval (Values.Vfalse) compiler.Tint
+            Csyntax.Eval (Values.Vfalse) IRToC.Tint
         end reflection
           in
     let finstate := ExprState fn v c env m in
