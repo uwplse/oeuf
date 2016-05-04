@@ -40,7 +40,73 @@ Module expr.
     | If _ b e1 e2 => if denote b then denote e1 else denote e2
     end.
 
-  
+  Inductive step : forall {ty}, syntax ty -> syntax ty -> Prop :=
+  | StepIntAddL : forall l l' r,
+          step l l' ->
+          step (IntAdd l  r)
+               (IntAdd l' r)
+  | StepIntAddR : forall l r r',
+          step r r' ->
+          step (IntAdd l r)
+               (IntAdd l r')
+  | StepIntAdd : forall a b,
+          step (IntAdd (IntConst a) (IntConst b))
+               (IntConst (Int.add a b))
+  | StepIntEqL : forall l l' r,
+          step l l' ->
+          step (IntEq l  r)
+               (IntEq l' r)
+  | StepIntEqR : forall l r r',
+          step r r' ->
+          step (IntEq l r)
+               (IntEq l r')
+  | StepIntEq : forall a b,
+          step (IntEq (IntConst a) (IntConst b))
+               (BoolConst (Int.eq a b))
+  | StepIfTrue : forall ty e1 e2,
+          @step ty
+               (If (BoolConst true) e1 e2)
+               e1
+  | StepIfFalse : forall ty e1 e2,
+          @step ty
+               (If (BoolConst false) e1 e2)
+               e2
+  .
+
+  Inductive star : forall {ty}, syntax ty -> syntax ty -> Prop :=
+  | StarZero : forall ty (e : syntax ty), star e e
+  | StarMore : forall ty (e e' e'' : syntax ty),
+          step e e' ->
+          star e' e'' ->
+          star e e''.
+
+  Inductive is_value : forall {ty}, syntax ty -> type.denote ty -> Prop :=
+  | ValInt : forall i, is_value (IntConst i) i
+  | ValBool : forall b, is_value (BoolConst b) b
+  .
+
+
+  Lemma step_preserves_denote : forall ty (e e' : syntax ty),
+      step e e' ->
+      denote e = denote e'.
+  induction 1; simpl; try congruence.
+  Qed.
+
+  Lemma is_value_denote : forall ty (e : syntax ty) x,
+      is_value e x ->
+      denote e = x.
+  destruct 1; reflexivity.
+  Qed.
+
+  Theorem star_denote : forall ty (e e' : syntax ty) x,
+      star e e' ->
+      is_value e' x ->
+      denote e = x.
+  induction 1; simpl.
+  - eauto using is_value_denote.
+  - erewrite step_preserves_denote; eauto.
+  Qed.
+
 End expr.
 
 
