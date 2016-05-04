@@ -83,6 +83,43 @@ Module expr.
           star e' e'' ->
           star e e''.
 
+  Lemma star_app :
+    forall {ty} (e1 e2 e3 : syntax ty),
+      star e1 e2 ->
+      star e2 e3 ->
+      star e1 e3.
+  Proof.
+    induction 1; intros. auto.
+    eapply StarMore; try apply H.
+    eapply IHstar; eauto.
+  Qed.
+    
+
+  Lemma star_right :
+    forall {ty} (e1 e2 e3 : syntax ty),
+      star e1 e2 ->
+      step e2 e3 ->
+      star e1 e3.
+  Proof.
+    induction 1; intros; simpl; eauto.
+    eapply StarMore; try eapply StarZero; eauto.
+    apply IHstar in H1.
+    eapply StarMore; try apply H.
+    assumption.
+  Qed.
+
+  Lemma star_step_addl :
+    forall l l',
+      star l l' ->
+      forall r,
+        star (IntAdd l  r)
+             (IntAdd l' r).
+  Proof.
+    (* induction 1; intros.*)
+  Admitted.
+    
+
+  
   Inductive is_value : forall {ty}, syntax ty -> type.denote ty -> Prop :=
   | ValInt : forall i, is_value (IntConst i) i
   | ValBool : forall b, is_value (BoolConst b) b
@@ -110,6 +147,26 @@ Module expr.
   - eauto using is_value_denote.
   - erewrite step_preserves_denote; eauto.
   Qed.
+
+
+  
+  Theorem strong_norm :
+    forall {ty} (e : syntax ty),
+    exists e' v,
+      star e e' /\ is_value e' v.
+  Proof.
+    induction e; intros.
+    eexists; eexists; split.
+    eapply StarZero. econstructor.
+    destruct IHe1. destruct H.
+    destruct H.
+    destruct IHe2. destruct H1. destruct H1.
+
+    exists (IntConst (Int.add x0 x2)). exists (Int.add x0 x2).
+    split; try solve [econstructor; eauto].
+    unfold type.denote in *.
+    
+  Admitted.
 
 End expr.
 
@@ -159,13 +216,15 @@ Module ExprToIR.
       IR.If (compile b) (compile e1) (compile e2)
     end.
 
-  Lemma forward_sim :
+  Lemma forward_sim_step :
     forall ty (e e' : expr.syntax ty),
       expr.step e e' ->
       IR.step (compile e) (compile e').
   Proof.
     induction 1; try solve [simpl; econstructor; auto using Int.one_not_zero].
   Qed.
+
+
 End ExprToIR.
 
 Require compcert.cfrontend.Csyntax.
