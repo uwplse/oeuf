@@ -121,6 +121,18 @@ Module expr.
       constructor; eauto.
   Qed.
 
+  Lemma star_step_addr :
+    forall r r',
+      star r r' ->
+      forall l,
+        star (IntAdd l r)
+             (IntAdd l r').
+  Proof.
+    induction 1; intros.
+    - constructor.
+    - econstructor; eauto.
+      constructor; eauto.
+  Qed.
   
   Inductive is_value : forall {ty}, syntax ty -> type.denote ty -> Prop :=
   | ValInt : forall i, is_value (IntConst i) i
@@ -150,7 +162,24 @@ Module expr.
   - erewrite step_preserves_denote; eauto.
   Qed.
 
+  Lemma canon_int :
+    forall a (b : type.denote type.int),
+      is_value a b ->
+      exists (i : int),
+        a = IntConst i /\ b = i.
+  Proof.
+    intros.
+    inversion H.
+    simpl in *.
+  Admitted.
 
+  Lemma canon_bool :
+    forall a (b : type.denote type.bool),
+      is_value a b ->
+      exists (x : bool),
+        a = BoolConst x /\ b = x.
+  Proof.
+  Admitted.
   
   Theorem strong_norm :
     forall {ty} (e : syntax ty),
@@ -168,8 +197,13 @@ Module expr.
     split; try solve [econstructor; eauto].
     unfold type.denote in *.
     
-  Admitted.
+    eapply star_app. eapply star_app.
+    eapply star_step_addl; eauto.
+    eapply star_step_addr; eauto.
+    eapply StarMore; try eapply StarZero.
 
+  Admitted.
+    
 End expr.
 
 Definition bool_to_int (b : bool) : int :=
