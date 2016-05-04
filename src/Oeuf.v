@@ -76,9 +76,9 @@ Module expr.
                e2
   .
 
-  Inductive star : forall {ty}, syntax ty -> syntax ty -> Prop :=
-  | StarZero : forall ty (e : syntax ty), star e e
-  | StarMore : forall ty (e e' e'' : syntax ty),
+  Inductive star {ty} : syntax ty -> syntax ty -> Prop :=
+  | StarZero : forall (e : syntax ty), star e e
+  | StarMore : forall (e e' e'' : syntax ty),
           step e e' ->
           star e' e'' ->
           star e e''.
@@ -115,9 +115,11 @@ Module expr.
         star (IntAdd l  r)
              (IntAdd l' r).
   Proof.
-    (* induction 1; intros.*)
-  Admitted.
-    
+    induction 1; intros.
+    - constructor.
+    - econstructor; eauto.
+      constructor; eauto.
+  Qed.
 
   
   Inductive is_value : forall {ty}, syntax ty -> type.denote ty -> Prop :=
