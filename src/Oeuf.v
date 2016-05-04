@@ -63,6 +63,9 @@ Module expr.
   | StepIntEq : forall a b,
           step (IntEq (IntConst a) (IntConst b))
                (BoolConst (Int.eq a b))
+  | StepIf : forall ty e e' (e1 e2 : syntax ty),
+          step e e' ->
+          step (If e e1 e2) (If e' e1 e2)
   | StepIfTrue : forall ty e1 e2,
           @step ty
                (If (BoolConst true) e1 e2)
@@ -90,6 +93,7 @@ Module expr.
       step e e' ->
       denote e = denote e'.
   induction 1; simpl; try congruence.
+  rewrite IHstep. reflexivity.
   Qed.
 
   Lemma is_value_denote : forall ty (e : syntax ty) x,
