@@ -180,6 +180,22 @@ Module expr.
         a = BoolConst x /\ b = x.
   Proof.
   Admitted.
+
+  Ltac break_exists :=
+    match goal with
+    | [ H : exists _, _ |- _ ] => destruct H
+    end.
+
+  Ltac break_and :=
+    match goal with
+    | [ H : _ /\ _ |- _ ] => destruct H
+    end.
+
+  Ltac app N P :=
+    match goal with
+    | [ H : context[P], H2 : context[P] |- _ ] => fail "Ambiguous Pattern"
+    | [ H : context[P] |- _ ] => eapply N in H
+    end.
   
   Theorem strong_norm :
     forall {ty} (e : syntax ty),
@@ -187,13 +203,16 @@ Module expr.
       star e e' /\ is_value e' v.
   Proof.
     induction e; intros.
+
+    (* IntConst *)
     eexists; eexists; split.
     eapply StarZero. econstructor.
-    destruct IHe1. destruct H.
-    destruct H.
-    destruct IHe2. destruct H1. destruct H1.
 
-    exists (IntConst (Int.add x0 x2)). exists (Int.add x0 x2).
+    (* IntAdd *)
+    repeat break_exists;
+      repeat break_and.
+
+    exists (IntConst (Int.add x2 x0)). exists (Int.add x2 x0).
     split; try solve [econstructor; eauto].
     unfold type.denote in *.
     
@@ -202,6 +221,16 @@ Module expr.
     eapply star_step_addr; eauto.
     eapply StarMore; try eapply StarZero.
 
+    app canon_int (is_value x1 x2).
+    app canon_int (@is_value type.int).
+    repeat break_exists; repeat break_and.
+    subst.
+
+    econstructor; eauto.
+
+    (* IntEq *)
+    
+    
   Admitted.
     
 End expr.
