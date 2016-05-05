@@ -318,6 +318,20 @@ Module expr.
     assumption.
 
   Qed.
+
+  (* main correctness theorem *)
+  Theorem denote_step :
+    forall {ty} (e : syntax ty),
+    exists e' v,
+      star e e' /\ is_value e' v /\ denote e = v.
+  Proof.
+    intros.
+    destruct (strong_norm e).
+    repeat break_exists; repeat break_and.
+    exists x. exists x0.
+    repeat split; eauto.
+    eapply star_denote; eauto.
+  Qed.
     
 End expr.
 
