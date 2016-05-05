@@ -134,10 +134,13 @@ Module expr.
       constructor; eauto.
   Qed.
   
-  Inductive is_value : forall {ty}, syntax ty -> type.denote ty -> Prop :=
-  | ValInt : forall i, is_value (IntConst i) i
-  | ValBool : forall b, is_value (BoolConst b) b
-  .
+
+
+  Definition is_value {ty} : syntax ty -> type.denote ty -> Prop :=
+    match ty with
+    | type.int => fun e x => e = IntConst x
+    | type.bool => fun e x => e = BoolConst x
+    end.
 
 
   Lemma step_preserves_denote : forall ty (e e' : syntax ty),
@@ -150,7 +153,8 @@ Module expr.
   Lemma is_value_denote : forall ty (e : syntax ty) x,
       is_value e x ->
       denote e = x.
-  destruct 1; reflexivity.
+  unfold is_value.
+  destruct ty; intros; subst; reflexivity.
   Qed.
 
   Theorem star_denote : forall ty (e e' : syntax ty) x,
@@ -168,10 +172,9 @@ Module expr.
       exists (i : int),
         a = IntConst i /\ b = i.
   Proof.
-    intros.
-    inversion H.
-    simpl in *.
-  Admitted.
+    unfold is_value.
+    eauto.
+  Qed.
 
   Lemma canon_bool :
     forall a (b : type.denote type.bool),
@@ -179,7 +182,9 @@ Module expr.
       exists (x : bool),
         a = BoolConst x /\ b = x.
   Proof.
-  Admitted.
+    unfold is_value.
+    eauto.
+  Qed.
   
   Theorem strong_norm :
     forall {ty} (e : syntax ty),
