@@ -17,6 +17,21 @@ Module type.
 
 End type.
 
+  Ltac break_exists :=
+    match goal with
+    | [ H : exists _, _ |- _ ] => destruct H
+    end.
+
+  Ltac break_and :=
+    match goal with
+    | [ H : _ /\ _ |- _ ] => destruct H
+    end.
+
+  Ltac app N P :=
+    match goal with
+    | [ H : context[P], H2 : context[P] |- _ ] => fail "Ambiguous Pattern"
+    | [ H : context[P] |- _ ] => eapply N in H
+    end.
 
 (* Object language expressions *)
 Module expr.
@@ -224,21 +239,6 @@ Module expr.
     eauto.
   Qed.
 
-  Ltac break_exists :=
-    match goal with
-    | [ H : exists _, _ |- _ ] => destruct H
-    end.
-
-  Ltac break_and :=
-    match goal with
-    | [ H : _ /\ _ |- _ ] => destruct H
-    end.
-
-  Ltac app N P :=
-    match goal with
-    | [ H : context[P], H2 : context[P] |- _ ] => fail "Ambiguous Pattern"
-    | [ H : context[P] |- _ ] => eapply N in H
-    end.
   
   Theorem strong_norm :
     forall {ty} (e : syntax ty),
@@ -366,6 +366,11 @@ Module IR.
           star e' e'' ->
           star e e''.
 
+  Inductive is_value : syntax -> int -> Prop :=
+  | val_int :
+      forall i,
+        is_value (Const i) i.
+  
 End IR.
 
 
@@ -389,6 +394,32 @@ Module ExprToIR.
     induction 1; try solve [simpl; econstructor; auto using Int.one_not_zero].
   Qed.
 
+  Lemma forward_sim_star :
+    forall ty (e e' : expr.syntax ty),
+      expr.star e e' ->
+      IR.star (compile e) (compile e').
+  Proof.
+    induction 1.
+    econstructor.
+    eapply IR.StarMore.
+    eapply forward_sim_step; eauto.
+    assumption.
+  Qed.
+
+  Lemma strong_norm_IR :
+    forall ty (e : expr.syntax ty),
+      exists e' v,
+      IR.star (compile e) e' /\ IR.is_value e' v.
+  Proof.
+    intros.
+    pose proof (expr.denote_step e).
+    repeat break_exists; repeat break_and.
+    app forward_sim_star (@expr.star ty).
+    unfold expr.is_value in *.
+    destruct ty; subst;
+      eexists; eexists; split; try eassumption; econstructor.
+  Qed.
+
 
 End ExprToIR.
 
@@ -409,6 +440,9 @@ Module IRToC.
     | IR.If b e1 e2 =>
       Csyntax.Econdition (compile b) (compile e1) (compile e2) Tint
     end.
+
+  (* Simple one step correspondence here doesn't work so well *)
+  
 
 End IRToC.
 
