@@ -134,10 +134,51 @@ Module expr.
       constructor; eauto.
   Qed.
   
-  Inductive is_value : forall {ty}, syntax ty -> type.denote ty -> Prop :=
-  | ValInt : forall i, is_value (IntConst i) i
-  | ValBool : forall b, is_value (BoolConst b) b
-  .
+
+  Lemma star_step_eql :
+    forall l l',
+      star l l' ->
+      forall r,
+        star (IntEq l  r)
+             (IntEq l' r).
+    induction 1; intros.
+    - constructor.
+    - econstructor; eauto.
+      constructor; eauto.
+  Qed.
+
+  Lemma star_step_eqr :
+    forall r r',
+      star r r' ->
+      forall l,
+        star (IntEq l r)
+             (IntEq l r').
+  Proof.
+    induction 1; intros.
+    - constructor.
+    - econstructor; eauto.
+      constructor; eauto.
+  Qed.
+
+  Lemma star_step_if :
+    forall b b',
+      star b b' ->
+      forall {ty} (t e : syntax ty),
+        star (If b t e)
+             (If b' t e).
+  Proof.
+    induction 1; intros.
+    - constructor.
+    - econstructor; eauto.
+      constructor; eauto.
+  Qed.
+
+  
+  Definition is_value {ty} : syntax ty -> type.denote ty -> Prop :=
+    match ty with
+    | type.int => fun e x => e = IntConst x
+    | type.bool => fun e x => e = BoolConst x
+    end.
 
 
   Lemma step_preserves_denote : forall ty (e e' : syntax ty),
@@ -150,7 +191,8 @@ Module expr.
   Lemma is_value_denote : forall ty (e : syntax ty) x,
       is_value e x ->
       denote e = x.
-  destruct 1; reflexivity.
+  unfold is_value.
+  destruct ty; intros; subst; reflexivity.
   Qed.
 
   Theorem star_denote : forall ty (e e' : syntax ty) x,
@@ -168,10 +210,9 @@ Module expr.
       exists (i : int),
         a = IntConst i /\ b = i.
   Proof.
-    intros.
-    inversion H.
-    simpl in *.
-  Admitted.
+    unfold is_value.
+    eauto.
+  Qed.
 
   Lemma canon_bool :
     forall a (b : type.denote type.bool),
@@ -179,7 +220,9 @@ Module expr.
       exists (x : bool),
         a = BoolConst x /\ b = x.
   Proof.
-  Admitted.
+    unfold is_value.
+    eauto.
+  Qed.
 
   Ltac break_exists :=
     match goal with
@@ -229,9 +272,52 @@ Module expr.
     econstructor; eauto.
 
     (* IntEq *)
-    
-    
-  Admitted.
+    repeat break_exists;
+      repeat break_and.
+    app canon_int (is_value x1 x2).
+    app canon_int (@is_value type.int).
+    repeat break_exists; repeat break_and.
+    subst.
+    exists (BoolConst (Int.eq x4 x3)).
+    exists (Int.eq x4 x3).
+    split; try solve [destruct (Int.eq x4 x3); econstructor; eauto].
+    eapply star_app.
+    eapply star_step_eql; eauto.
+    eapply star_app.
+    eapply star_step_eqr; eauto.
+    eapply StarMore; try eapply StarZero.
+    econstructor; eauto.
+
+    (* BoolConst *)
+    eexists; eexists; split.
+    eapply StarZero. econstructor.
+
+    (* If *)
+    repeat break_exists;
+      repeat break_and.
+    app canon_bool (@is_value type.bool).
+    repeat break_exists;
+      repeat break_and.
+    subst.
+    destruct x5.
+    (* condition is true *)
+    exists x1. exists x2.
+    split; auto.
+    eapply star_app.
+    eapply star_step_if; eauto.
+    eapply StarMore.
+    eapply StepIfTrue; eauto.
+    assumption.
+    (* condition is false *)
+    exists x. exists x0.
+    split; auto.
+    eapply star_app.
+    eapply star_step_if; eauto.
+    eapply StarMore.
+    eapply StepIfFalse; eauto.
+    assumption.
+
+  Qed.
     
 End expr.
 
