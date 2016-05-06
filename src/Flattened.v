@@ -1,5 +1,9 @@
 Require Import List.
 Import ListNotations.
+Require Import Arith.
+
+Require Import StructTact.StructTactics.
+Require Import StructTact.Util.
 
 Definition function_name := nat.
 
@@ -25,39 +29,85 @@ Definition env := list func_def.
 
 Record frame := Frame { code : list stmt;
                         ret : expr;
-                        locals : list (nat * value); (* TODO: bring in alist stuff *)
+                        locals : list (nat * value);
                         arg : value;
                         upvars : list value;
                       }.
 
 Definition stack := list frame.
 
+Definition eval_expr (arg : value) (upvars : list value) (locals : list (nat * value)) (e : expr) : option value :=
+  match e with
+  | Arg => Some arg
+  | UpVar n => nth_error upvars n
+  | Temp n => assoc Nat.eq_dec locals n
+  end.
+
+Fixpoint map_partial {A B : Type} (f : A -> option B) (l : list A) : option (list B) :=
+  match l with
+  | [] => Some []
+  | a :: l' => match f a, map_partial f l' with
+              | Some b, Some l'' => Some (b :: l'')
+              | _, _ => None
+              end
+  end.
+
+(* sanity checks *)
+Lemma length_map_partial :
+  forall A B (f : A -> option B) l bs,
+    map_partial f l = Some bs ->
+    length l = length bs.
+Proof.
+  induction l; simpl; intros.
+  - find_inversion. auto.
+  - repeat break_match; try discriminate.
+    find_inversion. simpl.
+    auto using f_equal.
+Qed.
+
+Lemma map_map_partial :
+  forall A B (f : A -> option B) l bs,
+    map_partial f l = Some bs ->
+    map (@Some _) bs = map f l.
+Proof.
+  induction l; simpl; intros.
+  - find_inversion. auto.
+  - repeat break_match; try discriminate.
+    find_inversion. simpl.
+    auto using f_equal.
+Qed.
+
+
+
 Inductive step (E : env) : stack -> stack -> Prop :=
-(* | MakeCall : forall f a free e e',
-    value a ->
-    Forall value free ->
-    nth_error E f = Some e ->
-    subst a free e = Some e' ->
-    step E (Call (Close f free) a) e'
-| CallL : forall e1 e1' e2,
-    step E e1 e1' ->
-    step E (Call e1 e2) (Call e1' e2)
-| CallR : forall v e2 e2',
-    value v ->
-    step E e2 e2' ->
-    step E (Call v e2) (Call v e2')
-| SwitchStep : forall t t' cases, step E t t' -> step E (Switch cases t) (Switch cases t')
-| Switchinate : forall tag args cases case arg_n,
-    nth_error cases tag = Some (arg_n, case) ->
-    length args = arg_n ->
-    step E (Switch cases (Constr tag args)) (call_all case args)
-| ConstrStep : forall tag vs e e' es,
-    step E e e' ->
-    Forall value vs ->
-    step E (Constr tag (vs ++ [e] ++ es)) (Constr tag (vs ++ [e'] ++ es))
-| CloseStep : forall f vs e e' es,
-    step E e e' ->
-    Forall value vs ->
-    step E (Close f (vs ++ [e] ++ es)) (Close f (vs ++ [e'] ++ es))
-*)
+| StepReturn : forall dst f a l r ls av ups s r' ls' av' ups' rv,
+    eval_expr av ups ls r = Some rv ->
+    step E (Frame [] r ls av ups :: Frame (Call dst f a :: l) r' ls' av' ups' :: s)
+           (Frame l r' (assoc_set Nat.eq_dec ls' dst rv) av' ups' :: s)
+
+| StepCall : forall dst f a l r ls av ups s fn free def ret av',
+    eval_expr av ups ls f = Some (Close fn free) ->
+    eval_expr av ups ls a = Some av' ->
+    nth_error E fn = Some (def, ret) ->
+    step E (Frame (Call dst f a :: l) r ls av ups :: s)
+           (Frame def ret [] av' free :: Frame (Call dst f a :: l) r ls av ups :: s)
+
+| StepMakeConstr : forall dst tag args l r ls av ups s vs,
+    map_partial (eval_expr av ups ls) args = Some vs ->
+    step E (Frame (MakeConstr dst tag args :: l) r ls av ups :: s)
+           (Frame l r (assoc_set Nat.eq_dec ls dst (Constr tag vs)) av ups :: s)
+
+| StepSwitch : forall dst cases target l r ls av ups s tag args case,
+    eval_expr av ups ls target = Some (Constr tag args) ->
+    nth_error cases tag = Some case ->
+
+    step E (Frame (Switch dst cases target :: l) r ls av ups :: s)
+         (* TODO: actually apply the case.
+            It seems like we'll need to generate a list of calls... :(  *)
+         (Frame (l) r ls av ups :: s)
+
+| StepMakeClose : forall dst fn args l r ls av ups s vs,
+    map_partial (eval_expr av ups ls) args = Some vs ->
+    step E (Frame (MakeClose dst fn args :: l) r ls av ups :: s)
+           (Frame (l) r (assoc_set Nat.eq_dec ls dst (Close fn vs)) av ups :: s)
 .
