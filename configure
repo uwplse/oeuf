@@ -3,7 +3,7 @@
 DIRS=(src)
 NAMESPACE_compcert=compcert
 LOCALDEPS=(compcert)
-DEPS=()
+DEPS=(StructTact)
 CANARIES=("compcert.backend.RTL" "Oeuf requires compcert to be built first.")
 EXTRA=()
 
