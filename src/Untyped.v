@@ -17,16 +17,40 @@ Inductive constr_name :=
 | Ccons
 .
 
-Definition constructor_index ty ctor : option nat :=
-    match ty, ctor with
-    | Tnat, CO => Some 0
-    | Tnat, CS => Some 1
+Definition constructor_index ctor : nat :=
+    match ctor with
+    | CO => 0
+    | CS => 1
 
-    | Tbool, Cfalse => Some 0
-    | Tbool, Ctrue => Some 1
+    | Cfalse => 0
+    | Ctrue => 1
 
-    | Tlist_nat, Cnil => Some 0
-    | Tlist_nat, Ccons => Some 1
+    | Cnil => 0
+    | Ccons => 1
+    end.
+
+Definition constructor_arg_n ctor : nat :=
+    match ctor with
+    | CO => 0
+    | CS => 1
+
+    | Cfalse => 0
+    | Ctrue => 0
+
+    | Cnil => 0
+    | Ccons => 2
+    end.
+
+Definition type_constr ty idx : option constr_name :=
+    match ty, idx with
+    | Tnat, 0 => Some CO
+    | Tnat, 1 => Some CS
+
+    | Tbool, 0 => Some Cfalse
+    | Tbool, 1 => Some Ctrue
+
+    | Tlist_nat, 0 => Some Cnil
+    | Tlist_nat, 1 => Some Ccons
 
     | _, _ => None
     end.
@@ -107,7 +131,6 @@ Inductive step : expr -> expr -> Prop :=
 | AppL : forall e1 e1' e2, step e1 e1' -> step (App e1 e2) (App e1' e2)
 | AppR : forall v e2 e2', value v -> step e2 e2' -> step (App v e2) (App v e2')
 | ElimStep : forall t t' ty cases, step t t' -> step (Elim ty cases t) (Elim ty cases t')
-| Eliminate : forall c args ty cases case idx,
-    constructor_index ty c = Some idx ->
-    nth_error cases idx = Some case ->
+| Eliminate : forall c args ty cases case,
+    nth_error cases (constructor_index c) = Some case ->
     step (Elim ty cases (Constr c args)) (apply_all case args).
