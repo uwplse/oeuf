@@ -80,24 +80,22 @@ Definition compile (e : U.expr) : option T.expr :=
 
     e.
 
-(* TODO: this should work, but the termination checker doesn't like it... *)
-(*
-Fixpoint compile (e : U.expr) : option T.expr :=
-    let fix map_p {A B : Type} (f : A -> option B) (l : list A) : option (list B) :=
+Fixpoint compile' (e : U.expr) : option T.expr :=
+    let fix map_p (l : list U.expr) : option (list T.expr) :=
       match l with
       | [] => Some []
-      | a :: l' => match f a, map_partial f l' with
+      | a :: l' => match compile' a, map_p l' with
                   | Some b, Some l'' => Some (b :: l'')
                   | _, _ => None
                   end
       end in
     match e with
     | U.Var n => T.Var <$> Some n
-    | U.Lam body => T.Lam <$> compile body
-    | U.App f a => T.App <$> compile f <*> compile a
+    | U.Lam body => T.Lam <$> compile' body
+    | U.App f a => T.App <$> compile' f <*> compile' a
     | U.Constr c args => T.Constr
         <$> Some (U.constructor_index c)
-        <*> map_p compile args
+        <*> map_p args
     | _ => None
     end.
-*)
+
