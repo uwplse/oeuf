@@ -1,6 +1,6 @@
 Require Import List.
 Import ListNotations.
-
+Require Import Arith.
 
 Inductive type_name :=
 | Tnat
@@ -99,20 +99,31 @@ Definition expr_ind' (P : expr -> Prop)
         HVar HLam HApp HConstr HElim _ _ e); eauto).
 
 
+(* leave vars below c alone while shifting everything else up by one *)
+Fixpoint shift' (c : nat) (e : expr) : expr :=
+  match e with
+  | Var n => if lt_dec n c then e else Var (S n)
+  | Lam e' => Lam (shift' (S c) e')
+  | App e1 e2 => App (shift' c e1) (shift' c e2)
+  | Constr ctor args => Constr ctor (map (shift' c) args)
+  | Elim ty cases target => Elim ty (map (shift' c) cases) (shift' c target)
+  end.
+Definition shift := shift' 0.
+
+
 (* substitute [0 -> to] in e and shift other indices down by 1 *)
 (* TODO: someone should make sure I did the right thing here -SP *)
-Fixpoint subst (to : expr) (e : expr) : expr :=
+Fixpoint subst' (from : nat) (to : expr) (e : expr) : expr :=
     match e with
-    | Var n =>
-            match n with
-            | 0 => to
-            | S n' => Var n'
-            end
-    | Lam e' => Lam (subst to e')
-    | App e1 e2 => App (subst to e1) (subst to e2)
-    | Constr c args => Constr c (map (subst to) args)
-    | Elim ty cases target => Elim ty (map (subst to) cases) (subst to target)
+    | Var n => if lt_dec n from then e
+              else if Nat.eq_dec n from then to
+                   else Var (pred n)
+    | Lam e' => Lam (subst' (S from) (shift to) e')
+    | App e1 e2 => App (subst' from to e1) (subst' from to e2)
+    | Constr c args => Constr c (map (subst' from to) args)
+    | Elim ty cases target => Elim ty (map (subst' from to) cases) (subst' from to target)
     end.
+Definition subst := subst' 0.
 
 
 Inductive value : expr -> Prop :=
