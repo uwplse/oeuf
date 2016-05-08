@@ -165,7 +165,97 @@ Eval compute in expr_denote (Constr CTrue hnil) hnil.
 
 Eval compute in expr_denote (Lam(ty1 := ADT Bool) (Var Here)) hnil.
 
-Definition map_reflect {l} : expr l (Arrow (Arrow (ADT Nat) (ADT Nat)) (Arrow (ADT ListNat) (ADT ListNat))) :=
+(* given a gallina term, try to find something that type_denote will map to it. *)
+Ltac type_reflect' x :=
+  match x with
+  | ?X -> ?Y => let rX := type_reflect' X in
+              let rY := type_reflect' Y in
+              constr:(Arrow rX rY)
+  | nat => constr:(ADT Nat)
+  | bool => constr:(ADT Bool)
+  | list nat => constr:(ADT ListNat)
+  end.
+
+(* fill in a context with the reflection of the given gallina term *)
+Ltac type_reflect x := let r := type_reflect' x in exact r.
+
+Check ltac:(type_reflect nat).
+Check ltac:(type_reflect bool).
+Check ltac:(type_reflect (list nat)).
+Check ltac:(type_reflect ((bool -> nat) -> (list nat -> bool) -> nat)).
+
+(* given a gallina term, try to find something that expr_denote will map to it *)
+Ltac reflect' x :=
+  let x' := eval simpl in x in
+  match x' with
+  | fun _ => true => uconstr:(Constr CTrue hnil)
+  | fun _ => false => uconstr:(Constr CFalse hnil)
+  | fun _ => O => uconstr:(Constr CZero hnil)
+  | fun _ => S => uconstr:(Lam (Constr CSucc (hcons (Var Here) hnil)))
+  | fun (x : ?T) => S (@?X x) =>
+    let r := reflect' X in
+    uconstr:(Constr CSucc (hcons r hnil))
+  | fun _ => @nil nat => uconstr:(Constr CNil hnil)
+  | fun (x : ?T) => @cons nat (@?X x) (@?Y x) =>
+    let r1 := reflect' X in
+    let r2 := reflect' Y in
+    uconstr:(Constr CCons (hcons r1 (hcons r2 hnil)))
+  | fun (x : ?T) => if @?B x then @?X x else @?Y x =>
+    let r1 := reflect' B in
+    let r2 := reflect' X in
+    let r3 := reflect' Y in
+    uconstr:(Elim (EBool _) (hcons r2 (hcons r3 hnil)) r1)
+  | fun (x : ?T) => nat_rect _ (@?X x) (@?Y x) (@?n x) =>
+    let r1 := reflect' X in
+    let r2 := reflect' Y in
+    let r3 := reflect' n in
+    uconstr:(Elim (ENat _) (hcons r1 (hcons r2 hnil)) r3)
+  | fun (x : ?T) => @list_rect nat _ (@?X x) (@?Y x) (@?l x) =>
+    let r1 := reflect' X in
+    let r2 := reflect' Y in
+    let r3 := reflect' l in
+    uconstr:(Elim (EListNat _) (hcons r1 (hcons r2 hnil)) r3)
+  | fun (x : ?T) (y : ?A) => @?E x y =>
+    let rA := type_reflect' A in
+    let r := reflect' (fun (p : T * A) => E (fst p) (snd p)) in
+    uconstr:(Lam (ty1 := rA) r)
+  | fun (x : ?T) => snd x => uconstr:(Var Here)
+  | fun (x : ?T) => snd (fst x) => uconstr:(Var (There Here))
+  | fun (x : ?T) => snd (fst (fst x)) => uconstr:(Var (There (There Here)))
+  | fun (x : ?T) => snd (fst (fst (fst x))) => uconstr:(Var (There (There Here)))
+  | fun (_ : ?T) => ?X ?Y => (* TODO: figure out whether second-order pattern matching supports applications *)
+    let r1 := reflect' (fun _ : T => X) in
+    let r2 := reflect' (fun _ : T => Y) in
+    uconstr:(App r1 r2)
+  | _ => fail 100 "Unsupported term" x'
+  end.
+
+(* fill in the context with the expression reflection of the given term *)
+Ltac reflect x := let r := reflect' (fun _ : unit => x) in exact r.
+
+Check ltac:(reflect true) : expr [] _ .
+Check ltac:(reflect O)  : expr [] _ .
+Check ltac:(reflect S)  : expr [] _ .
+Check ltac:(reflect (S O))  : expr [] _ .
+Check ltac:(reflect (fun _ : nat => (S O)))  : expr [] _ .
+Check ltac:(reflect (fun x : nat => (S x)))  : expr [] _ .
+Check ltac:(reflect (fun x : bool => x))  : expr [] _ .
+Check ltac:(reflect (fun f : bool -> bool => f))  : expr [] _ .
+Check ltac:(reflect ((S O) :: nil))  : expr [] _ .
+Check ltac:(reflect [1; 2; 3])  : expr [] _ .
+Check ltac:(reflect (if true then 1 else 2))  : expr [] _ .
+Check ltac:(reflect S)  : expr [] _ .
+Check ltac:(reflect (fun _ : nat => S))  : expr [] _ .
+Check ltac:(reflect (nat_rect (fun _ => nat) 4 (fun _ => S) 17))  : expr [] _ .
+Check ltac:(reflect (fun x : nat => x))  : expr [] _ .
+Check ltac:(reflect (@list_rect nat (fun _ => list nat) [] (fun h _ t => cons 3 (cons h t)) [0; 0; 0])) : expr [] _ .
+Eval compute in expr_denote ltac:(reflect  (@list_rect nat (fun _ => list nat) [] (fun h _ t => cons 3 (cons h t)) [0; 0; 0])) hnil.
+
+
+Definition map_reflect {l} : expr l _ :=
+  (* doesn't work because only very particular applications are properly handled.
+     applying a variable to a variable doesn't work, so the (f x) breaks it. *)
+  (* ltac:(reflect (fun (f : nat -> nat) (l : list nat) => list_rect (fun _ => list nat) [] (fun x _ t => f x :: t) l)). *)
   Lam
   (Lam
   (Elim (EListNat _)
