@@ -143,6 +143,57 @@ Definition elim_denote {case_tys target_ty ty} (e : elim case_tys target_ty ty) 
   | EListNat _ => fun cases target => (list_rect _ (hhead cases) (hhead (htail cases)) target)
   end.
 
+Inductive HForall {A B} (P : forall a : A, B a -> Type) : forall {l : list A}, hlist B l -> Type :=
+| HFhnil : HForall P hnil
+| HFhcons : forall a b l (h : hlist B l), P a b -> HForall P h -> HForall P (hcons b h).
+Hint Constructors HForall.
+
+Definition expr_mut_rect
+           (P : forall l ty, expr l ty -> Type)
+           (Ph : forall l tys, hlist (expr l) tys -> Type)
+           (Hvar : forall l ty m, P l ty (Var m))
+           (Hlam : forall l ty1 ty2 b, P (ty1 :: l) ty2 b -> P l (Arrow ty1 ty2) (Lam b))
+           (Happ : forall l ty1 ty2 e1 e2, P l (Arrow ty1 ty2) e1 -> P _ _ e2 -> P _ _ (App e1 e2))
+           (Hconstr : forall l ty arg_tys c args,
+               Ph l arg_tys args -> P l ty (Constr c args))
+           (Helim : forall l ty case_tys target_ty e cases target,
+               Ph l case_tys cases -> P l target_ty target -> P _ ty (Elim e cases target))
+           (Hnil : forall l, Ph l _ hnil)
+           (Hcons : forall l ty e tys h, P l ty e -> Ph l tys h -> Ph l (ty :: tys) (hcons e h))
+           l ty e : P l ty e :=
+  let fix go l ty (e : expr l ty) : P l ty e :=
+      let fix go_hlist l tys (h : hlist (expr l) tys) : Ph l tys h :=
+          match h as h0 return Ph _ _ h0 with
+          | hnil => Hnil _
+          | hcons x h'' => Hcons _ _ x _ h'' (go _ _ _) (go_hlist _ _ _)
+          end
+      in
+      match e as e0 in expr l0 ty0 return P l0 ty0 e0 with
+      | Var m => Hvar _ _ m
+      | Lam b => Hlam _ _ _ b (go _ _ _)
+      | App e1 e2 => Happ _ _ _ _ _ (go _ _ _) (go _ _ _)
+      | Constr c args => Hconstr _ _ _ _ _ (go_hlist _ _ _)
+      | Elim e cases target => Helim _ _ _ _ _ _ _ (go_hlist _ _ _) (go _ _ _)
+      end
+  in go l ty e.
+
+Definition expr_mut_rect'
+           (P : forall l ty, expr l ty -> Type)
+           (Hvar : forall l ty m, P l ty (Var m))
+           (Hlam : forall l ty1 ty2 b, P (ty1 :: l) ty2 b -> P l (Arrow ty1 ty2) (Lam b))
+           (Happ : forall l ty1 ty2 e1 e2, P l (Arrow ty1 ty2) e1 -> P _ _ e2 -> P _ _ (App e1 e2))
+           (Hconstr : forall l ty arg_tys c (args : hlist (expr l) arg_tys),
+               HForall (P l) args -> P l ty (Constr c args))
+           (Helim : forall l ty case_tys target_ty e (cases : hlist (expr l) case_tys) target,
+               HForall (P l) cases -> P l target_ty target -> P _ ty (Elim e cases target))
+           l ty e : P l ty e.
+  refine (expr_mut_rect P (fun l tys h => HForall (P l) h)
+           Hvar
+           Hlam
+           Happ
+           Hconstr
+           Helim _ _ l ty e); auto.
+Defined.
 
 Definition expr_denote {l ty} (e : expr l ty) (h : hlist type_denote l) : type_denote ty :=
   let fix go {l ty} (e : expr l ty) (h : hlist type_denote l) : type_denote ty :=
