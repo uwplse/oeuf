@@ -328,3 +328,64 @@ Eval compute in @map nat nat.
 
 Example map_reflect_correct : forall l h, expr_denote(l := l) map_reflect h = @map nat nat.
 Proof. reflexivity. Qed.
+
+Fixpoint insert (ty : type) (l : list type) (n : nat) {struct n} : list type :=
+  match n with
+  | 0 => ty :: l
+  | S n' => match l with
+           | [] => ty :: l
+           | x :: l' => x :: insert ty l' n'
+           end
+  end.
+
+Fixpoint liftVar {ty l ty'} (m : member ty l) n : member ty (insert ty' l n) :=
+  match m with
+  | Here => match n as n0 return member _ (insert _ _ n0) with
+           | 0 => There Here
+           | S n' => Here
+           end
+  | There m' => match n as n0 return member _ (insert _ _ n0) with
+               | 0 => There (There m')
+               | S n' => There (liftVar m' _)
+               end
+  end.
+
+Fixpoint lift' {l ty ty'} n (e : expr l ty) {struct e} : expr (insert ty' l n) ty :=
+  let fix go_hlist {l ty'} n {tys} (h : hlist (expr l) tys) :
+        hlist (expr (insert ty' l n)) tys :=
+      match h with
+      | hnil => hnil
+      | hcons x h' => hcons (lift' n x) (go_hlist n h')
+      end
+  in
+  match e in expr l0 ty0 return expr (insert ty' l0 n) ty0 with
+  | Var m => Var (liftVar m n)
+  | Lam b => Lam (lift' (S n) b)
+  | App e1 e2 => App (lift' n e1) (lift' n e2)
+  | Constr c args => Constr c (go_hlist n args)
+  | Elim e cases target => Elim e (go_hlist n cases) (lift' n target)
+  end.
+Definition lift {l} ty' ty e := @lift' l ty ty' 0 e.
+
+
+Fixpoint hmap {A B C} {l : list A} (f : forall a, B a -> C a) (h : hlist B l) : hlist C l :=
+  match h with
+  | hnil => hnil
+  | hcons x h' => hcons (f _ x) (hmap f h')
+  end.
+
+Fixpoint subst {l ty} (e : expr l ty) {l'} : hlist (expr l') l -> expr l' ty :=
+  let fix go_hlist {l tys} (h' : hlist (expr l) tys) {l'} (h : hlist (expr l') l) :
+        hlist (expr l') tys :=
+      match h' with
+      | hnil => hnil
+      | hcons x h'' => hcons (subst x h) (go_hlist h'' h)
+      end
+  in
+  match e with
+  | Var m => fun h => hget h m
+  | Lam b => fun h => Lam (subst b (hcons (Var Here) (hmap (lift _) h)))
+  | App e1 e2 => fun h => App (subst e1 h) (subst e2 h)
+  | Constr c args => fun h => Constr c (go_hlist args h)
+  | Elim e cases target => fun h => Elim e (go_hlist cases h) (subst target h)
+  end.
