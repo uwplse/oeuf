@@ -329,16 +329,18 @@ Eval compute in @map nat nat.
 Example map_reflect_correct : forall l h, expr_denote(l := l) map_reflect h = @map nat nat.
 Proof. reflexivity. Qed.
 
-Fixpoint insert (ty : type) (l : list type) (n : nat) {struct n} : list type :=
+Fixpoint insert {A} (a : A) (l : list A) (n : nat) {struct n} : list A :=
   match n with
-  | 0 => ty :: l
+  | 0 => a :: l
   | S n' => match l with
-           | [] => ty :: l
-           | x :: l' => x :: insert ty l' n'
+           | [] => a :: l
+           | x :: l' => x :: insert a l' n'
            end
   end.
 
-Fixpoint liftVar {ty l ty'} (m : member ty l) n : member ty (insert ty' l n) :=
+
+
+Fixpoint insert_member {A} {ty : A} {l ty'} (m : member ty l) n : member ty (insert ty' l n) :=
   match m with
   | Here => match n as n0 return member _ (insert _ _ n0) with
            | 0 => There Here
@@ -346,8 +348,18 @@ Fixpoint liftVar {ty l ty'} (m : member ty l) n : member ty (insert ty' l n) :=
            end
   | There m' => match n as n0 return member _ (insert _ _ n0) with
                | 0 => There (There m')
-               | S n' => There (liftVar m' _)
+               | S n' => There (insert_member m' _)
                end
+  end.
+
+Fixpoint insert_hlist {A} {B : A -> Type} {l : list A} {a : A} (b : B a) (n : nat) {struct n}:
+  hlist B l -> hlist B (insert a l n) :=
+  match n with
+  | 0 => fun h => hcons b h
+  | S n' => match l with
+           | [] => fun _ => hcons b hnil
+           | x :: l' => fun h => hcons (hhead h) (insert_hlist b n' (htail h))
+           end
   end.
 
 Fixpoint lift' {l ty ty'} n (e : expr l ty) {struct e} : expr (insert ty' l n) ty :=
@@ -359,7 +371,7 @@ Fixpoint lift' {l ty ty'} n (e : expr l ty) {struct e} : expr (insert ty' l n) t
       end
   in
   match e in expr l0 ty0 return expr (insert ty' l0 n) ty0 with
-  | Var m => Var (liftVar m n)
+  | Var m => Var (insert_member m n)
   | Lam b => Lam (lift' (S n) b)
   | App e1 e2 => App (lift' n e1) (lift' n e2)
   | Constr c args => Constr c (go_hlist n args)
