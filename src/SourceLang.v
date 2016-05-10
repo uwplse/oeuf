@@ -401,3 +401,122 @@ Fixpoint subst {l ty} (e : expr l ty) {l'} : hlist (expr l') l -> expr l' ty :=
   | Constr c args => fun h => Constr c (go_hlist args h)
   | Elim e cases target => fun h => Elim e (go_hlist cases h) (subst target h)
   end.
+
+Require Import FunctionalExtensionality.
+Require Import Program.
+
+Lemma hget_hmap :
+  forall A B C (l : list A) (f : forall a, B a -> C a) (h : hlist B l) t (m : member t _),
+    hget (hmap f h) m = f _ (hget h m).
+Proof.
+  intros A B C l f h.
+  induction h; intros; dependent destruction m; simpl; auto.
+Qed.
+
+Lemma hmap_hmap :
+  forall A B C D (l : list A) (f : forall a, B a -> C a) (g : forall a, C a -> D a) (h : hlist B l),
+    hmap g (hmap f h) = hmap (fun a b => g a (f a b)) h.
+Proof.
+  induction h; simpl; auto using f_equal.
+Qed.
+
+Lemma hmap_ext :
+  forall A B C (l : list A) (f g : forall a, B a -> C a) (h : hlist B l),
+    (forall a b, f a b = g a b) ->
+    hmap f h = hmap g h.
+Proof.
+  induction h; simpl; auto; auto.
+  intros. rewrite H. auto using f_equal.
+Qed.
+
+Lemma hget_insert:
+  forall l ty (m : member ty l) n ty' vs (x : type_denote ty'),
+    hget (insert_hlist x n vs) (insert_member m n) = hget vs m.
+Proof.
+  induction m; intros; destruct n; simpl in *.
+  - auto.
+  - dependent destruction vs. auto.
+  - dependent destruction vs. auto.
+  - dependent destruction vs. simpl. auto.
+Qed.
+
+Lemma lift'_denote :
+  forall l ty (e : expr l ty) n ty' vs (x : type_denote ty'),
+    expr_denote (lift' n e) (insert_hlist x n vs) =
+    expr_denote e vs.
+Proof.
+  refine (expr_mut_rect' _ _ _ _ _ _); intros.
+  - simpl. apply hget_insert.
+  - simpl. apply functional_extensionality. intros z.
+    apply H with (n := (S _)) (vs := hcons _ _).
+  - simpl. rewrite H. rewrite H0. auto.
+  - simpl. unfold constr_denote.
+    destruct c; auto.
+    + dependent destruction H. simpl. auto.
+    + dependent destruction H.
+      dependent destruction H.
+      simpl. f_equal; auto.
+  - simpl. unfold elim_denote.
+    destruct e; auto.
+    + dependent destruction H.
+      dependent destruction H.
+      simpl. f_equal; auto.
+    + dependent destruction H.
+      dependent destruction H.
+      simpl. f_equal; auto.
+    + dependent destruction H.
+      dependent destruction H.
+      simpl. f_equal; auto.
+Qed.
+
+Lemma lift_denote :
+  forall ty1 l' (vs : hlist type_denote l')
+    (x : type_denote ty1) (ty : type) (e : expr l' ty),
+    expr_denote (lift ty1 ty e) (hcons x vs) = expr_denote e vs.
+Proof.
+  intros ty1 l' vs x.
+  unfold lift.
+  intros.
+  apply lift'_denote with (n := 0).
+Qed.
+
+
+Theorem subst_denote :
+  forall l ty (e : expr l ty) l' (sub : hlist (expr l') l)
+    (vs : hlist type_denote l'),
+    expr_denote (subst e sub) vs =
+    expr_denote e (hmap (fun t (e' : expr _ t) => expr_denote e' vs) sub).
+Proof.
+  refine (expr_mut_rect' _ _ _ _ _ _); intros.
+  - simpl. rewrite hget_hmap. auto.
+  - simpl. apply functional_extensionality. intros.
+    rewrite H.
+    simpl.
+    f_equal. f_equal.
+    rewrite hmap_hmap.
+    apply hmap_ext.
+    intros.
+    apply lift_denote.
+  - simpl. rewrite H. rewrite H0. auto.
+  - simpl. unfold constr_denote.
+    destruct c; auto.
+    + f_equal.
+      dependent destruction H.
+      simpl. auto.
+    + dependent destruction H.
+      simpl.
+      dependent destruction H.
+      simpl.
+      f_equal; auto.
+  - simpl. unfold elim_denote.
+    destruct e.
+    + dependent destruction H.
+      dependent destruction H.
+      simpl. f_equal; auto.
+    + dependent destruction H.
+      dependent destruction H.
+      simpl. f_equal; auto.
+    + dependent destruction H.
+      dependent destruction H.
+      simpl. f_equal; auto.
+Qed.
