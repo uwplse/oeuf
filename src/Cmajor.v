@@ -17,8 +17,16 @@ Require Import Arith.
 Require Import StructTact.StructTactics.
 Require Import StructTact.Util.
 
+Inductive constant : Type :=
+  | Ointconst: int -> constant     (**r integer constant *)
+  | Oaddrsymbol: ident -> int -> constant (**r address of the symbol plus the offset *)
+  | Oaddrstack: int -> constant.   (**r stack pointer plus the given offset *)
+
+
 Inductive expr : Type :=
   | Evar : ident -> expr
+  | Econst : constant -> expr
+  | Eadd : expr -> expr -> expr
   | Eload : memory_chunk -> expr -> expr.
 
 Inductive stmt : Type :=
@@ -112,21 +120,38 @@ Variable sp: val.
 Variable e: env.
 Variable m: mem.
 
-Inductive eval_expr: expr -> val -> Prop :=
+Definition eval_constant (sp: val) (cst: constant) : option val :=
+  match cst with
+  | Ointconst n => Some (Vint n)
+  | Oaddrsymbol s ofs =>
+      Some(match Genv.find_symbol ge s with
+           | None => Vundef
+           | Some b => Vptr b ofs end)
+  | Oaddrstack ofs => Some (Val.add sp (Vint ofs))
+  end.
+
+Inductive eval_expr(sp : val) : expr -> val -> Prop :=
   | eval_Evar: forall id v,
       PTree.get id e = Some v ->
-      eval_expr (Evar id) v
+      eval_expr sp (Evar id) v
+  | eval_Econst: forall cst v,
+      eval_constant sp cst = Some v ->
+      eval_expr sp (Econst cst) v
+  | eval_Eadd: forall a1 a2 v1 v2,
+      eval_expr sp a1 v1 ->
+      eval_expr sp a2 v2 ->
+      eval_expr sp (Eadd a1 a2) (Val.add v1 v2)
   | eval_Eload: forall chunk addr vaddr v,
-      eval_expr addr vaddr ->
+      eval_expr sp addr vaddr ->
       Mem.loadv chunk m vaddr = Some v ->
-      eval_expr (Eload chunk addr) v.
+      eval_expr sp (Eload chunk addr) v.
 
-Inductive eval_exprlist: list expr -> list val -> Prop :=
+Inductive eval_exprlist(sp : val): list expr -> list val -> Prop :=
   | eval_Enil:
-      eval_exprlist nil nil
+      eval_exprlist sp nil nil
   | eval_Econs: forall a1 al v1 vl,
-      eval_expr a1 v1 -> eval_exprlist al vl ->
-      eval_exprlist (a1 :: al) (v1 :: vl).
+      eval_expr sp a1 v1 -> eval_exprlist sp al vl ->
+      eval_exprlist sp (a1 :: al) (v1 :: vl).
 
 End EVAL_EXPR.
 
@@ -148,7 +173,6 @@ Definition is_call_cont (k: cont) : Prop :=
 
 
 Inductive step: state -> trace -> state -> Prop :=
-
   | step_skip_seq: forall f s k sp e m,
       step (State f Sskip (Kseq s k) sp e m)
         E0 (State f s k sp e m)
@@ -160,22 +184,19 @@ Inductive step: state -> trace -> state -> Prop :=
       Mem.free m sp 0 f.(fn_stackspace) = Some m' ->
       step (State f Sskip k (Vptr sp Int.zero) e m)
         E0 (Returnstate Vundef k m')
-
   | step_assign: forall f id a k sp e m v,
-      eval_expr e m a v ->
+      eval_expr e m sp a v ->
       step (State f (Sassign id a) k sp e m)
         E0 (State f Sskip k sp (PTree.set id v e) m)
-
   | step_store: forall f chunk addr a k sp e m vaddr v m',
-      eval_expr e m addr vaddr ->
-      eval_expr e m a v ->
+      eval_expr e m sp addr vaddr ->
+      eval_expr e m sp a v ->
       Mem.storev chunk m vaddr v = Some m' ->
       step (State f (Sstore chunk addr a) k sp e m)
         E0 (State f Sskip k sp e m')
-
   | step_call: forall f optid sig a bl k sp e m vf vargs fd,
-      eval_expr e m a vf ->
-      eval_exprlist e m bl vargs ->
+      eval_expr e m sp a vf ->
+      eval_exprlist e m sp bl vargs ->
       Genv.find_funct ge vf = Some fd ->
       funsig fd = sig ->
       step (State f (Scall optid sig a bl) k sp e m)
@@ -191,7 +212,7 @@ Inductive step: state -> trace -> state -> Prop :=
   (*       E0 (Callstate fd vargs (call_cont k) m') *)
 
   | step_builtin: forall f optid ef bl k sp e m vargs t vres m',
-      eval_exprlist e m bl vargs ->
+      eval_exprlist e m sp bl vargs ->
       external_call ef ge vargs m t vres m' ->
       step (State f (Sbuiltin optid ef bl) k sp e m)
          t (State f Sskip k sp (set_optvar optid vres e) m')
@@ -225,7 +246,7 @@ Inductive step: state -> trace -> state -> Prop :=
   (*       E0 (State f (Sexit n) k sp e m) *)
 
   | step_switch: forall f islong a cases default k sp e m v n,
-      eval_expr e m a v ->
+      eval_expr e m sp a v ->
       switch_argument islong v n ->
       step (State f (Sswitch islong a cases default) k sp e m)
         E0 (State f (Sexit (switch_target n default cases)) k sp e m)
@@ -235,7 +256,7 @@ Inductive step: state -> trace -> state -> Prop :=
       step (State f (Sreturn None) k (Vptr sp Int.zero) e m)
         E0 (Returnstate Vundef (call_cont k) m')
   | step_return_1: forall f a k sp e m v m',
-      eval_expr e m a v ->
+      eval_expr e m (Vptr sp Int.zero) a v ->
       Mem.free m sp 0 f.(fn_stackspace) = Some m' ->
       step (State f (Sreturn (Some a)) k (Vptr sp Int.zero) e m)
         E0 (Returnstate v (call_cont k) m')

@@ -16,10 +16,18 @@ Require Import Cmajor.
 Require Import StructTact.StructTactics.
 Require Import StructTact.Util.
 
+Definition transf_const (c : Cmajor.constant) : Cminor.constant :=
+  match c with
+  | Ointconst i => Cminor.Ointconst i
+  | Oaddrsymbol id i => Cminor.Oaddrsymbol id i
+  | Oaddrstack i => Cminor.Oaddrstack i
+  end.
 
 Fixpoint transf_expr (e : Cmajor.expr) : Cminor.expr :=
   match e with
   | Evar id => Cminor.Evar id
+  | Econst c => Cminor.Econst (transf_const c)
+  | Eadd e1 e2 => Cminor.Ebinop Cminor.Oadd (transf_expr e1) (transf_expr e2)
   | Eload mc exp => Cminor.Eload mc (transf_expr exp)
   end.
 
@@ -125,10 +133,29 @@ Ltac invp pat :=
   | [ H : context[pat] |- _ ] => inversion H
   end.
 
+
+Lemma find_symbol_transf :
+  forall id,
+    Genv.find_symbol tge id = Genv.find_symbol ge id.
+Proof.
+  intros. unfold tge.
+  unfold ge. rewrite <- TRANSF.
+  apply Genv.find_symbol_transf.
+Qed.
+
+Lemma eval_const_transf :
+  forall sp c v,
+    Cmajor.eval_constant ge sp c = Some v ->
+    Cminor.eval_constant tge sp (transf_const c) = Some v.
+Proof.
+  intros. destruct c; simpl in *; auto.
+  erewrite find_symbol_transf; eauto.
+Qed.
+
 Lemma eval_expr_transf :
-  forall a e m v,
-    Cmajor.eval_expr e m a v ->
-    forall tge sp e' m',
+  forall sp a e m v,
+    Cmajor.eval_expr ge e m sp a v ->
+    forall e' m',
       env_lessdef e e' ->
       Mem.extends m m' ->
       exists v',
@@ -141,10 +168,20 @@ Proof.
     eexists.
     split. econstructor.
     eassumption. assumption.
+  * inversion H.
+    eapply eval_const_transf in H3.
+    eexists; split; simpl; econstructor; eauto.
+  * inv H.
+    eapply IHa1 in H4; eauto.
+    eapply IHa2 in H6; eauto.
+    clear IHa1 IHa2.
+    repeat break_exists; repeat break_and.
+    exists (Val.add x0 x). split.
+    simpl. econstructor; eauto.
+    eapply Val.add_lessdef; eauto.
   * inv H. eapply IHa in H4; eauto.
     break_exists. break_and.
-    instantiate (1 := sp) in H2.
-    instantiate (1 := tge0) in H2.
+    clear IHa.
     simpl.
     eapply Mem.loadv_extends in H6; eauto.
     break_exists; break_and. 
@@ -152,10 +189,12 @@ Proof.
     econstructor; eauto.
 Qed.
 
+Check Cmajor.eval_exprlist.
+
 Lemma eval_exprlist_transf :
-  forall a e m v,
-    Cmajor.eval_exprlist e m a v ->
-    forall tge sp e' m',
+  forall a sp e m v,
+    Cmajor.eval_exprlist ge e m sp a v ->
+    forall e' m',
       env_lessdef e e' ->
       Mem.extends m m' ->
       exists v',
@@ -220,14 +259,6 @@ Proof.
   intros. destruct fd; simpl; reflexivity.
 Qed.
 
-Lemma find_symbol_transf :
-  forall id,
-    Genv.find_symbol tge id = Genv.find_symbol ge id.
-Proof.
-  intros. unfold tge.
-  unfold ge. rewrite <- TRANSF.
-  apply Genv.find_symbol_transf.
-Qed.
 
 Lemma public_symbol_transf :
   forall id,
