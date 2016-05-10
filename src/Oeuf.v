@@ -547,46 +547,48 @@ Lemma correctness :
   forall {ty} (r : expr.syntax ty) c,
     reflection_sim c r.
 Proof.
-  induction r; intros;
-    unfold reflection_sim in *;
-    intros; simpl.
-  (* compiling an int literal *)
-  * eapply star_refl; eauto.
-  (* compiling an addition *)
-  * eapply star_trans.
-    3: instantiate (2 := Events.E0); simpl; reflexivity.
-    replace (c (Csyntax.Ebinop Cop.Oadd (compiler.compile r1) (compiler.compile r2) IRToC.Tint)) with
-    ((fun l => (c (Csyntax.Ebinop Cop.Oadd l (compiler.compile r2) IRToC.Tint))) (compiler.compile r1)) by (simpl; auto).
-    eapply (IHr1 (fun l => (c (Csyntax.Ebinop Cop.Oadd l (compiler.compile r2) IRToC.Tint)))).
-    eapply star_trans.
-    3: instantiate (2 := Events.E0); simpl; reflexivity.
-    replace (c
-           (Csyntax.Ebinop Cop.Oadd
-              (Csyntax.Eval (Values.Vint (expr.denote r1)) IRToC.Tint)
-              (compiler.compile r2) IRToC.Tint))
-    with
-    ((fun r => (c
-           (Csyntax.Ebinop Cop.Oadd
-              (Csyntax.Eval (Values.Vint (expr.denote r1)) IRToC.Tint)
-              r IRToC.Tint))) (compiler.compile r2)) by (simpl; auto).
-    eapply (IHr2 ((fun r => (c
-           (Csyntax.Ebinop Cop.Oadd
-              (Csyntax.Eval (Values.Vint (expr.denote r1)) IRToC.Tint)
-              r IRToC.Tint))))).
-    eapply star_one.
-    (* Now we're stuck, need a step we can't take *)
+
+Admitted.
+(*   induction r; intros; *)
+(*     unfold reflection_sim in *; *)
+(*     intros; simpl. *)
+(*   (* compiling an int literal *) *)
+(*   * eapply star_refl; eauto. *)
+(*   (* compiling an addition *) *)
+(*   * eapply star_trans. *)
+(*     3: instantiate (2 := Events.E0); simpl; reflexivity. *)
+(*     replace (c (Csyntax.Ebinop Cop.Oadd (compiler.compile r1) (compiler.compile r2) IRToC.Tint)) with *)
+(*     ((fun l => (c (Csyntax.Ebinop Cop.Oadd l (compiler.compile r2) IRToC.Tint))) (compiler.compile r1)) by (simpl; auto). *)
+(*     eapply (IHr1 (fun l => (c (Csyntax.Ebinop Cop.Oadd l (compiler.compile r2) IRToC.Tint)))). *)
+(*     eapply star_trans. *)
+(*     3: instantiate (2 := Events.E0); simpl; reflexivity. *)
+(*     replace (c *)
+(*            (Csyntax.Ebinop Cop.Oadd *)
+(*               (Csyntax.Eval (Values.Vint (expr.denote r1)) IRToC.Tint) *)
+(*               (compiler.compile r2) IRToC.Tint)) *)
+(*     with *)
+(*     ((fun r => (c *)
+(*            (Csyntax.Ebinop Cop.Oadd *)
+(*               (Csyntax.Eval (Values.Vint (expr.denote r1)) IRToC.Tint) *)
+(*               r IRToC.Tint))) (compiler.compile r2)) by (simpl; auto). *)
+(*     eapply (IHr2 ((fun r => (c *)
+(*            (Csyntax.Ebinop Cop.Oadd *)
+(*               (Csyntax.Eval (Values.Vint (expr.denote r1)) IRToC.Tint) *)
+(*               r IRToC.Tint))))). *)
+(*     eapply star_one. *)
+(*     (* Now we're stuck, need a step we can't take *) *)
     
 
-    SearchAbout star.
-    eapply star_left.
-    SearchAbout Csyntax.Ebinop.
+(*     SearchAbout star. *)
+(*     eapply star_left. *)
+(*     SearchAbout Csyntax.Ebinop. *)
     
-    Print Cstrategy.estep.
+(*     Print Cstrategy.estep. *)
 
-    unfold reflection_sim in *.
+(*     unfold reflection_sim in *. *)
     
     
-eapply star_one; eauto.
-    econstructor; simpl; eauto.
-    econstructor; eauto.
-    2: simpl.
+(* eapply star_one; eauto. *)
+(*     econstructor; simpl; eauto. *)
+(*     econstructor; eauto. *)
+(*     2: simpl. *)
