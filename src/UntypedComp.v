@@ -69,8 +69,8 @@ Lemma nth_member_hget :
     nth (member m) (hmap_simple f h) c = f _ (S.hget h m).
 Proof.
   induction h; intros.
-  - destruct m using S.member_nil.
-  - destruct a, l, m using S.member_cons; simpl; auto.
+  - destruct m using S.case_member_nil.
+  - destruct a, l, m using S.case_member_cons; simpl; auto.
 Qed.
 
 
