@@ -1,6 +1,8 @@
 Require Import List.
 Import ListNotations.
 
+Require Import StructTact.StructTactics.
+
 Inductive type_name :=
 | Bool
 | Nat
@@ -546,4 +548,76 @@ Proof.
     destruct e;
     repeat destruct cases, H as [? cases] using case_HForall_cons;
       simpl; f_equal; auto.
+Qed.
+
+
+Definition value {l ty} (e : expr l ty) : Prop :=
+  let fix go {l ty} (e : expr l ty) : Prop :=
+      let fix go_hlist {l tys} (h : hlist (expr l) tys) : Prop :=
+          match h with
+          | hnil => True
+          | hcons x h' => go x /\ go_hlist h'
+          end
+      in
+      match e with
+      | Var _ => False
+      | Lam _ => True
+      | App _ _ => False
+      | Constr c args => go_hlist args
+      | Elim _ _ _ => False
+      end
+  in go e.
+
+Fixpoint identity_subst l : hlist (expr l) l :=
+  match l with
+  | [] => hnil
+  | ty :: l' => hcons (Var Here) (hmap (fun a e => lift _ _ e) (identity_subst l'))
+  end.
+
+(* Restricting to closed terms (ie, l = []) turns out to be super
+   annoying, so we phrase stepping on open terms instead.  We will
+   only ever use it on closed terms. Also, this cannot (afaict) be
+   defined as an inductive predicate because doing it that way causes
+   inversion to be useless (it generates a bunch of [existsT x y =
+   existsT x z] hypotheses). The current way is uglier, but at least
+   it works. *)
+Definition step {l ty} (e : expr l ty) : expr l ty -> Prop :=
+  let fix go {l ty} (e : expr l ty) {struct e} : expr l ty -> Prop :=
+      match e with
+      | Var _ => fun _ => False
+      | Lam _ => fun _ => False
+      | App e1 e2 =>
+        fun e' =>
+          ((exists e1', go e1 e1' /\ e' = App e1' e2) \/
+           (value e1 /\ exists e2', go e2 e2' /\ e' = App e1 e2') \/
+           (value e2 /\ exists b, e1 = Lam b /\ e' = subst b (hcons e2 (identity_subst _))))
+      | Constr _ _ => fun _ => False (* TODO: step under Constr *)
+      | Elim _ _ _ => fun _ => False
+      end
+  in go e.
+
+Lemma hmap_denote_identity :
+  forall l vs,
+    hmap (fun t e => expr_denote e vs) (identity_subst l) = vs.
+Proof.
+  induction l; simpl; intros.
+  - now destruct vs using case_hlist_nil.
+  - destruct vs using case_hlist_cons.
+    f_equal.
+    rewrite hmap_hmap.
+    erewrite hmap_ext; eauto.
+    intros. apply lift_denote.
+Qed.
+
+Theorem step_denote : forall l ty (e e' : expr l ty) vs,
+    step e e' ->
+    expr_denote e vs = expr_denote e' vs.
+Proof.
+  refine (expr_mut_rect' _ _ _ _ _ _); simpl; firstorder.
+  - subst. now erewrite H by eauto.
+  - subst. now erewrite H0 by eauto.
+  - subst. simpl. rewrite subst_denote.
+    simpl.
+    f_equal. f_equal.
+    now rewrite hmap_denote_identity.
 Qed.
