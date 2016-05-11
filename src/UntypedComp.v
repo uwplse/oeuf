@@ -94,9 +94,15 @@ Proof.
     apply H with (n := (S n)).
   - f_equal; auto.
   - unfold constr_name.
-    destruct c; repeat dependent destruction H; simpl; auto using f_equal, f_equal2.
+    destruct c;
+      repeat destruct args, H as [? args] using S.case_HForall_cons;
+      repeat destruct args, H using S.case_HForall_nil;
+      simpl; auto using f_equal, f_equal2.
   - unfold elim_to_type_name.
-    destruct e; repeat dependent destruction H; simpl; auto using f_equal, f_equal2.
+    destruct e;
+     repeat destruct cases, H as [? cases] using S.case_HForall_cons;
+     repeat destruct cases, H using S.case_HForall_nil;
+     simpl; auto using f_equal, f_equal2.
 Qed.
 
 Lemma compile_lift :
@@ -142,7 +148,13 @@ Proof.
     intros. apply compile_lift.
   - f_equal; auto.
   - unfold constr_name.
-    destruct c; repeat dependent destruction H; simpl; auto using f_equal, f_equal2.
+    destruct c;
+      repeat destruct args, H as [? args] using S.case_HForall_cons;
+      repeat destruct args, H using S.case_HForall_nil;
+      simpl; auto using f_equal, f_equal2.
   - unfold elim_to_type_name.
-    destruct e; repeat dependent destruction H; simpl; auto using f_equal, f_equal2.
+    destruct e;
+      repeat destruct cases, H as [? cases] using S.case_HForall_cons;
+      repeat destruct cases, H using S.case_HForall_nil;
+      simpl; auto using f_equal, f_equal2.
 Qed.

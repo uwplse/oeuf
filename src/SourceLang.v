@@ -463,33 +463,50 @@ Proof.
   - destruct vs using case_hlist_cons. simpl. auto.
 Qed.
 
+Definition case_HForall_nil {A} {B : A -> Type} {P : forall a, B a -> Type}
+           (Q : forall hl : hlist B [], HForall P hl -> Type)
+           (case : Q hnil (HFhnil _))
+           hl H : Q hl H :=
+  match H with
+  | HFhnil _ => case
+  | HFhcons _ _ _ _ _ _ _ => tt
+  end.
+
+Definition case_HForall_cons {A} {B : A -> Type} {P : forall a, B a -> Type} {h t}
+           (Q : forall hl : hlist B (h :: t), HForall P hl -> Type)
+           (case : forall hh ht (pf : (P _ hh)) (H : HForall P ht),
+               Q (hcons hh ht) (HFhcons _ _ _ _ _ pf H))
+           (hl : hlist B (h :: t)) (H : HForall P hl) : Q hl H :=
+  match H as H0 in @HForall _ _ _ l0 hl0
+        return match l0 return forall hl0', HForall _ hl0' -> Type with
+               | [] => fun _ _ => unit
+               | h0 :: t0 => fun hl0' H0' =>
+                              forall Q, (forall (hh : B h0) (ht : hlist B t0) pf H,
+                                       Q (hcons hh ht) (HFhcons _ _ hh _ ht pf H)) ->
+                                   Q hl0' H0'
+               end hl0 H0 with
+  | HFhnil _ => tt
+  | HFhcons _ _ _ _ _ _ _ => fun Q' case' => case' _ _ _ _
+  end Q case.
+
 Lemma lift'_denote :
   forall l ty (e : expr l ty) n ty' vs (x : type_denote ty'),
     expr_denote (lift' n e) (insert_hlist x n vs) =
     expr_denote e vs.
 Proof.
-  refine (expr_mut_rect' _ _ _ _ _ _); intros.
-  - simpl. apply hget_insert.
-  - simpl. apply functional_extensionality. intros z.
+  refine (expr_mut_rect' _ _ _ _ _ _); intros; simpl.
+  - apply hget_insert.
+  - apply functional_extensionality. intros z.
     apply H with (n := (S _)) (vs := hcons _ _).
-  - simpl. rewrite H. rewrite H0. auto.
-  - simpl. unfold constr_denote.
-    destruct c; auto.
-    + dependent destruction H. simpl. auto.
-    + dependent destruction H.
-      dependent destruction H.
-      simpl. f_equal; auto.
-  - simpl. unfold elim_denote.
-    destruct e; auto.
-    + dependent destruction H.
-      dependent destruction H.
-      simpl. f_equal; auto.
-    + dependent destruction H.
-      dependent destruction H.
-      simpl. f_equal; auto.
-    + dependent destruction H.
-      dependent destruction H.
-      simpl. f_equal; auto.
+  - rewrite H. rewrite H0. auto.
+  - unfold constr_denote.
+    destruct c; auto;
+      repeat destruct args, H as [? args] using case_HForall_cons;
+      simpl; f_equal; auto.
+  - unfold elim_denote.
+    destruct e; auto;
+      repeat destruct cases, H as [? cases] using case_HForall_cons;
+      simpl; f_equal; auto.
 Qed.
 
 Lemma lift_denote :
@@ -510,9 +527,9 @@ Theorem subst_denote :
     expr_denote (subst e sub) vs =
     expr_denote e (hmap (fun t (e' : expr _ t) => expr_denote e' vs) sub).
 Proof.
-  refine (expr_mut_rect' _ _ _ _ _ _); intros.
-  - simpl. rewrite hget_hmap. auto.
-  - simpl. apply functional_extensionality. intros.
+  refine (expr_mut_rect' _ _ _ _ _ _); intros; simpl.
+  - rewrite hget_hmap. auto.
+  - apply functional_extensionality. intros.
     rewrite H.
     simpl.
     f_equal. f_equal.
@@ -520,26 +537,13 @@ Proof.
     apply hmap_ext.
     intros.
     apply lift_denote.
-  - simpl. rewrite H. rewrite H0. auto.
-  - simpl. unfold constr_denote.
-    destruct c; auto.
-    + f_equal.
-      dependent destruction H.
-      simpl. auto.
-    + dependent destruction H.
-      simpl.
-      dependent destruction H.
-      simpl.
-      f_equal; auto.
-  - simpl. unfold elim_denote.
-    destruct e.
-    + dependent destruction H.
-      dependent destruction H.
-      simpl. f_equal; auto.
-    + dependent destruction H.
-      dependent destruction H.
-      simpl. f_equal; auto.
-    + dependent destruction H.
-      dependent destruction H.
-      simpl. f_equal; auto.
+  - rewrite H. rewrite H0. auto.
+  - unfold constr_denote.
+    destruct c; auto;
+      repeat destruct args, H as [? args] using case_HForall_cons;
+      simpl; f_equal; auto.
+  - unfold elim_denote.
+    destruct e;
+    repeat destruct cases, H as [? cases] using case_HForall_cons;
+      simpl; f_equal; auto.
 Qed.
