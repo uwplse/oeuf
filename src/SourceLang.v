@@ -16,13 +16,13 @@ Inductive type :=
 
 (* a constructor that takes a list of arguments (with types given by the first index)
    and returns a piece of data (with type given by the second index) *)
-Inductive constr : list type -> type -> Type :=
-| CTrue  : constr [] (ADT Bool)
-| CFalse : constr [] (ADT Bool)
-| CZero  : constr [] (ADT Nat)
-| CSucc  : constr [ADT Nat] (ADT Nat)
-| CNil   : constr [] (ADT ListNat)
-| CCons  : constr [ADT Nat; ADT ListNat] (ADT ListNat)
+Inductive constr : list type -> type_name -> Type :=
+| CTrue  : constr [] Bool
+| CFalse : constr [] Bool
+| CZero  : constr [] Nat
+| CSucc  : constr [ADT Nat] Nat
+| CNil   : constr [] ListNat
+| CCons  : constr [ADT Nat; ADT ListNat] ListNat
 .
 
 (* an eliminator that takes cases with types given by the first index,
@@ -105,7 +105,7 @@ Inductive expr : list type -> type -> Type :=
 | Var : forall {ty l}, member ty l -> expr l ty
 | Lam : forall {ty1 ty2 l}, expr (ty1 :: l) ty2 -> expr l (Arrow ty1 ty2)
 | App : forall {ty1 ty2 l}, expr l (Arrow ty1 ty2) -> expr l ty1 -> expr l ty2
-| Constr : forall {ty arg_tys l} (c : constr arg_tys ty), hlist (expr l) arg_tys -> expr l ty
+| Constr : forall {ty arg_tys l} (c : constr arg_tys ty), hlist (expr l) arg_tys -> expr l (ADT ty)
 | Elim : forall {case_tys target_ty ty l} (e : elim case_tys target_ty ty),
     hlist (expr l) case_tys ->
     expr l target_ty ->
@@ -128,7 +128,7 @@ Fixpoint type_denote (ty : type) : Type :=
 
 
 Definition constr_denote {arg_tys ty} (c : constr arg_tys ty) :
-  hlist type_denote arg_tys -> type_denote ty :=
+  hlist type_denote arg_tys -> type_denote (ADT ty) :=
   match c with
   | CTrue => fun _ => true
   | CFalse => fun _ => false
@@ -159,7 +159,7 @@ Definition expr_mut_rect
            (Hlam : forall l ty1 ty2 b, P (ty1 :: l) ty2 b -> P l (Arrow ty1 ty2) (Lam b))
            (Happ : forall l ty1 ty2 e1 e2, P l (Arrow ty1 ty2) e1 -> P _ _ e2 -> P _ _ (App e1 e2))
            (Hconstr : forall l ty arg_tys c args,
-               Ph l arg_tys args -> P l ty (Constr c args))
+               Ph l arg_tys args -> P l (ADT ty) (Constr c args))
            (Helim : forall l ty case_tys target_ty e cases target,
                Ph l case_tys cases -> P l target_ty target -> P _ ty (Elim e cases target))
            (Hnil : forall l, Ph l _ hnil)
@@ -187,7 +187,7 @@ Definition expr_mut_rect'
            (Hlam : forall l ty1 ty2 b, P (ty1 :: l) ty2 b -> P l (Arrow ty1 ty2) (Lam b))
            (Happ : forall l ty1 ty2 e1 e2, P l (Arrow ty1 ty2) e1 -> P _ _ e2 -> P _ _ (App e1 e2))
            (Hconstr : forall l ty arg_tys c (args : hlist (expr l) arg_tys),
-               HForall (P l) args -> P l ty (Constr c args))
+               HForall (P l) args -> P l (ADT ty) (Constr c args))
            (Helim : forall l ty case_tys target_ty e (cases : hlist (expr l) case_tys) target,
                HForall (P l) cases -> P l target_ty target -> P _ ty (Elim e cases target))
            l ty e : P l ty e.
