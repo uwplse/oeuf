@@ -158,3 +158,37 @@ Proof.
       repeat destruct cases, H using S.case_HForall_nil;
       simpl; auto using f_equal, f_equal2.
 Qed.
+
+Hint Constructors U.value.
+Lemma compile_value :
+  forall l ty (e : S.expr l ty),
+    S.value e -> U.value (compile e).
+Proof.
+  refine (S.expr_mut_rect' _ _ _ _ _ _ ); simpl; intuition.
+  constructor.
+  clear c ty.
+  induction H.
+  - auto.
+  - intuition.
+Qed.
+
+Hint Constructors U.step.
+
+Theorem forward_simulation :
+  forall ty (e e' : S.expr [] ty),
+    S.step e e' ->
+    U.step (compile e) (compile e').
+Proof.
+  intros ty e.
+  remember [] as l.
+  revert l ty e Heql.
+  refine (S.expr_mut_rect' _ _ _ _ _ _); simpl; intros; subst; firstorder; subst; simpl.
+  - eauto.
+  - eauto using compile_value.
+  - rewrite compile_subst. simpl.
+    eapply eq_rect.
+    constructor. eauto using compile_value.
+    unfold U.subst.
+    now rewrite U.multisubst'_subst'.
+  - eauto.
+Qed.
