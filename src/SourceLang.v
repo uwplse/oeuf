@@ -71,10 +71,7 @@ Arguments There {A} {a} {x} {l} m.
 
 
 Definition case_member_nil {A} {a : A} (P : member a [] -> Type) (m : member a []) : P m :=
-  match m as m0 in member _ l0 return match l0 as l0' return member a l0' -> _ with
-                                      | nil => fun m0' => P m0'
-                                      | _ => fun _ => unit
-                                      end m0 with
+  match m with
   | Here => tt
   | There _ => tt
   end.
@@ -83,10 +80,7 @@ Definition case_member_nil {A} {a : A} (P : member a [] -> Type) (m : member a [
 Definition case_member_cons {A} {a : A} (P : forall h t, member a (h :: t) -> Type)
            (here : forall l, P a l Here) (there : forall h t (m : member a t), P h t (There m))
            {h t} (m : member a (h :: t)) : P h t m :=
-  match m as m0 in member _ l0 return match l0 as l0' return member a l0' -> Type with
-                                      | nil => fun _ => False
-                                      | h0 :: t0 => fun m0' => P h0 t0 m0'
-                                      end m0 with
+  match m with
   | Here => here _
   | There m' => there _ _ m'
   end.
