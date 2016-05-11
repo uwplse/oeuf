@@ -622,3 +622,42 @@ Proof.
     now rewrite hmap_denote_identity.
   - subst. simpl. now erewrite H0 by eauto.
 Qed.
+
+Lemma canonical_forms_arrow :
+  forall ty1 ty2 (e : expr [] (Arrow ty1 ty2)),
+    value e ->
+    exists b, e = Lam b.
+Proof.
+  intros ty1 ty2 e.
+  remember [] as l.
+  revert Heql.
+  refine match e with
+         | Var _ => _
+         | Lam _ => _
+         | App _ _ => _
+         | Constr _ _ => _
+         | Elim _ _ _ => _
+         end.
+  - destruct t; firstorder.
+  - eauto.
+  - destruct t0; firstorder.
+  - firstorder.
+  - destruct t0; firstorder.
+Qed.
+
+Theorem progress : forall ty (e : expr [] ty), value e \/ exists e', step e e'.
+Proof.
+  intros ty e.
+  remember [] as l.
+  revert l ty e Heql.
+  refine (expr_mut_rect' _ _ _ _ _ _); simpl; intros; subst; intuition.
+  - destruct m using case_member_nil.
+  - right. destruct (canonical_forms_arrow _ _ e1 H). subst.
+    eauto 10.
+  - right. break_exists. eauto 10.
+  - right. break_exists. eauto 10.
+  - right. break_exists. eauto 10.
+  - admit.
+  - admit.
+  - break_exists. eauto.
+Admitted.
