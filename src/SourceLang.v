@@ -592,7 +592,7 @@ Definition step {l ty} (e : expr l ty) : expr l ty -> Prop :=
            (value e1 /\ exists e2', go e2 e2' /\ e' = App e1 e2') \/
            (value e2 /\ exists b, e1 = Lam b /\ e' = subst b (hcons e2 (identity_subst _))))
       | Constr _ _ => fun _ => False (* TODO: step under Constr *)
-      | Elim _ _ _ => fun _ => False
+      | Elim e cases target => fun e' => exists target', go target target' /\ e' = Elim e cases target'
       end
   in go e.
 
@@ -620,4 +620,5 @@ Proof.
     simpl.
     f_equal. f_equal.
     now rewrite hmap_denote_identity.
+  - subst. simpl. now erewrite H0 by eauto.
 Qed.
