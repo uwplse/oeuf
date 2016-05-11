@@ -433,15 +433,34 @@ Proof.
   intros. rewrite H. auto using f_equal.
 Qed.
 
+Definition case_hlist_nil {A} {B : A -> Type} (P : hlist B [] -> Type) (case : P hnil) hl : P hl :=
+  match hl with
+  | hnil => case
+  | hcons _ _ => tt
+  end.
+
+Definition case_hlist_cons {A} {B : A -> Type} {h t} (P : hlist B (h :: t) -> Type)
+           (case : forall hh ht, P (hcons hh ht))
+           (hl : hlist B (h :: t)) : P hl :=
+  match hl as hl0 in hlist _ l0
+        return match l0 as l0' return hlist _ l0' -> Type with
+               | [] => fun _ => unit
+               | h0 :: t0 => fun hl0' => forall P', (forall hh ht, P' (hcons hh ht)) -> P' hl0'
+               end hl0 with
+  | hnil => tt
+  | hcons hh ht => fun P' case' => case' hh ht
+  end P case.
+
+
 Lemma hget_insert:
   forall l ty (m : member ty l) n ty' vs (x : type_denote ty'),
     hget (insert_hlist x n vs) (insert_member m n) = hget vs m.
 Proof.
   induction m; intros; destruct n; simpl in *.
   - auto.
-  - dependent destruction vs. auto.
-  - dependent destruction vs. auto.
-  - dependent destruction vs. simpl. auto.
+  - destruct vs using case_hlist_cons. auto.
+  - destruct vs using case_hlist_cons. auto.
+  - destruct vs using case_hlist_cons. simpl. auto.
 Qed.
 
 Lemma lift'_denote :
