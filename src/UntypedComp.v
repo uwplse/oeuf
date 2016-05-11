@@ -68,7 +68,9 @@ Lemma nth_member_hget :
   forall A (B : A -> Type) C (f : forall a, B a -> C) c l (h : S.hlist B l) t (m : S.member t l),
     nth (member m) (hmap_simple f h) c = f _ (S.hget h m).
 Proof.
-  induction h; intros; dependent destruction m; simpl; auto.
+  induction h; intros.
+  - destruct m using S.member_nil.
+  - destruct a, l, m using S.member_cons; simpl; auto.
 Qed.
 
 

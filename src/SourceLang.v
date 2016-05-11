@@ -69,27 +69,34 @@ Inductive member {A : Type} (a : A) : list A -> Type :=
 Arguments Here {A} {a} {l}.
 Arguments There {A} {a} {x} {l} m.
 
+Definition member_nil {A} {a : A} (P : member a [] -> Type) (m : member a []) : P m :=
+  match m as m0 in member _ l0 return match l0 as l0' return member a l0' -> _ with
+                                      | nil => fun m0' => P m0'
+                                      | _ => fun _ => unit
+                                      end m0 with
+  | Here => tt
+  | There _ => tt
+  end.
+
+
+Definition member_cons {A} {a : A} (P : forall h t, member a (h :: t) -> Type)
+           (here : forall l, P a l Here) (there : forall h t (m : member a t), P h t (There m))
+           {h t} (m : member a (h :: t)) : P h t m :=
+  match m as m0 in member _ l0 return match l0 as l0' return member a l0' -> Type with
+                                      | nil => fun _ => False
+                                      | h0 :: t0 => fun m0' => P h0 t0 m0'
+                                      end m0 with
+  | Here => here _
+  | There m' => there _ _ m'
+  end.
+
 (* given an index into l, lookup the corresponding element in an (hlist l) *)
 Fixpoint hget {A B} {l : list A} (h : hlist B l) (x : A) {struct h} : member x l -> B x :=
     match h with
-    | hnil =>
-      fun m : member x [] =>
-        match m in member _ l0 return match l0 with
-                                      | nil => B x
-                                      | _ :: _ => unit
-                                      end with
-        | Here => tt
-        | There _ => tt
-        end
+    | hnil => member_nil _
     | @hcons _ _ a b l' h' =>
       fun m : member x (a :: l') =>
-        match m in member _ l0 return match l0 with
-                                      | nil => unit
-                                      | a'' :: l'' => B a'' -> (member x l'' -> B x) -> B x
-                                      end with
-        | Here => fun b' _ => b'
-        | There m' => fun _ rec => rec m'
-        end b (hget h' x)
+        member_cons _ (fun _ b' _ => b') (fun _ _ m' _ rec => rec m') m b (hget h' x)
     end.
 Arguments hget {A B l} h {x} m.
 
@@ -410,7 +417,9 @@ Lemma hget_hmap :
     hget (hmap f h) m = f _ (hget h m).
 Proof.
   intros A B C l f h.
-  induction h; intros; dependent destruction m; simpl; auto.
+  induction h; intros.
+  - destruct m using member_nil.
+  - destruct a, l, m using member_cons; simpl; auto.
 Qed.
 
 Lemma hmap_hmap :
