@@ -84,7 +84,6 @@ Definition set_optvar (optid: option ident) (v: val) (e: env) : env :=
 Inductive cont: Type :=
   | Kstop: cont                         (**r stop program execution *)
   | Kseq: stmt -> cont -> cont          (**r execute stmt, then cont *)
-  | Kblock: cont -> cont                (**r exit a block, then do cont *)
   | Kcall: option ident -> function -> val -> env -> cont -> cont.
                                         (**r return to caller *)
 
@@ -160,7 +159,6 @@ End EVAL_EXPR.
 Fixpoint call_cont (k: cont) : cont :=
   match k with
   | Kseq s k => call_cont k
-  | Kblock k => call_cont k
   | _ => k
   end.
 
@@ -176,9 +174,6 @@ Inductive step: state -> trace -> state -> Prop :=
   | step_skip_seq: forall f s k sp e m,
       step (State f Sskip (Kseq s k) sp e m)
         E0 (State f s k sp e m)
-  | step_skip_block: forall f k sp e m,
-      step (State f Sskip (Kblock k) sp e m)
-        E0 (State f Sskip k sp e m)
   | step_skip_call: forall f k sp e m m',
       is_call_cont k ->
       Mem.free m sp 0 f.(fn_stackspace) = Some m' ->

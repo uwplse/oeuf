@@ -78,9 +78,6 @@ Inductive match_cont: Cmajor.cont -> Cminor.cont -> Prop :=
       transf_stmt s = s' ->
       match_cont k k' ->
       match_cont (Cmajor.Kseq s k) (Cminor.Kseq s' k')
-  | match_cont_block: forall k k',
-      match_cont k k' ->
-      match_cont (Cmajor.Kblock k) (Cminor.Kblock k')
   | match_cont_call: forall id f sp e k f' e' k',
       transf_function f = f' ->
       match_cont k k' ->
