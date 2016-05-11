@@ -1,6 +1,8 @@
 Require Import List.
 Import ListNotations.
-Require Import Arith.
+Require Import Arith Omega.
+
+Require Import StructTact.StructTactics.
 
 Inductive type_name :=
 | Tnat
@@ -111,8 +113,18 @@ Fixpoint shift' (c : nat) (e : expr) : expr :=
 Definition shift := shift' 0.
 
 
+(* multisubstitution to correspond most closely to SourceLang *)
+Fixpoint multisubst' (l : list expr) (e : expr) : expr :=
+    match e with
+    | Var n => nth n l (Var (pred n))
+    | Lam e' => Lam (multisubst' (Var 0 :: map shift l) e')
+    | App e1 e2 => App (multisubst' l e1) (multisubst' l e2)
+    | Constr c args => Constr c (map (multisubst' l) args)
+    | Elim ty cases target => Elim ty (map (multisubst' l) cases) (multisubst' l target)
+    end.
+Definition multisubst := multisubst' [].
+
 (* substitute [0 -> to] in e and shift other indices down by 1 *)
-(* TODO: someone should make sure I did the right thing here -SP *)
 Fixpoint subst' (from : nat) (to : expr) (e : expr) : expr :=
     match e with
     | Var n => if lt_dec n from then e
@@ -125,6 +137,38 @@ Fixpoint subst' (from : nat) (to : expr) (e : expr) : expr :=
     end.
 Definition subst := subst' 0.
 
+Lemma multisubst'_subst' :
+  forall e from to,
+    subst' from to e = multisubst' (map Var (seq 0 from) ++ [to]) e.
+Proof.
+  induction e using expr_ind'; simpl; intros.
+  - repeat break_if.
+    + rewrite app_nth1 by now rewrite map_length, seq_length.
+      now rewrite map_nth, seq_nth.
+    + subst.
+      rewrite app_nth2; rewrite map_length, seq_length; auto.
+      now rewrite minus_diag.
+    + rewrite app_nth2; rewrite map_length, seq_length; [|omega].
+      now rewrite nth_overflow by (simpl; omega).
+  - f_equal.
+    rewrite IHe. simpl.
+    f_equal. f_equal.
+    rewrite map_app. simpl.
+    f_equal.
+    rewrite map_map.
+    unfold shift. simpl.
+    rewrite <- map_map with (f := S) (g := Var).
+    now rewrite seq_shift.
+  - now rewrite IHe1, IHe2.
+  - f_equal.
+    apply map_ext_in.
+    rewrite Forall_forall in H.
+    auto.
+  - f_equal; auto.
+    apply map_ext_in.
+    rewrite Forall_forall in H.
+    auto.
+Qed.
 
 Inductive value : expr -> Prop :=
 | VLam : forall b, value (Lam b)
