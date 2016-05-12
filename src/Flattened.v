@@ -1,3 +1,15 @@
+Require Import compcert.lib.Coqlib.
+Require Import compcert.lib.Maps.
+Require Import compcert.lib.Integers.
+
+Require Import compcert.common.AST.
+Require Import compcert.common.Values.
+Require Import compcert.common.Globalenvs.
+Require Import compcert.common.Memory.
+Require Import compcert.common.Events.
+Require Import compcert.common.Switch.
+Require Import compcert.common.Smallstep.
+
 Require Import List.
 Import ListNotations.
 Require Import Arith.
@@ -5,17 +17,12 @@ Require Import Arith.
 Require Import StructTact.StructTactics.
 Require Import StructTact.Util.
 
-Definition function_name := nat.
-
+Definition function_name := ident.
 
 Inductive expr :=
 | Arg : expr
-| UpVar : nat -> expr
-| Temp : nat -> expr.
-
-Inductive value :=
-| Constr (tag : nat) (args : list value)
-| Close (f : function_name) (free : list value).
+| UpVar : ident -> expr
+| Temp : ident -> expr.
 
 Inductive stmt :=
 | Call (dst : nat) (f : expr) (a : expr)
@@ -27,6 +34,12 @@ Inductive stmt :=
 Definition func_def : Type := list stmt * expr.
 Definition env := list func_def.
 
+(* Values used for the dynamic semantics *)
+Inductive value :=
+| Constr (tag : nat) (args : list value)
+| Close (f : function_name) (free : list value).
+
+(* TODO: Change to continuations *)
 Record frame := Frame { code : list stmt;
                         ret : expr;
                         locals : list (nat * value);
