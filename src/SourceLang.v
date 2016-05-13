@@ -242,6 +242,14 @@ Check ltac:(type_reflect bool).
 Check ltac:(type_reflect (list nat)).
 Check ltac:(type_reflect ((bool -> nat) -> (list nat -> bool) -> nat)).
 
+Ltac build_member P :=
+  let rec go P :=
+      match P with
+      | fun (x : _) => x => uconstr:Here
+      | fun (x : _) => fst (@?Q x) => let r := go Q in uconstr:(There r)
+      end
+  in go P.
+
 (* given a gallina term, try to find something that expr_denote will map to it *)
 Ltac reflect' x :=
   let x' := eval simpl in x in
@@ -277,10 +285,7 @@ Ltac reflect' x :=
     let rA := type_reflect' A in
     let r := reflect' (fun (p : T * A) => E (fst p) (snd p)) in
     uconstr:(Lam (ty1 := rA) r)
-  | fun (x : ?T) => snd x => uconstr:(Var Here)
-  | fun (x : ?T) => snd (fst x) => uconstr:(Var (There Here))
-  | fun (x : ?T) => snd (fst (fst x)) => uconstr:(Var (There (There Here)))
-  | fun (x : ?T) => snd (fst (fst (fst x))) => uconstr:(Var (There (There Here)))
+  | fun (x : _) => snd (@?P x) => let m := build_member P in uconstr:(Var m)
   | fun (_ : ?T) => ?X ?Y => (* TODO: figure out whether second-order pattern matching supports applications *)
     let r1 := reflect' (fun _ : T => X) in
     let r2 := reflect' (fun _ : T => Y) in
@@ -308,6 +313,7 @@ Check ltac:(reflect (nat_rect (fun _ => nat) 4 (fun _ => S) 17))  : expr [] _ .
 Check ltac:(reflect (fun x : nat => x))  : expr [] _ .
 Check ltac:(reflect (@list_rect nat (fun _ => list nat) [] (fun h _ t => cons 3 (cons h t)) [0; 0; 0])) : expr [] _ .
 Eval compute in expr_denote ltac:(reflect  (@list_rect nat (fun _ => list nat) [] (fun h _ t => cons 3 (cons h t)) [0; 0; 0])) hnil.
+Check ltac:(reflect (fun (x _ _ _ _ _ _ _ _ _ _ : nat) => x))  : expr [] _ .
 
 
 Definition map_reflect {l} : expr l _ :=
