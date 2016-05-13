@@ -41,6 +41,7 @@ Fixpoint transf_stmt (s : Cmajor.stmt) : Cminor.stmt :=
   | Sseq s1 s2 => Cminor.Sseq (transf_stmt s1) (transf_stmt s2)
   | Sswitch b exp l n => Cminor.Sswitch b (transf_expr exp) l n
   | Sexit n => Cminor.Sexit n
+  | Sblock s => Cminor.Sblock (transf_stmt s)
   | Sreturn (Some exp) => Cminor.Sreturn (Some (transf_expr exp))
   | Sreturn None => Cminor.Sreturn None
   end.
@@ -74,6 +75,10 @@ Definition env_lessdef (e1 e2: env) : Prop :=
 Inductive match_cont: Cmajor.cont -> Cminor.cont -> Prop :=
   | match_cont_stop:
       match_cont Cmajor.Kstop Cminor.Kstop
+  | match_cont_block :
+      forall k k',
+        match_cont k k' ->
+        match_cont (Cmajor.Kblock k) (Cminor.Kblock k')
   | match_cont_seq: forall s s' k k',
       transf_stmt s = s' ->
       match_cont k k' ->
@@ -370,6 +375,10 @@ Proof.
   * (* seq *)
     simpl.
     eexists; split; try econstructor; eauto.
+    econstructor; eauto.
+  * (* block *)
+    simpl in *.
+    eexists; split; try econstructor; eauto; simpl; eauto.
     econstructor; eauto.
   * (* switch *)
     simpl.
