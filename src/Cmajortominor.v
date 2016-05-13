@@ -191,8 +191,6 @@ Proof.
     econstructor; eauto.
 Qed.
 
-Check Cmajor.eval_exprlist.
-
 Lemma eval_exprlist_transf :
   forall a sp e m v,
     Cmajor.eval_exprlist ge e m sp a v ->

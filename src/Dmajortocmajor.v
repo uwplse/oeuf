@@ -40,6 +40,7 @@ Fixpoint transf_stmt (s : Dmajor.stmt) : Cmajor.stmt :=
   | Salloc id exp => Cmajor.Sbuiltin (Some id) EF_malloc (transf_expr exp :: nil)
   | Sseq s1 s2 => Cmajor.Sseq (transf_stmt s1) (transf_stmt s2)
   | Sswitch b exp l n => Cmajor.Sswitch b (transf_expr exp) l n
+  | Sblock s => Cmajor.Sblock (transf_stmt s)
   | Sexit n => Cmajor.Sexit n
   | Sreturn (Some exp) => Cmajor.Sreturn (Some (transf_expr exp))
   | Sreturn None => Cmajor.Sreturn None
@@ -73,6 +74,10 @@ Definition env_lessdef (e1 e2: env) : Prop :=
 Inductive match_cont: Dmajor.cont -> Cmajor.cont -> Prop :=
   | match_cont_stop:
       match_cont Dmajor.Kstop Cmajor.Kstop
+  | match_cont_block :
+      forall k k',
+        match_cont k k' ->
+        match_cont (Dmajor.Kblock k) (Cmajor.Kblock k')
   | match_cont_seq: forall s s' k k',
       transf_stmt s = s' ->
       match_cont k k' ->
@@ -366,6 +371,10 @@ Proof.
     eapply env_lessdef_set; eauto.
   * (* seq *)
     simpl.
+    eexists; split; try econstructor; eauto.
+    econstructor; eauto.
+  * (* block *)
+    simpl in *.
     eexists; split; try econstructor; eauto.
     econstructor; eauto.
   * (* switch *)

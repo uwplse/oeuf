@@ -18,6 +18,8 @@ Require Import StructTact.StructTactics.
 Require Import StructTact.Util.
 
 (* Similar to Cmajor, but with explicit mem allocation *)
+(* Only internal functions here, with an Salloc statement *)
+(* Computation still over lower level CompCert values *)
 
 Inductive constant : Type :=
   | Ointconst: int -> constant     (**r integer constant *)
@@ -37,6 +39,7 @@ Inductive stmt : Type :=
   | Scall : option ident -> signature -> expr -> list expr -> stmt
   | Salloc : ident -> expr -> stmt (* eval expr to a number, alloc that much, put pointer in ident *)
   | Sseq: stmt -> stmt -> stmt
+  | Sblock : stmt -> stmt
   | Sswitch: bool -> expr -> list (Z * nat) -> nat -> stmt
   | Sexit: nat -> stmt
   | Sreturn: option expr -> stmt.
@@ -80,6 +83,7 @@ Definition set_optvar (optid: option ident) (v: val) (e: env) : env :=
 Inductive cont: Type :=
   | Kstop: cont                         (**r stop program execution *)
   | Kseq: stmt -> cont -> cont          (**r execute stmt, then cont *)
+  | Kblock: cont -> cont                (**r exit a block, then do cont *)
   | Kcall: option ident -> function -> val -> env -> cont -> cont.
                                         (**r return to caller *)
 
@@ -157,6 +161,7 @@ End EVAL_EXPR.
 Fixpoint call_cont (k: cont) : cont :=
   match k with
   | Kseq s k => call_cont k
+  | Kblock k => call_cont k
   | _ => k
   end.
 
@@ -203,6 +208,21 @@ Inductive step: state -> trace -> state -> Prop :=
   | step_seq: forall f s1 s2 k sp e m,
       step (State f (Sseq s1 s2) k sp e m)
         E0 (State f s1 (Kseq s2 k) sp e m)
+
+  | step_block: forall f s k sp e m,
+      step (State f (Sblock s) k sp e m)
+        E0 (State f s (Kblock k) sp e m)
+
+  | step_exit_seq: forall f n s k sp e m,
+      step (State f (Sexit n) (Kseq s k) sp e m)
+        E0 (State f (Sexit n) k sp e m)
+  | step_exit_block_0: forall f k sp e m,
+      step (State f (Sexit O) (Kblock k) sp e m)
+        E0 (State f Sskip k sp e m)
+  | step_exit_block_S: forall f n k sp e m,
+      step (State f (Sexit (S n)) (Kblock k) sp e m)
+        E0 (State f (Sexit n) k sp e m)
+
   | step_switch: forall f islong a cases default k sp e m v n,
       eval_expr e m sp a v ->
       switch_argument islong v n ->
