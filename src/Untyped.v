@@ -212,3 +212,76 @@ Inductive step : expr -> expr -> Prop :=
     nth_error cases (constructor_index c) = Some case ->
     step (Elim ty cases (Constr c args))
         (unroll_elim case c args (fun x => Elim ty cases x)).
+
+
+
+(* Demo *)
+
+Definition fib n :=
+    @nat_rect (fun _ => nat -> nat -> nat)
+        (fun a b => a)
+        (fun n IHn a b =>
+            IHn b (
+                @nat_rect (fun _ => nat -> nat)     (* this is `add` *)
+                    (fun b => b)
+                    (fun a IHa b => IHa (S b))
+                    a b))
+        n 0 1.
+
+Eval compute in map fib [0;1;2;3;4;5;6;7;8;9].
+
+Fixpoint nat_reflect n : expr :=
+    match n with
+    | 0 => Constr CO []
+    | S n => Constr CS [nat_reflect n]
+    end.
+
+Definition fib_reflect :=
+    (Lam (*n*) (App (App (Elim Tnat
+        [ Lam (*a*) (Lam (*b*) (Var 1))
+        ; Lam (*n*) (Lam (*IHn*) (Lam (*a*) (Lam (*b*)
+            (App (App (Var 2) (Var 0))
+                (App (Elim Tnat
+                    [ Lam (*b*) (Var 0)
+                    ; Lam (*a*) (Lam (*IHa*) (Lam (*b*)
+                        (App (Var 1) (Constr CS [Var 0]))))
+                    ]
+                    (Var 1)) (Var 0))))))
+        ]
+        (Var 0)) (nat_reflect 0)) (nat_reflect 1))).
+
+Inductive star : expr -> expr -> Prop :=
+| StarNil : forall e, star e e
+| StarCons : forall e e' e'',
+        step e e' ->
+        star e' e'' ->
+        star e e''.
+
+Ltac mash :=
+    lazymatch goal with
+    | [ |- value _ ] => solve [ repeat constructor ]
+    | _ => idtac
+    end.
+
+Ltac mash' :=
+    eright; [ solve [repeat (econstructor; mash)] | compute ].
+
+Theorem fib_0 : { x | star (App fib_reflect (nat_reflect 0)) x }.
+eexists.  repeat mash'.  eleft.
+Defined.
+Eval compute in proj1_sig fib_0.
+
+Ltac evaluate x :=
+    cut ({ x' | star x x' });
+            [ intro x'; exact (proj1_sig x')
+            | eexists; repeat mash'; eleft ].
+
+Eval compute in ltac:(evaluate (App fib_reflect (nat_reflect 0))).
+Eval compute in ltac:(evaluate (App fib_reflect (nat_reflect 1))).
+(* gets kind of slow for larger `n`, so leave these commented *)
+(*
+Eval compute in ltac:(evaluate (App fib_reflect (nat_reflect 2))).
+Eval compute in ltac:(evaluate (App fib_reflect (nat_reflect 3))).
+Eval compute in ltac:(evaluate (App fib_reflect (nat_reflect 4))).
+Eval compute in ltac:(evaluate (App fib_reflect (nat_reflect 5))).
+*)
