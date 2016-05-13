@@ -36,7 +36,8 @@ Inductive stmt : Type :=
   | Scall : option ident -> signature -> expr -> list expr -> stmt
   | Sbuiltin : option ident -> external_function -> list expr -> stmt (* malloc *)
   | Sseq: stmt -> stmt -> stmt
-  | Sswitch: bool -> expr -> list (Z * nat) -> nat -> stmt
+  | Sswitch: bool -> expr -> list (Z * nat) -> nat -> stmt (* exit n blocks *)
+  | Sblock: stmt -> stmt (* neccessary for switch to work *)
   | Sexit: nat -> stmt
   | Sreturn: option expr -> stmt.
 
@@ -84,6 +85,7 @@ Definition set_optvar (optid: option ident) (v: val) (e: env) : env :=
 Inductive cont: Type :=
   | Kstop: cont                         (**r stop program execution *)
   | Kseq: stmt -> cont -> cont          (**r execute stmt, then cont *)
+  | Kblock: cont -> cont                (**r exit a block, then do cont *)
   | Kcall: option ident -> function -> val -> env -> cont -> cont.
                                         (**r return to caller *)
 
@@ -159,6 +161,7 @@ End EVAL_EXPR.
 Fixpoint call_cont (k: cont) : cont :=
   match k with
   | Kseq s k => call_cont k
+  | Kblock k => call_cont k
   | _ => k
   end.
 
@@ -226,19 +229,19 @@ Inductive step: state -> trace -> state -> Prop :=
   (*     step (State f (Sloop s) k sp e m) *)
   (*       E0 (State f s (Kseq (Sloop s) k) sp e m) *)
 
-  (* | step_block: forall f s k sp e m, *)
-  (*     step (State f (Sblock s) k sp e m) *)
-  (*       E0 (State f s (Kblock k) sp e m) *)
+  | step_block: forall f s k sp e m,
+      step (State f (Sblock s) k sp e m)
+        E0 (State f s (Kblock k) sp e m)
 
-  (* | step_exit_seq: forall f n s k sp e m, *)
-  (*     step (State f (Sexit n) (Kseq s k) sp e m) *)
-  (*       E0 (State f (Sexit n) k sp e m) *)
-  (* | step_exit_block_0: forall f k sp e m, *)
-  (*     step (State f (Sexit O) (Kblock k) sp e m) *)
-  (*       E0 (State f Sskip k sp e m) *)
-  (* | step_exit_block_S: forall f n k sp e m, *)
-  (*     step (State f (Sexit (S n)) (Kblock k) sp e m) *)
-  (*       E0 (State f (Sexit n) k sp e m) *)
+  | step_exit_seq: forall f n s k sp e m,
+      step (State f (Sexit n) (Kseq s k) sp e m)
+        E0 (State f (Sexit n) k sp e m)
+  | step_exit_block_0: forall f k sp e m,
+      step (State f (Sexit O) (Kblock k) sp e m)
+        E0 (State f Sskip k sp e m)
+  | step_exit_block_S: forall f n k sp e m,
+      step (State f (Sexit (S n)) (Kblock k) sp e m)
+        E0 (State f (Sexit n) k sp e m)
 
   | step_switch: forall f islong a cases default k sp e m v n,
       eval_expr e m sp a v ->
