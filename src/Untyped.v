@@ -43,6 +43,13 @@ Definition constructor_arg_n ctor : nat :=
     | Ccons => 2
     end.
 
+Definition ctor_arg_is_recursive ctor pos : bool :=
+    match ctor, pos with
+    | CS, 0 => true
+    | Ccons, 1 => true
+    | _, _ => false
+    end.
+
 Definition type_constr ty idx : option constr_name :=
     match ty, idx with
     | Tnat, 0 => Some CO
@@ -174,18 +181,34 @@ Inductive value : expr -> Prop :=
 | VLam : forall b, value (Lam b)
 | VConstr : forall c l, Forall value l -> value (Constr c l).
 
-Fixpoint apply_all (f : expr) (args : list expr) : expr :=
+Fixpoint unroll_elim' (case : expr)
+                      (ctor : constr_name)
+                      (args : list expr)
+                      (mk_rec : expr -> expr)
+                      (idx : nat) : expr :=
     match args with
-    | [] => f
-    | arg :: args => apply_all (App f arg) args
+    | [] => case
+    | arg :: args =>
+            let case := App case arg in
+            let case := if ctor_arg_is_recursive ctor idx
+                then App case (mk_rec arg) else case in
+            unroll_elim' case ctor args mk_rec (S idx)
     end.
 
-(* TODO: add stepping under Constrs *)
+Fixpoint unroll_elim case ctor args mk_rec :=
+    unroll_elim' case ctor args mk_rec 0.
+
 Inductive step : expr -> expr -> Prop :=
 | Beta : forall b a, value a -> step (App (Lam b) a) (subst a b)
 | AppL : forall e1 e1' e2, step e1 e1' -> step (App e1 e2) (App e1' e2)
 | AppR : forall v e2 e2', value v -> step e2 e2' -> step (App v e2) (App v e2')
+| ConstrStep : forall c pre e e' post,
+        Forall value pre ->
+        step e e' ->
+        step (Constr c (pre ++ [e] ++ post))
+            (Constr c (pre ++ [e'] ++ post))
 | ElimStep : forall t t' ty cases, step t t' -> step (Elim ty cases t) (Elim ty cases t')
 | Eliminate : forall c args ty cases case,
     nth_error cases (constructor_index c) = Some case ->
-    step (Elim ty cases (Constr c args)) (apply_all case args).
+    step (Elim ty cases (Constr c args))
+        (unroll_elim case c args (fun x => Elim ty cases x)).
