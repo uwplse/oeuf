@@ -253,7 +253,7 @@ Ltac build_member P :=
 (* given a gallina term, try to find something that expr_denote will map to it *)
 Ltac reflect' x :=
   let x' := eval simpl in x in
-  match x' with
+  lazymatch x' with
   | fun _ => true => uconstr:(Constr CTrue hnil)
   | fun _ => false => uconstr:(Constr CFalse hnil)
   | fun _ => O => uconstr:(Constr CZero hnil)
@@ -286,11 +286,10 @@ Ltac reflect' x :=
     let r := reflect' (fun (p : T * A) => E (fst p) (snd p)) in
     uconstr:(Lam (ty1 := rA) r)
   | fun (x : _) => snd (@?P x) => let m := build_member P in uconstr:(Var m)
-  | fun (_ : ?T) => ?X ?Y => (* TODO: figure out whether second-order pattern matching supports applications *)
-    let r1 := reflect' (fun _ : T => X) in
-    let r2 := reflect' (fun _ : T => Y) in
+  | fun (z : ?T) => ?X ?Y =>
+    let r1 := reflect' (fun z : T => X) in
+    let r2 := reflect' (fun z : T => Y) in
     uconstr:(App r1 r2)
-  | _ => fail 100 "Unsupported term" x'
   end.
 
 (* fill in the context with the expression reflection of the given term *)
@@ -317,24 +316,7 @@ Check ltac:(reflect (fun (x _ _ _ _ _ _ _ _ _ _ : nat) => x))  : expr [] _ .
 
 
 Definition map_reflect {l} : expr l _ :=
-  (* doesn't work because only very particular applications are properly handled.
-     applying a variable to a variable doesn't work, so the (f x) breaks it. *)
-  (* ltac:(reflect (fun (f : nat -> nat) (l : list nat) => list_rect (fun _ => list nat) [] (fun x _ t => f x :: t) l)). *)
-  Lam
-  (Lam
-  (Elim (EListNat _)
-        (hcons (Constr CNil hnil)
-         (hcons
-          (Lam (Lam (Lam
-           (Constr CCons
-            (hcons
-              (App
-                (Var (There (There (There (There Here)))))
-                (Var (There (There Here))))
-             (hcons (Var Here) hnil))))))
-          hnil))
-        (Var Here))).
-
+   ltac:(reflect (fun (f : nat -> nat) (l : list nat) => list_rect (fun _ => list nat) [] (fun x _ t => f x :: t) l)).
 
 Eval compute in expr_denote map_reflect hnil.
 Eval compute in @map nat nat.
