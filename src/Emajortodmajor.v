@@ -62,3 +62,7 @@ Inductive value_inject (ge : genv) (m : mem) : value -> val -> Prop :=
       value_inject ge m (Close fname values) (Vptr b ofs).
 
 
+(* At lower levels, every function will take one pointer as an argument, and return one pointer *)
+(* Thus, the fn_sig parameter of the function is irrelevant *)
+(* we will always have exactly one signature *)
+Definition EMsig : signature := mksignature [Tint] (Some Tint) (mkcallconv false false false).
