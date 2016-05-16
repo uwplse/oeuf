@@ -62,7 +62,7 @@ Inductive value :=
 Definition env := PTree.t value.
 
 Inductive cont: Type :=
-  | Kstop: ident -> cont                (**r stop program execution *)
+  | Kstop: cont                (**r stop program execution *)
   | Kseq: stmt -> cont -> cont          (**r execute stmt, then cont *)
   | Kblock: cont -> cont                (**r exit a block, then do cont *)
   | Kcall: ident -> expr -> function -> env -> cont -> cont.
@@ -121,7 +121,7 @@ Fixpoint call_cont (k: cont) : cont :=
 
 Definition is_call_cont (k: cont) : Prop :=
   match k with
-  | Kstop _ => True
+  | Kstop => True
   | Kcall _ _ _ _ _ => True
   | _ => False
   end.
@@ -179,4 +179,33 @@ Inductive step : state -> trace -> state -> Prop :=
         E0 (State f Sskip exp k (PTree.set id result e)).
       
 
+
+End RELSEM.
+
+Inductive initial_state (p: program): state -> Prop :=
+  | initial_state_intro: forall b f,
+      let ge := Genv.globalenv p in
+      Genv.find_symbol ge p.(prog_main) = Some b ->
+      Genv.find_funct_ptr ge b = Some f ->
+      initial_state p (Callstate f nil Kstop).
+
+Inductive final_state: state -> int -> Prop :=
+  | final_state_intro: forall r v,
+      final_state (Returnstate v Kstop) r.
+
+Definition semantics (p: program) :=
+  Semantics step (initial_state p) final_state (Genv.globalenv p).
+
+
+Lemma semantics_receptive:
+  forall (p: program), receptive (semantics p).
+Proof.
+  intros. constructor; simpl; intros.
+(* receptiveness *)
+  assert (t1 = E0 -> exists s2, step (Genv.globalenv p) s t2 s2).
+    intros. subst. inv H0. exists s1; auto.
+  inversion H; subst; auto.
+(* trace length *)
+  red; intros; inv H; simpl; try omega; eapply external_call_trace_length; eauto.
+Qed.
 
