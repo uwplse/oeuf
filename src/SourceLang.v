@@ -645,32 +645,52 @@ Proof.
       simpl; auto.
 Qed.
 
+Fixpoint happ {A} {B : A -> Type} {l1 l2} (h1 : hlist B l1) (h2 : hlist B l2) : hlist B (l1 ++ l2) :=
+  match h1 with
+  | hnil => h2
+  | hcons x h1' => hcons x (happ h1' h2)
+  end.
 
-(* Restricting to closed terms (ie, l = []) turns out to be super
-   annoying, so we phrase stepping on open terms instead.  We will
-   only ever use it on closed terms. Also, this cannot (afaict) be
-   defined as an inductive predicate because doing it that way causes
-   inversion to be useless (it generates a bunch of [existsT x y =
-   existsT x z] hypotheses). The current way is uglier, but at least
-   it works. *)
-Definition step {l ty} (e : expr l ty) : expr l ty -> Prop :=
-  let fix go {l ty} (e : expr l ty) {struct e} : expr l ty -> Prop :=
-      match e with
-      | Var _ => fun _ => False
-      | Lam _ => fun _ => False
-      | App e1 e2 =>
-        fun e' =>
-          ((exists e1', go e1 e1' /\ e' = App e1' e2) \/
-           (value e1 /\ exists e2', go e2 e2' /\ e' = App e1 e2') \/
-           (value e2 /\ exists b, e1 = Lam b /\ e' = subst b (hcons e2 (identity_subst _))))
-      | Constr _ _ => fun _ => False (* TODO: step under Constr *)
-      | Elim e cases target =>
-        fun e' =>
-          (exists target', go target target' /\ e' = Elim e cases target') \/
-          (value target /\ exists arg_tys c (ct : constr_type c _ _) (args : hlist (expr _) arg_tys),
-              target = Constr ct args /\ e' = eliminate e cases ct args)
-      end
-  in go e.
+
+Inductive step {l} : forall {ty}, expr l ty -> expr l ty -> Prop :=
+| Beta : forall ty1 ty2 (b : expr _ ty2) (e2 : expr _ ty1),
+    value e2 ->
+    step (App (Lam b) e2) (subst b (hcons e2 (identity_subst _)))
+| AppL : forall ty1 ty2 (e1 e1' : expr _ (Arrow ty1 ty2)) e2,
+    step e1 e1' ->
+    step (App e1 e2) (App e1' e2)
+| AppR : forall ty1 ty2 (e1 : expr _ (Arrow ty1 ty2)) e2 e2',
+    value e1 ->
+    step e2 e2' ->
+    step (App e1 e2) (App e1 e2')
+| Target :
+    forall case_tys target_tyn ty
+      (e : elim case_tys (ADT target_tyn) ty)
+      (cases : hlist (expr l) case_tys)
+      (target target' : expr l (ADT target_tyn)),
+      step target target' ->
+      step (Elim e cases target) (Elim e cases target')
+| ConstrArgs :
+    forall ty arg_tys1 arg_ty arg_tys2 c
+      (ct : constr_type c (arg_tys1 ++ arg_ty :: arg_tys2) ty)
+      (args1 : hlist (expr l) arg_tys1)
+      (arg arg' : expr l arg_ty)
+      (args2 : hlist (expr l) arg_tys2),
+      HForall (fun ty e => value e) args1 ->
+      step arg arg' ->
+      step (Constr ct (happ args1 (hcons arg args2)))
+           (Constr ct (happ args1 (hcons arg' args2)))
+| ElimConstr :
+    forall arg_tys c case_tys target_tyn ty
+      (ct : constr_type c arg_tys target_tyn)
+      (args : hlist (expr l) arg_tys)
+      (e : elim case_tys (ADT target_tyn) ty)
+      (cases : hlist (expr l) case_tys),
+      HForall (fun ty e => value e) args ->
+      step (Elim e cases (Constr ct args))
+           (eliminate e cases ct args)
+.
+Hint Constructors step.
 
 Lemma hmap_denote_identity :
   forall l vs,
@@ -685,17 +705,81 @@ Proof.
     intros. apply lift_denote.
 Qed.
 
+Definition constr_name_eq_dec (c1 c2 : constr_name) : {c1 = c2} + {c1 <> c2}.
+  decide equality.
+Defined.
+
+Definition case_HForall_hcons {A} {B : A -> Type} {P : forall a, B a -> Prop} {h t} {hh : B h} {ht : hlist B t}
+           (Q : HForall P (hcons hh ht) -> Prop)
+           (case : forall (pf : (P _ hh)) (H : HForall P ht),
+               Q (HFhcons _ _ _ _ _ pf H))
+           (H : HForall P (hcons hh ht)) : Q H.
+  revert Q case.
+  refine (match H as H0 in @HForall _ _ _ l0 hl0
+                return match l0 return forall hl0', HForall _ hl0' -> Prop with
+                       | [] => fun _ _ => True
+                       | h0 :: t0 =>
+                         fun hl0' =>
+                           match hl0' with
+                           | hnil => fun _ => True
+                           | hcons hh0 ht0 =>
+                             fun H0' =>
+                               forall (Q' : HForall P (hcons hh0 ht0) -> Prop),
+                                 (forall (pf : (P _ hh0)) (H : HForall P ht0),
+                                     Q' (HFhcons _ _ _ _ _ pf H)) ->
+                                 Q' H0'
+                           end
+                       end hl0 H0
+          with
+          | HFhnil _ => I
+          | HFhcons _ _ _ _ _ _ _ => _
+          end).
+  auto.
+Defined.
+
+Lemma HForall_happ_split :
+  forall A (B : A -> Type) (P : forall a, B a -> Prop) l1 l2 (h1 : hlist B l1) (h2 : hlist B l2),
+    HForall P (happ h1 h2) ->
+    HForall P h1 /\ HForall P h2.
+Proof.
+  induction h1; simpl; intuition.
+  - destruct  H using case_HForall_hcons.
+    apply IHh1 in H. intuition.
+  - destruct  H using case_HForall_hcons.
+    apply IHh1 in H. intuition.
+Qed.
+
 Theorem step_denote : forall l ty (e e' : expr l ty) vs,
     step e e' ->
     expr_denote e vs = expr_denote e' vs.
 Proof.
-  refine (expr_mut_ind' _ _ _ _ _ _); simpl; firstorder; subst.
-  - now erewrite H by eauto.
-  - now erewrite H0 by eauto.
-  - simpl. rewrite subst_denote.
-    simpl. now rewrite hmap_denote_identity.
-  - simpl. now erewrite H0 by eauto.
-  - now rewrite eliminate_denote.
+  refine (expr_mut_ind' _ _ _ _ _ _); intros.
+  - invc H.
+  - invc H0.
+  - invc H1;
+      repeat (find_apply_lem_hyp Eqdep_dec.inj_pair2_eq_dec;
+      [|now auto using list_eq_dec, type_eq_dec]); subst; simpl.
+    + rewrite subst_denote.
+      simpl. now rewrite hmap_denote_identity.
+    + erewrite H by eauto. auto.
+    + auto using f_equal.
+  - invc H0.
+    repeat (find_apply_lem_hyp Eqdep_dec.inj_pair2_eq_dec;
+      [|now auto using list_eq_dec, type_eq_dec, type_name_eq_dec, constr_name_eq_dec]);
+      subst; simpl.
+    apply HForall_happ_split in H. break_and.
+    destruct H0 using case_HForall_hcons.
+    f_equal.
+    clear H H0 H4 ct c ty.
+    induction args1; simpl.
+    + erewrite pf by eauto. auto.
+    + f_equal. auto.
+  - invc H1;
+    repeat (find_apply_lem_hyp Eqdep_dec.inj_pair2_eq_dec;
+      [|now auto using list_eq_dec, type_eq_dec, type_name_eq_dec, constr_name_eq_dec]);
+      subst; simpl.
+    + erewrite H0 by eauto. auto.
+    + rewrite eliminate_denote. simpl. auto.
 Qed.
 
 Lemma canonical_forms_arrow :
@@ -743,6 +827,55 @@ Proof.
   - destruct t0; firstorder.
 Qed.
 
+Lemma HForall_imp :
+  forall A (A_eq_dec : forall x y : A, {x = y} + {x <> y}) (B : A -> Type) (P Q : forall a, B a -> Prop),
+    (forall a b, P a b -> Q a b) ->
+    forall l (h : hlist B l),
+      HForall P h -> HForall Q h.
+Proof.
+  induction h; inversion 1; subst; auto.
+  repeat (find_apply_lem_hyp Eqdep_dec.inj_pair2_eq_dec; [|now auto using list_eq_dec]).
+  subst.
+  auto.
+Qed.
+
+Lemma HForall_or_split :
+  forall A (B : A -> Type) (P Q : forall a, B a -> Prop) l (h : hlist B l),
+    HForall (fun a b => P a b \/ Q a b) h ->
+    HForall P h \/
+    exists l1 a l2 (h1 : hlist B l1) (b : B a) (h2 : hlist B l2)
+      (pf : l = l1 ++ a :: l2),
+      eq_rect _ _ h _ pf = happ h1 (hcons b h2) /\
+      HForall P h1 /\
+      Q a b.
+Proof.
+  induction h; intros.
+  - auto.
+  - destruct H using case_HForall_hcons.
+    destruct pf.
+    + apply IHh in H.
+      destruct H.
+      * auto.
+      * right.
+        break_exists_name l1.
+        break_exists_name a0.
+        break_exists_name l2.
+        break_exists_name h1.
+        break_exists_name b0.
+        break_exists_name h2.
+        break_exists_name pf.
+        subst l.
+        exists (a :: l1), a0, l2.
+        exists (hcons b h1), b0, h2.
+        exists eq_refl.
+        simpl in *.
+        break_and. subst.
+        auto.
+    + right.
+      exists [], a, l, hnil, b, h, eq_refl.
+      auto.
+Qed.
+
 Theorem progress : forall ty (e : expr [] ty), value e \/ exists e', step e e'.
 Proof.
   intros ty e.
@@ -755,8 +888,32 @@ Proof.
   - right. break_exists. eauto 10.
   - right. break_exists. eauto 10.
   - right. break_exists. eauto 10.
-  - admit.
+  - eapply HForall_imp with (Q := fun ty e => value e \/ (exists e', step e e')) in H;
+      auto using type_eq_dec.
+    apply HForall_or_split in H.
+    intuition.
+    + left.
+      clear ct.
+      induction args.
+      * auto.
+      * destruct H0 using case_HForall_hcons.
+        split; auto. apply IHargs. auto.
+    + right.
+      destruct H0 as [l1 [a [l2 [h1 [b [h2 [pf ?]]]]]]].
+      break_and.
+      break_exists_name e'.
+      subst.
+      rewrite <- Eqdep_dec.eq_rect_eq_dec in H; [|now auto using list_eq_dec, type_eq_dec].
+      subst.
+      eexists.
+      econstructor.
+      auto.
+      eauto.
   - right. destruct (canonical_forms_ADT _ _ H0) as [arg_tys [c [ct [args ?]]]].
-    subst. eauto 10.
+    subst. eexists.
+    eapply ElimConstr.
+    simpl in H0.
+    clear ct.
+    induction args; intuition.
   - break_exists. eauto 10.
-Admitted.
+Qed.
