@@ -32,6 +32,7 @@ Inductive expr : Type :=
   | Eadd : expr -> expr -> expr
   | Eload : memory_chunk -> expr -> expr.
 
+
 Inductive stmt : Type :=
   | Sskip: stmt
   | Sassign : ident -> expr -> stmt
@@ -44,6 +45,7 @@ Inductive stmt : Type :=
   | Sexit: nat -> stmt
   | Sreturn: option expr -> stmt.
 
+
 Record function : Type := mkfunction {
   fn_sig: signature;
   fn_params: list ident; (* parameters *)
@@ -51,6 +53,17 @@ Record function : Type := mkfunction {
   fn_stackspace: Z;
   fn_body: stmt
 }.
+
+ 
+Definition const (n : Z) := Econst (Ointconst (Int.repr n)).
+Definition var (id : ident) := Evar id.
+Notation "A + B" := (Eadd A B).
+Definition load (a : expr) := Eload Mint32 a.
+Notation "A <- B" := (Sassign A B) (at level 70).
+Notation "A ; B" := (Sseq A B) (at level 50).
+Definition alloc (dst : ident) (sz : Z) := Salloc dst (const sz).
+Definition store (addr : expr) (payload : expr) := Sstore Mint32 addr payload.
+
 
 Definition fundef := function.
 Definition program := AST.program fundef unit.
