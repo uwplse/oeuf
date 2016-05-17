@@ -65,15 +65,25 @@ Definition close_vars n :=
     | S n => close_vars' n
     end.
 
+Definition rep_upvar n :=
+    let fix go n acc :=
+        match n with
+        | 0 => acc
+        | S n => go n (L.UpVar n :: acc)
+        end
+    in go n [].
+
 Inductive match_states (E : L.env) : nat -> U.expr -> L.expr -> Prop :=
 | MsArg : forall lvl,
         match_states E lvl (U.Var 0) L.Arg
 | MsUpVar : forall lvl n,
         match_states E lvl (U.Var (S n)) (L.UpVar n)
-| MsLam : forall lvl u_body fname l_body,
+| MsLam : forall lvl u_body fname free l_body l_body',
         nth_error E fname = Some l_body ->
-        match_states E (S lvl) u_body l_body ->
-        match_states E lvl (U.Lam u_body) (L.Close fname (close_vars lvl))
+        Forall L.value (skipn lvl free) ->
+        L.subst L.Arg (rep_upvar lvl ++ skipn lvl free) l_body = Some l_body' ->
+        match_states E (S lvl) u_body l_body' ->
+        match_states E lvl (U.Lam u_body) (L.Close fname free)
 | MsApp : forall lvl u_f u_a l_f l_a,
         match_states E lvl u_f l_f ->
         match_states E lvl u_a l_a ->
@@ -93,19 +103,31 @@ unfold U.add_reflect, L.add_reflect.
 
 eapply MsLam.
   { compute [nth_error L.add_env L.add_lam_a]. reflexivity. }
+  { constructor. }
+  { compute. reflexivity. }
 eapply MsLam.
   { compute [nth_error L.add_env L.add_lam_b]. reflexivity. }
+  { constructor. }
+  { compute. reflexivity. }
 eapply MsApp; eauto using MsArg, MsUpVar.
 eapply MsElim; eauto using MsArg, MsUpVar.
 econstructor; [ | econstructor; [ | econstructor ] ].
 - eapply MsLam; eauto using MsArg, MsUpVar.
     { compute [nth_error L.add_env L.elim_zero_lam_b]. reflexivity. }
+    { constructor. }
+    { compute. reflexivity. }
 - eapply MsLam; eauto using MsArg, MsUpVar.
     { compute [nth_error L.add_env L.elim_succ_lam_a]. reflexivity. }
+    { constructor. }
+    { compute. reflexivity. }
   eapply MsLam; eauto using MsArg, MsUpVar.
     { compute [nth_error L.add_env L.elim_succ_lam_IHa]. reflexivity. }
+    { constructor. }
+    { compute. reflexivity. }
   eapply MsLam; eauto using MsArg, MsUpVar.
     { compute [nth_error L.add_env L.elim_succ_lam_b]. reflexivity. }
+    { constructor. }
+    { compute. reflexivity. }
   eapply MsApp; eauto using MsArg, MsUpVar.
   eapply MsConstr; eauto using MsArg, MsUpVar.
 Qed.
@@ -114,6 +136,17 @@ Qed.
 Theorem add_match' : match_states L.add_env 0 U.add_reflect L.add_reflect.
 repeat econstructor.
 Qed.
+
+Theorem add_1_2_match : match_states L.add_env 0 U_add_1_2 L_add_1_2.
+repeat econstructor.
+Qed.
+
+Theorem add_next_match : match_states L.add_env 0 U_add_next L_add_next.
+repeat econstructor.
+Qed.
+
+
+
 
 
 Ltac generalize_all :=
@@ -143,8 +176,6 @@ Ltac subst_max :=
 Ltac inv H := inversion H; subst_max.
 Ltac invc H := inv H; clear H.
 Ltac invcs H := invc H; simpl in *.
-
-Print Forall2.
 
 Lemma Forall2_nth_error : forall A B P n (x : A) (y : B) xs ys,
     Forall2 P xs ys ->
@@ -271,7 +302,7 @@ Theorem match_value_0_fwd : forall E ue le,
 remember 0 as lvl.
 induction ue using U.expr_ind'; intros0 Hmatch Uval; invc Uval; invc Hmatch.
 
-- constructor. econstructor.
+- constructor. assumption.
 - constructor.
   eapply Forall2_right.
   eapply Forall2_apply1; cycle 1.
@@ -300,11 +331,151 @@ induction ue using U.expr_ind'; intros0 Hmatch Uval; invc Uval; invc Hmatch.
   erewrite Forall2_flip'. eassumption.
 Qed.
 
+
+Tactic Notation "unify" uconstr(x) "with" uconstr(y) :=
+    let Htmp := fresh "Htmp" in
+    refine (let Htmp : False -> x := fun false : False =>
+        match false return y with end
+    in _);
+    clear Htmp.
+
+Tactic Notation "on" uconstr(x) "," tactic3(tac) :=
+    match goal with
+    | [ H : ?y |- _ ] =>
+            unify x with y;
+            tac H
+    end.
+
+Tactic Notation "fwd" tactic3(tac) "as" ident(H) :=
+    simple refine (let H : _ := _ in _);
+    [ shelve
+    | tac
+    | clearbody H ].
+
+Tactic Notation "fwd" tactic3(tac) :=
+    let H := fresh "H" in
+    fwd tac as H.
+
+Definition sealed {A} (x : A) := x.
+
+Ltac seal H :=
+    match type of H with
+    | ?x => change x with (sealed x) in H
+    end.
+
+Ltac unseal H :=
+    match type of H with
+    | sealed ?x => change (sealed x) with x in H
+    end.
+
+Lemma Forall2_cons_inv : forall A B (R : A -> B -> Prop) x xs ys,
+    Forall2 R (x :: xs) ys ->
+    exists x' xs',
+        R x x' /\ Forall2 R xs xs' /\ ys = x' :: xs'.
+intros0 Hfa. invc Hfa. eauto.
+Qed.
+
+Lemma Forall2_apply_lr A B (P : A -> Prop) (Q : A -> B -> Prop) (R : B -> Prop) :
+    forall xs ys,
+    (forall x y, P x -> Q x y -> R y) ->
+    Forall P xs ->
+    Forall2 Q xs ys ->
+    Forall R ys.
+induction xs; intros0 Hlem Hf Hf2; invc Hf; invc Hf2.
+- constructor.
+- constructor; eauto.
+Qed.
+
+Theorem match_step : forall E ue ue' le,
+    match_states E 0 ue le ->
+    U.step ue ue' ->
+    exists le', L.step E le le'.
+intros. move ue at top. generalize_all.
+induction ue using U.expr_ind'; intros0 Hmatch Ustep; try solve [invc Ustep].
+
+(*intros0 Hmatch Ustep. move Hmatch at top. generalize_all.
+remember 0 as lvl; induction 1; subst lvl;
+intros0 Ustep; try solve [invc Ustep].
+
+(* The business with lvl leaves these annoying 0 = 0 terms lying around. *)
+all: repeat match goal with
+| [ H : 0 = 0 -> _ |- _ ] => specialize (H eq_refl)
+end.
+*)
+
+(*
+intros0 Hmatch Ustep. move Ustep at top. generalize_all.
+intros ??. induction 1; intros0 Hmatch.
+*)
+
+
+- (* App *)
+  inv Ustep.
+
+  + (* Beta *)
+    admit.
+
+  + (* AppL *)
+    invc Hmatch.
+    destruct (IHue1 _ _ _ ltac:(eassumption) ltac:(eassumption)).
+    eexists. eapply L.CallL. eassumption.
+
+  + (* AppR *)
+    invc Hmatch.
+    fwd eapply match_value_0_fwd as HH; cycle 1; eauto.
+    destruct (IHue2 _ _ _ ltac:(eassumption) ltac:(eassumption)).
+    eexists. eapply L.CallR; eassumption.
+
+- (* Constr *)
+  inv Ustep.
+  invc Hmatch.
+
+  (* Collect match_states facts *)
+  fwd eapply Forall2_app_inv_l as HH; eauto.
+  destruct HH as (l_pre & l_rest & ? & ? & ?).  subst l_args.
+  fwd eapply Forall2_cons_inv as HH; eauto.
+  destruct HH as (l_e & l_post & ? & ? & ?).  subst l_rest.
+
+  (* Obtain the result of stepping the first non-value arg *)
+  rewrite Forall_forall in *.
+  assert (In e (pre ++ [e] ++ post)).
+    { eapply in_or_app. right. eapply in_or_app. left. constructor. reflexivity. }
+  destruct (H _ ltac:(eassumption) _ _ _ ltac:(eassumption) ltac:(eassumption)).
+
+  eexists. eapply L.ConstrStep; eauto.
+    { rewrite <- Forall_forall in *.
+      eapply Forall2_apply_lr.
+      { intros. eapply match_value_0_fwd; eauto. }
+      all: eauto. }
+
+- (* Elim *)
+  inv Ustep.
+
+  + (* ElimStep *)
+    invc Hmatch.
+    destruct (IHue _ _ _ ltac:(eassumption) ltac:(eassumption)).
+    eexists. eapply L.ElimStep. eassumption.
+
+  + (* Eliminate *)
+    invc Hmatch.
+    invc H7.
+
+    fwd eapply nth_error_Some'; eauto.
+    erewrite Forall2_len in * by eauto.
+    fwd eapply nth_error_lt as HH; eauto. destruct HH.
+
+    eexists. eapply L.Eliminate. eassumption.
+
+Admitted.
+
+(*
+
+
 Theorem step_match : forall E lvl ue ue' le le',
     match_states E lvl ue le ->
     U.step ue ue' ->
     L.step E le le' ->
-    exists lvl', match_states E lvl' ue' le'.
+    match_states E lvl ue' le'.
 intros0 Hmatch Ustep Lstep. move Hmatch at top. generalize_all.
 induction 1; intros0 Ustep Lstep.
 
@@ -314,4 +485,9 @@ induction 1; intros0 Ustep Lstep.
 
 - invc Ustep.
 
-- 
+- invc Ustep.
+
+  + (* AppL *) 
+
+  + (* AppL *) 
+  *)

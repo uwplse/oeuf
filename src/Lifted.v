@@ -110,13 +110,15 @@ Definition add_env : list expr :=
     (* add_lam_a *)
     [ Close add_lam_b [Arg]
     (* add_lam_b *)
-    ; Call (Elim Tnat [Close elim_zero_lam_b []; Close elim_succ_lam_a []] (UpVar 0)) Arg
+    ; Call (Elim Tnat
+        [Close elim_zero_lam_b [Arg; UpVar 0];
+         Close elim_succ_lam_a [Arg; UpVar 0]] (UpVar 0)) Arg
     (* elim_zero_lam_b *)
     ; Arg
     (* elim_succ_lam_a *)
-    ; Close elim_succ_lam_IHa []
+    ; Close elim_succ_lam_IHa [Arg; UpVar 0; UpVar 1]
     (* elim_succ_lam_IHa *)
-    ; Close elim_succ_lam_b [Arg]
+    ; Close elim_succ_lam_b [Arg; UpVar 0; UpVar 1; UpVar 2]
     (* elim_succ_lam_b *)
     ; Call (UpVar 0) (Constr CS [Arg])
     ].
