@@ -152,7 +152,7 @@ Definition elim_denote {case_tys target_ty ty} (e : elim case_tys target_ty ty) 
   | EListNat _ => fun cases target => (list_rect _ (hhead cases) (hhead (htail cases)) target)
   end.
 
-Inductive HForall {A B} (P : forall a : A, B a -> Type) : forall {l : list A}, hlist B l -> Type :=
+Inductive HForall {A B} (P : forall a : A, B a -> Prop) : forall {l : list A}, hlist B l -> Prop :=
 | HFhnil : HForall P hnil
 | HFhcons : forall a b l (h : hlist B l), P a b -> HForall P h -> HForall P (hcons b h).
 Hint Constructors HForall.
@@ -186,8 +186,8 @@ Definition expr_mut_rect
       end
   in go l ty e.
 
-Definition expr_mut_rect'
-           (P : forall l ty, expr l ty -> Type)
+Definition expr_mut_ind'
+           (P : forall l ty, expr l ty -> Prop)
            (Hvar : forall l ty m, P l ty (Var m))
            (Hlam : forall l ty1 ty2 b, P (ty1 :: l) ty2 b -> P l (Arrow ty1 ty2) (Lam b))
            (Happ : forall l ty1 ty2 e1 e2, P l (Arrow ty1 ty2) e1 -> P _ _ e2 -> P _ _ (App e1 e2))
@@ -455,38 +455,50 @@ Proof.
   - destruct vs using case_hlist_cons. simpl. auto.
 Qed.
 
-Definition case_HForall_nil {A} {B : A -> Type} {P : forall a, B a -> Type}
-           (Q : forall hl : hlist B [], HForall P hl -> Type)
+Definition case_HForall_nil {A} {B : A -> Type} {P : forall a, B a -> Prop}
+           (Q : forall hl : hlist B [], HForall P hl -> Prop)
            (case : Q hnil (HFhnil _))
-           hl H : Q hl H :=
-  match H with
-  | HFhnil _ => case
-  | HFhcons _ _ _ _ _ _ _ => tt
-  end.
+           hl H : Q hl H.
+  refine
+    (match H as H0 in @HForall _ _ _ l0 hl0
+          return match l0 return forall hl0', HForall _ hl0' -> Prop with
+                 | [] => fun hl0' H0' =>
+                          forall (Q' : forall hl0, HForall P hl0 -> Prop),
+                            Q' hnil (HFhnil P) ->
+                            Q' hl0' H0'
+                 | _ :: _ => fun _ _ => True
+                 end hl0 H0 with
+    | HFhnil _ => fun Q' case' => case'
+    | HFhcons _ _ _ _ _ _ _ => I
+    end Q case).
+Defined.
 
-Definition case_HForall_cons {A} {B : A -> Type} {P : forall a, B a -> Type} {h t}
-           (Q : forall hl : hlist B (h :: t), HForall P hl -> Type)
+Definition case_HForall_cons {A} {B : A -> Type} {P : forall a, B a -> Prop} {h t}
+           (Q : forall hl : hlist B (h :: t), HForall P hl -> Prop)
            (case : forall hh ht (pf : (P _ hh)) (H : HForall P ht),
                Q (hcons hh ht) (HFhcons _ _ _ _ _ pf H))
            (hl : hlist B (h :: t)) (H : HForall P hl) : Q hl H :=
-  match H as H0 in @HForall _ _ _ l0 hl0
-        return match l0 return forall hl0', HForall _ hl0' -> Type with
-               | [] => fun _ _ => unit
-               | h0 :: t0 => fun hl0' H0' =>
-                              forall Q, (forall (hh : B h0) (ht : hlist B t0) pf H,
-                                       Q (hcons hh ht) (HFhcons _ _ hh _ ht pf H)) ->
-                                   Q hl0' H0'
-               end hl0 H0 with
-  | HFhnil _ => tt
-  | HFhcons _ _ _ _ _ _ _ => fun Q' case' => case' _ _ _ _
-  end Q case.
+    match H as H0 in @HForall _ _ _ l0 hl0
+           return match l0 return forall hl0', HForall _ hl0' -> Prop with
+                  | [] => fun _ _ => True
+                  | h0 :: t0 =>
+                    fun hl0' H0' =>
+                      forall (Q' : forall hl0 : hlist B (h0 :: t0), HForall P hl0 -> Prop),
+                        (forall hh ht (pf : (P _ hh)) (H : HForall P ht),
+                            Q' (hcons hh ht) (HFhcons _ _ _ _ _ pf H)) ->
+                        Q' hl0' H0'
+                  end hl0 H0
+     with
+     | HFhnil _ => I
+     | HFhcons _ a b l h pb ph => fun Q' case' => case' b h pb ph
+     end Q case.
 
 Lemma lift'_denote :
   forall l ty (e : expr l ty) n ty' vs (x : type_denote ty'),
     expr_denote (lift' n e) (insert_hlist x n vs) =
     expr_denote e vs.
 Proof.
-  refine (expr_mut_rect' _ _ _ _ _ _); intros; simpl.
+  refine (expr_mut_ind' _ _ _ _ _ _); intros; simpl.
   - apply hget_insert.
   - apply functional_extensionality. intros z.
     apply H with (n := (S _)) (vs := hcons _ _).
@@ -519,7 +531,7 @@ Theorem subst_denote :
     expr_denote (subst e sub) vs =
     expr_denote e (hmap (fun t (e' : expr _ t) => expr_denote e' vs) sub).
 Proof.
-  refine (expr_mut_rect' _ _ _ _ _ _); intros; simpl.
+  refine (expr_mut_ind' _ _ _ _ _ _); intros; simpl.
   - rewrite hget_hmap. auto.
   - apply functional_extensionality. intros.
     rewrite H.
@@ -677,7 +689,7 @@ Theorem step_denote : forall l ty (e e' : expr l ty) vs,
     step e e' ->
     expr_denote e vs = expr_denote e' vs.
 Proof.
-  refine (expr_mut_rect' _ _ _ _ _ _); simpl; firstorder; subst.
+  refine (expr_mut_ind' _ _ _ _ _ _); simpl; firstorder; subst.
   - now erewrite H by eauto.
   - now erewrite H0 by eauto.
   - simpl. rewrite subst_denote.
@@ -736,7 +748,7 @@ Proof.
   intros ty e.
   remember [] as l.
   revert l ty e Heql.
-  refine (expr_mut_rect' _ _ _ _ _ _); simpl; intros; subst; intuition.
+  refine (expr_mut_ind' _ _ _ _ _ _); simpl; intros; subst; intuition.
   - destruct m using case_member_nil.
   - right. destruct (canonical_forms_arrow _ _ e1 H). subst.
     eauto 10.
