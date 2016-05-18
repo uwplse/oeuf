@@ -20,7 +20,9 @@ Require Import StructTact.Util.
 Definition function_name := ident.
 
 Inductive expr : Type :=
-| Var : ident -> expr.
+| Var : ident -> expr
+| Deref : expr -> nat -> expr
+.
 
 Inductive stmt : Type :=
 | Sskip
@@ -28,8 +30,8 @@ Inductive stmt : Type :=
 | SmakeConstr (dst : ident) (tag : Z) (args : list expr)
 | Sswitch (dst : ident) (cases : list (Z * list ident * expr)) (target : expr)
 | SmakeClose (dst : ident) (f : function_name) (free : list expr)
-| Sseq (s1 : stmt) (s2 : stmt).
-
+| Sseq (s1 : stmt) (s2 : stmt)
+.
 
 Record function : Type := mkfunction {
   fn_params: list ident; (* there will always be one param, but also could be closure args *)
@@ -68,7 +70,6 @@ Inductive cont: Type :=
   | Kcall: ident -> expr -> function -> env -> cont -> cont.
                                         (**r return to caller *)
 
-
 Inductive state: Type :=
   | State:                      (**r Execution within a function *)
       forall (f: function)              (**r currently executing function  *)
@@ -100,7 +101,17 @@ Inductive eval_expr : expr -> value -> Prop :=
 | eval_var :
     forall id v,
       PTree.get id e = Some v ->
-      eval_expr (Var id) v.
+      eval_expr (Var id) v
+| eval_deref_close :
+    forall n exp fn l v,
+      eval_expr exp (Close fn l) ->
+      nth_error l n = Some v ->
+      eval_expr (Deref exp n) v
+| eval_dref_constr :
+    forall n exp tag l v,
+      eval_expr exp (Constr tag l) ->
+      nth_error l n = Some v ->
+      eval_expr (Deref exp n) v.
 
 Inductive eval_exprlist : list expr -> list value -> Prop :=
 | eval_Enil:
@@ -110,7 +121,6 @@ Inductive eval_exprlist : list expr -> list value -> Prop :=
     eval_exprlist (a1 :: al) (v1 :: vl).
 
 End EVAL_EXPR.
-
 
 Fixpoint call_cont (k: cont) : cont :=
   match k with
@@ -132,10 +142,18 @@ Fixpoint set_params (vl: list value) (il: list ident) {struct il} : env :=
   | _, _ => PTree.empty value
   end.
 
-(* TODO: write these *)
-Fixpoint bind_ids (ids : list ident) (vals : list value) (e : env) : env := e.
+Fixpoint bind_ids (ids : list ident) (vals : list value) (e : env) : env :=
+  match ids,vals with
+  | id :: ids', v :: vs => bind_ids ids' vs (PTree.set id v e)
+  | _,_ => e
+  end.
 
-Fixpoint find_case (tag : Z) (cases : list (Z * list ident * expr)) : option (list ident * expr) := None.
+Fixpoint find_case (tag : Z) (cases : list (Z * list ident * expr)) : option (list ident * expr) :=
+  match cases with
+  | nil => None
+  | (z,ids,e) :: r =>
+    if zeq tag z then Some (ids,e) else find_case tag r
+  end.
 
 Inductive step : state -> trace -> state -> Prop :=
   | step_skip_seq: forall f s k e exp,
@@ -151,7 +169,7 @@ Inductive step : state -> trace -> state -> Prop :=
       eval_expr e efunc (Close fname cargs) -> (* the function itself *)
       Genv.find_funct_ptr ge fname = Some fn ->
       step (State f (Scall id efunc earg) exp k e) E0
-           (Callstate fn (varg :: cargs) (Kcall id exp f e k))
+           (Callstate fn ((Close fname cargs) :: varg :: nil) (Kcall id exp f e k))
   | step_return: forall v f id e k exp,
       step (Returnstate v (Kcall id exp f e k))
         E0 (State f Sskip exp k (PTree.set id v e))
