@@ -54,6 +54,7 @@ Definition zip_counter {A} (xs : list A) : list (nat * A) :=
             end in
     go 0 xs.
 
+(*
 Definition index_to_count ty idx_e : option (nat * T.expr) :=
     let '(idx, e) := idx_e in
     match U.type_constr ty idx with
@@ -99,3 +100,4 @@ Fixpoint compile' (e : U.expr) : option T.expr :=
     | _ => None
     end.
 
+*)
