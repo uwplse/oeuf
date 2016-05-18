@@ -6,6 +6,8 @@ Require Import StructTact.StructTactics.
 Require Import FunctionalExtensionality.
 Require Import Program.
 
+Require Import HList.
+
 Require Import Utopia.
 
 Definition type_name_eq_dec (tn1 tn2 : type_name) : {tn1 = tn2} + {tn1 <> tn2}.
@@ -38,70 +40,6 @@ Inductive elim : list type -> type -> type -> Type :=
 | ENat : forall ty, elim [ty; Arrow (ADT Tnat) (Arrow ty ty)] (ADT Tnat) ty
 | EListNat : forall ty, elim [ty; Arrow (ADT Tnat) (Arrow (ADT Tlist_nat) (Arrow ty ty))] (ADT Tlist_nat) ty
 .
-
-(* heterogeneous lists. for more details see cpdt:
-   http://adam.chlipala.net/cpdt/html/Cpdt.DataStruct.html *)
-Inductive hlist {A : Type} (B : A -> Type) : list A -> Type :=
-| hnil : hlist B []
-| hcons : forall {a} (b : B a) l, hlist B l -> hlist B (a :: l)
-.
-Arguments hnil {A} {B}.
-Arguments hcons {A} {B} {a} b {l} h.
-
-Definition hhead {A B} {a : A} {l} (h : hlist B (a :: l)) : B a :=
-  match h in hlist _ l return match l with
-                              | [] => unit
-                              | x :: _ => B x
-                              end with
-  | hnil => tt
-  | hcons b _ => b
-  end.
-
-Definition htail {A B} {a : A} {l} (h : hlist B (a :: l)) : hlist B l :=
-  match h in hlist _ l return match l with
-                              | [] => unit
-                              | _ :: l' => hlist B l'
-                              end with
-  | hnil => tt
-  | hcons _ t => t
-  end.
-
-
-(* `member` is isomorphic to `In`, but its proof-relevant, so it can be used as data.
-   this is used below to represent variables as dependent de Bruijn indices. *)
-Inductive member {A : Type} (a : A) : list A -> Type :=
-| Here : forall l, member a (a :: l)
-| There : forall x l, member a l -> member a (x :: l)
-.
-Arguments Here {A} {a} {l}.
-Arguments There {A} {a} {x} {l} m.
-
-
-Definition case_member_nil {A} {a : A} (P : member a [] -> Type) (m : member a []) : P m :=
-  match m with
-  | Here => tt
-  | There _ => tt
-  end.
-
-
-Definition case_member_cons {A} {a : A} (P : forall h t, member a (h :: t) -> Type)
-           (here : forall l, P a l Here) (there : forall h t (m : member a t), P h t (There m))
-           {h t} (m : member a (h :: t)) : P h t m :=
-  match m with
-  | Here => here _
-  | There m' => there _ _ m'
-  end.
-
-(* given an index into l, lookup the corresponding element in an (hlist l) *)
-Fixpoint hget {A B} {l : list A} (h : hlist B l) (x : A) {struct h} : member x l -> B x :=
-    match h with
-    | hnil => case_member_nil _
-    | @hcons _ _ a b l' h' =>
-      fun m : member x (a :: l') =>
-        case_member_cons _ (fun _ b' _ => b') (fun _ _ m' _ rec => rec m') m b (hget h' x)
-    end.
-Arguments hget {A B l} h {x} m.
-
 
 Section expr.
 (* since this type makes hlists of recursive calls, the auto-generated schemes are garbage. *)
@@ -151,11 +89,6 @@ Definition elim_denote {case_tys target_ty ty} (e : elim case_tys target_ty ty) 
   | ENat _ => fun cases target => (nat_rect _ (hhead cases) (hhead (htail cases)) target)
   | EListNat _ => fun cases target => (list_rect _ (hhead cases) (hhead (htail cases)) target)
   end.
-
-Inductive HForall {A B} (P : forall a : A, B a -> Prop) : forall {l : list A}, hlist B l -> Prop :=
-| HFhnil : HForall P hnil
-| HFhcons : forall a b l (h : hlist B l), P a b -> HForall P h -> HForall P (hcons b h).
-Hint Constructors HForall.
 
 Definition expr_mut_rect
            (P : forall l ty, expr l ty -> Type)
@@ -326,39 +259,6 @@ Eval compute in @map nat nat.
 Example map_reflect_correct : forall l h, expr_denote(l := l) map_reflect h = @map nat nat.
 Proof. reflexivity. Qed.
 
-Fixpoint insert {A} (a : A) (l : list A) (n : nat) {struct n} : list A :=
-  match n with
-  | 0 => a :: l
-  | S n' => match l with
-           | [] => a :: l
-           | x :: l' => x :: insert a l' n'
-           end
-  end.
-
-
-
-Fixpoint insert_member {A} {ty : A} {l ty'} (m : member ty l) n : member ty (insert ty' l n) :=
-  match m with
-  | Here => match n as n0 return member _ (insert _ _ n0) with
-           | 0 => There Here
-           | S n' => Here
-           end
-  | There m' => match n as n0 return member _ (insert _ _ n0) with
-               | 0 => There (There m')
-               | S n' => There (insert_member m' _)
-               end
-  end.
-
-Fixpoint insert_hlist {A} {B : A -> Type} {l : list A} {a : A} (b : B a) (n : nat) {struct n}:
-  hlist B l -> hlist B (insert a l n) :=
-  match n with
-  | 0 => fun h => hcons b h
-  | S n' => match l with
-           | [] => fun _ => hcons b hnil
-           | x :: l' => fun h => hcons (hhead h) (insert_hlist b n' (htail h))
-           end
-  end.
-
 Fixpoint lift' {l ty ty'} n (e : expr l ty) {struct e} : expr (insert ty' l n) ty :=
   let fix go_hlist {l ty'} n {tys} (h : hlist (expr l) tys) :
         hlist (expr (insert ty' l n)) tys :=
@@ -377,12 +277,6 @@ Fixpoint lift' {l ty ty'} n (e : expr l ty) {struct e} : expr (insert ty' l n) t
 Definition lift {l} ty' ty e := @lift' l ty ty' 0 e.
 
 
-Fixpoint hmap {A B C} {l : list A} (f : forall a, B a -> C a) (h : hlist B l) : hlist C l :=
-  match h with
-  | hnil => hnil
-  | hcons x h' => hcons (f _ x) (hmap f h')
-  end.
-
 Fixpoint subst {l ty} (e : expr l ty) {l'} : hlist (expr l') l -> expr l' ty :=
   let fix go_hlist {l tys} (h' : hlist (expr l) tys) {l'} (h : hlist (expr l') l) :
         hlist (expr l') tys :=
@@ -398,100 +292,6 @@ Fixpoint subst {l ty} (e : expr l ty) {l'} : hlist (expr l') l -> expr l' ty :=
   | Constr c args => fun h => Constr c (go_hlist args h)
   | Elim e cases target => fun h => Elim e (go_hlist cases h) (subst target h)
   end.
-
-Lemma hget_hmap :
-  forall A B C (l : list A) (f : forall a, B a -> C a) (h : hlist B l) t (m : member t _),
-    hget (hmap f h) m = f _ (hget h m).
-Proof.
-  intros A B C l f h.
-  induction h; intros.
-  - destruct m using case_member_nil.
-  - destruct a, l, m using case_member_cons; simpl; auto.
-Qed.
-
-Lemma hmap_hmap :
-  forall A B C D (l : list A) (f : forall a, B a -> C a) (g : forall a, C a -> D a) (h : hlist B l),
-    hmap g (hmap f h) = hmap (fun a b => g a (f a b)) h.
-Proof.
-  induction h; simpl; auto using f_equal.
-Qed.
-
-Lemma hmap_ext :
-  forall A B C (l : list A) (f g : forall a, B a -> C a) (h : hlist B l),
-    (forall a b, f a b = g a b) ->
-    hmap f h = hmap g h.
-Proof.
-  induction h; simpl; auto; auto.
-  intros. rewrite H. auto using f_equal.
-Qed.
-
-Definition case_hlist_nil {A} {B : A -> Type} (P : hlist B [] -> Type) (case : P hnil) hl : P hl :=
-  match hl with
-  | hnil => case
-  | hcons _ _ => tt
-  end.
-
-Definition case_hlist_cons {A} {B : A -> Type} {h t} (P : hlist B (h :: t) -> Type)
-           (case : forall hh ht, P (hcons hh ht))
-           (hl : hlist B (h :: t)) : P hl :=
-  match hl as hl0 in hlist _ l0
-        return match l0 as l0' return hlist _ l0' -> Type with
-               | [] => fun _ => unit
-               | h0 :: t0 => fun hl0' => forall P', (forall hh ht, P' (hcons hh ht)) -> P' hl0'
-               end hl0 with
-  | hnil => tt
-  | hcons hh ht => fun P' case' => case' hh ht
-  end P case.
-
-
-Lemma hget_insert:
-  forall l ty (m : member ty l) n ty' vs (x : type_denote ty'),
-    hget (insert_hlist x n vs) (insert_member m n) = hget vs m.
-Proof.
-  induction m; intros; destruct n; simpl in *.
-  - auto.
-  - destruct vs using case_hlist_cons. auto.
-  - destruct vs using case_hlist_cons. auto.
-  - destruct vs using case_hlist_cons. simpl. auto.
-Qed.
-
-Definition case_HForall_nil {A} {B : A -> Type} {P : forall a, B a -> Prop}
-           (Q : forall hl : hlist B [], HForall P hl -> Prop)
-           (case : Q hnil (HFhnil _))
-           hl H : Q hl H.
-  refine
-    (match H as H0 in @HForall _ _ _ l0 hl0
-          return match l0 return forall hl0', HForall _ hl0' -> Prop with
-                 | [] => fun hl0' H0' =>
-                          forall (Q' : forall hl0, HForall P hl0 -> Prop),
-                            Q' hnil (HFhnil P) ->
-                            Q' hl0' H0'
-                 | _ :: _ => fun _ _ => True
-                 end hl0 H0 with
-    | HFhnil _ => fun Q' case' => case'
-    | HFhcons _ _ _ _ _ _ _ => I
-    end Q case).
-Defined.
-
-Definition case_HForall_cons {A} {B : A -> Type} {P : forall a, B a -> Prop} {h t}
-           (Q : forall hl : hlist B (h :: t), HForall P hl -> Prop)
-           (case : forall hh ht (pf : (P _ hh)) (H : HForall P ht),
-               Q (hcons hh ht) (HFhcons _ _ _ _ _ pf H))
-           (hl : hlist B (h :: t)) (H : HForall P hl) : Q hl H :=
-    match H as H0 in @HForall _ _ _ l0 hl0
-           return match l0 return forall hl0', HForall _ hl0' -> Prop with
-                  | [] => fun _ _ => True
-                  | h0 :: t0 =>
-                    fun hl0' H0' =>
-                      forall (Q' : forall hl0 : hlist B (h0 :: t0), HForall P hl0 -> Prop),
-                        (forall hh ht (pf : (P _ hh)) (H : HForall P ht),
-                            Q' (hcons hh ht) (HFhcons _ _ _ _ _ pf H)) ->
-                        Q' hl0' H0'
-                  end hl0 H0
-     with
-     | HFhnil _ => I
-     | HFhcons _ a b l h pb ph => fun Q' case' => case' b h pb ph
-     end Q case.
 
 Lemma lift'_denote :
   forall l ty (e : expr l ty) n ty' vs (x : type_denote ty'),
@@ -723,13 +523,6 @@ Proof.
       simpl; auto.
 Qed.
 
-Fixpoint happ {A} {B : A -> Type} {l1 l2} (h1 : hlist B l1) (h2 : hlist B l2) : hlist B (l1 ++ l2) :=
-  match h1 with
-  | hnil => h2
-  | hcons x h1' => hcons x (happ h1' h2)
-  end.
-
-
 Inductive step {l} : forall {ty}, expr l ty -> expr l ty -> Prop :=
 | Beta : forall ty1 ty2 (b : expr _ ty2) (e2 : expr _ ty1),
     value e2 ->
@@ -786,46 +579,6 @@ Qed.
 Definition constr_name_eq_dec (c1 c2 : constr_name) : {c1 = c2} + {c1 <> c2}.
   decide equality.
 Defined.
-
-Definition case_HForall_hcons {A} {B : A -> Type} {P : forall a, B a -> Prop} {h t} {hh : B h} {ht : hlist B t}
-           (Q : HForall P (hcons hh ht) -> Prop)
-           (case : forall (pf : (P _ hh)) (H : HForall P ht),
-               Q (HFhcons _ _ _ _ _ pf H))
-           (H : HForall P (hcons hh ht)) : Q H.
-  revert Q case.
-  refine (match H as H0 in @HForall _ _ _ l0 hl0
-                return match l0 return forall hl0', HForall _ hl0' -> Prop with
-                       | [] => fun _ _ => True
-                       | h0 :: t0 =>
-                         fun hl0' =>
-                           match hl0' with
-                           | hnil => fun _ => True
-                           | hcons hh0 ht0 =>
-                             fun H0' =>
-                               forall (Q' : HForall P (hcons hh0 ht0) -> Prop),
-                                 (forall (pf : (P _ hh0)) (H : HForall P ht0),
-                                     Q' (HFhcons _ _ _ _ _ pf H)) ->
-                                 Q' H0'
-                           end
-                       end hl0 H0
-          with
-          | HFhnil _ => I
-          | HFhcons _ _ _ _ _ _ _ => _
-          end).
-  auto.
-Defined.
-
-Lemma HForall_happ_split :
-  forall A (B : A -> Type) (P : forall a, B a -> Prop) l1 l2 (h1 : hlist B l1) (h2 : hlist B l2),
-    HForall P (happ h1 h2) ->
-    HForall P h1 /\ HForall P h2.
-Proof.
-  induction h1; simpl; intuition.
-  - destruct  H using case_HForall_hcons.
-    apply IHh1 in H. intuition.
-  - destruct  H using case_HForall_hcons.
-    apply IHh1 in H. intuition.
-Qed.
 
 Theorem step_denote : forall l ty (e e' : expr l ty) vs,
     step e e' ->
@@ -903,55 +656,6 @@ Proof.
   - destruct t0; firstorder.
   - eauto.
   - destruct t0; firstorder.
-Qed.
-
-Lemma HForall_imp :
-  forall A (A_eq_dec : forall x y : A, {x = y} + {x <> y}) (B : A -> Type) (P Q : forall a, B a -> Prop),
-    (forall a b, P a b -> Q a b) ->
-    forall l (h : hlist B l),
-      HForall P h -> HForall Q h.
-Proof.
-  induction h; inversion 1; subst; auto.
-  repeat (find_apply_lem_hyp Eqdep_dec.inj_pair2_eq_dec; [|now auto using list_eq_dec]).
-  subst.
-  auto.
-Qed.
-
-Lemma HForall_or_split :
-  forall A (B : A -> Type) (P Q : forall a, B a -> Prop) l (h : hlist B l),
-    HForall (fun a b => P a b \/ Q a b) h ->
-    HForall P h \/
-    exists l1 a l2 (h1 : hlist B l1) (b : B a) (h2 : hlist B l2)
-      (pf : l = l1 ++ a :: l2),
-      eq_rect _ _ h _ pf = happ h1 (hcons b h2) /\
-      HForall P h1 /\
-      Q a b.
-Proof.
-  induction h; intros.
-  - auto.
-  - destruct H using case_HForall_hcons.
-    destruct pf.
-    + apply IHh in H.
-      destruct H.
-      * auto.
-      * right.
-        break_exists_name l1.
-        break_exists_name a0.
-        break_exists_name l2.
-        break_exists_name h1.
-        break_exists_name b0.
-        break_exists_name h2.
-        break_exists_name pf.
-        subst l.
-        exists (a :: l1), a0, l2.
-        exists (hcons b h1), b0, h2.
-        exists eq_refl.
-        simpl in *.
-        break_and. subst.
-        auto.
-    + right.
-      exists [], a, l, hnil, b, h, eq_refl.
-      auto.
 Qed.
 
 Theorem progress : forall ty (e : expr [] ty), value e \/ exists e', step e e'.
