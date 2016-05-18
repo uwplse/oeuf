@@ -42,6 +42,12 @@ Definition compile {l ty} (e : S.expr l ty) : U.expr :=
       end
   in go e.
 
+Fixpoint compile_hlist {l tys} (h : S.hlist (S.expr l) tys) : list U.expr :=
+  match h with
+  | S.hnil => []
+  | S.hcons x h' => cons (compile x) (compile_hlist h')
+  end.
+
 Fixpoint hmap_simple {A} {B : A -> Type} {C l} (f : forall a, B a -> C) (h : S.hlist B l) : list C :=
   match h with
   | S.hnil => []
@@ -157,6 +163,22 @@ Qed.
 
 Hint Constructors U.step.
 
+Lemma compile_hlist_app :
+  forall l tys1 tys2 (h1 : S.hlist (S.expr l) tys1) (h2 : S.hlist (S.expr l) tys2),
+    compile_hlist (S.happ h1 h2) =
+    compile_hlist h1 ++ compile_hlist h2.
+Proof.
+  induction h1; simpl; auto using f_equal.
+Qed.
+
+Lemma compile_hlist_Forall_value :
+  forall l tys (args : S.hlist (S.expr l) tys),
+    S.HForall (fun ty e => S.value e) args ->
+    Forall U.value (compile_hlist args).
+Proof.
+  induction 1; simpl; auto using compile_value.
+Qed.
+
 Theorem forward_simulation :
   forall ty (e e' : S.expr [] ty),
     S.step e e' ->
@@ -174,19 +196,8 @@ Proof.
   - auto.
   - eauto using compile_value.
   - auto.
-  - match goal with
-    | [ |- context [?f _ _ (S.happ _ _)] ] =>
-      assert (forall l tys1 tys2 (h1 : S.hlist (S.expr l) tys1) (h2 : S.hlist (S.expr l) tys2),
-                 f l (tys1 ++ tys2) (S.happ h1 h2) = f l tys1 h1 ++ f l tys2 h2)
-        as Hfix
-          by (induction h1; simpl; auto using f_equal);
-        rewrite !Hfix; clear Hfix
-    end.
-    apply U.ConstrStep; auto.
-    clear ct.
-    induction args1.
-    + auto.
-    + destruct H using S.case_HForall_hcons.
-      auto using compile_value.
+  - fold @compile_hlist.
+    rewrite !compile_hlist_app.
+    apply U.ConstrStep; auto using compile_hlist_Forall_value.
   - admit.
 Admitted.
