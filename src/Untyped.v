@@ -137,7 +137,7 @@ Fixpoint unroll_elim' (case : expr)
             unroll_elim' case ctor args mk_rec (S idx)
     end.
 
-Fixpoint unroll_elim case ctor args mk_rec :=
+Definition unroll_elim case ctor args mk_rec :=
     unroll_elim' case ctor args mk_rec 0.
 
 Inductive step : expr -> expr -> Prop :=
@@ -153,7 +153,7 @@ Inductive step : expr -> expr -> Prop :=
 | Eliminate : forall c args ty cases case,
     nth_error cases (constructor_index c) = Some case ->
     step (Elim ty cases (Constr c args))
-        (unroll_elim case c args (fun x => Elim ty cases x)).
+        (unroll_elim case c args (Elim ty cases)).
 
 
 
