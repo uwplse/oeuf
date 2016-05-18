@@ -19,8 +19,8 @@ Definition constructor_index ctor : nat :=
     | CO => 0
     | CS => 1
 
-    | Cfalse => 0
-    | Ctrue => 1
+    | Ctrue => 0
+    | Cfalse => 1
 
     | Cnil => 0
     | Ccons => 1
