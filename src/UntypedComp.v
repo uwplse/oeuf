@@ -48,12 +48,18 @@ Fixpoint compile_hlist {l tys} (h : S.hlist (S.expr l) tys) : list U.expr :=
   | S.hcons x h' => cons (compile x) (compile_hlist h')
   end.
 
-Fixpoint hmap_simple {A} {B : A -> Type} {C l} (f : forall a, B a -> C) (h : S.hlist B l) : list C :=
+Fixpoint hmap_simple {A} {B : A -> Type} {C} (f : forall a, B a -> C) {l} (h : S.hlist B l) : list C :=
   match h with
   | S.hnil => []
   | S.hcons x h' => cons (f _ x) (hmap_simple f h')
   end.
 
+Lemma compile_hlist_hmap_simple :
+  forall l tys (h : S.hlist (S.expr l) tys),
+    compile_hlist h = hmap_simple (@compile l) h.
+Proof.
+  induction h; simpl; auto using f_equal.
+Qed.
 
 Lemma nth_member_hget :
   forall A (B : A -> Type) C (f : forall a, B a -> C) c l (h : S.hlist B l) t (m : S.member t l),
@@ -179,6 +185,97 @@ Proof.
   induction 1; simpl; auto using compile_value.
 Qed.
 
+Lemma compile_unroll' :
+  forall l ty_rec arg_rec arg_tys ty c
+    (mk_urec : U.expr -> U.expr)
+    (mk_rec : S.expr l ty_rec -> S.expr l arg_rec),
+    (forall e : S.expr l ty_rec, compile (mk_rec e) = mk_urec (compile e)) ->
+    forall (args : S.hlist (S.expr l) arg_tys)
+    (case : S.expr l (S.arrow_all ty_rec arg_rec arg_tys ty))
+    i,
+    (forall j, nth_error arg_tys j = Some ty_rec ->
+          ctor_arg_is_recursive c (j + i) = true) ->
+    (forall j ty, nth_error arg_tys j = Some ty ->
+             ty <> ty_rec ->
+             ctor_arg_is_recursive c (j + i) = false) ->
+
+    compile (S.unroll args case mk_rec) =
+    U.unroll_elim' (compile case) c (compile_hlist args) mk_urec i.
+Proof.
+  induction args; intros.
+  - auto.
+  - simpl in *.
+    revert case.
+    destruct (S.type_eq_dec a ty_rec); intros.
+    + subst. simpl.
+      pose proof H0 0 eq_refl as Hi.
+      simpl in Hi.
+      rewrite Hi.
+      rewrite IHargs with (i := S i).
+      simpl. f_equal. f_equal. auto.
+      intros. rewrite <- plus_n_Sm. apply H0 with (j := S j). auto.
+      intros. rewrite <- plus_n_Sm. apply H1 with (ty := ty0) (j := S j); auto.
+    + pose proof H1 0 _ eq_refl ltac:(auto) as Hi.
+      simpl in Hi.
+      rewrite Hi.
+      rewrite IHargs with (i := S i).
+      auto.
+      intros. rewrite <- plus_n_Sm. apply H0 with (j := S j). auto.
+      intros. rewrite <- plus_n_Sm. apply H1 with (ty := ty0) (j := S j); auto.
+Qed.
+
+Lemma elim_to_type_name_correct :
+  forall case_tys target_tyn ty
+    (e : S.elim case_tys (S.ADT target_tyn) ty),
+    elim_to_type_name e = target_tyn.
+Proof.
+  dependent destruction e; auto.
+Qed.
+
+
+Lemma compile_eliminate :
+  forall case_tys target_tyn arg_tys ty l c
+    (e : S.elim case_tys (S.ADT target_tyn) ty)
+    (cases : S.hlist (S.expr l) case_tys)
+    (ct : S.constr_type c arg_tys target_tyn)
+    (args : S.hlist (S.expr l) arg_tys),
+    compile (S.unroll args (S.hget cases (S.eliminate_case_type e ct)) (S.Elim e cases)) =
+    U.unroll_elim (compile (S.hget cases (S.eliminate_case_type e ct)))
+                  c
+                  (compile_hlist args)
+                  (U.Elim target_tyn (compile_hlist cases)).
+Proof.
+  unfold U.unroll_elim.
+  intros.
+  apply compile_unroll'.
+  - simpl. intros. rewrite elim_to_type_name_correct. auto.
+  - intros. rewrite <- plus_n_O.
+    dependent destruction e; dependent destruction ct; destruct j; simpl in *; try congruence.
+    destruct j; simpl in *; try congruence.
+    destruct j; simpl in *; try congruence.
+    destruct j; simpl in *; try congruence.
+  - intros. rewrite <- plus_n_O.
+    dependent destruction e; dependent destruction ct; simpl; auto;
+    destruct j; simpl in *; try congruence.
+    destruct j; simpl in *; try congruence.
+Qed.
+
+Lemma nth_error_hmap_simple_hget :
+  forall A (B : A -> Type) C (f : forall a, B a -> C) l (h : S.hlist B l) a (m : S.member a l),
+    nth_error (hmap_simple f h) (member m) = Some (f _ (S.hget h m)).
+Proof.
+  induction h; intros; dependent destruction m; simpl; auto.
+Qed.
+
+Lemma constructor_index_correct :
+  forall case_tys target_tyn arg_tys ty c
+    (e : S.elim case_tys (S.ADT target_tyn) ty)
+    (ct : S.constr_type c arg_tys target_tyn),
+    member (S.eliminate_case_type e ct) = constructor_index c.
+Proof.
+  dependent destruction e; dependent destruction ct; auto.
+Qed.
+
 Theorem forward_simulation :
   forall ty (e e' : S.expr [] ty),
     S.step e e' ->
@@ -199,5 +296,12 @@ Proof.
   - fold @compile_hlist.
     rewrite !compile_hlist_app.
     apply U.ConstrStep; auto using compile_hlist_Forall_value.
-  - admit.
-Admitted.
+  - fold @compile_hlist.
+    rewrite S.eliminate_unroll.
+    rewrite compile_eliminate.
+    rewrite elim_to_type_name_correct.
+    rewrite compile_hlist_hmap_simple.
+    apply U.Eliminate.
+    rewrite <- constructor_index_correct with (e := e) (ct := ct).
+    now rewrite nth_error_hmap_simple_hget.
+Qed.

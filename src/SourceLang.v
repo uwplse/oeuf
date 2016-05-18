@@ -607,6 +607,84 @@ Definition eliminate {case_tys target_tyn arg_tys ty l c}
             end).
 Defined.
 
+Fixpoint arrow_all (ty_rec : type) (arg_rec : type) (args : list type) (dest : type) : type :=
+  match args with
+  | [] => dest
+  | ty :: args' =>
+    Arrow ty
+          (if type_eq_dec ty ty_rec
+           then Arrow arg_rec (arrow_all ty_rec arg_rec args' dest)
+           else (arrow_all ty_rec arg_rec args' dest))
+  end.
+
+Definition eliminate_case_type
+           {case_tys target_tyn arg_tys c ty}
+           (e : elim case_tys (ADT target_tyn) ty) :
+            constr_type c arg_tys target_tyn ->
+            member (arrow_all (ADT target_tyn) ty arg_tys ty) case_tys.
+  refine match e with
+         | EBool t    => fun ct => _
+         | ENat t     => fun ct => _
+         | EListNat t => fun ct => _
+         end.
+  - refine match ct with
+           | CTtrue => _
+           | CTfalse => _
+           end.
+    + exact (Here).
+    + exact (There Here).
+  - refine match ct with
+           | CTS => _
+           | CTO => _
+           end.
+    + exact (There Here).
+    + exact Here.
+  - refine match ct with
+           | CTnil => _
+           | CTcons => _
+           end.
+    + exact Here.
+    + exact (There Here).
+Defined.
+
+Fixpoint unroll {l ty_rec arg_rec arg_tys ty}
+         (args : hlist (expr l) arg_tys) :
+         expr l (arrow_all ty_rec arg_rec arg_tys ty) ->
+         (expr l ty_rec -> expr l arg_rec) -> expr l ty.
+  refine match args with
+         | hnil => fun f mk_rec => _
+         | hcons arg args' => _
+         end.
+  - exact f.
+  - cbn [arrow_all].
+    refine match type_eq_dec t ty_rec with
+           | left pf => _
+           | right _ => fun f mk_rec => _
+           end.
+    + revert arg.
+      refine match eq_sym pf with
+             | eq_refl => fun arg f mk_rec => unroll _ _ _ _ _ args' _ mk_rec
+             end.
+      refine (App (App f arg) (mk_rec arg)).
+    + refine (unroll _ _ _ _ _ args' (App f arg) mk_rec).
+Defined.
+
+
+Lemma eliminate_unroll :
+  forall case_tys target_tyn arg_tys ty l c
+    (e : elim case_tys (ADT target_tyn) ty)
+    (cases : hlist (expr l) case_tys)
+    (ct : constr_type c arg_tys target_tyn)
+    (args : hlist (expr l) arg_tys),
+    eliminate e cases ct args =
+    unroll args (hget cases (eliminate_case_type e ct))
+           (Elim e cases).
+Proof.
+  dependent destruction e; dependent destruction ct; intros;
+  repeat dependent destruction args;
+  repeat dependent destruction cases; auto.
+Qed.
+
 Theorem eliminate_denote :
   forall case_tys target_tyn arg_tys ty l c
     (e : elim case_tys (ADT target_tyn) ty)
