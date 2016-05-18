@@ -52,8 +52,8 @@ Definition stack := list frame.
 Definition eval_expr (arg : value) (upvars : list value) (locals : list (nat * value)) (e : expr) : option value :=
   match e with
   | Arg => Some arg
-  | UpVar n => nth_error upvars n
-  | Temp n => assoc Nat.eq_dec locals n
+  | UpVar n => nth_error upvars (Pos.to_nat n)
+  | Temp n => assoc Nat.eq_dec locals (Pos.to_nat n)
   end.
 
 Fixpoint map_partial {A B : Type} (f : A -> option B) (l : list A) : option (list B) :=
@@ -101,7 +101,7 @@ Inductive step (E : env) : stack -> stack -> Prop :=
 | StepCall : forall dst f a l r ls av ups s fn free def ret av',
     eval_expr av ups ls f = Some (Close fn free) ->
     eval_expr av ups ls a = Some av' ->
-    nth_error E fn = Some (def, ret) ->
+    nth_error E (Pos.to_nat fn) = Some (def, ret) ->
     step E (Frame (Call dst f a :: l) r ls av ups :: s)
            (Frame def ret [] av' free :: Frame (Call dst f a :: l) r ls av ups :: s)
 
