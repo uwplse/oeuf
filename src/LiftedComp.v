@@ -1,5 +1,6 @@
 Require Import List.
 Import ListNotations.
+Require Import StructTact.StructTactics.
 
 Require Import Monads.
 
@@ -386,6 +387,179 @@ induction xs; intros0 Hlem Hf Hf2; invc Hf; invc Hf2.
 - constructor; eauto.
 Qed.
 
+Lemma nat_ge_max : forall n m1 m2,
+    n >= max m1 m2 ->
+    n >= m1 /\ n >= m2.
+intros0 Hge.
+destruct (Max.max_spec m1 m2) as [[? ?] | [? ?]]; split; omega.
+Qed.
+
+Notation "**" := (ltac:(eassumption)) (only parsing).
+
+Definition req_upvars e :=
+    let fix go e :=
+        let fix go_list es :=
+            match es with
+            | [] => 0
+            | e :: es => max (go e) (go_list es)
+            end in
+        match e with
+        | L.Arg => 0
+        | L.UpVar n => S n
+        | L.Call e1 e2 => max (go e1) (go e2)
+        | L.Constr _ es => go_list es
+        | L.Elim _ cases target => max (go_list cases) (go target)
+        | L.Close _ free => go_list free
+        end in go e.
+
+Fixpoint req_upvars_list es :=
+    match es with
+    | [] => 0
+    | e :: es => max (req_upvars e) (req_upvars_list es)
+    end.
+
+Lemma nat_ge_req_upvars_list : forall n es,
+    n >= req_upvars_list es ->
+    Forall (fun e => n >= req_upvars e) es.
+induction es; simpl; intros0 Hge.
+- constructor.
+- destruct (nat_ge_max _ _ _ **). specialize (IHes **).
+  constructor; assumption.
+Qed.
+
+Section subst.
+Open Scope option_monad.
+
+Definition L_subst_list arg vals : list L.expr -> option (list L.expr) :=
+    let fix go_list es :=
+        match es with
+        | [] => Some []
+        | e :: es => @cons L.expr <$> L.subst arg vals e <*> go_list es
+        end in go_list.
+
+Lemma L_subst_list_exists : forall arg vals es,
+    Forall (fun e => exists e', L.subst arg vals e = Some e') es ->
+    exists es', L_subst_list arg vals es = Some es'.
+induction es; intros0 Hfa; simpl; eauto.
+invc Hfa. specialize (IHes **). do 2 break_exists.
+do 2 match goal with [ H : _ |- _ ] => erewrite H; clear H end.
+compute [seq fmap bind_option]. eauto.
+Qed.
+
+End subst.
+
+Lemma Forall_apply A (P : A -> Prop) (Q : A -> Prop) (R : A -> Prop) :
+    forall xs,
+    (forall x, P x -> Q x -> R x) ->
+    Forall P xs ->
+    Forall Q xs ->
+    Forall R xs.
+induction xs; intros0 Hlem Hf Hf'; invc Hf; invc Hf'.
+- constructor.
+- constructor; eauto.
+Qed.
+
+Lemma Forall_exists A B (P : A -> B -> Prop) :
+    forall xs,
+    Forall (fun x => exists y, P x y) xs ->
+    exists ys, Forall2 P xs ys.
+induction xs; intros0 Hfa; simpl.
+- eauto.
+- invc Hfa.
+  destruct H1 as [y ?].
+  destruct (IHxs **) as [ys ?].
+  exists (y :: ys). constructor; assumption.
+Qed.
+
+Lemma subst_req_upvars_ok : forall arg vals e,
+    length vals >= req_upvars e ->
+    exists e', L.subst arg vals e = Some e'.
+induction e using L.expr_ind'; intros0 Hlen; simpl in Hlen.
+
+- (* Arg *) eexists. reflexivity.
+
+- (* UpVar *) simpl. eapply nth_error_lt. omega.
+
+- (* Call *)
+  destruct (nat_ge_max _ _ _ **).
+  destruct (IHe1 **) as [? Heq1].
+  destruct (IHe2 **) as [? Heq2].
+  simpl. compute [seq fmap bind_option].
+  rewrite Heq1. rewrite Heq2. eauto.
+
+- (* Constr *)
+  fold req_upvars_list in Hlen.
+  eapply nat_ge_req_upvars_list in Hlen.
+
+  fwd eapply Forall_apply with (2 := H) (3 := Hlen).
+    { intros ? HH ?. eapply HH. eauto. }
+  clear H Hlen.
+  destruct (L_subst_list_exists _ _ _ **) as [? Heq].
+
+  simpl. fold (L_subst_list arg vals). compute [seq fmap bind_option].
+  rewrite Heq. eauto.
+
+- (* Elim *)
+  fold req_upvars_list in Hlen.
+  destruct (nat_ge_max _ _ _ **) as [Hlen' ?].
+  eapply nat_ge_req_upvars_list in Hlen'.
+  clear Hlen.
+
+  destruct (IHe **) as [? Heq1].
+
+  fwd eapply Forall_apply with (2 := H) (3 := Hlen').
+    { intros ? HH ?. eapply HH. eauto. }
+  clear H Hlen'.
+  destruct (L_subst_list_exists _ _ _ **) as [? Heq].
+
+  simpl. fold (L_subst_list arg vals). compute [seq fmap bind_option].
+  rewrite Heq, Heq1. eauto.
+
+- (* Close *)
+  fold req_upvars_list in Hlen.
+  eapply nat_ge_req_upvars_list in Hlen.
+
+  fwd eapply Forall_apply with (2 := H) (3 := Hlen).
+    { intros ? HH ?. eapply HH. eauto. }
+  clear H Hlen.
+  destruct (L_subst_list_exists _ _ _ **) as [? Heq].
+
+  simpl. fold (L_subst_list arg vals). compute [seq fmap bind_option].
+  rewrite Heq. eauto.
+Qed.
+
+Lemma max_ge_args : forall n m,
+    max n m >= n /\ max n m >= m.
+intros.
+destruct (Max.max_spec n m) as [[? ?] | [? ?]]; split; omega.
+Qed.
+
+
+Lemma subst_ok_req_upvars : forall arg vals e e',
+    L.subst arg vals e = Some e' ->
+    length vals >= req_upvars e.
+induction e using L.expr_ind'; intros0 Hsubst;
+simpl in *; fold req_upvars_list in *.
+
+- (* Arg *) omega.
+
+- (* UpVar *) fwd eapply nth_error_Some'; eauto.
+
+- (* Call *)
+  compute [seq fmap bind_option] in Hsubst.
+  destruct (L.subst _ _ e1) eqn:Heq1; try discriminate.
+  destruct (L.subst _ _ e2) eqn:Heq2; try discriminate.
+  specialize (IHe1 _ eq_refl).
+  specialize (IHe2 _ eq_refl).
+  destruct (Max.max_spec (req_upvars e1) (req_upvars e2)) as [[??] | [??]]; omega.
+
+- (* Constr *) admit.
+
+- (* Elim *) admit.
+
+- (* Close *) admit.
+Admitted.
+
 Theorem match_step : forall E ue ue' le,
     match_states E 0 ue le ->
     U.step ue ue' ->
@@ -413,7 +587,13 @@ intros ??. induction 1; intros0 Hmatch.
   inv Ustep.
 
   + (* Beta *)
-    admit.
+    invc Hmatch.
+    invc H3.
+    fwd eapply subst_req_upvars_ok as HH.
+      { eapply subst_ok_req_upvars. eassumption. }
+    destruct HH as [l_body'' ?].
+
+    eexists. eapply L.MakeCall; eauto using match_value_0_fwd.
 
   + (* AppL *)
     invc Hmatch.
@@ -466,7 +646,7 @@ intros ??. induction 1; intros0 Hmatch.
 
     eexists. eapply L.Eliminate. eassumption.
 
-Admitted.
+Qed.
 
 (*
 

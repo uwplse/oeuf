@@ -16,6 +16,43 @@ Inductive expr :=
 | Close (f : function_name) (free : list expr)
 .
 
+Definition expr_rect_mut (P : expr -> Type) (Pl : list expr -> Type)
+    (HArg :     P Arg)
+    (HUpVar :   forall n, P (UpVar n))
+    (HCall :    forall f a, P f -> P a -> P (Call f a))
+    (HConstr :  forall c args, Pl args -> P (Constr c args))
+    (HElim :    forall ty cases target, Pl cases -> P target -> P (Elim ty cases target))
+    (HClose :   forall f free, Pl free -> P (Close f free))
+    (Hnil :     Pl [])
+    (Hcons :    forall e es, P e -> Pl es -> Pl (e :: es))
+    (e : expr) : P e :=
+    let fix go e :=
+        let fix go_list es :=
+            match es as es_ return Pl es_ with
+            | [] => Hnil
+            | e :: es => Hcons e es (go e) (go_list es)
+            end in
+        match e as e_ return P e_ with
+        | Arg => HArg
+        | UpVar n => HUpVar n
+        | Call f a => HCall f a (go f) (go a)
+        | Constr c args => HConstr c args (go_list args)
+        | Elim ty cases target => HElim ty cases target (go_list cases) (go target)
+        | Close f free => HClose f free (go_list free)
+        end in go e.
+
+(* Useful wrapper for `expr_rect_mut with (Pl := Forall P)` *)
+Definition expr_ind' (P : expr -> Prop) 
+    (HArg :     P Arg)
+    (HUpVar :   forall n, P (UpVar n))
+    (HCall :    forall f a, P f -> P a -> P (Call f a))
+    (HConstr :  forall c args, Forall P args -> P (Constr c args))
+    (HElim :    forall ty cases target, Forall P cases -> P target -> P (Elim ty cases target))
+    (HClose :   forall f free, Forall P free -> P (Close f free))
+    (e : expr) : P e :=
+    ltac:(refine (@expr_rect_mut P (Forall P)
+        HArg HUpVar HCall HConstr HElim HClose _ _ e); eauto).
+
 Definition env := list expr.
 
 Inductive value : expr -> Prop :=
