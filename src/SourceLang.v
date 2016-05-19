@@ -370,6 +370,20 @@ Definition value {l ty} (e : expr l ty) : Prop :=
       end
   in go e.
 
+Fixpoint value_hlist {l tys} (h : hlist (expr l) tys) : Prop :=
+  match h with
+  | hnil => True
+  | hcons x h' => value x /\ value_hlist h'
+  end.
+
+Lemma value_hlist_happ :
+  forall l tys1 (h1 : hlist (expr l) tys1) tys2 (h2 : hlist (expr l) tys2),
+    value_hlist (happ h1 h2) ->
+    value_hlist h1 /\ value_hlist h2.
+Proof.
+  induction h1; simpl; firstorder.
+Qed.
+
 Fixpoint identity_subst l : hlist (expr l) l :=
   match l with
   | [] => hnil
@@ -563,6 +577,92 @@ Inductive step {l} : forall {ty}, expr l ty -> expr l ty -> Prop :=
 .
 Hint Constructors step.
 
+Definition constr_name_eq_dec (c1 c2 : constr_name) : {c1 = c2} + {c1 <> c2}.
+  decide equality.
+Defined.
+
+Lemma value_no_step :
+  forall l ty (e e' : expr l ty),
+    value e ->
+    step e e' ->
+    False.
+Proof.
+  intros.
+  induction H0; simpl in *; auto.
+  fold @value_hlist in *.
+  find_apply_lem_hyp value_hlist_happ.
+  break_and. simpl in *. intuition.
+Qed.
+
+
+Definition sigT_comm {A B} {P : A -> B -> Type} (p : {x : A & {y : B & P x y}}) :
+  {y : B & {x : A & P x y}} :=
+  match p with
+  | existT _ a (existT _ b pf) => existT _ b (existT _ a pf)
+  end.
+
+Lemma step_det :
+  forall l ty (e1 e2 e2' : expr l ty),
+    step e1 e2 ->
+    step e1 e2' ->
+    e2 = e2'.
+Proof.
+  intros.
+  induction H; invcs H0;
+    repeat (find_apply_lem_hyp Eqdep_dec.inj_pair2_eq_dec;
+      [|now auto using list_eq_dec, type_eq_dec, type_name_eq_dec, constr_name_eq_dec]);
+   subst.
+  - auto.
+  - solve_by_inversion.
+  - exfalso. eauto using value_no_step.
+  - invc H.
+  - auto using f_equal2.
+  - exfalso. eauto using value_no_step.
+  - exfalso. eauto using value_no_step.
+  - exfalso. eauto using value_no_step.
+  - auto using f_equal2.
+  - auto using f_equal2.
+  - exfalso.
+    invc H;
+    repeat (find_apply_lem_hyp Eqdep_dec.inj_pair2_eq_dec;
+      [|now auto using list_eq_dec, type_eq_dec, type_name_eq_dec, constr_name_eq_dec]).
+    subst.
+    find_apply_lem_hyp HForall_happ_split. break_and.
+    destruct H0 using case_HForall_hcons.
+    exfalso. eauto using value_no_step.
+  - apply f_equal with (f := sigT_comm) in H7.
+    simpl in H7.
+    repeat (find_apply_lem_hyp Eqdep_dec.inj_pair2_eq_dec;
+      [|now auto using list_eq_dec, type_eq_dec, type_name_eq_dec, constr_name_eq_dec]).
+    apply EqdepFacts.eq_sigT_sig_eq in H7.
+    destruct H7.
+    pose proof e.
+    apply happ_middle_member in e; auto using type_eq_dec.
+    destruct e as [[[]|]|[]].
+    + subst. pose proof HForall_member _ _ _ _ _ _ x0 H5. simpl in *.
+      exfalso. eauto using value_no_step.
+    + break_and. subst.
+      repeat (find_apply_lem_hyp Eqdep_dec.inj_pair2_eq_dec;
+         [|now auto using list_eq_dec, type_eq_dec, type_name_eq_dec, constr_name_eq_dec]).
+      subst.
+      f_equal.
+      rewrite <- Eqdep_dec.eq_rect_eq_dec in * by auto using list_eq_dec, type_eq_dec.
+      find_apply_lem_hyp happ_inv. break_and. subst.
+      find_apply_lem_hyp hcons_inv. break_and. subst.
+      f_equal. f_equal. auto.
+    + subst. pose proof HForall_member _ _ _ _ _ _ x0 H. simpl in *.
+      exfalso. eauto using value_no_step.
+  - exfalso.
+    invc H3;
+    repeat (find_apply_lem_hyp Eqdep_dec.inj_pair2_eq_dec;
+      [|now auto using list_eq_dec, type_eq_dec, type_name_eq_dec, constr_name_eq_dec]).
+    subst.
+    find_apply_lem_hyp HForall_happ_split. break_and.
+    destruct H0 using case_HForall_hcons.
+    exfalso. eauto using value_no_step.
+  - auto.
+Qed.
+
 Lemma hmap_denote_identity :
   forall l vs,
     hmap (fun t e => expr_denote e vs) (identity_subst l) = vs.
@@ -575,10 +675,6 @@ Proof.
     erewrite hmap_ext; eauto.
     intros. apply lift_denote.
 Qed.
-
-Definition constr_name_eq_dec (c1 c2 : constr_name) : {c1 = c2} + {c1 <> c2}.
-  decide equality.
-Defined.
 
 Theorem step_denote : forall l ty (e e' : expr l ty) vs,
     step e e' ->

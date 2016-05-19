@@ -381,3 +381,136 @@ Proof.
   - destruct m using case_member_nil.
   - destruct a, l, m using case_member_cons; simpl; auto.
 Qed.
+
+Lemma HForall_member :
+  forall A (B : A -> Type) (P : forall a, B a -> Prop) l (h : hlist B l) a (m : member a l),
+    HForall P h ->
+    P a (hget h m).
+Proof.
+  intros.
+  induction H; intros.
+  - destruct m using case_member_nil.
+  - destruct a0, l, m using case_member_cons; simpl; auto.
+Qed.
+
+Lemma hcons_inv : forall A (B : A -> Type) a l (b1 b2 : B a) (h1 h2 : hlist B l),
+      hcons b1 h1 = hcons b2 h2 ->
+      b1 = b2 /\ h1 = h2.
+Proof.
+  intros.
+  refine match H in _ = h
+               return match h with
+                      | hnil => True
+                      | hcons b2' h2' => fun b1' h1' => b1' = b2' /\ h1' = h2'
+                      end b1 h1
+         with
+         | eq_refl => conj eq_refl eq_refl
+         end.
+Qed.
+
+Lemma happ_inv : forall A (B : A -> Type) l1 l2 (h1 h1' : hlist B l1) (h2 h2' : hlist B l2),
+    happ h1 h2 = happ h1' h2' ->
+    h1 = h1' /\ h2 = h2'.
+Proof.
+  induction h1; intros.
+  - destruct h1' using case_hlist_nil.
+    simpl in *. auto.
+  - destruct h1' using case_hlist_cons.
+    simpl in *.
+    find_apply_lem_hyp hcons_inv.
+    break_and. subst.
+    find_apply_hyp_hyp.
+    intuition. subst. auto.
+Qed.
+
+Lemma hcons_eq_rect_inv :
+  forall A (A_eq_dec : forall x y : A, {x = y} + {x <> y}) (B : A -> Type) a l1 l2 (b1 b2 : B a)
+    (h1 : hlist B l1) (h2 : hlist B l2)
+    (pf : a :: l1 = a :: l2),
+    eq_rect _ _ (hcons b1 h1) _ pf = hcons b2 h2 ->
+    b1 = b2 /\ {pf0 | eq_rect _ _ h1 _ pf0 = h2}.
+Proof.
+  intros.
+  inv pf.
+  rewrite <- Eqdep_dec.eq_rect_eq_dec in * by auto using list_eq_dec.
+  find_apply_lem_hyp hcons_inv.
+  intuition. exists eq_refl. simpl. auto.
+Qed.
+
+Ltac my_inv :=
+  match goal with
+  | [ H : ?h1 :: ?t1 = ?h2 :: ?t2 |- _ ] =>
+    assert (h1 = h2) by congruence;
+    assert (t1 = t2) by congruence;
+    subst
+  end.
+
+(* This lemma is really only here as documentation, to help understand
+   the hlist version of it, below.
+*)
+Fixpoint app_middle_member {A} {xs} {y : A} {zs xs' y' zs'} :
+  xs ++ y :: zs = xs' ++ y' :: zs' ->
+  member y' xs + {xs = xs' /\ y = y' /\ zs = zs'} + member y xs'.
+  refine match xs with
+  | [] => match xs' with
+         | [] => fun pf => inl (inright _)
+         | x' :: xs'0 => fun pf => inr _
+         end
+  | x :: xs0 => match xs' with
+               | [] => fun pf => inl (inleft _)
+               | x' :: xs'0 => fun pf => match app_middle_member _ xs0 y zs xs'0 y' zs' _ with
+                                     | inl (inleft m) => inl (inleft (There m))
+                                     | inl (inright _) => inl (inright _)
+                                     | inr m => inr (There m)
+                                     end
+               end
+  end; simpl in *.
+  - intuition congruence.
+  - find_inversion. exact Here.
+  - find_inversion. exact Here.
+  - congruence.
+  - intuition congruence.
+Defined.
+
+Fixpoint happ_middle_member {A} (A_eq_dec : forall x y : A, {x = y} + {x <> y})
+         {B : A -> Type} {xs} {y : A} {zs xs' y' zs'}
+         {hxs : hlist B xs} {b_y : B y} {hzs : hlist B zs}
+         {hxs' : hlist B xs'} {b_y' : B y'} {hzs' : hlist B zs'}
+
+  : forall (pf : xs ++ y :: zs = xs' ++ y' :: zs'),
+        eq_rect _ _ (happ hxs (hcons b_y hzs)) _ pf = (happ hxs' (hcons b_y' hzs')) ->
+  {m : member y' xs | hget hxs m = b_y'} +
+  {xs = xs' /\ y = y' /\ zs = zs'} +
+  {m : member y xs' | hget hxs' m = b_y}.
+refine match hxs with
+       | hnil => match hxs' with
+                | hnil => fun pf H => inl (inright _)
+                | hcons x' hxs'0 => fun pf H => inr _
+                end
+       | hcons x hxs0 => match hxs' with
+                        | hnil => fun pf H => inl (inleft _)
+                        | hcons x' hxs'0 => fun pf H => _
+                        end
+       end.
+- simpl in *. intuition congruence.
+- simpl in pf, H. my_inv.
+  rewrite <- Eqdep_dec.eq_rect_eq_dec in * by auto using list_eq_dec.
+  find_apply_lem_hyp hcons_inv. break_and. subst.
+  exact (exist _ Here eq_refl).
+- simpl in pf, H. my_inv.
+  rewrite <- Eqdep_dec.eq_rect_eq_dec in * by auto using list_eq_dec.
+  find_apply_lem_hyp hcons_inv. break_and. subst.
+  exact (exist _ Here eq_refl).
+- simpl in pf, H. my_inv.
+  find_apply_lem_hyp hcons_eq_rect_inv; auto.
+  break_and. subst. destruct H0.
+
+  refine match happ_middle_member _ A_eq_dec _ _ _ _ _ _ _ hxs0 b_y hzs hxs'0 b_y' hzs' ltac:(auto) ltac:(auto) with
+         | inl (inleft (exist _ m _)) => inl (inleft (exist _ (There m) _))
+         | inl (inright _) => inl (inright _)
+         | inr (exist _ m _) => inr (exist _ (There m) _)
+         end.
+  + simpl. auto.
+  + intuition congruence.
+  + simpl. auto.
+Defined.
