@@ -394,6 +394,13 @@ intros0 Hge.
 destruct (Max.max_spec m1 m2) as [[? ?] | [? ?]]; split; omega.
 Qed.
 
+Lemma nat_ge_max_rev : forall n m1 m2,
+    n >= m1 /\ n >= m2 ->
+    n >= max m1 m2.
+intros0 Hge. destruct Hge.
+destruct (Max.max_spec m1 m2) as [[? ?] | [? ?]]; omega.
+Qed.
+
 Notation "**" := (ltac:(eassumption)) (only parsing).
 
 Definition req_upvars e :=
@@ -427,6 +434,14 @@ induction es; simpl; intros0 Hge.
   constructor; assumption.
 Qed.
 
+Lemma nat_ge_req_upvars_list_rev : forall n es,
+    Forall (fun e => n >= req_upvars e) es ->
+    n >= req_upvars_list es.
+induction es; simpl; intros0 Hfa.
+- omega.
+- invc Hfa. eapply nat_ge_max_rev; split; eauto.
+Qed.
+
 Section subst.
 Open Scope option_monad.
 
@@ -444,6 +459,17 @@ induction es; intros0 Hfa; simpl; eauto.
 invc Hfa. specialize (IHes **). do 2 break_exists.
 do 2 match goal with [ H : _ |- _ ] => erewrite H; clear H end.
 compute [seq fmap bind_option]. eauto.
+Qed.
+
+Lemma L_subst_list_exists_rev : forall arg vals es es',
+    L_subst_list arg vals es = Some es' ->
+    Forall (fun e => exists e', L.subst arg vals e = Some e') es.
+induction es; intros0 Hsubst; simpl; eauto.
+simpl in Hsubst; compute [seq fmap bind_option] in Hsubst.
+break_match; try discriminate.
+break_match; try discriminate.
+break_match; try discriminate.
+constructor; eauto.
 Qed.
 
 End subst.
@@ -553,12 +579,37 @@ simpl in *; fold req_upvars_list in *.
   specialize (IHe2 _ eq_refl).
   destruct (Max.max_spec (req_upvars e1) (req_upvars e2)) as [[??] | [??]]; omega.
 
-- (* Constr *) admit.
+- (* Constr *)
+  fold (L_subst_list arg vals) in Hsubst.
+  compute [seq fmap bind_option] in Hsubst.
+  break_match; try discriminate.
+  fwd eapply L_subst_list_exists_rev; eauto.
+  eapply nat_ge_req_upvars_list_rev.
+  eapply Forall_apply with (2 := H0) (3 := H).
+    { intros. break_exists. eauto. }
 
-- (* Elim *) admit.
+- (* Elim *)
+  fold (L_subst_list arg vals) in Hsubst.
+  compute [seq fmap bind_option] in Hsubst.
+  do 3 (break_match; try discriminate).
 
-- (* Close *) admit.
-Admitted.
+  eapply nat_ge_max_rev. split.
+  + fwd eapply L_subst_list_exists_rev; eauto.
+    eapply nat_ge_req_upvars_list_rev.
+    eapply Forall_apply with (2 := H0) (3 := H).
+      { intros. break_exists. eauto. }
+  + eauto.
+
+- (* Constr *)
+  fold (L_subst_list arg vals) in Hsubst.
+  compute [seq fmap bind_option] in Hsubst.
+  break_match; try discriminate.
+  fwd eapply L_subst_list_exists_rev; eauto.
+  eapply nat_ge_req_upvars_list_rev.
+  eapply Forall_apply with (2 := H0) (3 := H).
+    { intros. break_exists. eauto. }
+
+Qed.
 
 Theorem match_step : forall E ue ue' le,
     match_states E 0 ue le ->
