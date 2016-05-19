@@ -60,6 +60,33 @@ Inductive value :=
 | Close (f : function_name) (free : list value). (* a closure value *)
 (* free is the list of values closed over, referred to inside as upvars *)
 
+(* Thanks Stuart *)
+Definition value_rect_mut (P : value -> Type) (Pl : list value -> Type)
+           (HConstr : forall tag args, Pl args -> P (Constr tag args))
+           (HClose : forall fname args, Pl args -> P (Close fname args))
+    (Hnil :     Pl [])
+    (Hcons :    forall e es, P e -> Pl es -> Pl (e :: es))
+    (v : value) : P v :=
+    let fix go v :=
+        let fix go_list vs :=
+            match vs as vs_ return Pl vs_ with
+            | [] => Hnil
+            | v :: vs => Hcons v vs (go v) (go_list vs)
+            end in
+        match v as v_ return P v_ with
+        | Constr tag args => HConstr tag args (go_list args)
+        | Close f args => HClose f args (go_list args)
+        end in go v.
+
+(* Useful wrapper for `expr_rect_mut with (Pl := Forall P)` *)
+Definition value_ind' (P : value -> Prop) 
+           (HConstr : forall tag args, Forall P args -> P (Constr tag args))
+           (HClose : forall fname args, Forall P args -> P (Close fname args))
+    (v : value) : P v :=
+    ltac:(refine (@value_rect_mut P (Forall P)
+        HConstr HClose _ _ v); eauto).
+
+
 (* local environment for computation *)
 Definition env := PTree.t value.
 
@@ -218,6 +245,7 @@ Definition semantics (p: program) :=
 Lemma semantics_receptive:
   forall (p: program), receptive (semantics p).
 Proof.
+  Print receptive.
   intros. constructor; simpl; intros.
 (* receptiveness *)
   assert (t1 = E0 -> exists s2, step (Genv.globalenv p) s t2 s2).

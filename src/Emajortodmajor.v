@@ -343,41 +343,151 @@ Definition rest (v : value) : list value :=
   end.
 
 Fixpoint store_value (v : value) (m : mem) {struct v} : option (val * mem) :=
-  let sz := size_bytes v in
-  let (m',b) := Mem.alloc m 0 sz in
-  match first_byte v with
-  | None => None
-  | Some vl =>
-    match Mem.storev Mint32 m' (Vptr b Int.zero) vl with
-    | Some m'' =>
-      match store_values b (4%Z) (rest v) m'' with
-      | Some m''' => 
-        Some (Vptr b Int.zero, m''')
+  let fix store_values b ofs l m :=
+      match l with
+      | nil => Some m
+      | v :: vs =>
+        match store_values b (ofs + 4)%Z vs m with
+        | Some m' =>
+          match store_value v m' with
+          | Some (vp,m'') => Mem.storev Mint32 m'' (Vptr b (Int.repr ofs)) vp
+          | None => None
+          end
+        | None => None
+        end
+      end in
+  let sz := size_bytes v in (* find total size for value *)
+  let (m',b) := Mem.alloc m 0 sz in (* allocate that much space *)
+  match v with
+  | Close fname l =>
+    match Genv.find_symbol tge fname with
+    | Some bcode =>
+      match Mem.storev Mint32 m' (Vptr b Int.zero) (Vptr bcode Int.zero) with
+      | Some m'' =>
+        match store_values b 4 l m'' with
+        | Some m''' => Some (Vptr b Int.zero, m''')
+        | None => None
+        end
       | None => None
       end
     | None => None
     end
-  end
+  | Constr tag l =>
+    None (* TODO write this case, same as above *)
+  end.
 
-with store_values (b : block) (ofs : Z) (l : list value) (m : mem) {struct l} : option mem :=
-       match l with
-       | nil => Some m
-       | v :: vs =>
-         match store_values b (ofs + 4)%Z vs m with
-         | Some m' =>
-           match store_value v m' with
-           | Some (vp,m'') => Mem.storev Mint32 m'' (Vptr b (Int.repr ofs)) vp
-           | None => None
-           end
-         | None => None
-         end
-end.
 
-      
+Definition all_addrs (b : block) (z : Z) : Prop := True.
+
+Lemma store_value_unchanged :
+  forall v m v' m',
+    store_value v m = Some (v',m') ->
+    Mem.unchanged_on all_addrs m m'.
+Proof.
+  induction v using value_ind'; intros; econstructor; intros;
+    simpl in *;
+    repeat (break_match_hyp; try congruence).
+
+Admitted.
+
+Lemma loadv_unchanged_on :
+  forall m m',
+    Mem.unchanged_on all_addrs m m' ->
+    forall c v v',
+      Mem.loadv c m v = Some v' ->
+      Mem.loadv c m' v = Some v'.
+Proof.
+  intros.
+  unfold Mem.loadv in H0.
+  break_match_hyp; try congruence.
+  subst v.
+  simpl.
+  eapply Mem.load_unchanged_on; eauto.
+  intros. unfold all_addrs. auto.
+Qed.
+
+Lemma load_all_unchanged_on :
+  forall m m',
+    Mem.unchanged_on all_addrs m m' ->
+    forall l l',
+      load_all l m = Some l' ->
+      load_all l m' = Some l'.
+Proof.
+  induction l; intros.
+  simpl in H0. inv H0. simpl. reflexivity.
+  simpl in H0.
+  repeat break_match_hyp; try congruence. subst a.
+  invc H0. simpl.
+  erewrite loadv_unchanged_on; eauto.
+  erewrite IHl; eauto.
+Qed.
+
+Lemma value_inject_unchanged_on :
+  forall m m',
+    Mem.unchanged_on all_addrs m m' ->
+    forall v v',
+      value_inject m v v' ->
+      value_inject m' v v'.
+Proof.
+  induction v using value_ind';
+      intros.
+  inv H1; econstructor;
+    try (eapply loadv_unchanged_on; eauto);
+    try (eapply load_all_unchanged_on; eauto);
+    try assumption.
+
+  (* THIS IS AN INTERESTING CASE *)
+Admitted.
+  
+
+Lemma unchanged_env_inject :
+  forall e e' m m',
+    env_inject e e' m ->
+    Mem.unchanged_on all_addrs m m' ->
+    env_inject e e' m'.
+Proof.
+  intros.
+  unfold env_inject in *.
+  intros. eapply H in H1.
+  break_exists; break_and. exists x; split; auto.
+  inv H2; econstructor; eauto;
+    try (eapply loadv_unchanged_on; eauto);
+    try (eapply load_all_unchanged_on; eauto);
+    try (intros; eapply value_inject_unchanged_on; eauto).
+Qed.
+    
+Lemma store_value_inject :
+  forall v v' m m',
+    store_value v m = Some (v',m') ->
+    value_inject m' v v'.
+Proof.
+
+Admitted.
 
 (* This is the cool one *)
 (* if we Set in Emajor land, what operation is that in Dmajor? *)
 Lemma env_inject_set :
-  forall e e' m,
-    env_inject m e e' ->
-    
+  forall e e' (m : mem),
+    env_inject e e' m ->
+    forall v v' m',
+      store_value v m = Some (v',m') ->
+      forall id,
+        env_inject (PTree.set id v e) (PTree.set id v' e') m'.
+Proof.
+  intros.
+  unfold env_inject in *. intros.
+  destruct (peq id id0).
+
+  Focus 2. rewrite PTree.gso in * by congruence.
+  eapply H in H1. break_exists. break_and.
+  exists x. split; eauto. eapply value_inject_unchanged_on; eauto.
+  eapply store_value_unchanged; eauto.
+
+  subst id.
+  rewrite PTree.gss in *.
+  inv H1. exists v'.
+  split; auto.
+  eapply store_value_inject; eauto.
+Qed.
+
+
