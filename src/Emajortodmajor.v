@@ -50,7 +50,6 @@ Fixpoint store_args (id : ident) (l : list Emajor.expr) (z : Z) : Dmajor.stmt :=
       store_args id es (z + 4)%Z
   end.
 
-
 (* Hand roll a fresh ident monad *)
 Fixpoint transf_stmt (s : Emajor.stmt) (fresh : ident) : (Dmajor.stmt * ident) :=
   match s with
@@ -72,7 +71,7 @@ Fixpoint transf_stmt (s : Emajor.stmt) (fresh : ident) : (Dmajor.stmt * ident) :
     let sz := (4 + 4 * (Z.of_nat (length args)))%Z in
     (alloc fresh sz;
   (* then we store each in turn: the tag, and the arguments *)
-     store (var fresh) (const tag);
+     store (var fresh) (Econst (Ointconst tag));
      store_args fresh args 4%Z,
        Pos.succ fresh)
   | Emajor.SmakeClose id fname args =>
@@ -110,98 +109,6 @@ Let tge := Genv.globalenv tprog.
 Hypothesis TRANSF : transf_prog prog = tprog.
 
 
-
-(* given an address, addresses of the nested values *)
-Fixpoint arg_addrs (b : block) (ofs : int) (l : list value) : list (value * val) :=
-  match l with
-  | nil => nil
-  | v :: vs =>
-    let ofs' := Int.add ofs (Int.repr 4) in
-    (v, Vptr b ofs') :: arg_addrs b ofs' vs
-  end.
-
-Fixpoint load_all (l : list (value * val)) (m : mem) : option (list (value * val)) :=
-  match l with
-  | nil => Some nil
-  | (hval,vaddr) :: rest =>
-    match Mem.loadv Mint32 m vaddr with
-    | None => None
-    | Some v' =>
-      match load_all rest m with
-      | None => None
-      | Some res => Some ((hval,v') :: res)
-      end
-    end
-  end.
-                     
-
-(* mapping of high level values to low level values *)
-(* everything is one pointer *)
-Inductive value_inject (m : mem) : value -> val -> Prop :=
-| inj_constr :
-    (* a constructor is a pointer to the correct tag *)
-    (* and every value following that in memory is a value for that constructor *)
-    (* *(b,ofs) = tag *)
-    (* *(b,ofs+4) = pointer to first field *)
-    forall b ofs n values l',
-      Mem.loadv Mint32 m (Vptr b ofs) = Some (Vint n) -> (* correct tag *)
-      load_all (arg_addrs b ofs values) m = Some l' -> (* one more deref for args *)
-      (forall a b, In (a,b) l' -> value_inject m a b) -> (* all args inject *)
-      value_inject m (Constr (Int.unsigned n) values) (Vptr b ofs)
-| inj_closure :
-    forall b ofs bcode f fname values l',
-      Mem.loadv Mint32 m (Vptr b ofs) = Some (Vptr bcode Int.zero) ->
-      Genv.find_funct_ptr tge bcode = Some f -> (* legit pointer to some code *)
-      Genv.find_symbol tge fname = Some bcode -> (* name we have points to same code *)
-      load_all (arg_addrs b ofs values) m = Some l' -> (* one more deref for args *)
-      (forall a b, In (a,b) l' -> value_inject m a b) -> (* all args inject *)
-      value_inject m (Close fname values) (Vptr b ofs).
-
-
-Definition env_inject (Ee : Emajor.env) (De : Dmajor.env) (m : mem) : Prop :=
-  forall id v,
-    PTree.get id Ee = Some v ->
-    exists v',
-      PTree.get id De = Some v' /\ value_inject m v v'.
-  
-
-Lemma load_all_val :
-  forall l b ofs m l' n v,
-    nth_error l n = Some v ->
-    load_all (arg_addrs b ofs l) m = Some l' ->
-    exists v',
-      Mem.loadv Mint32 m (Vptr b (Int.add ofs (Int.repr (4 + 4 * Z.of_nat n)))) = Some v' /\ In (v,v') l'.
-Proof.
-  induction l; intros;
-    destruct n; simpl in H; inv H; subst.
-  * simpl in H0.
-    repeat break_match_hyp; try congruence.
-    eexists; split; eauto. inv H0. simpl. left. auto.
-  * simpl in H0. repeat break_match_hyp; try congruence.
-    inv H0.
-    eapply IHl in H; eauto.
-    repeat break_exists; repeat break_and.
-    replace (Int.add (Int.add ofs (Int.repr 4)) (Int.repr (4 + 4 * Z.of_nat n)))
-    with  (Int.add ofs (Int.repr (4 + 4 * Z.of_nat (S n)))) in H.
-    
-    eexists. split. eauto.
-    simpl. right. auto.
-    replace (4 * Z.of_nat (S n)) with (4 + 4 * Z.of_nat n)%Z.
-    rewrite Int.add_assoc.
-    f_equal.
-    rewrite Int.add_unsigned.
-    rewrite (Int.unsigned_repr 4).
-    rewrite Int.unsigned_repr_eq.
-    eapply Int.eqm_samerepr.
-    unfold Int.eqm.
-    assert (Int.modulus > 0).
-    unfold Int.modulus, two_power_nat, Int.wordsize, Wordsize_32.wordsize.
-    simpl. omega.
-    remember (Int.eqmod_mod Int.modulus H3) as ie.
-    (* proof is close, get it later *)
-    
-Admitted. 
-
 Lemma transf_expr_inject :
   forall Ee De m sp,
     env_inject Ee De m ->
@@ -231,9 +138,19 @@ Proof.
       split; auto.
       unfold transf_expr. fold transf_expr.
       repeat (econstructor; eauto).
-      replace (Vptr b (Int.add ofs (Int.repr (4 + 4 * Z.of_nat n)))) with
-      (Val.add (Vptr b ofs) (Vint (Int.repr (4 + 4 * Z.of_nat n)))) by (simpl; reflexivity).
+      replace (Vptr b (Int.add (Int.add ofs (Int.repr 4)) (Int.repr (4 * Z.of_nat n)))) with (Val.add (Vptr b ofs) (Vint (Int.repr (4 + 4 * Z.of_nat n)))).
       repeat (econstructor; eauto).
+      
+      unfold Val.add.
+      f_equal.
+      rewrite Int.add_assoc. f_equal.
+      rewrite Int.add_unsigned.
+      eapply Int.eqm_samerepr.
+      eapply Int.eqm_add. rewrite Int.unsigned_repr. eapply Int.eqm_refl.
+      unfold Int.max_unsigned. simpl. omega.
+      eapply Int.eqm_unsigned_repr.
+
+
     - (* deref a constructor *)
       remember (IHexp _ H3) as IH.
       clear HeqIH.
@@ -246,9 +163,19 @@ Proof.
       split; auto.
       unfold transf_expr. fold transf_expr.
       repeat (econstructor; eauto).
-      replace (Vptr b (Int.add ofs (Int.repr (4 + 4 * Z.of_nat n)))) with
-      (Val.add (Vptr b ofs) (Vint (Int.repr (4 + 4 * Z.of_nat n)))) by (simpl; reflexivity).
+      replace (Vptr b (Int.add (Int.add ofs (Int.repr 4)) (Int.repr (4 * Z.of_nat n)))) with
+      (Val.add (Vptr b ofs) (Vint (Int.repr (4 + 4 * Z.of_nat n)))).
       repeat (econstructor; eauto).
+
+      unfold Val.add.
+      f_equal.
+      rewrite Int.add_assoc. f_equal.
+      rewrite Int.add_unsigned.
+      eapply Int.eqm_samerepr.
+      eapply Int.eqm_add. rewrite Int.unsigned_repr. eapply Int.eqm_refl.
+      unfold Int.max_unsigned. simpl. omega.
+      eapply Int.eqm_unsigned_repr.
+
 Qed.      
 
 
@@ -317,177 +244,3 @@ Proof.
   unfold ge. rewrite <- TRANSF.
   apply Genv.find_symbol_transf.
 Qed.
-
-(* number of bytes to store a value *)
-Definition size_bytes (v : value) : Z :=
-  match v with
-  | Close _ l => (4 * Z.of_nat (length l)) + 4
-  | Constr _ l => (4 * Z.of_nat (length l)) + 4
-  end.
-
-
-Definition first_byte (v : value) : option val :=
-  match v with
-  | Close fname _ =>
-    match Genv.find_symbol tge fname with
-    | Some b => Some (Vptr b Int.zero)
-    | None => None
-    end
-  | Constr tag _ => Some (Vint (Int.repr tag))
-  end.
-
-Definition rest (v : value) : list value :=
-  match v with
-  | Close _ l => l
-  | Constr _ l => l
-  end.
-
-Fixpoint store_value (v : value) (m : mem) {struct v} : option (val * mem) :=
-  let fix store_values b ofs l m :=
-      match l with
-      | nil => Some m
-      | v :: vs =>
-        match store_values b (ofs + 4)%Z vs m with
-        | Some m' =>
-          match store_value v m' with
-          | Some (vp,m'') => Mem.storev Mint32 m'' (Vptr b (Int.repr ofs)) vp
-          | None => None
-          end
-        | None => None
-        end
-      end in
-  let sz := size_bytes v in (* find total size for value *)
-  let (m',b) := Mem.alloc m 0 sz in (* allocate that much space *)
-  match v with
-  | Close fname l =>
-    match Genv.find_symbol tge fname with
-    | Some bcode =>
-      match Mem.storev Mint32 m' (Vptr b Int.zero) (Vptr bcode Int.zero) with
-      | Some m'' =>
-        match store_values b 4 l m'' with
-        | Some m''' => Some (Vptr b Int.zero, m''')
-        | None => None
-        end
-      | None => None
-      end
-    | None => None
-    end
-  | Constr tag l =>
-    None (* TODO write this case, same as above *)
-  end.
-
-
-Definition all_addrs (b : block) (z : Z) : Prop := True.
-
-Lemma store_value_unchanged :
-  forall v m v' m',
-    store_value v m = Some (v',m') ->
-    Mem.unchanged_on all_addrs m m'.
-Proof.
-  induction v using value_ind'; intros; econstructor; intros;
-    simpl in *;
-    repeat (break_match_hyp; try congruence).
-
-Admitted.
-
-Lemma loadv_unchanged_on :
-  forall m m',
-    Mem.unchanged_on all_addrs m m' ->
-    forall c v v',
-      Mem.loadv c m v = Some v' ->
-      Mem.loadv c m' v = Some v'.
-Proof.
-  intros.
-  unfold Mem.loadv in H0.
-  break_match_hyp; try congruence.
-  subst v.
-  simpl.
-  eapply Mem.load_unchanged_on; eauto.
-  intros. unfold all_addrs. auto.
-Qed.
-
-Lemma load_all_unchanged_on :
-  forall m m',
-    Mem.unchanged_on all_addrs m m' ->
-    forall l l',
-      load_all l m = Some l' ->
-      load_all l m' = Some l'.
-Proof.
-  induction l; intros.
-  simpl in H0. inv H0. simpl. reflexivity.
-  simpl in H0.
-  repeat break_match_hyp; try congruence. subst a.
-  invc H0. simpl.
-  erewrite loadv_unchanged_on; eauto.
-  erewrite IHl; eauto.
-Qed.
-
-Lemma value_inject_unchanged_on :
-  forall m m',
-    Mem.unchanged_on all_addrs m m' ->
-    forall v v',
-      value_inject m v v' ->
-      value_inject m' v v'.
-Proof.
-  induction v using value_ind';
-      intros.
-  inv H1; econstructor;
-    try (eapply loadv_unchanged_on; eauto);
-    try (eapply load_all_unchanged_on; eauto);
-    try assumption.
-
-  (* THIS IS AN INTERESTING CASE *)
-Admitted.
-  
-
-Lemma unchanged_env_inject :
-  forall e e' m m',
-    env_inject e e' m ->
-    Mem.unchanged_on all_addrs m m' ->
-    env_inject e e' m'.
-Proof.
-  intros.
-  unfold env_inject in *.
-  intros. eapply H in H1.
-  break_exists; break_and. exists x; split; auto.
-  inv H2; econstructor; eauto;
-    try (eapply loadv_unchanged_on; eauto);
-    try (eapply load_all_unchanged_on; eauto);
-    try (intros; eapply value_inject_unchanged_on; eauto).
-Qed.
-    
-Lemma store_value_inject :
-  forall v v' m m',
-    store_value v m = Some (v',m') ->
-    value_inject m' v v'.
-Proof.
-
-Admitted.
-
-(* This is the cool one *)
-(* if we Set in Emajor land, what operation is that in Dmajor? *)
-Lemma env_inject_set :
-  forall e e' (m : mem),
-    env_inject e e' m ->
-    forall v v' m',
-      store_value v m = Some (v',m') ->
-      forall id,
-        env_inject (PTree.set id v e) (PTree.set id v' e') m'.
-Proof.
-  intros.
-  unfold env_inject in *. intros.
-  destruct (peq id id0).
-
-  Focus 2. rewrite PTree.gso in * by congruence.
-  eapply H in H1. break_exists. break_and.
-  exists x. split; eauto. eapply value_inject_unchanged_on; eauto.
-  eapply store_value_unchanged; eauto.
-
-  subst id.
-  rewrite PTree.gss in *.
-  inv H1. exists v'.
-  split; auto.
-  eapply store_value_inject; eauto.
-Qed.
-
-

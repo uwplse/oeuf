@@ -17,7 +17,7 @@ Require Import Arith.
 Require Import StructTact.StructTactics.
 Require Import StructTact.Util.
 
-Definition function_name := ident.
+Require Import HighValues.
 
 Inductive expr : Type :=
 | Var : ident -> expr
@@ -27,7 +27,7 @@ Inductive expr : Type :=
 Inductive stmt : Type :=
 | Sskip
 | Scall (dst : ident) (f : expr) (a : expr)
-| SmakeConstr (dst : ident) (tag : Z) (args : list expr)
+| SmakeConstr (dst : ident) (tag : int) (args : list expr)
 | Sswitch (dst : ident) (cases : list (Z * list ident * expr)) (target : expr)
 | SmakeClose (dst : ident) (f : function_name) (free : list expr)
 | Sseq (s1 : stmt) (s2 : stmt)
@@ -46,46 +46,6 @@ Definition program := AST.program fundef unit.
 Definition genv := Genv.t fundef unit.
 
 (* Begin Dynamic Semantics *)
-
-(* Computation will be over higher level values, i.e. Constr and Close *)
-(* We will need a way to relate those to lower level values *)
-(* That relation will have type hval -> rval -> mem -> Prop *)
-(* since high level values will have to live in memory *)
-
-
-Inductive value :=
-| Constr (tag : Z) (args : list value) (* A constructor applied to some values *)
-(* At this level we have a Z tag  *)
-(* corresponds with lower level switch semantics nicely *)
-| Close (f : function_name) (free : list value). (* a closure value *)
-(* free is the list of values closed over, referred to inside as upvars *)
-
-(* Thanks Stuart *)
-Definition value_rect_mut (P : value -> Type) (Pl : list value -> Type)
-           (HConstr : forall tag args, Pl args -> P (Constr tag args))
-           (HClose : forall fname args, Pl args -> P (Close fname args))
-    (Hnil :     Pl [])
-    (Hcons :    forall e es, P e -> Pl es -> Pl (e :: es))
-    (v : value) : P v :=
-    let fix go v :=
-        let fix go_list vs :=
-            match vs as vs_ return Pl vs_ with
-            | [] => Hnil
-            | v :: vs => Hcons v vs (go v) (go_list vs)
-            end in
-        match v as v_ return P v_ with
-        | Constr tag args => HConstr tag args (go_list args)
-        | Close f args => HClose f args (go_list args)
-        end in go v.
-
-(* Useful wrapper for `expr_rect_mut with (Pl := Forall P)` *)
-Definition value_ind' (P : value -> Prop) 
-           (HConstr : forall tag args, Forall P args -> P (Constr tag args))
-           (HClose : forall fname args, Forall P args -> P (Close fname args))
-    (v : value) : P v :=
-    ltac:(refine (@value_rect_mut P (Forall P)
-        HConstr HClose _ _ v); eauto).
-
 
 (* local environment for computation *)
 Definition env := PTree.t value.
@@ -217,7 +177,7 @@ Inductive step : state -> trace -> state -> Prop :=
         E0 (State f Sskip exp k (PTree.set id (Close fname vargs) e))
   | step_switch: forall id cases target f exp k e tag vargs result casexp ids,
       eval_expr e target (Constr tag vargs) -> (* eval match target *)
-      find_case tag cases = Some (ids,casexp) -> (* find the right case *)
+      find_case (Int.unsigned tag) cases = Some (ids,casexp) -> (* find the right case *)
       length vargs = length ids -> (* vars to bind match idents *)
       eval_expr (bind_ids ids vargs e) casexp result -> (* eval that case *)
       step (State f (Sswitch id cases target) exp k e)
@@ -245,7 +205,6 @@ Definition semantics (p: program) :=
 Lemma semantics_receptive:
   forall (p: program), receptive (semantics p).
 Proof.
-  Print receptive.
   intros. constructor; simpl; intros.
 (* receptiveness *)
   assert (t1 = E0 -> exists s2, step (Genv.globalenv p) s t2 s2).
