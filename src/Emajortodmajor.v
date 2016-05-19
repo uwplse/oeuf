@@ -20,8 +20,7 @@ Require Import StructTact.Util.
 
 Require Import Emajor.
 Require Import Dmajor.
-
-
+Require Import HighValues.
 
 Fixpoint transf_expr (e : Emajor.expr) : Dmajor.expr :=
   match e with
@@ -111,11 +110,11 @@ Hypothesis TRANSF : transf_prog prog = tprog.
 
 Lemma transf_expr_inject :
   forall Ee De m sp,
-    env_inject Ee De m ->
+    env_inject Ee De tge m ->
     forall (exp : Emajor.expr) v,
       Emajor.eval_expr Ee exp v ->
       exists v',
-        Dmajor.eval_expr tge De m sp (transf_expr exp) v' /\ value_inject m v v'.
+        Dmajor.eval_expr tge De m sp (transf_expr exp) v' /\ value_inject tge m v v'.
 Proof.
   induction exp; intros.
   * inv H0. unfold env_inject in H.
@@ -195,7 +194,7 @@ Inductive match_cont: Emajor.cont -> Dmajor.cont -> Prop :=
     (* TODO: rewrite here when expr constraints figured out *)
     transf_function f = f' ->
     match_cont k k' ->
-    env_inject e e' m ->
+    env_inject e e' tge m ->
     match_cont (Emajor.Kcall id expr f e k) (Dmajor.Kcall (Some id) f' sp e' k') .
 
 
@@ -205,17 +204,17 @@ Inductive match_states: Emajor.state -> Dmajor.state -> Prop :=
       transf_function f = f' ->
       (exists id id', transf_stmt s id = (s',id')) ->
       match_cont k k' ->
-      env_inject e e' m ->
+      env_inject e e' tge m ->
       match_states (Emajor.State f s expr k e) (Dmajor.State f' s' k' sp e' m)
 | match_callstate :
     forall fd fd' vals vals' m k k',
       transf_fundef fd = fd' ->
-      list_forall2 (value_inject m) vals vals' ->
+      list_forall2 (value_inject tge m) vals vals' ->
       match_cont k k' ->
       match_states (Emajor.Callstate fd vals k) (Dmajor.Callstate fd' vals' k' m)
 | match_returnstate :
     forall v v' k k' m,
-      value_inject m v v' ->
+      value_inject tge m v v' ->
       match_cont k k' ->
       match_states (Emajor.Returnstate v k) (Dmajor.Returnstate v' k' m).
 
@@ -234,8 +233,6 @@ Proof.
   intros. destruct k; simpl in *; try solve [inv H]; inv H0; eauto.
 Qed.
 
-
-
 Lemma find_symbol_transf :
   forall id,
     Genv.find_symbol tge id = Genv.find_symbol ge id.
@@ -244,3 +241,4 @@ Proof.
   unfold ge. rewrite <- TRANSF.
   apply Genv.find_symbol_transf.
 Qed.
+
