@@ -204,17 +204,9 @@ Definition store_value {A B} (ge : Genv.t A B) (v : value) (m : mem) (l : list v
   | Some v' =>
     match Mem.storev Mint32 m' (Vptr b Int.zero) v' with
     | Some m'' =>
-      match Mem.drop_perm m'' b 0 4 Readable with
+      match store_list b 4 l m'' with
       | Some m''' =>
-        match store_list b 4 l m''' with
-        | Some m'''' =>
-          match Mem.drop_perm m'''' b 4 sz Readable with
-          | Some m''''' =>
-            Some (Vptr b Int.zero, m''''')
-          | None => None
-          end
-        | None => None
-        end
+        Some (Vptr b Int.zero, m''')
       | None => None
       end
     | None => None

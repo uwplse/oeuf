@@ -34,13 +34,33 @@ Fixpoint transf_expr (e : Emajor.expr) : Dmajor.expr :=
 (* we will always have exactly one signature *)
 Definition EMsig : signature := mksignature (Tint::Tint::nil) (Some Tint) (mkcallconv false false false).
 
-(* TODO: how do we translate a switch statement *)
-(* There will be blocks in here for sure *)
-(* transform target and cases into preamble, target, cases, default, and fresh *)
-Definition transf_switch (target : Emajor.expr) (cases : list (Z * list ident * Emajor.expr)) (fresh : ident) : (Dmajor.stmt * Dmajor.expr * list (Z * nat) * nat * ident).
-Admitted.
-  
 
+Definition transf_case (res : ident) (z : Z) (ids : list ident) (exp : Emajor.expr) (n : nat) (bottom : Dmajor.stmt) : Dmajor.stmt :=
+  Dmajor.Sblock (bottom ; (Dmajor.Sassign res (transf_expr exp)); (Dmajor.Sexit n)).
+
+Fixpoint transf_cases (res : ident) (cases : list (Z * list ident * Emajor.expr)) (n : nat) (bottom : Dmajor.stmt) : Dmajor.stmt :=
+  match cases with
+  | nil => bottom
+  | (tag,ids,exp) :: r =>
+    let s := transf_cases res r (S n) bottom in
+    transf_case res tag ids exp n s
+  end.
+
+Fixpoint make_cases (c : list (Z * list ident * Emajor.expr)) (n : nat) : list (Z * nat) :=
+  match c,n with
+  | (z,_,_) :: r, S n' => (z,n) :: make_cases r n'
+  | _,_ => nil
+  end.
+
+Definition transf_target (target : Emajor.expr) (cases : list (Z * list ident * Emajor.expr)) : Dmajor.stmt :=
+  let e := transf_expr target in
+  let len := length cases in
+  Dmajor.Sswitch false e (make_cases cases len) len.
+
+Definition transf_switch (target : Emajor.expr) (cases : list (Z * list ident * Emajor.expr)) (fresh : ident) : (Dmajor.stmt * ident) :=
+  (transf_cases fresh cases O (transf_target target cases), Pos.succ fresh).
+
+             
 Fixpoint store_args (id : ident) (l : list Emajor.expr) (z : Z) : Dmajor.stmt :=
   match l with
   | nil => Dmajor.Sskip
@@ -60,10 +80,7 @@ Fixpoint transf_stmt (s : Emajor.stmt) (fresh : ident) : (Dmajor.stmt * ident) :
   | Emajor.Scall id efun earg =>
     (Dmajor.Scall (Some id) EMsig (transf_expr efun) ((transf_expr earg) :: nil),fresh)
   | Emajor.Sswitch id cases target =>
-    match transf_switch target cases fresh with
-    | (s,target',cases',default',fresh') =>
-      (s;Dmajor.Sswitch false target' cases' default',fresh')
-    end
+    transf_switch target cases fresh
   | Emajor.SmakeConstr id tag args =>
   (* In order to translate a constructor *)
     (* First we allocate enough space *)
