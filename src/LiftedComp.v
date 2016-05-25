@@ -29,7 +29,45 @@ Eval compute in L_add_next.
 
 
 Section compile.
-Open Scope option_monad.
+Open Scope state_monad.
+
+Definition record e : state (list L.expr) nat :=
+    (@length _ <$> get) >>= fun idx =>
+    modify (fun env => env ++ [e]) >>= fun _ =>
+    ret_state idx.
+
+Fixpoint close_vars' n :=
+    match n with
+    | 0 => [L.Arg]
+    | S n => close_vars' n ++ [L.UpVar n]
+    end.
+
+Definition close_vars n :=
+    match n with
+    | 0 => []
+    | S n => close_vars' n
+    end.
+
+Fixpoint compile' (n : nat) (e : U.expr) {struct e} : state (list L.expr) L.expr :=
+    let fix go_list n es :=
+        match es with
+        | [] => ret_state []
+        | e :: es => @cons L.expr <$> compile' n e <*> go_list n es
+        end in
+    match e with
+    | U.Var 0 => ret_state L.Arg
+    | U.Var (S n) => ret_state (L.UpVar n)
+    | U.Lam body =>
+        compile' (S n) body >>= fun body' =>
+        record body' >>= fun fname =>
+        ret_state (L.Close fname (close_vars n))
+    | U.App f a => L.Call <$> compile' n f <*> compile' n a
+    | U.Constr c args => L.Constr c <$> go_list n args
+    | U.Elim ty cases target => L.Elim ty <$> go_list n cases <*> compile' n target
+    end.
+
+Definition compile e := compile' 0 e [].
+
 
 (*
 Definition compile (e : U.expr) : option L.expr :=
@@ -54,17 +92,34 @@ Definition compile (e : U.expr) : option L.expr :=
 End compile.
 
 
-Fixpoint close_vars' n :=
-    match n with
-    | 0 => [L.Arg]
-    | S n => close_vars' n ++ [L.UpVar n]
-    end.
+(* Test compiler *)
 
-Definition close_vars n :=
-    match n with
-    | 0 => []
-    | S n => close_vars' n
-    end.
+Eval compute in compile U.add_reflect.
+
+Definition add_comp := fst (compile U.add_reflect).
+Definition add_env_comp := snd (compile U.add_reflect).
+
+Theorem add_1_2 : { x | L.star add_env_comp
+        (L.Call (L.Call add_comp (L.nat_reflect 1)) (L.nat_reflect 2)) x }.
+eexists.
+
+unfold add_comp. simpl.
+eright. eapply L.CallL, L.MakeCall; try solve [repeat econstructor].
+eright. eapply L.MakeCall; try solve [repeat econstructor].
+eright. eapply L.CallL, L.Eliminate; try solve [repeat econstructor].
+  compute [L.unroll_elim L.unroll_elim' Utopia.ctor_arg_is_recursive].
+eright. eapply L.CallL, L.CallL, L.MakeCall; try solve [repeat econstructor].
+eright. eapply L.CallL, L.CallR, L.Eliminate; try solve [repeat econstructor].
+  compute [L.unroll_elim L.unroll_elim' Utopia.ctor_arg_is_recursive].
+eright. eapply L.CallL, L.MakeCall; try solve [repeat econstructor].
+eright. eapply L.MakeCall; try solve [repeat econstructor].
+eright. eapply L.MakeCall; try solve [repeat econstructor].
+eleft.
+Defined.
+Eval compute in proj1_sig add_1_2.
+
+(* end of test *)
+
 
 Definition rep_upvar n :=
     let fix go n acc :=

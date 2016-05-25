@@ -39,3 +39,32 @@ Notation "f <$> x" := (fmap (@bind_option) (@Some) f x)
     (at level 42, left associativity) : option_monad.
 Notation "f <*> x" := (seq (@bind_option) (@Some) f x)
     (at level 42, left associativity) : option_monad.
+
+
+Definition state S A := S -> A * S.
+
+Definition bind_state {S A B : Type} (m : state S A) (k : A -> state S B) : state S B :=
+    fun s =>
+        let '(a, s') := m s in
+        k a s'.
+
+Definition ret_state {S A : Type} (a : A) : state S A :=
+    fun s => (a, s).
+
+Definition get {S : Type} : state S S :=
+    fun s => (s, s).
+
+Definition put {S : Type} (s : S) : state S unit :=
+    fun _ => (tt, s).
+
+Definition modify {S : Type} (f : S -> S) : state S unit :=
+    fun s => (tt, f s).
+
+Notation "x '>>=' f" := (bind_state x f)
+    (at level 42, left associativity) : state_monad.
+Notation "f <$> x" := (fmap (@bind_state _) (@ret_state _) f x)
+    (at level 42, left associativity) : state_monad.
+Notation "f <*> x" := (seq (@bind_state _) (@ret_state _) f x)
+    (at level 42, left associativity) : state_monad.
+
+
