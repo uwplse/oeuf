@@ -1,28 +1,41 @@
 Require Import List.
 Import ListNotations.
 
+Require Import Utopia.
+Require Import Monads.
+Require Import StructTact.StructTactics.
+
+
+Definition function_name := nat.
+
+(* List containing a flag for each argument, `true` if Elim should recurse on
+   that argument, `false` if it shouldn't.  The length gives the number of
+   arguments. *)
+Definition rec_info := list bool.
 
 Inductive expr :=
-| Var : nat -> expr
-| Lam : expr -> expr
-| App : expr -> expr -> expr
+| Arg : expr
+| UpVar : nat -> expr
+| Call : expr -> expr -> expr
 | Constr (tag : nat) (args : list expr)
-| Switch (cases : list (nat * expr)) (target : expr)
+| Elim (cases : list (expr * rec_info)) (target : expr)
+| Close (f : function_name) (free : list expr)
 .
 
 Definition expr_rect_mut
         (P : expr -> Type)
         (Pl : list expr -> Type)
-        (Pp : (nat * expr) -> Type)
-        (Plp : list (nat * expr) -> Type)
-    (HVar :     forall n, P (Var n))
-    (HLam :     forall body, P body -> P (Lam body))
-    (HApp :     forall f a, P f -> P a -> P (App f a))
+        (Pp : expr * rec_info -> Type)
+        (Plp : list (expr * rec_info) -> Type)
+    (HArg :     P Arg)
+    (HUpVar :   forall n, P (UpVar n))
+    (HCall :    forall f a, P f -> P a -> P (Call f a))
     (HConstr :  forall tag args, Pl args -> P (Constr tag args))
-    (HSwitch :  forall cases target, Plp cases -> P target -> P (Switch cases target))
+    (HElim :    forall cases target, Plp cases -> P target -> P (Elim cases target))
+    (HClose :   forall f free, Pl free -> P (Close f free))
     (Hnil :     Pl [])
     (Hcons :    forall e es, P e -> Pl es -> Pl (e :: es))
-    (Hpair :    forall n e, P e -> Pp (n, e))
+    (Hpair :    forall e r, P e -> Pp (e, r))
     (Hnil_p :   Plp [])
     (Hcons_p :  forall p ps, Pp p -> Plp ps -> Plp (p :: ps))
     (e : expr) : P e :=
@@ -32,78 +45,192 @@ Definition expr_rect_mut
             | [] => Hnil
             | e :: es => Hcons e es (go e) (go_list es)
             end in
-        let fix go_pair p :=
-            match p as p_ return Pp p_ with
-            | (n, e) => Hpair n e (go e)
-            end in
-        let fix go_list_pair ps :=
+        let go_pair p :=
+            let '(e, r) := p in
+            Hpair e r (go e) in
+        let fix go_pair_list ps :=
             match ps as ps_ return Plp ps_ with
             | [] => Hnil_p
-            | p :: ps => Hcons_p p ps (go_pair p) (go_list_pair ps)
+            | p :: ps => Hcons_p p ps (go_pair p) (go_pair_list ps)
             end in
         match e as e_ return P e_ with
-        | Var n => HVar n
-        | Lam body => HLam body (go body)
-        | App f a => HApp f a (go f) (go a)
-        | Constr c args => HConstr c args (go_list args)
-        | Switch cases target => HSwitch cases target (go_list_pair cases) (go target)
+        | Arg => HArg
+        | UpVar n => HUpVar n
+        | Call f a => HCall f a (go f) (go a)
+        | Constr tag args => HConstr tag args (go_list args)
+        | Elim cases target => HElim cases target (go_pair_list cases) (go target)
+        | Close f free => HClose f free (go_list free)
         end in go e.
 
-(* Useful wrapper for `expr_rect_mut with (Pl := Forall P)` *)
-Definition expr_ind' (P : expr -> Prop)
-    (HVar :     forall n, P (Var n))
-    (HLam :     forall body, P body -> P (Lam body))
-    (HApp :     forall f a, P f -> P a -> P (App f a))
-    (HConstr :  forall c args, Forall P args -> P (Constr c args))
-    (HSwitch :  forall cases target,
-        Forall (fun (p : nat * expr) => P (snd p)) cases ->
-        P target -> P (Switch cases target))
-    (e : expr) : P e.
-refine (@expr_rect_mut
-    P
-    (Forall P)
-    (fun p => P (snd p))
-    (Forall (fun (p : nat * expr) => P (snd p)))
-    HVar HLam HApp HConstr HSwitch _ _ _ _ _ e);
-eauto.
-Defined.
-
-
-(* substitute [0 -> to] in e and shift other indices down by 1 *)
-(* TODO: someone should make sure I did the right thing here -SP *)
-Fixpoint subst (to : expr) (e : expr) : expr :=
-    match e with
-    | Var n =>
-            match n with
-            | 0 => to
-            | S n' => Var n'
-            end
-    | Lam e' => Lam (subst to e')
-    | App e1 e2 => App (subst to e1) (subst to e2)
-    | Constr tag args => Constr tag (map (subst to) args)
-    | Switch cases target =>
-            Switch
-                (map (fun p => let '(n, e) := p in (n, subst to e)) cases)
-                (subst to target)
-    end.
+Definition env := list expr.
 
 Inductive value : expr -> Prop :=
-| VLam : forall b, value (Lam b)
-| VConstr : forall tag l, Forall value l -> value (Constr tag l).
+| VConstr : forall tag args, Forall value args -> value (Constr tag args)
+| VClose : forall f free, Forall value free -> value (Close f free).
 
-Fixpoint apply_all (f : expr) (args : list expr) : expr :=
-    match args with
-    | [] => f
-    | arg :: args => apply_all (App f arg) args
+Section subst.
+Open Scope option_monad.
+
+Definition subst (arg : expr) (vals : list expr) (e : expr) : option expr :=
+    let fix go e :=
+        let fix go_list es : option (list expr) :=
+            match es with
+            | [] => Some []
+            | e :: es => @cons expr <$> go e <*> go_list es
+            end in
+        let go_pair p : option (expr * rec_info) :=
+            let '(e, r) := p in
+            go e >>= fun e' => Some (e', r) in
+        let fix go_pair_list ps : option (list (expr * rec_info)) :=
+            match ps with
+            | [] => Some []
+            | p :: ps => @cons (expr * rec_info) <$> go_pair p <*> go_pair_list ps
+            end in
+        match e with
+        | Arg => Some arg
+        | UpVar n => nth_error vals n
+        | Call f a => Call <$> go f <*> go a
+        | Constr c es => Constr c <$> go_list es
+        | Elim cases target => Elim <$> go_pair_list cases <*> go target
+        | Close f free => Close f <$> go_list free
+        end in
+    go e.
+End subst.
+
+
+Fixpoint unroll_elim (case : expr)
+                     (args : list expr)
+                     (rec : rec_info)
+                     (mk_rec : expr -> expr) : option expr :=
+    match args, rec with
+    | [], [] => Some case
+    | arg :: args, r :: rec =>
+            let case := Call case arg in
+            let case := if r then Call case (mk_rec arg) else case in
+            unroll_elim case args rec mk_rec
+    | _, _ => None
     end.
 
-(* TODO: add stepping under Constrs *)
-Inductive step : expr -> expr -> Prop :=
-| Beta : forall b a, value a -> step (App (Lam b) a) (subst a b)
-| AppL : forall e1 e1' e2, step e1 e1' -> step (App e1 e2) (App e1' e2)
-| AppR : forall v e2 e2', value v -> step e2 e2' -> step (App v e2) (App v e2')
-| SwitchStep : forall t t' cases, step t t' -> step (Switch cases t) (Switch cases t')
-| Switchinate : forall tag args cases case arg_n,
-    nth_error cases tag = Some (arg_n, case) ->
-    length args = arg_n ->
-    step (Switch cases (Constr tag args)) (apply_all case args).
+Ltac generalize_all :=
+    repeat match goal with
+    | [ y : _ |- _ ] => generalize y; clear y
+    end.
+
+(* Change the current goal to an equivalent one in which argument "x" is the
+ * first one. *)
+Tactic Notation "make_first" ident(x) :=
+    try intros until x;
+    move x at top;
+    generalize_all.
+
+(* Move "x" to the front of the goal, then perform induction. *)
+Ltac first_induction x := make_first x; induction x.
+
+Tactic Notation "fwd" tactic3(tac) "as" ident(H) :=
+    simple refine (let H : _ := _ in _);
+    [ shelve
+    | tac
+    | clearbody H ].
+
+Lemma unroll_elim_length : forall case args rec mk_rec,
+    length args = length rec <-> unroll_elim case args rec mk_rec <> None.
+first_induction args; destruct rec; intros; split; simpl;
+  try solve [intro; congruence].
+
+- intro Hlen. simpl. eapply IHargs. congruence.
+- intro Hcall. f_equal. apply <- IHargs. eauto.
+Qed.
+
+
+Inductive step (E : env) : expr -> expr -> Prop :=
+| MakeCall : forall f a free e e',
+    value a ->
+    Forall value free ->
+    nth_error E f = Some e ->
+    subst a free e = Some e' ->
+    step E (Call (Close f free) a) e'
+| CallL : forall e1 e1' e2,
+    step E e1 e1' ->
+    step E (Call e1 e2) (Call e1' e2)
+| CallR : forall v e2 e2',
+    value v ->
+    step E e2 e2' ->
+    step E (Call v e2) (Call v e2')
+| ConstrStep : forall tag vs e e' es,
+    step E e e' ->
+    Forall value vs ->
+    step E (Constr tag (vs ++ [e] ++ es)) (Constr tag (vs ++ [e'] ++ es))
+| ElimStep : forall t t' cases,
+        step E t t' ->
+        step E (Elim cases t) (Elim cases t')
+| Eliminate : forall tag args cases case rec e',
+    nth_error cases tag = Some (case, rec) ->
+    unroll_elim case args rec (fun x => Elim cases x) = Some e' ->
+    step E (Elim cases (Constr tag args)) e'
+| CloseStep : forall f vs e e' es,
+    step E e e' ->
+    Forall value vs ->
+    step E (Close f (vs ++ [e] ++ es)) (Close f (vs ++ [e'] ++ es))
+.
+
+
+
+(* Demo *)
+
+Definition add_lam_a :=             0.
+Definition add_lam_b :=             1.
+Definition elim_zero_lam_b :=       2.
+Definition elim_succ_lam_a :=       3.
+Definition elim_succ_lam_IHa :=     4.
+Definition elim_succ_lam_b :=       5.
+
+Definition add_reflect := Close add_lam_a [].
+
+Definition add_env : list expr :=
+    (* add_lam_a *)
+    [ Close add_lam_b [Arg]
+    (* add_lam_b *)
+    ; Call (Elim
+        [(Close elim_zero_lam_b [Arg; UpVar 0], []);
+         (Close elim_succ_lam_a [Arg; UpVar 0], [true])] (UpVar 0)) Arg
+    (* elim_zero_lam_b *)
+    ; Arg
+    (* elim_succ_lam_a *)
+    ; Close elim_succ_lam_IHa [Arg; UpVar 0; UpVar 1]
+    (* elim_succ_lam_IHa *)
+    ; Close elim_succ_lam_b [Arg; UpVar 0; UpVar 1; UpVar 2]
+    (* elim_succ_lam_b *)
+    ; Call (UpVar 0) (Constr 1 [Arg])
+    ].
+
+Inductive star (E : env) : expr -> expr -> Prop :=
+| StarNil : forall e, star E e e
+| StarCons : forall e e' e'',
+        step E e e' ->
+        star E e' e'' ->
+        star E e e''.
+
+Fixpoint nat_reflect n : expr :=
+    match n with
+    | 0 => Constr 0 []
+    | S n => Constr 1 [nat_reflect n]
+    end.
+
+Theorem add_1_2 : { x | star add_env
+        (Call (Call add_reflect (nat_reflect 1)) (nat_reflect 2)) x }.
+eexists.
+
+unfold add_reflect.
+eright. eapply CallL, MakeCall; try solve [repeat econstructor].
+eright. eapply MakeCall; try solve [repeat econstructor].
+eright. eapply CallL, Eliminate; try solve [repeat econstructor].
+  compute [unroll_elim ctor_arg_is_recursive].
+eright. eapply CallL, CallL, MakeCall; try solve [repeat econstructor].
+eright. eapply CallL, CallR, Eliminate; try solve [repeat econstructor].
+  compute [unroll_elim ctor_arg_is_recursive].
+eright. eapply CallL, MakeCall; try solve [repeat econstructor].
+eright. eapply MakeCall; try solve [repeat econstructor].
+eright. eapply MakeCall; try solve [repeat econstructor].
+eleft.
+Defined.
+Eval compute in proj1_sig add_1_2.
