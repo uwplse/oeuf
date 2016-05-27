@@ -98,23 +98,40 @@ Fixpoint transf_stmt (s : Emajor.stmt) (fresh : ident) : (Dmajor.stmt * ident) :
        Pos.succ fresh)
   end.
 
-Definition transf_fun_body (s : Emajor.stmt) (e : Emajor.expr) : Dmajor.stmt :=
-  let (bod,_) := transf_stmt s xH in
+Definition transf_fun_body (s : Emajor.stmt) (e : Emajor.expr) (fresh : ident) : (Dmajor.stmt * ident) :=
+  let (bod,fresh') := transf_stmt s fresh in
   let ret := Dmajor.Sreturn (Some (transf_expr e)) in
-  bod; ret.
+  (bod; ret, fresh').
 
-Definition transf_function (f : Emajor.function) : Dmajor.function :=
+Definition transf_function (f : Emajor.function) (fresh : ident) : (Dmajor.function * ident) :=
   let (s,e) := Emajor.fn_body f in
-  let ts := transf_fun_body s e in
+  let (ts,fresh') := transf_fun_body s e fresh in
   let ss := Emajor.fn_stackspace f in
   let params := Emajor.fn_params f in
-  Dmajor.mkfunction EMsig params nil ss ts.
+  (Dmajor.mkfunction EMsig params nil ss ts, fresh').
 
-Definition transf_fundef (fd : Emajor.fundef) : Dmajor.fundef :=
-  transf_function fd.
+Definition transf_fundef (fd : Emajor.fundef) (fresh : ident) : (Dmajor.fundef * ident) :=
+  transf_function fd fresh.
+
+Fixpoint transf_globdefs (gds : list (ident * globdef Emajor.fundef unit)) (fresh : ident) : (list (ident * globdef Dmajor.fundef unit)) * ident :=
+  match gds with
+  | nil => (nil,fresh)
+  | (id,Gfun fd) :: fs =>
+    let (tfd,fresh') := transf_fundef fd fresh in
+    let (tfs,fresh'') := transf_globdefs fs fresh' in
+    ((id,Gfun tfd) :: tfs, fresh'')
+  | (id,Gvar v) :: fs =>
+    let (tfs,fresh') := transf_globdefs fs fresh in
+    ((id,Gvar v) :: tfs, fresh)
+  end.
+
+(* TODO: write this *)
+Fixpoint next_id (p : Emajor.program) : ident := 100%positive.
 
 Definition transf_prog (p : Emajor.program) : Dmajor.program :=
-  AST.transform_program transf_fundef p.
+  let fresh := next_id p in
+  let (fds,fresh') := transf_globdefs (prog_defs p) fresh in
+  mkprogram fds (prog_public p) (prog_main p).
 
 Section PRESERVATION.
 
