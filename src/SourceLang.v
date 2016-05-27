@@ -250,14 +250,63 @@ Eval compute in expr_denote ltac:(reflect  (@list_rect nat (fun _ => list nat) [
 Check ltac:(reflect (fun (x _ _ _ _ _ _ _ _ _ _ : nat) => x))  : expr [] _ .
 
 
-Definition map_reflect {l} : expr l _ :=
-   ltac:(reflect (fun (f : nat -> nat) (l : list nat) => list_rect (fun _ => list nat) [] (fun x _ t => f x :: t) l)).
+Section tests.
 
-Eval compute in expr_denote map_reflect hnil.
-Eval compute in @map nat nat.
+  Definition id_nat (n : nat) : nat := n.
 
-Example map_reflect_correct : forall l h, expr_denote(l := l) map_reflect h = @map nat nat.
-Proof. reflexivity. Qed.
+  Definition id_nat_reflect {l} : expr l _ :=
+    ltac:(let x := eval unfold id_nat in id_nat in reflect x).
+
+  Example id_nat_reflect_correct : forall l h, expr_denote(l := l) id_nat_reflect h = id_nat.
+  Proof. reflexivity. Qed.
+
+  Definition map_reflect {l} : expr l _ :=
+    ltac:(reflect (fun (f : nat -> nat) (l : list nat) => list_rect (fun _ => list nat) [] (fun x _ t => f x :: t) l)).
+
+  Eval compute in expr_denote map_reflect hnil.
+  Eval compute in @map nat nat.
+
+  Example map_reflect_correct : forall l h, expr_denote(l := l) map_reflect h = @map nat nat.
+  Proof. reflexivity. Qed.
+
+  Definition add a b :=
+    @nat_rect (fun _ => nat -> nat)     (* this is `add` *)
+              (fun b => b)
+              (fun a IHa b => IHa (S b))
+              a b.
+
+  Example add_Nat_add : forall m n, add m n = Nat.add m n.
+  Proof.
+    induction m; simpl; intros.
+    - reflexivity.
+    - now rewrite IHm, plus_n_Sm.
+  Qed.
+
+  Definition add_reflect {l} : expr l _ :=
+    ltac:(let x := eval unfold add in add in reflect x).
+
+  Example add_reflect_correct : forall l h, expr_denote(l := l) add_reflect h = add.
+  Proof. reflexivity. Qed.
+
+  Definition fib n :=
+    @nat_rect (fun _ => nat -> nat -> nat)
+        (fun a b => a)
+        (fun n IHn a b =>
+            IHn b (
+                @nat_rect (fun _ => nat -> nat)     (* this is `add` *)
+                    (fun b => b)
+                    (fun a IHa b => IHa (S b))
+                    a b))
+        n 0 1.
+
+  Eval compute in map fib [0;1;2;3;4;5;6;7;8;9].
+
+  Definition fib_reflect {l} : expr l _ :=
+    ltac:(let x := eval unfold fib in fib in reflect x).
+
+  Example fib_reflect_correct : forall l h, expr_denote(l := l) fib_reflect h = fib.
+  Proof. reflexivity. Qed.
+End tests.
 
 Fixpoint lift' {l ty ty'} n (e : expr l ty) {struct e} : expr (insert ty' l n) ty :=
   let fix go_hlist {l ty'} n {tys} (h : hlist (expr l) tys) :

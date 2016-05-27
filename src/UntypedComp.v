@@ -37,6 +37,17 @@ Definition compile {l ty} (e : S.expr l ty) : U.expr :=
       end
   in go e.
 
+Section tests.
+  Example id_nat_compiles :  @compile [] _ S.id_nat_reflect = U.id_reflect.
+  Proof. reflexivity. Qed.
+
+  Example add_compiles : @compile [] _ S.add_reflect = U.add_reflect.
+  Proof. reflexivity. Qed.
+
+  Example fib_compiles : @compile [] _ S.fib_reflect = U.fib_reflect.
+  Proof. reflexivity. Qed.
+End tests.
+
 Fixpoint compile_hlist {l tys} (h : hlist (S.expr l) tys) : list U.expr :=
   match h with
   | hnil => []

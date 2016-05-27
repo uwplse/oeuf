@@ -159,18 +159,7 @@ Inductive step : expr -> expr -> Prop :=
 
 (* Demo *)
 
-Definition fib n :=
-    @nat_rect (fun _ => nat -> nat -> nat)
-        (fun a b => a)
-        (fun n IHn a b =>
-            IHn b (
-                @nat_rect (fun _ => nat -> nat)     (* this is `add` *)
-                    (fun b => b)
-                    (fun a IHa b => IHa (S b))
-                    a b))
-        n 0 1.
-
-Eval compute in map fib [0;1;2;3;4;5;6;7;8;9].
+Definition id_reflect := Lam (Var 0).
 
 Fixpoint nat_reflect n : expr :=
     match n with
