@@ -27,6 +27,7 @@ Inductive expr :=
 Inductive stmt :=
 | Call (dst : nat) (f : expr) (a : expr)
 | MakeConstr (dst : nat) (tag : nat) (args : list expr)
+             (* TODO: fix switch to have statements, arg count *)
 | Switch (dst : nat) (cases : list (nat * expr)) (target : expr)
 | MakeClose (dst : nat) (f : function_name) (free : list expr)
 .

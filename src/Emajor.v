@@ -28,7 +28,7 @@ Inductive stmt : Type :=
 | Sskip
 | Scall (dst : ident) (f : expr) (a : expr)
 | SmakeConstr (dst : ident) (tag : int) (args : list expr)
-| Sswitch (dst : ident) (cases : list (Z * list ident * expr)) (target : expr)
+| Sswitch (cases : list (Z * list ident * stmt)) (target : expr)
 | SmakeClose (dst : ident) (f : function_name) (free : list expr)
 | Sseq (s1 : stmt) (s2 : stmt)
 .
@@ -53,7 +53,7 @@ Definition env := PTree.t value.
 Inductive cont: Type :=
   | Kstop: cont                (**r stop program execution *)
   | Kseq: stmt -> cont -> cont          (**r execute stmt, then cont *)
-  | Kblock: cont -> cont                (**r exit a block, then do cont *)
+  | Kswitch : env -> cont -> cont  (**r env to return to when exiting switch *)
   | Kcall: ident -> expr -> function -> env -> cont -> cont.
                                         (**r return to caller *)
 
@@ -112,7 +112,7 @@ End EVAL_EXPR.
 Fixpoint call_cont (k: cont) : cont :=
   match k with
   | Kseq s k => call_cont k
-  | Kblock k => call_cont k
+  | Kswitch e k => call_cont k 
   | _ => k
   end.
 
@@ -135,11 +135,11 @@ Fixpoint bind_ids (ids : list ident) (vals : list value) (e : env) : env :=
   | _,_ => e
   end.
 
-Fixpoint find_case (tag : Z) (cases : list (Z * list ident * expr)) : option (list ident * expr) :=
+Fixpoint find_case (tag : Z) (cases : list (Z * list ident * stmt)) : option (list ident * stmt) :=
   match cases with
   | nil => None
-  | (z,ids,e) :: r =>
-    if zeq tag z then Some (ids,e) else find_case tag r
+  | (z,ids,s) :: r =>
+    if zeq tag z then Some (ids,s) else find_case tag r
   end.
 
 Inductive step : state -> trace -> state -> Prop :=
@@ -175,15 +175,15 @@ Inductive step : state -> trace -> state -> Prop :=
       eval_exprlist e l vargs ->
       step (State f (SmakeClose id fname l) exp k e)
         E0 (State f Sskip exp k (PTree.set id (Close fname vargs) e))
-  | step_switch: forall id cases target f exp k e tag vargs result casexp ids,
+  | step_switch: forall e target tag vargs cases ids s k exp f,
       eval_expr e target (Constr tag vargs) -> (* eval match target *)
-      find_case (Int.unsigned tag) cases = Some (ids,casexp) -> (* find the right case *)
+      find_case (Int.unsigned tag) cases = Some (ids,s) -> (* find the right case *)
       length vargs = length ids -> (* vars to bind match idents *)
-      eval_expr (bind_ids ids vargs e) casexp result -> (* eval that case *)
-      step (State f (Sswitch id cases target) exp k e)
-        E0 (State f Sskip exp k (PTree.set id result e)).
-      
-
+      step (State f (Sswitch cases target) exp k e)
+        E0 (State f s exp (Kswitch e k) (bind_ids ids vargs e))
+  | step_switch_cont: forall f exp k e e',
+      step (State f Sskip exp (Kswitch e k) e')
+        E0 (State f Sskip exp k e).
 
 End RELSEM.
 
