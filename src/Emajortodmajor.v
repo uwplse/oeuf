@@ -56,6 +56,24 @@ Fixpoint store_args (id : ident) (l : list Emajor.expr) (z : Z) : Dmajor.stmt :=
 
 (* Hand roll a fresh ident monad *)
 Fixpoint transf_stmt (s : Emajor.stmt) (fresh : ident) : (Dmajor.stmt * ident) :=
+  let
+    fix transf_cases (cases : list (Z * list ident * Emajor.stmt)) (n : nat) (bottom : Dmajor.stmt) (fsh : ident) : Dmajor.stmt * ident :=
+    match cases with
+    | nil => (bottom,fsh)
+    | (tag,ids,s) :: cases' =>
+      let (s',fresh') := transf_stmt s fsh in (* what to do in this case *)
+      let (rest,fresh'') := transf_cases cases' (S n) bottom fresh' in
+      (* the rest of the cases *)
+      (Dmajor.Sblock (rest ; (s'; Dmajor.Sexit n)), fresh'')
+        (*
+          First enter n blocks
+          next execute bottom, which is dmajor switch stmt
+          that will exit k blocks
+          leaving the (k-n)th block to execute,
+          then exit the rest of the way
+         *)
+    end
+  in
   match s with
   | Emajor.Sskip => (Dmajor.Sskip,fresh)
   | Emajor.Sseq s1 s2 =>
@@ -65,7 +83,7 @@ Fixpoint transf_stmt (s : Emajor.stmt) (fresh : ident) : (Dmajor.stmt * ident) :
   | Emajor.Scall id efun earg =>
     (Dmajor.Scall (Some id) EMsig (transf_expr efun) ((transf_expr earg) :: nil),fresh)
   | Emajor.Sswitch cases target =>
-    (Dmajor.Sskip,fresh)
+    transf_cases cases O (transf_target target cases) fresh
   | Emajor.SmakeConstr id tag args =>
   (* In order to translate a constructor *)
     (* First we allocate enough space *)
@@ -82,22 +100,6 @@ Fixpoint transf_stmt (s : Emajor.stmt) (fresh : ident) : (Dmajor.stmt * ident) :
      store_args fresh args 4%Z,
        Pos.succ fresh)
   end.
-
-
-(* Definition transf_case (res : ident) (z : Z) (ids : list ident) (s : Emajor.stmt) (n : nat) (bottom : Dmajor.stmt) : Dmajor.stmt := *)
-(*   Dmajor.Sblock (bottom ; ((transf_stmt s)); (Dmajor.Sexit n)). *)
-
-(* Fixpoint transf_cases (res : ident) (cases : list (Z * list ident * Emajor.stmt)) (n : nat) (bottom : Dmajor.stmt) : Dmajor.stmt := *)
-(*   match cases with *)
-(*   | nil => bottom *)
-(*   | (tag,ids,exp) :: r => *)
-(*     Dmajor.Sblock ( *)
-(*     let s := transf_cases res r (S n) bottom in *)
-(*     transf_case res tag ids exp n s *)
-(*   end. *)
-
-(* Definition transf_switch (target : Emajor.expr) (cases : list (Z * list ident * Emajor.stmt)) (fresh : ident) : (Dmajor.stmt * ident) := *)
-(*   (transf_cases fresh cases O (transf_target target cases), Pos.succ fresh). *)
 
 
 Definition transf_fun_body (s : Emajor.stmt) (e : Emajor.expr) (fresh : ident) : (Dmajor.stmt * ident) :=
