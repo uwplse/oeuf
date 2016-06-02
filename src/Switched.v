@@ -17,38 +17,50 @@ Require Import Arith.
 Require Import StructTact.StructTactics.
 Require Import StructTact.Util.
 
+Require Import HighValues.
+
 Definition function_name := ident.
 
 Inductive expr :=
-| Arg : expr
-| UpVar : ident -> expr
-| Temp : ident -> expr.
+| Arg : expr (* the argument to a function *)
+| UpVar : ident -> expr (* the nth closure argument *)
+| Temp : ident -> expr. (* local temporary value *)
 
 Inductive stmt :=
-| Call (dst : nat) (f : expr) (a : expr)
-| MakeConstr (dst : nat) (tag : nat) (args : list expr)
-             (* TODO: fix switch to have statements, arg count *)
-| Switch (dst : nat) (cases : list (nat * expr)) (target : expr)
-| MakeClose (dst : nat) (f : function_name) (free : list expr)
+| Call (dst : ident) (f : expr) (a : expr)
+| MakeConstr (dst : ident) (tag : int) (args : list expr)
+| Switch (cases : list (Z * list ident * stmt)) (target : expr)
+| MakeClose (dst : ident) (f : function_name) (free : list expr)
 .
 
-Definition func_def : Type := list stmt * expr.
-Definition env := list func_def.
+Record function : Type := mkfunction {
+  fn_params: list ident; (* there will always be one param, but also could be closure args *)
+  (* fn_vars will always be nil *)
+  fn_stackspace: Z;
+  fn_body: stmt * expr
+}.
 
-(* Values used for the dynamic semantics *)
-Inductive value :=
-| Constr (tag : nat) (args : list value)
-| Close (f : function_name) (free : list value).
+Definition fundef := function.
+Definition program := AST.program fundef unit.
 
-(* TODO: Change to continuations *)
-Record frame := Frame { code : list stmt;
-                        ret : expr;
-                        locals : list (nat * value);
-                        arg : value;
-                        upvars : list value;
-                      }.
+Definition genv := Genv.t fundef unit.
 
-Definition stack := list frame.
+
+(* Begin Dynamic Semantics *)
+
+(* local environment for computation *)
+Definition env := PTree.t value.
+
+
+(* WOO continuations :) *)
+Inductive cont: Type :=
+  | Kstop: cont                (**r stop program execution *)
+  | Kseq: stmt -> cont -> cont          (**r execute stmt, then cont *)
+  | Kswitch : env -> cont -> cont  (**r env to return to when exiting switch *)
+  | Kcall: ident -> expr -> function -> env -> cont -> cont.
+                                        (**r return to caller *)
+
+
 
 Definition eval_expr (arg : value) (upvars : list value) (locals : list (nat * value)) (e : expr) : option value :=
   match e with
@@ -92,7 +104,7 @@ Proof.
 Qed.
 
 
-
+(* UP TO HERE IS PORTED TO CONTINUATIONS *)
 Inductive step (E : env) : stack -> stack -> Prop :=
 | StepReturn : forall dst f a l r ls av ups s r' ls' av' ups' rv,
     eval_expr av ups ls r = Some rv ->

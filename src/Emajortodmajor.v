@@ -35,16 +35,17 @@ Fixpoint transf_expr (e : Emajor.expr) : Dmajor.expr :=
 Definition EMsig : signature := mksignature (Tint::Tint::nil) (Some Tint) (mkcallconv false false false).
 
 
-Fixpoint make_cases (c : list (Z * list ident * Emajor.stmt)) (n : nat) : list (Z * nat) :=
+Fixpoint make_cases (c : list (Z * Emajor.stmt)) (n : nat) : list (Z * nat) :=
   match c,n with
-  | (z,_,_) :: r, S n' => (z,n) :: make_cases r n'
+  | (z,_) :: r, S n' => (z,n) :: make_cases r n'
   | _,_ => nil
   end.
 
-Definition transf_target (target : Emajor.expr) (cases : list (Z * list ident * Emajor.stmt)) : Dmajor.stmt :=
+Definition transf_target (targid : ident) (target : Emajor.expr) (cases : list (Z * Emajor.stmt)) : Dmajor.stmt :=
   let e := transf_expr target in
   let len := length cases in
-  Dmajor.Sswitch false e (make_cases cases len) len.
+  (Dmajor.Sassign targid e) ;
+    (Dmajor.Sswitch false e (make_cases cases len) len).
 
 Fixpoint store_args (id : ident) (l : list Emajor.expr) (z : Z) : Dmajor.stmt :=
   match l with
@@ -57,12 +58,12 @@ Fixpoint store_args (id : ident) (l : list Emajor.expr) (z : Z) : Dmajor.stmt :=
 (* Hand roll a fresh ident monad *)
 Fixpoint transf_stmt (s : Emajor.stmt) (fresh : ident) : (Dmajor.stmt * ident) :=
   let
-    fix transf_cases (cases : list (Z * list ident * Emajor.stmt)) (n : nat) (bottom : Dmajor.stmt) (fsh : ident) : Dmajor.stmt * ident :=
+    fix transf_cases (targid : ident) (cases : list (Z * Emajor.stmt)) (n : nat) (bottom : Dmajor.stmt) (fsh : ident) : Dmajor.stmt * ident :=
     match cases with
     | nil => (bottom,fsh)
-    | (tag,ids,s) :: cases' =>
+    | (tag,s) :: cases' =>
       let (s',fresh') := transf_stmt s fsh in (* what to do in this case *)
-      let (rest,fresh'') := transf_cases cases' (S n) bottom fresh' in
+      let (rest,fresh'') := transf_cases targid cases' (S n) bottom fresh' in
       (* the rest of the cases *)
       (Dmajor.Sblock (rest ; (s'; Dmajor.Sexit n)), fresh'')
         (*
@@ -82,8 +83,8 @@ Fixpoint transf_stmt (s : Emajor.stmt) (fresh : ident) : (Dmajor.stmt * ident) :
     (s1' ; s2', fresh2')
   | Emajor.Scall id efun earg =>
     (Dmajor.Scall (Some id) EMsig (transf_expr efun) ((transf_expr earg) :: nil),fresh)
-  | Emajor.Sswitch cases target =>
-    transf_cases cases O (transf_target target cases) fresh
+  | Emajor.Sswitch targid cases target =>
+    transf_cases targid cases O (transf_target targid target cases) fresh
   | Emajor.SmakeConstr id tag args =>
   (* In order to translate a constructor *)
     (* First we allocate enough space *)
