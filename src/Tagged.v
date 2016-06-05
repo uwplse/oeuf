@@ -1,9 +1,7 @@
-Require Import List.
-Import ListNotations.
+Require Import Common.
 
 Require Import Utopia.
 Require Import Monads.
-Require Import StructTact.StructTactics.
 
 
 Definition function_name := nat.
@@ -76,7 +74,7 @@ Definition subst (arg : expr) (vals : list expr) (e : expr) : option expr :=
         let fix go_list es : option (list expr) :=
             match es with
             | [] => Some []
-            | e :: es => @cons expr <$> go e <*> go_list es
+            | e :: es => cons <$> go e <*> go_list es
             end in
         let go_pair p : option (expr * rec_info) :=
             let '(e, r) := p in
@@ -84,7 +82,7 @@ Definition subst (arg : expr) (vals : list expr) (e : expr) : option expr :=
         let fix go_pair_list ps : option (list (expr * rec_info)) :=
             match ps with
             | [] => Some []
-            | p :: ps => @cons (expr * rec_info) <$> go_pair p <*> go_pair_list ps
+            | p :: ps => cons <$> go_pair p <*> go_pair_list ps
             end in
         match e with
         | Arg => Some arg

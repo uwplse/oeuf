@@ -1,7 +1,4 @@
-Require Import List.
-Import ListNotations.
-Require Import StructTact.StructTactics.
-Require Import Omega.
+Require Import Common.
 
 Require Import Monads.
 Require Utopia.
@@ -41,7 +38,7 @@ Definition compile (e : L.expr) : option T.expr :=
         let fix go_list es :=
             match es with
             | [] => Some []
-            | e :: es => @cons T.expr <$> go e <*> go_list es
+            | e :: es => cons <$> go e <*> go_list es
             end in
         match e with
         | L.Arg => Some (T.Arg)
@@ -58,7 +55,7 @@ Definition compile_list :=
     let fix go_list (es : list L.expr) : option (list T.expr) :=
         match es with
         | [] => Some []
-        | e :: es => @cons T.expr <$> compile e <*> go_list es
+        | e :: es => cons <$> compile e <*> go_list es
         end in go_list.
 
 End compile.

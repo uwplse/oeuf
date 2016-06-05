@@ -1,5 +1,4 @@
-Require Import List.
-Import ListNotations.
+Require Import Common.
 
 Require Import Utopia.
 Require Import Monads.
@@ -67,7 +66,7 @@ Definition subst (arg : expr) (vals : list expr) (e : expr) : option expr :=
         let fix go_list es : option (list expr) :=
             match es with
             | [] => Some []
-            | e :: es => @cons expr <$> go e <*> go_list es
+            | e :: es => cons <$> go e <*> go_list es
             end in
         match e with
         | Arg => Some arg

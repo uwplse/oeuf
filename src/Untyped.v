@@ -1,8 +1,4 @@
-Require Import List.
-Import ListNotations.
-Require Import Arith Omega.
-
-Require Import StructTact.StructTactics.
+Require Import Common.
 
 Require Import Utopia.
 

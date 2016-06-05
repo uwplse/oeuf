@@ -1,7 +1,4 @@
-Require Import List.
-Import ListNotations.
-Require Import StructTact.StructTactics.
-
+Require Import Common.
 Require Import Monads.
 
 Require Untyped.
@@ -52,7 +49,7 @@ Fixpoint compile' (n : nat) (e : U.expr) {struct e} : state (list L.expr) L.expr
     let fix go_list n es :=
         match es with
         | [] => ret_state []
-        | e :: es => @cons L.expr <$> compile' n e <*> go_list n es
+        | e :: es => cons <$> compile' n e <*> go_list n es
         end in
     match e with
     | U.Var 0 => ret_state L.Arg
@@ -504,7 +501,7 @@ Definition L_subst_list arg vals : list L.expr -> option (list L.expr) :=
     let fix go_list es :=
         match es with
         | [] => Some []
-        | e :: es => @cons L.expr <$> L.subst arg vals e <*> go_list es
+        | e :: es => cons <$> L.subst arg vals e <*> go_list es
         end in go_list.
 
 Lemma L_subst_list_exists : forall arg vals es,

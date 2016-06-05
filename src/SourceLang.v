@@ -1,7 +1,4 @@
-Require Import List.
-Import ListNotations.
-
-Require Import StructTact.StructTactics.
+Require Import Common.
 
 Require Import FunctionalExtensionality.
 Require Import Program.
