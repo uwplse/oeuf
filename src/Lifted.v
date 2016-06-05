@@ -159,6 +159,8 @@ Definition add_env : list expr :=
     ; Call (UpVar 0) (Constr CS [Arg])
     ].
 
+Definition add_prog := (add_reflect, add_env).
+
 Inductive star (E : env) : expr -> expr -> Prop :=
 | StarNil : forall e, star E e e
 | StarCons : forall e e' e'',

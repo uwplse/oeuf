@@ -28,9 +28,11 @@ Eval compute in L_add_next.
 Section compile.
 Open Scope state_monad.
 
-Definition record e : state (list L.expr) nat :=
-    (@length _ <$> get) >>= fun idx =>
-    modify (fun env => env ++ [e]) >>= fun _ =>
+Definition compiler_monad A := state (list L.expr) A.
+
+Definition record x : compiler_monad nat :=
+    (length <$> get) >>= fun idx =>
+    modify (fun env => env ++ [x]) >>= fun _ =>
     ret_state idx.
 
 Fixpoint close_vars' n :=
@@ -45,7 +47,7 @@ Definition close_vars n :=
     | S n => close_vars' n
     end.
 
-Fixpoint compile' (n : nat) (e : U.expr) {struct e} : state (list L.expr) L.expr :=
+Fixpoint compile' (n : nat) (e : U.expr) {struct e} : compiler_monad L.expr :=
     let fix go_list n es :=
         match es with
         | [] => ret_state []
@@ -93,14 +95,19 @@ End compile.
 
 Eval compute in compile U.add_reflect.
 
-Definition add_comp := fst (compile U.add_reflect).
-Definition add_env_comp := snd (compile U.add_reflect).
+Definition add_prog_comp := compile U.add_reflect.
+
+Definition add_exp_comp := fst add_prog_comp.
+
+Definition add_env_comp := snd add_prog_comp.
+
+
 
 Theorem add_1_2 : { x | L.star add_env_comp
-        (L.Call (L.Call add_comp (L.nat_reflect 1)) (L.nat_reflect 2)) x }.
+        (L.Call (L.Call add_exp_comp (L.nat_reflect 1)) (L.nat_reflect 2)) x }.
 eexists.
 
-unfold add_comp. simpl.
+unfold add_exp_comp. simpl.
 eright. eapply L.CallL, L.MakeCall; try solve [repeat econstructor].
 eright. eapply L.MakeCall; try solve [repeat econstructor].
 eright. eapply L.CallL, L.Eliminate; try solve [repeat econstructor].

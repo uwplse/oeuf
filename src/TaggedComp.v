@@ -58,13 +58,16 @@ Definition compile_list :=
         | e :: es => cons <$> compile e <*> go_list es
         end in go_list.
 
+Definition compile_program (lp : L.expr * list L.expr) : option (T.expr * list T.expr) :=
+  pair <$> (compile (fst lp)) <*> compile_list (snd lp).
+
 End compile.
 
 
 
 (* Test compiler *)
 
-Eval compute in compile L.add_reflect.
+Eval compute in compile_program L.add_prog.
 
 Definition add_comp :=
     let x := compile L.add_reflect in
