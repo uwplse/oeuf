@@ -25,7 +25,14 @@ Definition seq {M : Type -> Type}
     {A B : Type} (f : M (A -> B)) (x : M A) : M B :=
     bind _ _ f (fun f => @fmap _ bind ret _ _ f x).
 
-
+Fixpoint sequence {M : Type -> Type}
+    (bind : forall A B, M A -> (A -> M B) -> M B)
+    (ret : forall A, A -> M A)
+    {A : Type} (l : list (M A)) : M (list A) :=
+  match l with
+  | [] => ret _ []
+  | x :: l' => bind _ _ x (fun x => bind _ _ (sequence bind ret l') (fun l' => ret _ (x :: l')))
+  end.
 
 Definition bind_option {A B : Type} (m : option A) (k : A -> option B) : option B :=
     match m with
