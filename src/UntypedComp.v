@@ -254,7 +254,7 @@ Proof.
     rewrite compile_eliminate.
     rewrite elim_to_type_name_correct.
     rewrite compile_hlist_hmap_simple.
-    apply U.Eliminate.
+    apply U.Eliminate; auto using compile_hlist_Forall_value.
     rewrite <- constructor_index_correct with (e := e) (ct := ct).
     now rewrite nth_error_hmap_simple_hget.
 Qed.

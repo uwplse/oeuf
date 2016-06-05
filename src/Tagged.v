@@ -164,6 +164,7 @@ Inductive step (E : env) : expr -> expr -> Prop :=
 | Eliminate : forall tag args cases case rec e',
     nth_error cases tag = Some (case, rec) ->
     unroll_elim case args rec (fun x => Elim cases x) = Some e' ->
+    Forall value args ->
     step E (Elim cases (Constr tag args)) e'
 | CloseStep : forall f vs e e' es,
     step E e e' ->

@@ -148,6 +148,7 @@ Inductive step : expr -> expr -> Prop :=
 | ElimStep : forall t t' ty cases, step t t' -> step (Elim ty cases t) (Elim ty cases t')
 | Eliminate : forall c args ty cases case,
     nth_error cases (constructor_index c) = Some case ->
+    Forall value args ->
     step (Elim ty cases (Constr c args))
         (unroll_elim case c args (Elim ty cases)).
 

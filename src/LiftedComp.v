@@ -748,14 +748,17 @@ intros ??. induction 1; intros0 Hmatch.
 
   + (* Eliminate *)
     invc Hmatch.
-    invc H7.
+    invc H8.
 
     fwd eapply nth_error_Some'; eauto.
     erewrite Forall2_len in * by eauto.
     fwd eapply nth_error_lt as HH; eauto. destruct HH.
 
     eexists. eapply L.Eliminate. eassumption.
-
+      eapply Forall2_apply_lr.
+      { intros. eapply match_value_0_fwd; eauto. }
+      eauto.
+      eauto.
 Qed.
 
 (*

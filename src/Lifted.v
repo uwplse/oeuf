@@ -121,6 +121,7 @@ Inductive step (E : env) : expr -> expr -> Prop :=
         step E (Elim ty cases t) (Elim ty cases t')
 | Eliminate : forall c args ty cases case,
     nth_error cases (constructor_index c) = Some case ->
+    Forall value args ->
     step E (Elim ty cases (Constr c args))
         (unroll_elim case c args (fun x => Elim ty cases x))
 | CloseStep : forall f vs e e' es,

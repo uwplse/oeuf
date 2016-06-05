@@ -65,7 +65,8 @@ Inductive step (E : env) : expr -> expr -> Prop :=
         step E t t' ->
         step E (Switch cases t) (Switch cases t')
 | Switchinate : forall tag args cases case,
-    nth_error cases tag = Some case -> 
+    nth_error cases tag = Some case ->
+    Forall value args ->
     step E (Switch cases (Constr tag args)) case
 | CloseStep : forall f vs e e' es,
     step E e e' ->
