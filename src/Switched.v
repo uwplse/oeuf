@@ -1,139 +1,136 @@
-Require Import compcert.lib.Coqlib.
-Require Import compcert.lib.Maps.
-Require Import compcert.lib.Integers.
+Require Import Common.
 
-Require Import compcert.common.AST.
-Require Import compcert.common.Values.
-Require Import compcert.common.Globalenvs.
-Require Import compcert.common.Memory.
-Require Import compcert.common.Events.
-Require Import compcert.common.Switch.
-Require Import compcert.common.Smallstep.
+Require Import Utopia.
+Require Import Monads.
 
-Require Import List.
-Import ListNotations.
-Require Import Arith.
-
-Require Import StructTact.StructTactics.
-Require Import StructTact.Util.
-
-Require Import HighValues.
-
-Definition function_name := ident.
+Definition function_name := nat.
 
 Inductive expr :=
-| Arg : expr (* the argument to a function *)
-| UpVar : ident -> expr (* the nth closure argument *)
-| Temp : ident -> expr. (* local temporary value *)
-
-Inductive stmt :=
-| Call (dst : ident) (f : expr) (a : expr)
-| MakeConstr (dst : ident) (tag : int) (args : list expr)
-| Switch (cases : list (Z * list ident * stmt)) (target : expr)
-| MakeClose (dst : ident) (f : function_name) (free : list expr)
+| Arg : expr
+| UpVar : nat -> expr
+| Deref : expr -> nat -> expr
+| Call : expr -> expr -> expr
+| Constr (tag : nat) (args : list expr)
+| Switch (cases : list expr) (target : expr)
+| Close (f : function_name) (free : list expr)
 .
 
-Record function : Type := mkfunction {
-  fn_params: list ident; (* there will always be one param, but also could be closure args *)
-  (* fn_vars will always be nil *)
-  fn_stackspace: Z;
-  fn_body: stmt * expr
-}.
+Definition env := list expr.
 
-Definition fundef := function.
-Definition program := AST.program fundef unit.
+Inductive value : expr -> Prop :=
+| VConstr : forall tag args, Forall value args -> value (Constr tag args)
+| VClose : forall f free, Forall value free -> value (Close f free).
 
-Definition genv := Genv.t fundef unit.
+Section subst.
+Open Scope option_monad.
 
+Definition subst (arg : expr) (vals : list expr) (e : expr) : option expr :=
+    let fix go e :=
+        let fix go_list es : option (list expr) :=
+            match es with
+            | [] => Some []
+            | e :: es => cons <$> go e <*> go_list es
+            end in
+        match e with
+        | Arg => Some arg
+        | UpVar n => nth_error vals n
+        | Deref e' n => (fun e => Deref e n) <$> go e'
+        | Call f a => Call <$> go f <*> go a
+        | Constr c es => Constr c <$> go_list es
+        | Switch cases target => Switch <$> go_list cases <*> go target
+        | Close f free => Close f <$> go_list free
+        end in
+    go e.
+End subst.
 
-(* Begin Dynamic Semantics *)
-
-(* local environment for computation *)
-Definition env := PTree.t value.
-
-
-(* WOO continuations :) *)
-Inductive cont: Type :=
-  | Kstop: cont                (**r stop program execution *)
-  | Kseq: stmt -> cont -> cont          (**r execute stmt, then cont *)
-  | Kswitch : env -> cont -> cont  (**r env to return to when exiting switch *)
-  | Kcall: ident -> expr -> function -> env -> cont -> cont.
-                                        (**r return to caller *)
-
-
-
-Definition eval_expr (arg : value) (upvars : list value) (locals : list (nat * value)) (e : expr) : option value :=
-  match e with
-  | Arg => Some arg
-  | UpVar n => nth_error upvars (Pos.to_nat n)
-  | Temp n => assoc Nat.eq_dec locals (Pos.to_nat n)
-  end.
-
-Fixpoint map_partial {A B : Type} (f : A -> option B) (l : list A) : option (list B) :=
-  match l with
-  | [] => Some []
-  | a :: l' => match f a, map_partial f l' with
-              | Some b, Some l'' => Some (b :: l'')
-              | _, _ => None
-              end
-  end.
-
-(* sanity checks *)
-Lemma length_map_partial :
-  forall A B (f : A -> option B) l bs,
-    map_partial f l = Some bs ->
-    length l = length bs.
-Proof.
-  induction l; simpl; intros.
-  - find_inversion. auto.
-  - repeat break_match; try discriminate.
-    find_inversion. simpl.
-    auto using f_equal.
-Qed.
-
-Lemma map_map_partial :
-  forall A B (f : A -> option B) l bs,
-    map_partial f l = Some bs ->
-    map (@Some _) bs = map f l.
-Proof.
-  induction l; simpl; intros.
-  - find_inversion. auto.
-  - repeat break_match; try discriminate.
-    find_inversion. simpl.
-    auto using f_equal.
-Qed.
-
-
-(* UP TO HERE IS PORTED TO CONTINUATIONS *)
-Inductive step (E : env) : stack -> stack -> Prop :=
-| StepReturn : forall dst f a l r ls av ups s r' ls' av' ups' rv,
-    eval_expr av ups ls r = Some rv ->
-    step E (Frame [] r ls av ups :: Frame (Call dst f a :: l) r' ls' av' ups' :: s)
-           (Frame l r' (assoc_set Nat.eq_dec ls' dst rv) av' ups' :: s)
-
-| StepCall : forall dst f a l r ls av ups s fn free def ret av',
-    eval_expr av ups ls f = Some (Close fn free) ->
-    eval_expr av ups ls a = Some av' ->
-    nth_error E (Pos.to_nat fn) = Some (def, ret) ->
-    step E (Frame (Call dst f a :: l) r ls av ups :: s)
-           (Frame def ret [] av' free :: Frame (Call dst f a :: l) r ls av ups :: s)
-
-| StepMakeConstr : forall dst tag args l r ls av ups s vs,
-    map_partial (eval_expr av ups ls) args = Some vs ->
-    step E (Frame (MakeConstr dst tag args :: l) r ls av ups :: s)
-           (Frame l r (assoc_set Nat.eq_dec ls dst (Constr tag vs)) av ups :: s)
-
-| StepSwitch : forall dst cases target l r ls av ups s tag args case,
-    eval_expr av ups ls target = Some (Constr tag args) ->
-    nth_error cases tag = Some case ->
-
-    step E (Frame (Switch dst cases target :: l) r ls av ups :: s)
-         (* TODO: actually apply the case.
-            It seems like we'll need to generate a list of calls... :(  *)
-         (Frame (l) r ls av ups :: s)
-
-| StepMakeClose : forall dst fn args l r ls av ups s vs,
-    map_partial (eval_expr av ups ls) args = Some vs ->
-    step E (Frame (MakeClose dst fn args :: l) r ls av ups :: s)
-           (Frame (l) r (assoc_set Nat.eq_dec ls dst (Close fn vs)) av ups :: s)
+Inductive step (E : env) : expr -> expr -> Prop := 
+| MakeCall : forall f a free e e', 
+    value a ->
+    Forall value free ->
+    nth_error E f = Some e ->
+    subst a free e = Some e' ->
+    step E (Call (Close f free) a) e'
+| CallL : forall e1 e1' e2,
+    step E e1 e1' ->
+    step E (Call e1 e2) (Call e1' e2)
+| CallR : forall v e2 e2',
+    value v ->
+    step E e2 e2' ->
+    step E (Call v e2) (Call v e2')
+| ConstrStep : forall tag vs e e' es,
+    step E e e' ->
+    Forall value vs ->
+    step E (Constr tag (vs ++ [e] ++ es)) (Constr tag (vs ++ [e'] ++ es))
+| SwitchStep : forall t t' cases,
+        step E t t' ->
+        step E (Switch cases t) (Switch cases t')
+| Switchinate : forall tag args cases case,
+    nth_error cases tag = Some case -> 
+    step E (Switch cases (Constr tag args)) case
+| CloseStep : forall f vs e e' es,
+    step E e e' ->
+    Forall value vs ->
+    step E (Close f (vs ++ [e] ++ es)) (Close f (vs ++ [e'] ++ es))
+| DerefConstrStep : forall tag args n a, 
+    nth_error args n = Some a -> 
+    step E (Deref (Constr tag args) n) a
+| DerefClosureStep : forall f args n a, 
+    nth_error args n = Some a -> 
+    step E (Deref (Close f args) n) a
 .
+
+Definition add_expr := Close 0 [].
+
+Definition add_env := 
+       [Close 1 [Arg];
+       Call
+         (Call
+            (Call (Call (Close 8 []) (Close 2 [Arg; UpVar 0]))
+               (Close 3 [Arg; UpVar 0])) (UpVar 0)) Arg; 
+       Arg;
+       Close 4 [Arg; UpVar 0; UpVar 1];
+       Close 5 [Arg; UpVar 0; UpVar 1; UpVar 2];
+       Call (UpVar 0) (Constr 1 [Arg]);
+       Switch
+         [UpVar 1;
+         Call (Call (UpVar 0) (Deref Arg 0))
+           (Call (Close 6 [UpVar 0; UpVar 1]) (Deref Arg 0))] Arg;
+       Close 6 [Arg; UpVar 0]; Close 7 [Arg]].
+Definition add_prog := (add_expr, add_env).
+
+Inductive star (E : env) : expr -> expr -> Prop :=
+| StarNil : forall e, star E e e
+| StarCons : forall e e' e'',
+        step E e e' ->
+        star E e' e'' ->
+        star E e e''.
+
+Fixpoint nat_reflect n : expr :=
+    match n with
+    | 0 => Constr 0 []
+    | S n => Constr 1 [nat_reflect n]
+    end.
+
+Theorem add_1_2 : { x | star add_env
+        (Call (Call add_expr (nat_reflect 1)) (nat_reflect 2)) x }.
+eexists.
+unfold add_expr.
+eright. solve [repeat econstructor].
+eright. solve [repeat econstructor].
+eright. solve [repeat econstructor].
+eright. solve [repeat econstructor].
+eright. solve [repeat econstructor].
+eright. solve [repeat econstructor].
+eright. solve [repeat econstructor].
+eright. solve [repeat econstructor].
+eright. solve [repeat econstructor].
+eright. solve [repeat econstructor].
+eright. solve [repeat econstructor].
+eright. solve [repeat econstructor].
+eright. solve [repeat econstructor].
+eright. solve [repeat econstructor].
+eleft.
+Defined.
+
+
+Eval compute in proj1_sig add_1_2.
