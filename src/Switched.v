@@ -72,11 +72,11 @@ Inductive step (E : env) : expr -> expr -> Prop :=
     step E e e' ->
     Forall value vs ->
     step E (Close f (vs ++ [e] ++ es)) (Close f (vs ++ [e'] ++ es))
-| DerefConstrStep : forall tag args n a, 
-    nth_error args n = Some a -> 
+| DerefinateConstr : forall tag args n a,
+    nth_error args n = Some a ->
     step E (Deref (Constr tag args) n) a
-| DerefClosureStep : forall f args n a, 
-    nth_error args n = Some a -> 
+| DerefinateClosure : forall f args n a,
+    nth_error args n = Some a ->
     step E (Deref (Close f args) n) a
 .
 
