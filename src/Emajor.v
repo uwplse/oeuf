@@ -28,14 +28,14 @@ Inductive stmt : Type :=
 | Sskip
 | Scall (dst : ident) (f : expr) (a : expr)
 | SmakeConstr (dst : ident) (tag : int) (args : list expr)
-| Sswitch (targid : ident) (cases : list (Z * stmt)) (target : expr)
+| Sswitch (targid : ident) (ansid : ident) (cases : list (Z * stmt)) (target : expr)
 | SmakeClose (dst : ident) (f : function_name) (free : list expr)
 | Sseq (s1 : stmt) (s2 : stmt)
 .
 
 Record function : Type := mkfunction {
   fn_params: list ident; (* there will always be one param, but also could be closure args *)
-  (* fn_vars will always be nil *)
+  (* fn_vars will always be nil *) (* not sure about this *)
   fn_stackspace: Z;
   fn_body: stmt * expr
 }.
@@ -53,7 +53,7 @@ Definition env := PTree.t value.
 Inductive cont: Type :=
   | Kstop: cont                (**r stop program execution *)
   | Kseq: stmt -> cont -> cont          (**r execute stmt, then cont *)
-  | Kswitch : env -> cont -> cont  (**r env to return to when exiting switch *)
+  | Kswitch : ident -> env -> cont -> cont  (**r env to return to when exiting switch *)
   | Kcall: ident -> expr -> function -> env -> cont -> cont.
                                         (**r return to caller *)
 
@@ -94,7 +94,7 @@ Inductive eval_expr : expr -> value -> Prop :=
       eval_expr exp (Close fn l) ->
       nth_error l n = Some v ->
       eval_expr (Deref exp n) v
-| eval_dref_constr :
+| eval_deref_constr :
     forall n exp tag l v,
       eval_expr exp (Constr tag l) ->
       nth_error l n = Some v ->
@@ -112,7 +112,7 @@ End EVAL_EXPR.
 Fixpoint call_cont (k: cont) : cont :=
   match k with
   | Kseq s k => call_cont k
-  | Kswitch e k => call_cont k 
+  | Kswitch id e k => call_cont k 
   | _ => k
   end.
 
@@ -175,14 +175,15 @@ Inductive step : state -> trace -> state -> Prop :=
       eval_exprlist e l vargs ->
       step (State f (SmakeClose id fname l) exp k e)
         E0 (State f Sskip exp k (PTree.set id (Close fname vargs) e))
-  | step_switch: forall e target targid tag vargs cases s k exp f,
+  | step_switch: forall e target targid tag vargs cases s k exp f ansid,
       eval_expr e target (Constr tag vargs) -> (* eval match target *)
       find_case (Int.unsigned tag) cases = Some s -> (* find the right case *)
-      step (State f (Sswitch targid cases target) exp k e)
-        E0 (State f s exp (Kswitch e k) (PTree.set targid (Constr tag vargs) e))
-  | step_switch_cont: forall f exp k e e',
-      step (State f Sskip exp (Kswitch e k) e')
-        E0 (State f Sskip exp k e).
+      step (State f (Sswitch targid ansid cases target) exp k e)
+        E0 (State f s exp (Kswitch ansid e k) (PTree.set targid (Constr tag vargs) e))
+  | step_switch_cont: forall f exp k e e' ansid v,
+      eval_expr e' (Var ansid) v ->
+      step (State f Sskip exp (Kswitch ansid e k) e')
+        E0 (State f Sskip exp k (PTree.set ansid v e)).
 
 End RELSEM.
 

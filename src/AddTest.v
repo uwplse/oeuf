@@ -29,7 +29,13 @@ Require Import Cmajortominor.
 Require Import Emajor.
 
 (* test add *)
-Definition add_one_id : ident := 12%positive.
+(* first idents need to be function names *)
+Definition add_one_id : ident := 1%positive.
+Definition main_id : ident := 2%positive.
+
+(* rest of these are picked by hand *)
+(* could easily be auto generated *)
+(* and should be *)
 Definition arg : ident := 13%positive.
 Definition ans : ident := 15%positive.
 Definition tag_0 : Z := 0.
@@ -40,7 +46,7 @@ Definition tmp2 : ident := 18%positive.
 Definition main_tmp0 : ident := 19%positive.
 Definition main_tmp1 : ident := 20%positive.
 Definition main_tmp2 : ident := 21%positive.
-Definition main_id : ident := 22%positive.
+
 
 Definition rec_case : Emajor.stmt :=
   Emajor.Sseq 
@@ -53,12 +59,12 @@ Definition rec_case : Emajor.stmt :=
 Definition add_one_body : Emajor.stmt :=
   Emajor.Sseq
     (Emajor.SmakeClose add_one_id add_one_id nil)
-    (Emajor.Sswitch targid ((tag_0,Emajor.SmakeConstr ans (Int.repr tag_0) nil) ::
+    (Emajor.Sswitch targid ans ((tag_0,Emajor.SmakeConstr ans (Int.repr tag_0) nil) ::
                            (tag_S,rec_case)
                         ::nil) (Var arg)).
 
 Definition add_one_fn : Emajor.function :=
-  Emajor.mkfunction (add_one_id :: targid :: nil) 8%Z (add_one_body,Var targid).
+  Emajor.mkfunction (add_one_id :: arg :: nil) 8%Z (add_one_body,Var ans).
 
 
 Definition main_body : Emajor.stmt :=
@@ -70,7 +76,7 @@ Definition main_body : Emajor.stmt :=
                     (Emajor.Scall main_tmp2 (Var add_one_id) (Var main_tmp1)))).
 
 Definition main_fn : Emajor.function :=
-  Emajor.mkfunction (add_one_id :: main_tmp0 :: main_tmp1 :: main_tmp2 :: nil)
+  Emajor.mkfunction nil
                     16%Z (main_body,Var main_tmp2).
 
 Definition add_one_prog : Emajor.program :=
@@ -86,3 +92,123 @@ Definition asm := transf_cminor_program cm.
 (* Now we need to extract all of this *)
 (* in order to run it *)
 (* I'm not sure how to do that *)
+
+Definition i := initial_state add_one_prog.
+
+Ltac take_step :=
+  eapply star_step;
+  match goal with
+  | [ |- step _ _ _ _ ] => econstructor; eauto
+  | [ |- E0 = _ ** _ ] => replace E0 with (E0 ** E0) by (simpl; reflexivity);
+                            reflexivity
+  | [ |- eval_expr _ _ _ ] => solve [simpl; instantiate; econstructor; eauto; simpl; try reflexivity]
+  | [ |- eval_exprlist _ _ _ ] => solve [simpl; instantiate; econstructor; simpl; eauto; simpl; try reflexivity]
+  | [ |- _ ] => idtac
+  end.
+
+
+Lemma add_one_prog_step :
+  forall s,
+    i s ->
+    star step (Genv.globalenv add_one_prog) s E0
+     (Returnstate
+        (HighValues.Constr (Int.repr tag_S)
+           [HighValues.Constr (Int.repr tag_S)
+              [HighValues.Constr (Int.repr tag_0) []]]) Kstop).
+Proof.
+  intros.
+  unfold i in H.
+  inv H.
+
+  unfold add_one_prog in *. simpl in *.
+  subst ge. simpl in *.
+  unfold Genv.find_symbol in *.
+  unfold Genv.find_funct_ptr in *.
+  unfold Genv.globalenv in *.  
+  simpl in *.
+  inv H0. simpl in H1. inv H1.
+  clear H1.
+  take_step.
+  take_step.
+  take_step.
+  simpl. econstructor; eauto.
+  take_step.
+  take_step.
+  take_step.
+  simpl. econstructor.
+  take_step.
+  take_step.
+  take_step.
+  simpl. econstructor.
+  econstructor; eauto.
+  simpl. reflexivity.
+  econstructor; eauto.
+  take_step.
+  take_step.
+  econstructor; eauto. simpl. reflexivity.
+  econstructor; eauto. simpl. reflexivity.
+  unfold Genv.find_funct_ptr. simpl. reflexivity.
+  take_step.
+  take_step.
+  take_step.
+  simpl. econstructor; eauto.
+  take_step.
+  take_step.
+  econstructor; eauto. simpl. reflexivity.
+  simpl.
+  unfold tag_0. unfold tag_S.
+  rewrite Int.unsigned_repr.
+  simpl. reflexivity.
+  unfold Int.max_unsigned. simpl. omega.
+  take_step.
+  take_step. simpl.
+  simpl.
+  eapply eval_deref_constr.
+  econstructor; eauto. simpl. reflexivity.
+  simpl. reflexivity.
+  econstructor; eauto. simpl. reflexivity.
+  unfold Genv.find_funct_ptr. simpl. reflexivity.
+  take_step.
+  take_step.
+  take_step.
+  simpl. econstructor; eauto.
+  take_step.
+  take_step.
+  econstructor; eauto. simpl. reflexivity.
+  simpl.
+  rewrite Int.unsigned_repr.
+  simpl. reflexivity.
+  unfold tag_0. unfold Int.max_unsigned.
+  simpl. omega.
+  take_step.
+  simpl. econstructor.
+  eapply star_step.
+  eapply step_switch_cont.
+  econstructor; eauto. simpl. reflexivity.
+  Focus 2. simpl. reflexivity.
+  take_step.
+  simpl. auto.
+  unfold fn_params. Print add_one_fn.
+  simpl. unfold ans.
+  econstructor; eauto. simpl.
+  reflexivity.
+  take_step.
+  take_step.
+  take_step.
+  take_step.
+  simpl.
+  repeat (simpl; econstructor; eauto).
+  take_step.
+  take_step.
+  simpl.
+  repeat (simpl; econstructor; eauto).
+  eapply star_step.
+  eapply step_switch_cont.
+  simpl. econstructor; eauto. simpl. reflexivity.
+  take_step. simpl. auto.
+  econstructor; eauto. simpl. reflexivity.
+  take_step. take_step. simpl. auto.
+  econstructor; eauto. simpl. reflexivity.
+  eapply star_refl. reflexivity. reflexivity.
+  reflexivity. reflexivity.
+Qed.
