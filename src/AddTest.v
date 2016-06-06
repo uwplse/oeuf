@@ -59,7 +59,7 @@ Definition rec_case : Emajor.stmt :=
 Definition add_one_body : Emajor.stmt :=
   Emajor.Sseq
     (Emajor.SmakeClose add_one_id add_one_id nil)
-    (Emajor.Sswitch targid ans ((tag_0,Emajor.SmakeConstr ans (Int.repr tag_0) nil) ::
+    (Emajor.Sswitch targid ((tag_0,Emajor.SmakeConstr ans (Int.repr tag_0) nil) ::
                            (tag_S,rec_case)
                         ::nil) (Var arg)).
 
@@ -182,13 +182,9 @@ Proof.
   simpl. omega.
   take_step.
   simpl. econstructor.
-  eapply star_step.
-  eapply step_switch_cont.
-  econstructor; eauto. simpl. reflexivity.
-  Focus 2. simpl. reflexivity.
   take_step.
   simpl. auto.
-  unfold fn_params. Print add_one_fn.
+  unfold fn_params. 
   simpl. unfold ans.
   econstructor; eauto. simpl.
   reflexivity.
@@ -202,13 +198,9 @@ Proof.
   take_step.
   simpl.
   repeat (simpl; econstructor; eauto).
-  eapply star_step.
-  eapply step_switch_cont.
-  simpl. econstructor; eauto. simpl. reflexivity.
   take_step. simpl. auto.
   econstructor; eauto. simpl. reflexivity.
   take_step. take_step. simpl. auto.
   econstructor; eauto. simpl. reflexivity.
-  eapply star_refl. reflexivity. reflexivity.
-  reflexivity. reflexivity.
+  eapply star_refl. 
 Qed.

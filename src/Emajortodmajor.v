@@ -83,7 +83,7 @@ Fixpoint transf_stmt (s : Emajor.stmt) (fresh : ident) : (Dmajor.stmt * ident) :
     (s1' ; s2', fresh2')
   | Emajor.Scall id efun earg =>
     (Dmajor.Scall (Some id) EMsig (transf_expr efun) ((transf_expr earg) :: nil),fresh)
-  | Emajor.Sswitch targid ansid cases target => (* TODO: set ansid at end of each case *)
+  | Emajor.Sswitch targid cases target => 
     transf_cases targid cases O (transf_target targid target cases) fresh
   | Emajor.SmakeConstr id tag args =>
   (* In order to translate a constructor *)
