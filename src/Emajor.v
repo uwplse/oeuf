@@ -27,6 +27,7 @@ Inductive expr : Type :=
 Inductive stmt : Type :=
 | Sskip
 | Scall (dst : ident) (f : expr) (a : expr)
+| Sassign (dst : ident) (e : expr)
 | SmakeConstr (dst : ident) (tag : int) (args : list expr)
 | Sswitch (targid : ident) (cases : list (Z * stmt)) (target : expr)
 | SmakeClose (dst : ident) (f : function_name) (free : list expr)
@@ -143,6 +144,10 @@ Fixpoint find_case (tag : Z) (cases : list (Z * stmt)) : option stmt :=
   end.
 
 Inductive step : state -> trace -> state -> Prop :=
+  | step_assign: forall f lhs rhs exp k e v,
+      eval_expr e rhs v ->
+      step (State f (Sassign lhs rhs) exp k e)
+        E0 (State f Sskip exp k (PTree.set lhs v e))
   | step_skip_seq: forall f s k e exp,
       step (State f Sskip exp (Kseq s k) e)
         E0 (State f s exp k e)

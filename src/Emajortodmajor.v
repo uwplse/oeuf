@@ -32,7 +32,7 @@ Fixpoint transf_expr (e : Emajor.expr) : Dmajor.expr :=
 (* At lower levels, every function will take two pointers as arguments, the closure and the additional argument, and return one pointer *)
 (* Thus, the fn_sig parameter of the function is irrelevant *)
 (* we will always have exactly one signature *)
-Definition EMsig : signature := mksignature (Tint::Tint::nil) (Some Tint) (mkcallconv false false false).
+Definition EMsig : signature := mksignature (Tint::Tint::nil) (Some Tint) cc_default.
 
 
 Fixpoint make_cases (c : list (Z * Emajor.stmt)) (n : nat) : list (Z * nat) :=
@@ -77,6 +77,7 @@ Fixpoint transf_stmt (s : Emajor.stmt) (fresh : ident) : (Dmajor.stmt * ident) :
   in
   match s with
   | Emajor.Sskip => (Dmajor.Sskip,fresh)
+  | Emajor.Sassign lhs rhs => (Dmajor.Sassign lhs (transf_expr rhs), fresh)
   | Emajor.Sseq s1 s2 =>
     let (s1',fresh1') := transf_stmt s1 fresh in
     let (s2',fresh2') := transf_stmt s2 fresh1' in
@@ -108,34 +109,38 @@ Definition transf_fun_body (s : Emajor.stmt) (e : Emajor.expr) (fresh : ident) :
   let ret := Dmajor.Sreturn (Some (transf_expr e)) in
   (bod; ret, fresh').
 
-Definition transf_function (f : Emajor.function) (fresh : ident) : (Dmajor.function * ident) :=
+Definition transf_function (sig : signature) (f : Emajor.function) (fresh : ident) : (Dmajor.function * ident) :=
   let (s,e) := Emajor.fn_body f in
   let (ts,fresh') := transf_fun_body s e fresh in
   let ss := Emajor.fn_stackspace f in
   let params := Emajor.fn_params f in
-  (Dmajor.mkfunction EMsig params nil ss ts, fresh').
+  (Dmajor.mkfunction sig params nil ss ts, fresh').
 
-Definition transf_fundef (fd : Emajor.fundef) (fresh : ident) : (Dmajor.fundef * ident) :=
-  transf_function fd fresh.
+Definition transf_fundef (sig : signature) (fd : Emajor.fundef) (fresh : ident) : (Dmajor.fundef * ident) :=
+  transf_function sig fd fresh.
 
-Fixpoint transf_globdefs (gds : list (ident * globdef Emajor.fundef unit)) (fresh : ident) : (list (ident * globdef Dmajor.fundef unit)) * ident :=
+Fixpoint transf_globdefs (main_id : ident) (gds : list (ident * globdef Emajor.fundef unit)) (fresh : ident) : (list (ident * globdef Dmajor.fundef unit)) * ident :=
+  let fnsig id :=
+      if peq id main_id then mksignature [] (Some Tint) cc_default
+      else EMsig
+  in
   match gds with
   | nil => (nil,fresh)
   | (id,Gfun fd) :: fs =>
-    let (tfd,fresh') := transf_fundef fd fresh in
-    let (tfs,fresh'') := transf_globdefs fs fresh' in
+    let (tfd,fresh') := transf_fundef (fnsig id) fd fresh in
+    let (tfs,fresh'') := transf_globdefs main_id fs fresh' in
     ((id,Gfun tfd) :: tfs, fresh'')
   | (id,Gvar v) :: fs =>
-    let (tfs,fresh') := transf_globdefs fs fresh in
+    let (tfs,fresh') := transf_globdefs main_id fs fresh in
     ((id,Gvar v) :: tfs, fresh)
   end.
 
 (* TODO: write this *)
-Fixpoint next_id (p : Emajor.program) : ident := 100%positive.
+Fixpoint next_id (p : Emajor.program) : ident := 400%positive.
 
 Definition transf_prog (p : Emajor.program) : Dmajor.program :=
   let fresh := next_id p in
-  let (fds,fresh') := transf_globdefs (prog_defs p) fresh in
+  let (fds,fresh') := transf_globdefs (prog_main p) (prog_defs p) fresh in
   mkprogram fds (prog_public p) (prog_main p).
 
 Section PRESERVATION.
@@ -231,7 +236,7 @@ Inductive match_cont: Emajor.cont -> Dmajor.cont -> Prop :=
 | match_cont_call: forall id f sp e k f' e' k' m expr,
     (* expr is unconstrained, probably not right *)
     (* TODO: rewrite here when expr constraints figured out *)
-    (exists id id', transf_function f id = (f',id')) ->
+    (* (exists id id', transf_function f id = (f',id')) -> *)
     match_cont k k' ->
     env_inject e e' tge m ->
     match_cont (Emajor.Kcall id expr f e k) (Dmajor.Kcall (Some id) f' sp e' k').
@@ -240,14 +245,14 @@ Inductive match_cont: Emajor.cont -> Dmajor.cont -> Prop :=
 Inductive match_states: Emajor.state -> Dmajor.state -> Prop :=
 | match_state :
     forall f f' s s' expr k k' e e' sp m,
-      (exists id id', transf_function f id = (f',id')) ->
+      (* (exists id id', transf_function f id = (f',id')) -> *)
       (exists id id', transf_stmt s id = (s',id')) ->
       match_cont k k' ->
       env_inject e e' tge m ->
       match_states (Emajor.State f s expr k e) (Dmajor.State f' s' k' sp e' m)
 | match_callstate :
     forall fd fd' vals vals' m k k',
-      (exists id id', transf_fundef fd id = (fd',id')) ->
+      (* (exists id id', transf_fundef fd id = (fd',id')) -> *)
       list_forall2 (value_inject tge m) vals vals' ->
       match_cont k k' ->
       match_states (Emajor.Callstate fd vals k) (Dmajor.Callstate fd' vals' k' m)
