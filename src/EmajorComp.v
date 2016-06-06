@@ -109,4 +109,4 @@ Definition compile_prog (p : F.program) : option E.program :=
 End compile.
 
 
-Eval compute in compile_prog F.add_env.
+Eval compute in compile_prog F.compiled_add_prog.
