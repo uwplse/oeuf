@@ -83,7 +83,13 @@ Inductive step (E : env) : expr -> expr -> Prop :=
     step E (Deref (Close f args) n) a
 .
 
-Definition add_expr := Close 0 [].
+Fixpoint nat_reflect n : expr :=
+    match n with
+    | 0 => Constr 0 []
+    | S n => Constr 1 [nat_reflect n]
+    end.
+
+Definition add_expr := Call (Call (Close 0 []) (nat_reflect 1)) (nat_reflect 2).
 
 Definition add_env :=
        [Close 1 [Arg];
@@ -125,14 +131,7 @@ Inductive star (E : env) : expr -> expr -> Prop :=
         star E e' e'' ->
         star E e e''.
 
-Fixpoint nat_reflect n : expr :=
-    match n with
-    | 0 => Constr 0 []
-    | S n => Constr 1 [nat_reflect n]
-    end.
-
-Theorem add_1_2 : { x | star add_env
-        (Call (Call add_expr (nat_reflect 1)) (nat_reflect 2)) x }.
+Theorem add_1_2 : { x | star add_env add_expr x }.
 eexists.
 unfold add_expr.
 eright. solve [repeat econstructor].
@@ -156,8 +155,7 @@ Defined.
 Eval compute in proj1_sig add_1_2.
 
 
-Theorem add2_1_2 : { x | star add_env2
-        (Call (Call add_expr (nat_reflect 1)) (nat_reflect 2)) x }.
+Theorem add2_1_2 : { x | star add_env2 add_expr x }.
 Proof.
 eexists.
 unfold add_expr.

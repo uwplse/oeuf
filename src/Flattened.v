@@ -199,3 +199,75 @@ Defined.
 
 
 Eval compute in proj1_sig add_1_2.
+
+
+Definition compiled_add_prog :=
+([(Seq (Seq Skip Skip) (MakeClose 0 1 [Arg]), Temp 0);
+        (Seq
+           (Seq
+              (Seq
+                 (Seq (Seq Skip (MakeClose 1 8 []))
+                    (Seq
+                       (Seq (Seq Skip (Seq Skip Skip))
+                          (MakeClose 2 2 [Arg; Deref Self 0]))
+                       (Call 3 (Temp 1) (Temp 2))))
+                 (Seq
+                    (Seq (Seq Skip (Seq Skip Skip))
+                       (MakeClose 4 3 [Arg; Deref Self 0]))
+                    (Call 5 (Temp 3) (Temp 4))))
+              (Seq Skip (Call 6 (Temp 5) (Deref Self 0))))
+           (Seq Skip (Call 7 (Temp 6) Arg)), Temp 7); (Skip, Arg);
+        (Seq (Seq Skip (Seq Skip (Seq Skip Skip)))
+           (MakeClose 8 4 [Arg; Deref Self 0; Deref Self 1]),
+        Temp 8);
+        (Seq (Seq Skip (Seq Skip (Seq Skip (Seq Skip Skip))))
+           (MakeClose 9 5 [Arg; Deref Self 0; Deref Self 1; Deref Self 2]),
+        Temp 9);
+        (Seq Skip
+           (Seq (Seq (Seq Skip Skip) (MakeConstr 10 1 [Arg]))
+              (Call 11 (Deref Self 0) (Temp 10))), Temp 11);
+        (Seq Skip
+           (Switch
+              [Seq Skip (Assign 16 (Deref Self 1));
+              Seq
+                (Seq
+                   (Seq Skip
+                      (Seq Skip (Call 12 (Deref Self 0) (Deref Arg 0))))
+                   (Seq
+                      (Seq
+                         (Seq (Seq Skip (Seq Skip Skip))
+                            (MakeClose 13 6 [Deref Self 0; Deref Self 1]))
+                         (Seq Skip (Call 14 (Temp 13) (Deref Arg 0))))
+                      (Call 15 (Temp 12) (Temp 14)))) (Assign 16 (Temp 15))] Arg),
+        Temp 16);
+        (Seq (Seq Skip (Seq Skip Skip))
+           (MakeClose 17 6 [Arg; Deref Self 0]), Temp 17);
+        (Seq (Seq Skip Skip) (MakeClose 18 7 [Arg]), Temp 18);
+        (Seq
+           (Seq (Seq Skip (MakeClose 19 0 []))
+              (Seq
+                 (Seq (Seq (Seq Skip (MakeConstr 20 0 [])) Skip)
+                    (MakeConstr 21 1 [Temp 20])) (Call 22 (Temp 19) (Temp 21))))
+           (Seq
+              (Seq
+                 (Seq
+                    (Seq (Seq (Seq Skip (MakeConstr 23 0 [])) Skip)
+                       (MakeConstr 24 1 [Temp 23])) Skip) (MakeConstr 25 1 [Temp 24]))
+              (Call 26 (Temp 22) (Temp 25))), Temp 26)], 9)%nat.
+
+Theorem compiled_add_1_2 :
+  let (env, main_name) := compiled_add_prog in
+  match nth_error env main_name with None => False
+  | Some (main_body, main_ret) =>
+  { x | star env
+             (initial_state main_name main_body main_ret)
+             x}
+  end.
+eexists.
+
+repeat (eright; [solve [repeat econstructor] |]).
+compute.
+eleft.
+Defined.
+
+Eval compute in proj1_sig compiled_add_1_2.
