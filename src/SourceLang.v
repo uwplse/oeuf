@@ -303,6 +303,10 @@ Section tests.
 
   Example fib_reflect_correct : forall l h, expr_denote(l := l) fib_reflect h = fib.
   Proof. reflexivity. Qed.
+
+  Definition add_1_2 : expr [] _ := 
+    App (App add_reflect (ltac:(let x := constr:(1%nat) in reflect x)))
+        (ltac:(let x := constr:(2%nat) in reflect x)).
 End tests.
 
 Fixpoint lift' {l ty ty'} n (e : expr l ty) {struct e} : expr (insert ty' l n) ty :=
