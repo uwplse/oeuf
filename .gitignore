@@ -5,3 +5,9 @@
 *.v.d
 _CoqProject
 Makefile.coq
+
+src/*.cmi
+src/*.cmo
+src/*.cmx
+src/*.o
+/ccomp
