@@ -30,6 +30,7 @@ Inductive expr :=
 
 Inductive stmt :=
 | Skip
+| Assign (dst : nat) (e : expr)
 | Call (dst : nat) (f : expr) (a : expr)
 | MakeConstr (dst : nat) (tag : nat) (args : list expr)
 | Switch (cases : list stmt) (target : expr)
@@ -71,8 +72,8 @@ Definition set_tmp_env (n : nat) (v : value) : env :=
 
 
 Inductive eval_expr : expr -> value -> Prop :=
-| eval_arg : eval_expr Arg (arg e)
-| eval_self : eval_expr Self (self e)
+| eval_arg : forall v, arg e = v -> eval_expr Arg v
+| eval_self : forall v, self e = v -> eval_expr Self v
 | eval_temp : forall n v, lookup_tmp n = Some v -> 
                      eval_expr (Temp n) v
 | eval_deref_close :
@@ -102,6 +103,9 @@ Section RELSEM.
 Variable ge: genv.
 
 Inductive step : state -> state -> Prop :=
+| step_assign : forall E dst e v k, 
+    eval_expr E e v -> 
+    step (E, Assign dst e, k) (set_tmp_env E dst v, Skip, k)
 | step_call : forall dst f a fn free arg E k body ret, 
     eval_expr E f (Close fn free) -> 
     eval_expr E a arg -> 
@@ -134,3 +138,64 @@ Definition initial_state
 
 End RELSEM.
 
+Definition add_name : nat := 0.
+
+Definition main_body : stmt := 
+ Seq (MakeConstr 0 0 []) (
+  Seq (MakeConstr 1 1 [Temp 0]) (
+  Seq (MakeConstr 2 1 [Temp 1]) (
+  Seq (MakeClose 3 add_name []) (
+  Seq (Call 3 (Temp 3) (Temp 1)) (
+      (Call 3 (Temp 3) (Temp 2)))))))%nat.
+Definition main_ret : expr := Temp 3%nat.
+
+Definition main_name : nat := 9.
+
+Definition add_env := 
+       [(MakeClose 0 1 [Arg], Temp 0); 
+        (Seq (MakeClose 0 8 []) (
+         Seq (MakeClose 1 2 [Arg; Deref Self 0]) (
+         Seq (MakeClose 2 3 [Arg; Deref Self 0]) (
+         Seq (Call 0 (Temp 0) (Temp 1)) (
+         Seq (Call 0 (Temp 0) (Temp 2)) (
+         Seq (Call 0 (Temp 0) (Deref Self 0)) (
+             (Call 0 (Temp 0) Arg))))))), Temp 0);
+       (Skip, Arg);
+       (MakeClose 0 4 [Arg; Deref Self 0; Deref Self 1], Temp 0); 
+       (MakeClose 0 5 [Arg; Deref Self 0; Deref Self 1; Deref Self 2], Temp 0); 
+       (Seq (MakeConstr 0 1 [Arg]) (Call 0 (Deref Self 0) (Temp 0)), Temp 0);
+       (Switch [Assign 0 (Deref Self 1);
+                Seq (MakeClose 1 6 [Deref Self 0; Deref Self 1]) (
+                Seq (Call 0 (Deref Self 0) (Deref Arg 0)) (
+                Seq (Call 1 (Temp 1) (Deref Arg 0)) (
+                    (Call 0 (Temp 0) (Temp 1)))))
+               ] Arg, Temp 0);
+       (MakeClose 0 6 [Arg; Deref Self 0], Temp 0); 
+       (MakeClose 0 7 [Arg], Temp 0); 
+       (main_body, main_ret)
+       ]%nat.
+
+Inductive star (ge : genv) : state -> state -> Prop :=
+| StarNil : forall e, star ge e e
+| StarCons : forall e e' e'',
+        step ge e e' ->
+        star ge e' e'' ->
+        star ge e e''.
+
+Fixpoint nat_reflect n : value :=
+    match n with
+    | 0 => Constr 0 []
+    | S n => Constr 1 [nat_reflect n]
+    end%nat.
+
+Theorem add_1_2 : { x | star add_env
+                             (initial_state main_name main_body main_ret)
+                             x}.
+eexists.
+
+repeat (eright; [solve [repeat econstructor] |]).
+eleft.
+Defined.
+
+
+Eval compute in proj1_sig add_1_2.
