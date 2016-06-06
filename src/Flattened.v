@@ -138,6 +138,8 @@ Definition initial_state
 
 End RELSEM.
 
+Definition program : Type := list (stmt * expr) * nat (* name of main *) .
+
 Definition add_name : nat := 0.
 
 Definition main_body : stmt := 

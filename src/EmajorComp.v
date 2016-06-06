@@ -99,10 +99,11 @@ Fixpoint numbered_pos {A} n (xs : list A) :=
     | x :: xs => (n, x) :: numbered_pos (Pos.succ n) xs
     end.
 
-Definition compile_prog (g : F.genv) : option E.program :=
+Definition compile_prog (p : F.program) : option E.program :=
+  let (g, main_id) := p in
     compile_gdefs g >>= fun g' =>
     let g'' := numbered_pos 1%positive g' in
-    Some (AST.mkprogram g'' (map fst g'') 1%positive).
+    Some (AST.mkprogram g'' (map fst g'') (conv_fn main_id)).
 
 
 End compile.
