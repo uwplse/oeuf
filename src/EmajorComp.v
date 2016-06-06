@@ -70,7 +70,7 @@ Fixpoint compile_stmt (s : F.stmt) : option E.stmt :=
         Some (E.SmakeClose (conv_dest dst) (conv_fn fn) (compile_expr_list free))
     | F.Seq s1 s2 =>
         E.Sseq <$> compile_stmt s1 <*> compile_stmt s2
-    | F.Assign dst e => None
+    | F.Assign dst e => Some (E.Sassign (conv_dest dst) (compile_expr e))
     end.
 
 Fixpoint compile_stmt_list ss : option (list E.stmt) :=
@@ -108,4 +108,4 @@ Definition compile_prog (g : F.genv) : option E.program :=
 End compile.
 
 
-
+Eval compute in compile_prog F.add_env.

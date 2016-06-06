@@ -35,9 +35,14 @@ int read_nat(union nat* n) {
     return i;
 }
 
+// union nat* add(union nat* a, union nat* b);
+
 int main() {
     union nat* one = make_nat(1);
     union nat* two = make_nat(2);
+
+    // union nat* result = add(one, two);
+    // printf("%d + %d = %d\n", read_nat(one), read_nat(two), read_nat(result));
 
     printf("%d + %d = %d\n", read_nat(one), read_nat(two), 999);
 
