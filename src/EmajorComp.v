@@ -82,7 +82,7 @@ Fixpoint compile_stmt_list ss : option (list E.stmt) :=
 Definition compile_func (f : F.func_def) : option E.function :=
     let '(body, ret) := f in
     compile_stmt body >>= fun body' =>
-    Some (E.mkfunction [1%positive] 0%Z (body', compile_expr ret)).
+    Some (E.mkfunction [2%positive; 1%positive] 0%Z (body', compile_expr ret)).
 
 Definition compile_gdef (f : F.func_def) : option (AST.globdef E.fundef unit) :=
     compile_func f >>= fun f' =>
