@@ -37,6 +37,7 @@ Inductive stmt : Type :=
 Record function : Type := mkfunction {
   fn_params: list ident; (* there will always be one param, but also could be closure args *)
   (* fn_vars will always be nil *) (* not sure about this *)
+  fn_sig : signature;
   fn_stackspace: Z;
   fn_body: stmt * expr
 }.

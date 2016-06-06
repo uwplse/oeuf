@@ -42,7 +42,7 @@ Fixpoint make_cases (c : list (Z * Emajor.stmt)) (n : nat) : list (Z * nat) :=
   end.
 
 Definition transf_target (targid : ident) (target : Emajor.expr) (cases : list (Z * Emajor.stmt)) : Dmajor.stmt :=
-  let e := transf_expr target in
+  let e := load (transf_expr target) in
   let len := length cases in
   (Dmajor.Sassign targid e) ;
     (Dmajor.Sswitch false e (make_cases cases len) len).
@@ -56,16 +56,16 @@ Fixpoint store_args (id : ident) (l : list Emajor.expr) (z : Z) : Dmajor.stmt :=
   end.
 
 (* Hand roll a fresh ident monad *)
-Fixpoint transf_stmt (s : Emajor.stmt) (fresh : ident) : (Dmajor.stmt * ident) :=
+Fixpoint transf_stmt (s : Emajor.stmt) : Dmajor.stmt :=
   let
-    fix transf_cases (targid : ident) (cases : list (Z * Emajor.stmt)) (n : nat) (bottom : Dmajor.stmt) (fsh : ident) : Dmajor.stmt * ident :=
+    fix transf_cases (targid : ident) (cases : list (Z * Emajor.stmt)) (n : nat) (bottom : Dmajor.stmt) : Dmajor.stmt :=
     match cases with
-    | nil => (bottom,fsh)
+    | nil => bottom
     | (tag,s) :: cases' =>
-      let (s',fresh') := transf_stmt s fsh in (* what to do in this case *)
-      let (rest,fresh'') := transf_cases targid cases' (S n) bottom fresh' in
+      let s' := transf_stmt s in (* what to do in this case *)
+      let rest := transf_cases targid cases' (S n) bottom in
       (* the rest of the cases *)
-      (Dmajor.Sblock (rest ; (s'; Dmajor.Sexit n)), fresh'')
+      Dmajor.Sblock (rest ; (s'; Dmajor.Sexit n))
         (*
           First enter n blocks
           next execute bottom, which is dmajor switch stmt
@@ -76,72 +76,63 @@ Fixpoint transf_stmt (s : Emajor.stmt) (fresh : ident) : (Dmajor.stmt * ident) :
     end
   in
   match s with
-  | Emajor.Sskip => (Dmajor.Sskip,fresh)
-  | Emajor.Sassign lhs rhs => (Dmajor.Sassign lhs (transf_expr rhs), fresh)
+  | Emajor.Sskip => Dmajor.Sskip
+  | Emajor.Sassign lhs rhs => Dmajor.Sassign lhs (transf_expr rhs)
   | Emajor.Sseq s1 s2 =>
-    let (s1',fresh1') := transf_stmt s1 fresh in
-    let (s2',fresh2') := transf_stmt s2 fresh1' in
-    (s1' ; s2', fresh2')
+    let s1' := transf_stmt s1 in
+    let s2' := transf_stmt s2 in
+    s1' ; s2'
   | Emajor.Scall id efun earg =>
-    (Dmajor.Scall (Some id) EMsig (transf_expr efun) ((transf_expr earg) :: nil),fresh)
+    Dmajor.Scall (Some id) EMsig (load (transf_expr efun)) (((transf_expr efun)) :: (transf_expr earg) :: nil)
   | Emajor.Sswitch targid cases target => 
-    transf_cases targid cases O (transf_target targid target cases) fresh
+    transf_cases targid cases O (transf_target targid target cases) 
   | Emajor.SmakeConstr id tag args =>
   (* In order to translate a constructor *)
     (* First we allocate enough space *)
     let sz := (4 + 4 * (Z.of_nat (length args)))%Z in
-    (alloc fresh sz;
+    alloc id sz;
   (* then we store each in turn: the tag, and the arguments *)
-     store (var fresh) (Econst (Ointconst tag));
-     store_args fresh args 4%Z,
-       Pos.succ fresh)
+     store (var id) (Econst (Ointconst tag));
+     store_args id args 4%Z
   | Emajor.SmakeClose id fname args =>
     let sz := (4 + 4 * (Z.of_nat (length args)))%Z in
-    (alloc fresh sz;
-     store (var fresh) (Econst (Oaddrsymbol fname Int.zero));
-     store_args fresh args 4%Z,
-       Pos.succ fresh)
+    alloc id sz;
+      store (var id) (Econst (Oaddrsymbol fname Int.zero));
+     store_args id args 4%Z
   end.
 
 
-Definition transf_fun_body (s : Emajor.stmt) (e : Emajor.expr) (fresh : ident) : (Dmajor.stmt * ident) :=
-  let (bod,fresh') := transf_stmt s fresh in
+Definition transf_fun_body (s : Emajor.stmt) (e : Emajor.expr) : Dmajor.stmt :=
+  let bod := transf_stmt s in
   let ret := Dmajor.Sreturn (Some (transf_expr e)) in
-  (bod; ret, fresh').
+  bod; ret.
 
-Definition transf_function (sig : signature) (f : Emajor.function) (fresh : ident) : (Dmajor.function * ident) :=
+Definition transf_function (f : Emajor.function) : Dmajor.function :=
   let (s,e) := Emajor.fn_body f in
-  let (ts,fresh') := transf_fun_body s e fresh in
+  let ts := transf_fun_body s e in
   let ss := Emajor.fn_stackspace f in
   let params := Emajor.fn_params f in
-  (Dmajor.mkfunction sig params nil ss ts, fresh').
+  let sig := Emajor.fn_sig f in
+  Dmajor.mkfunction sig params nil ss ts.
 
-Definition transf_fundef (sig : signature) (fd : Emajor.fundef) (fresh : ident) : (Dmajor.fundef * ident) :=
-  transf_function sig fd fresh.
+Definition transf_fundef (fd : Emajor.fundef) : Dmajor.fundef :=
+  transf_function fd.
 
-Fixpoint transf_globdefs (main_id : ident) (gds : list (ident * globdef Emajor.fundef unit)) (fresh : ident) : (list (ident * globdef Dmajor.fundef unit)) * ident :=
-  let fnsig id :=
-      if peq id main_id then mksignature [] (Some Tint) cc_default
-      else EMsig
-  in
-  match gds with
-  | nil => (nil,fresh)
-  | (id,Gfun fd) :: fs =>
-    let (tfd,fresh') := transf_fundef (fnsig id) fd fresh in
-    let (tfs,fresh'') := transf_globdefs main_id fs fresh' in
-    ((id,Gfun tfd) :: tfs, fresh'')
-  | (id,Gvar v) :: fs =>
-    let (tfs,fresh') := transf_globdefs main_id fs fresh in
-    ((id,Gvar v) :: tfs, fresh)
-  end.
+(* Fixpoint transf_globdefs (main_id : ident) (gds : list (ident * globdef Emajor.fundef unit)) : (list (ident * globdef Dmajor.fundef unit)) := *)
+(*   match gds with *)
+(*   | nil => nil *)
+(*   | (id,Gfun fd) :: fs => *)
+(*     let tfd := transf_fundef (fnsig id) fd in *)
+(*     let tfs := transf_globdefs main_id fs in *)
+(*     (id,Gfun tfd) :: tfs *)
+(*   | (id,Gvar v) :: fs => *)
+(*     let tfs := transf_globdefs main_id fs in *)
+(*     (id,Gvar v) :: tfs *)
+(*   end. *)
 
-(* TODO: write this *)
-Fixpoint next_id (p : Emajor.program) : ident := 400%positive.
 
 Definition transf_prog (p : Emajor.program) : Dmajor.program :=
-  let fresh := next_id p in
-  let (fds,fresh') := transf_globdefs (prog_main p) (prog_defs p) fresh in
-  mkprogram fds (prog_public p) (prog_main p).
+  AST.transform_program transf_fundef p.
 
 Section PRESERVATION.
 
@@ -230,7 +221,7 @@ Inductive match_cont: Emajor.cont -> Dmajor.cont -> Prop :=
 (*       match_cont k k' -> *)
 (*       match_cont (Emajor.Kblock k) (Dmajor.Kblock k') *)
 | match_cont_seq: forall s s' k k',
-    (exists id id', transf_stmt s id = (s',id')) ->
+    transf_stmt s = s' ->
     match_cont k k' ->
     match_cont (Emajor.Kseq s k) (Dmajor.Kseq s' k')
 | match_cont_call: forall id f sp e k f' e' k' m expr,
@@ -245,14 +236,14 @@ Inductive match_cont: Emajor.cont -> Dmajor.cont -> Prop :=
 Inductive match_states: Emajor.state -> Dmajor.state -> Prop :=
 | match_state :
     forall f f' s s' expr k k' e e' sp m,
-      (* (exists id id', transf_function f id = (f',id')) -> *)
-      (exists id id', transf_stmt s id = (s',id')) ->
+      transf_function f = f' ->
+      transf_stmt s = s' ->
       match_cont k k' ->
       env_inject e e' tge m ->
       match_states (Emajor.State f s expr k e) (Dmajor.State f' s' k' sp e' m)
 | match_callstate :
     forall fd fd' vals vals' m k k',
-      (* (exists id id', transf_fundef fd id = (fd',id')) -> *)
+      transf_fundef fd = fd' ->
       list_forall2 (value_inject tge m) vals vals' ->
       match_cont k k' ->
       match_states (Emajor.Callstate fd vals k) (Dmajor.Callstate fd' vals' k' m)

@@ -205,10 +205,10 @@ Inductive step: state -> trace -> state -> Prop :=
       Mem.storev chunk m vaddr v = Some m' ->
       step (State f (Sstore chunk addr a) k sp e m)
         E0 (State f Sskip k sp e m')
-  | step_call: forall f optid sig a bl k sp e m vf vargs fd,
-      eval_expr e m sp a vf ->
+  | step_call: forall f optid sig a bl k sp e m vfp vargs fd,
+      eval_expr e m sp a vfp ->
       eval_exprlist e m sp bl vargs ->
-      Genv.find_funct ge vf = Some fd ->
+      Genv.find_funct ge vfp = Some fd ->
       funsig fd = sig ->
       step (State f (Scall optid sig a bl) k sp e m)
         E0 (Callstate fd vargs (Kcall optid f sp e k) m)
