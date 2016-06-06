@@ -93,16 +93,6 @@ Fixpoint generate_cases' (n : nat) (l : list T.rec_info) (n_upvars : nat) (rec :
 Definition generate_cases (l : list T.rec_info) (rec : S.function_name) : list S.expr :=
   generate_cases' (pred (length l)) l (length l) rec.
 
-
-Definition wrap' (n_upvars : nat) (f : S.function_name) : compiler_monad nat :=
-  record (S.Close f (S.Arg :: all_upvars n_upvars)).
-
-Fixpoint wrap (n n_upvars : nat) (f : S.function_name) : compiler_monad nat :=
-  match n with
-  | 0 => ret_state f
-  | S n' => wrap' n_upvars f >>= wrap n' (pred n_upvars)
-  end.
-
 (* For convenience, don't change the names of any existing functions during translation. *)
 Definition compile (e : T.expr) : compiler_monad S.expr :=
   let fix go (e : T.expr) : compiler_monad S.expr :=
@@ -127,10 +117,9 @@ Definition compile (e : T.expr) : compiler_monad S.expr :=
         let body := S.Switch (generate_cases (map snd cases) f) S.Arg in
         update f body >>= fun _ =>
         let n_args := length cases in
-        wrap n_args (pred n_args) f >>= fun f' =>
         go_pair_list cases >>= fun cases' =>
         go target >>= fun target' =>
-        ret_state (call_all (S.Close f' []) (cases' ++ [target']))
+        ret_state (S.Call (S.Close f cases') target')
       | T.Close f args => S.Close f <$> go_list args
       end
   in go e.

@@ -43,8 +43,8 @@ Definition subst (arg : expr) (vals : list expr) (e : expr) : option expr :=
     go e.
 End subst.
 
-Inductive step (E : env) : expr -> expr -> Prop := 
-| MakeCall : forall f a free e e', 
+Inductive step (E : env) : expr -> expr -> Prop :=
+| MakeCall : forall f a free e e',
     value a ->
     Forall value free ->
     nth_error E f = Some e ->
@@ -85,12 +85,12 @@ Inductive step (E : env) : expr -> expr -> Prop :=
 
 Definition add_expr := Close 0 [].
 
-Definition add_env := 
+Definition add_env :=
        [Close 1 [Arg];
        Call
          (Call
             (Call (Call (Close 8 []) (Close 2 [Arg; UpVar 0]))
-               (Close 3 [Arg; UpVar 0])) (UpVar 0)) Arg; 
+               (Close 3 [Arg; UpVar 0])) (UpVar 0)) Arg;
        Arg;
        Close 4 [Arg; UpVar 0; UpVar 1];
        Close 5 [Arg; UpVar 0; UpVar 1; UpVar 2];
@@ -101,6 +101,22 @@ Definition add_env :=
            (Call (Close 6 [UpVar 0; UpVar 1]) (Deref Arg 0))] Arg;
        Close 6 [Arg; UpVar 0]; Close 7 [Arg]].
 Definition add_prog := (add_expr, add_env).
+
+
+Definition add_env2 :=
+  [Close 1 [Arg];
+     Call
+       (Call (Close 6 [Close 3 [Arg; UpVar 0]; Close 2 [Arg; UpVar 0]])
+             (UpVar 0)) Arg;
+     Arg;
+     Close 4 [Arg; UpVar 0; UpVar 1];
+     Close 5 [Arg; UpVar 0; UpVar 1; UpVar 2];
+     Call (UpVar 0) (Constr 1 [Arg]);
+     Switch
+       [UpVar 1;
+          Call (Call (UpVar 0) (Deref Arg 0))
+               (Call (Close 6 [UpVar 0; UpVar 1]) (Deref Arg 0))] Arg].
+Definition add_prog2 := (add_expr, add_env).
 
 Inductive star (E : env) : expr -> expr -> Prop :=
 | StarNil : forall e, star E e e
@@ -138,3 +154,26 @@ Defined.
 
 
 Eval compute in proj1_sig add_1_2.
+
+
+Theorem add2_1_2 : { x | star add_env2
+        (Call (Call add_expr (nat_reflect 1)) (nat_reflect 2)) x }.
+Proof.
+eexists.
+unfold add_expr.
+eright. solve [repeat econstructor].
+eright. solve [repeat econstructor].
+eright. solve [repeat econstructor].
+eright. solve [repeat econstructor].
+eright. solve [repeat econstructor].
+eright. solve [repeat econstructor].
+eright. solve [repeat econstructor].
+eright. solve [repeat econstructor].
+eright. solve [repeat econstructor].
+eright. solve [repeat econstructor].
+eright. solve [repeat econstructor].
+eright. solve [repeat econstructor].
+eleft.
+Defined.
+
+Eval compute in proj1_sig add2_1_2.
