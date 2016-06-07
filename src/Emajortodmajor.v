@@ -107,13 +107,58 @@ Definition transf_fun_body (s : Emajor.stmt) (e : Emajor.expr) : Dmajor.stmt :=
   let ret := Dmajor.Sreturn (Some (transf_expr e)) in
   bod; ret.
 
+Section collect_locals.
+
+Require Import Monads.
+Open Scope state_monad.
+
+Definition record_local (i : ident) (ls : list ident) : unit * list ident :=
+    if (existsb (fun x => if ident_eq x i then true else false) ls) then
+        (tt, ls)
+    else
+        (tt, i :: ls).
+
+(*
+Transparent peq.
+Eval compute in (record_local 1 (2 :: 3 :: nil))%positive.
+Eval compute in (record_local 1 (1 :: 3 :: nil))%positive.
+Opaque peq.
+*)
+
+Fixpoint walk_stmt (s : Emajor.stmt) : state (list ident) unit :=
+    let fix go_cases cs :=
+        match cs with
+        | [] => ret_state tt
+        | (_, s) :: cs =>
+                walk_stmt s >>= fun _ =>
+                go_cases cs >>= fun _ =>
+                ret_state tt
+        end in
+    match s with
+    | Emajor.Sskip => ret_state tt
+    | Emajor.Scall x _ _ => record_local x
+    | Emajor.Sassign x _ => record_local x
+    | Emajor.SmakeConstr x _ _ => record_local x
+    | Emajor.Sswitch _ cases _ => go_cases cases
+    | Emajor.SmakeClose x _ _ => record_local x
+    | Emajor.Sseq s1 s2 =>
+            walk_stmt s1 >>= fun _ =>
+            walk_stmt s2 >>= fun _ =>
+            ret_state tt
+    end.
+
+Definition collect_locals (s : Emajor.stmt) : list ident :=
+    snd (walk_stmt s []).
+
+End collect_locals.
+
 Definition transf_function (f : Emajor.function) : Dmajor.function :=
   let (s,e) := Emajor.fn_body f in
   let ts := transf_fun_body s e in
   let ss := Emajor.fn_stackspace f in
   let params := Emajor.fn_params f in
   let sig := Emajor.fn_sig f in
-  Dmajor.mkfunction sig params nil ss ts.
+  Dmajor.mkfunction sig params (collect_locals s) ss ts.
 
 Definition transf_fundef (fd : Emajor.fundef) : Dmajor.fundef :=
   transf_function fd.
