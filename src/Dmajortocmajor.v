@@ -62,7 +62,7 @@ Definition add_malloc_prog (id : ident) (prog : Cmajor.program) : Cmajor.program
 
 Definition transf_prog (prog : Dmajor.program) : Cmajor.program :=
   (* first make an id for malloc *)
-  let malloc_id := Pos.of_nat (length (prog_defs prog)) in
+  let malloc_id := 5013%positive(* Pos.of_nat (length (prog_defs prog))*) in
   add_malloc_prog malloc_id (AST.transform_program (transf_fundef malloc_id) prog).
 
 (*
