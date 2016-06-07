@@ -14,3 +14,5 @@ src/*.o
 /ccomp
 /extraction/*.ml
 /extraction/*.mli
+/extraction/*.cm*
+/extraction/*.o
