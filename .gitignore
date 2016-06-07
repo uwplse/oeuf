@@ -5,6 +5,7 @@
 *.v.d
 _CoqProject
 Makefile.coq
+/.depend.extr
 
 src/*.cmi
 src/*.cmo

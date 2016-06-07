@@ -1,9 +1,9 @@
+-I extraction
 -I compcert/backend
 -I compcert/cfrontend
 -I compcert/common
 -I compcert/cparser
 -I compcert/debug
 -I compcert/driver
--I compcert/extraction
 -I compcert/ia32
 -I compcert/lib

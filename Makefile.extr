@@ -1,0 +1,35 @@
+
+ARCH = ia32
+
+OCAMLC = ocamlc -I extraction -I /usr/lib/ocaml/menhirLib
+OCAMLOPT = ocamlopt -I extraction -I /usr/lib/ocaml/menhirLib
+OCAMLDEP = ocamldep -I extraction \
+	-I compcert/backend \
+	-I compcert/cfrontend \
+	-I compcert/common \
+	-I compcert/cparser \
+	-I compcert/debug \
+	-I compcert/driver \
+	-I compcert/ia32 \
+	-I compcert/lib
+
+%.cmi:
+	$(OCAMLC) -o $@ -c `find src extraction compcert -name $$(basename "$@" .cmi).mli | head -n 1`
+%.cmo:
+	$(OCAMLC) -o $@ -c `find src extraction compcert -name $$(basename "$@" .cmo).ml | head -n 1`
+%.cmx:
+	$(OCAMLOPT) -o $@ -c `find src extraction compcert -name $$(basename "$@" .cmx).ml | head -n 1`
+
+DIRS= \
+  lib common $(ARCH) backend cfrontend cparser driver \
+  exportclight debug
+
+depend:
+	$(OCAMLDEP) \
+		$(foreach d,$(DIRS),$(wildcard compcert/$(d)/*.mli compcert/$(d)/*.ml)) \
+		$(wildcard extraction/*.mli extraction/*.ml) \
+		src/OeufDriver.ml \
+		| sed -e 's:[a-zA-Z0-9/]*/:extraction/:g' >.depend.extr \
+		|| { rm -f .depend.extr; exit 2; }
+
+-include .depend.extr

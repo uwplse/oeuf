@@ -8,3 +8,7 @@ CANARIES=("compcert.backend.RTL" "Oeuf requires compcert to be built first.")
 EXTRA=()
 
 source ./coqproject.sh
+
+# TODO fix this
+# Note: must be -R, -Q doesn't work (don't know why)
+sed -i -e '/-Q compcert/a-R compcert/ia32 compcert.ia32' _CoqProject

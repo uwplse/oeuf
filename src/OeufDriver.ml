@@ -16,6 +16,10 @@ open Camlcoq
 open Clflags
 open Timing
 
+open Oeuf
+open SourceLang
+open Utopia
+
 (* Location of the compatibility library *)
 
 let stdlib_path = ref Configuration.stdlib_path
@@ -669,6 +673,38 @@ let cmdline_actions =
       push_action process_h_file s; incr num_source_files; incr num_input_files);
   ]
 
+let compile_oeuf ofile debug =
+  (* Convert to Asm *)
+  let add_ty = SourceLang.Arrow (SourceLang.ADT Utopia.Tnat,
+               SourceLang.Arrow (SourceLang.ADT Utopia.Tnat,
+                                 SourceLang.ADT Utopia.Tnat)) in
+  let asm =
+    match Compiler.apply_partial
+               (Oeuf.transf_to_asm add_ty (SourceLang.add_reflect []))
+               Asmexpand.expand_program with
+    | Errors.OK asm ->
+        asm
+    | Errors.Error msg ->
+        eprintf "it's busted\n";
+        eprintf "oeuf.in: %a" print_error msg;
+        exit 2 in
+  (* Dump Asm in binary and JSON format *)
+  if !option_sdump then
+      dump_jasm asm "oeuf.in" (output_filename "oeuf.in" ".c" !sdump_suffix);
+  (* Print Asm in text form *)
+  let oc = open_out ofile in
+  PrintAsm.print_program oc asm debug;
+  close_out oc
+
+let process_oeuf () =
+  let asmname = "oeuf.s" in
+  let objname = "oeuf.o" in
+  compile_oeuf asmname None;
+  assemble asmname objname;
+  if not !option_dasm then safe_remove asmname;
+  objname
+
+
 let _ =
   try
     Gc.set { (Gc.get()) with
@@ -696,6 +732,11 @@ let _ =
       eprintf "Ambiguous '-o' option (multiple source files)\n";
       exit 2
     end;
+
+    (* oeuf-specific nonsense *)
+    push_action (fun s -> process_oeuf ()) "oeuf.in";
+    incr num_input_files;
+
     if !num_input_files = 0 then
       begin
         eprintf "ccomp: error: no input file\n";
