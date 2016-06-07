@@ -699,6 +699,7 @@ let compile_oeuf ofile debug =
 let process_oeuf () =
   let asmname = "oeuf.s" in
   let objname = "oeuf.o" in
+  PrintCminor.destination := Some "oeuf.minor.c";
   compile_oeuf asmname None;
   assemble asmname objname;
   if not !option_dasm then safe_remove asmname;
