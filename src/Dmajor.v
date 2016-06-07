@@ -68,8 +68,7 @@ Definition store (addr : expr) (payload : expr) := Sstore Mint32 addr payload.
 Definition fundef := function.
 Definition program := AST.program fundef unit.
 
-Definition funsig (fd: fundef) :=
-  fn_sig fd.
+Definition funsig (fd: fundef) := fn_sig fd.
 
 Definition genv := Genv.t fundef unit.
 Definition env := PTree.t val.

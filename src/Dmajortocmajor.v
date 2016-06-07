@@ -31,34 +31,39 @@ Fixpoint transf_expr (e : Dmajor.expr) : Cmajor.expr :=
   | Eload mc exp => Cmajor.Eload mc (transf_expr exp)
   end.
 
-Fixpoint transf_stmt (s : Dmajor.stmt) : Cmajor.stmt :=
+Fixpoint transf_stmt (alloc : ident) (s : Dmajor.stmt) : Cmajor.stmt :=
   match s with
   | Sskip => Cmajor.Sskip
   | Sassign id exp => Cmajor.Sassign id (transf_expr exp)
   | Sstore mc l r => Cmajor.Sstore mc (transf_expr l) (transf_expr r)
   | Scall oi sig exp exps => Cmajor.Scall oi sig (transf_expr exp) (map transf_expr exps)
   | Salloc id exp =>
-          Cmajor.ScallSpecial (Some id) (ef_sig EF_malloc) 5013%positive (transf_expr exp :: nil)
-  | Sseq s1 s2 => Cmajor.Sseq (transf_stmt s1) (transf_stmt s2)
+    Cmajor.Scall (Some id) (ef_sig EF_malloc) (Cmajor.Econst (Cmajor.Oaddrsymbol alloc Int.zero)) (transf_expr exp :: nil)
+  | Sseq s1 s2 => Cmajor.Sseq (transf_stmt alloc s1) (transf_stmt alloc s2)
   | Sswitch b exp l n => Cmajor.Sswitch b (transf_expr exp) l n
-  | Sblock s => Cmajor.Sblock (transf_stmt s)
+  | Sblock s => Cmajor.Sblock (transf_stmt alloc s)
   | Sexit n => Cmajor.Sexit n
   | Sreturn (Some exp) => Cmajor.Sreturn (Some (transf_expr exp))
   | Sreturn None => Cmajor.Sreturn None
   end.
 
-Definition transf_function (f : Dmajor.function) : Cmajor.function :=
+Definition transf_function (alloc : ident) (f : Dmajor.function) : Cmajor.function :=
   Cmajor.mkfunction (fn_sig f)
                     (fn_params f)
                     (fn_vars f)
                     (fn_stackspace f)
-                    (transf_stmt (fn_body f)).
+                    (transf_stmt alloc (fn_body f)).
 
-Definition transf_fundef (fd : Dmajor.fundef) : Cmajor.fundef :=
-  Internal (transf_function fd).
+Definition transf_fundef (alloc : ident) (fd : Dmajor.fundef) : Cmajor.fundef :=
+  Internal (transf_function alloc fd).
+
+Definition add_malloc_prog (id : ident) (prog : Cmajor.program) : Cmajor.program :=
+  mkprogram ((prog_defs prog) ++ (id,Gfun (External EF_malloc)) :: nil) (prog_public prog) (prog_main prog).
 
 Definition transf_prog (prog : Dmajor.program) : Cmajor.program :=
-  AST.transform_program transf_fundef prog.
+  (* first make an id for malloc *)
+  let malloc_id := Pos.of_nat (length (prog_defs prog)) in
+  add_malloc_prog malloc_id (AST.transform_program (transf_fundef malloc_id) prog).
 
 (*
 Section PRESERVATION.
@@ -80,28 +85,28 @@ Inductive match_cont: Dmajor.cont -> Cmajor.cont -> Prop :=
       forall k k',
         match_cont k k' ->
         match_cont (Dmajor.Kblock k) (Cmajor.Kblock k')
-  | match_cont_seq: forall s s' k k',
-      transf_stmt s = s' ->
+  | match_cont_seq: forall s s' id k k',
+      transf_stmt id s = s' ->
       match_cont k k' ->
       match_cont (Dmajor.Kseq s k) (Cmajor.Kseq s' k')
-  | match_cont_call: forall id f sp e k f' e' k',
-      transf_function f = f' ->
+  | match_cont_call: forall alloc id f sp e k f' e' k',
+      transf_function alloc f = f' ->
       match_cont k k' ->
       env_lessdef e e' ->
       match_cont (Dmajor.Kcall id f sp e k) (Cmajor.Kcall id f' sp e' k').
 
 Inductive match_states : Dmajor.state -> Cmajor.state -> Prop :=
-  | match_state: forall f f' s k s' k' sp e m e' m'
-        (TF: transf_function f = f')
-        (TS: transf_stmt s = s')
+  | match_state: forall f f' s k s' k' sp e m e' m' alloc
+        (TF: transf_function alloc f = f')
+        (TS: transf_stmt alloc s = s')
         (MC: match_cont k k')
         (LD: env_lessdef e e')
         (ME: Mem.extends m m'),
       match_states
         (Dmajor.State f s k sp e m)
         (Cmajor.State f' s' k' sp e' m')
-  | match_callstate: forall f f' args args' k k' m m'
-        (TF: transf_fundef f = f')
+  | match_callstate: forall f f' args args' k k' m m' alloc
+        (TF: transf_fundef alloc f = f')
         (MC: match_cont k k')
         (LD: Val.lessdef_list args args')
         (ME: Mem.extends m m'),
@@ -119,7 +124,8 @@ Inductive match_states : Dmajor.state -> Cmajor.state -> Prop :=
 Remark call_cont_commut:
   forall k k', match_cont k k' -> match_cont (Dmajor.call_cont k) (Cmajor.call_cont k').
 Proof.
-  induction 1; simpl; auto. constructor. constructor; auto.
+  induction 1; simpl; auto. constructor.
+  econstructor; eauto.
 Qed.
 
 Lemma is_call_cont_transf :
@@ -143,8 +149,8 @@ Lemma find_symbol_transf :
 Proof.
   intros. unfold tge.
   unfold ge. rewrite <- TRANSF.
-  apply Genv.find_symbol_transf.
-Qed.
+  try apply Genv.find_symbol_transf.
+Admitted.
 
 Lemma eval_const_transf :
   forall sp c v,
@@ -231,22 +237,23 @@ Qed.
 Lemma find_funct_transf :
   forall vf vf',
     Val.lessdef vf vf' ->
-    forall fd,
+    forall fd alloc,
       Genv.find_funct ge vf = Some fd ->
-      Genv.find_funct tge vf' = Some (transf_fundef fd).
+      Genv.find_funct tge vf' = Some (transf_fundef alloc fd).
 Proof.
   intros.
   remember H0 as H1. clear HeqH1.
   eapply Genv.find_funct_transf in H0; eauto.
-  instantiate (1 := transf_fundef) in H0.
-  inv H. unfold tge. assumption.
-  simpl in H1. congruence.
-Qed.
+  instantiate (1 := transf_fundef (Pos.of_nat (length (prog_defs prog)))) in H0.
+  inv H. unfold tge. 
+  unfold transf_prog.
 
+Admitted.
+(* 
 Lemma find_funct_ptr_transf :
   forall b f,
     Genv.find_funct_ptr ge b = Some f ->
-    Genv.find_funct_ptr tge b = Some (transf_fundef f).
+    Genv.find_funct_ptr tge b = Some (transf_fundef f).    
 Proof.
   intros.
   unfold tge. rewrite <- TRANSF.
@@ -456,9 +463,10 @@ Proof.
   eapply find_funct_ptr_transf; eauto.
   eauto.
 Qed.  
-
+*)
 End PRESERVATION.
 
+(* 
 Theorem transf_program_correct:
   forall prog tprog,
     transf_prog prog = tprog ->
