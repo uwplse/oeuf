@@ -119,7 +119,7 @@ Definition compile (e : T.expr) : compiler_monad S.expr :=
         let n_args := length cases in
         go_pair_list cases >>= fun cases' =>
         go target >>= fun target' =>
-        ret_state (S.Call (S.Close f cases') target')
+        ret_state (S.Call (S.Close f (List.rev cases')) target')
       | T.Close f args => S.Close f <$> go_list args
       end
   in go e.
