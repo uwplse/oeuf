@@ -12,3 +12,5 @@ src/*.cmo
 src/*.cmx
 src/*.o
 /ccomp
+/extraction/*.ml
+/extraction/*.mli
