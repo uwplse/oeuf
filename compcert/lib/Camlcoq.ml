@@ -288,7 +288,7 @@ let extern_atom a =
   try
     Hashtbl.find string_of_atom a
   with Not_found ->
-    Printf.sprintf "$%d" (P.to_int a)
+    if P.to_int a == 5013 then "malloc" else Printf.sprintf "_$%d" (P.to_int a)
 
 let first_unused_ident () = !next_atom
 
