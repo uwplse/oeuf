@@ -30,7 +30,8 @@ Definition runtime_hack (p : Cminor.program) : Cminor.program :=
             (5009, Gfun (External (EF_external "__i64_umod" SelectLong.sig_ll_l)));
             (5010, Gfun (External (EF_external "__i64_shl" SelectLong.sig_li_l)));
             (5011, Gfun (External (EF_external "__i64_shr" SelectLong.sig_li_l)));
-            (5012, Gfun (External (EF_external "__i64_sar" SelectLong.sig_li_l)))
+            (5012, Gfun (External (EF_external "__i64_sar" SelectLong.sig_li_l)));
+            (5013, Gfun (External EF_malloc))
         ])%positive
         (prog_public p)
         (prog_main p).

@@ -21,6 +21,7 @@ open AST
 open Camlcoq
 open Datatypes
 open Integers
+open Printf
 
 exception Error of string
 
@@ -394,7 +395,7 @@ let expand_instruction instr =
      begin
        match ef with
        | EF_builtin(name, sg) ->
-	  expand_builtin_inline (camlstring_of_coqstring name) args res
+          expand_builtin_inline (camlstring_of_coqstring name) args res
        | EF_vload chunk ->
           expand_builtin_vload chunk args res
        | EF_vstore chunk ->
@@ -408,6 +409,12 @@ let expand_instruction instr =
           expand_annot_val txt targ args res
        | EF_annot _ | EF_debug _ | EF_inline_asm _ ->
           emit instr
+       | EF_external(name, sg) ->
+           assert false
+       | EF_malloc ->
+          assert false
+       | EF_free ->
+          assert false
        | _ ->
           assert false
      end

@@ -37,7 +37,8 @@ Fixpoint transf_stmt (s : Dmajor.stmt) : Cmajor.stmt :=
   | Sassign id exp => Cmajor.Sassign id (transf_expr exp)
   | Sstore mc l r => Cmajor.Sstore mc (transf_expr l) (transf_expr r)
   | Scall oi sig exp exps => Cmajor.Scall oi sig (transf_expr exp) (map transf_expr exps)
-  | Salloc id exp => Cmajor.Sbuiltin (Some id) EF_malloc (transf_expr exp :: nil)
+  | Salloc id exp =>
+          Cmajor.ScallSpecial (Some id) (ef_sig EF_malloc) 5013%positive (transf_expr exp :: nil)
   | Sseq s1 s2 => Cmajor.Sseq (transf_stmt s1) (transf_stmt s2)
   | Sswitch b exp l n => Cmajor.Sswitch b (transf_expr exp) l n
   | Sblock s => Cmajor.Sblock (transf_stmt s)
@@ -59,6 +60,7 @@ Definition transf_fundef (fd : Dmajor.fundef) : Cmajor.fundef :=
 Definition transf_prog (prog : Dmajor.program) : Cmajor.program :=
   AST.transform_program transf_fundef prog.
 
+(*
 Section PRESERVATION.
 
 Variable prog: Dmajor.program.
@@ -470,3 +472,4 @@ Proof.
   eapply single_step_correct; eauto.
 Qed.
 
+*)

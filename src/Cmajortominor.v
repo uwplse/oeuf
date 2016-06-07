@@ -37,7 +37,9 @@ Fixpoint transf_stmt (s : Cmajor.stmt) : Cminor.stmt :=
   | Sassign id exp => Cminor.Sassign id (transf_expr exp)
   | Sstore mc l r => Cminor.Sstore mc (transf_expr l) (transf_expr r)
   | Scall oi sig exp exps => Cminor.Scall oi sig (transf_expr exp) (map transf_expr exps)
-  | Sbuiltin oi ef exps => Cminor.Sbuiltin oi ef (map transf_expr exps)
+  | ScallSpecial oi sig fn exps =>
+          let f := Cminor.Econst (Cminor.Oaddrsymbol fn Int.zero) in
+          Cminor.Scall oi sig f (map transf_expr exps)
   | Sseq s1 s2 => Cminor.Sseq (transf_stmt s1) (transf_stmt s2)
   | Sswitch b exp l n => Cminor.Sswitch b (transf_expr exp) l n
   | Sexit n => Cminor.Sexit n
@@ -60,6 +62,7 @@ Definition transf_prog (prog : Cmajor.program) : Cminor.program :=
   AST.transform_program transf_fundef prog.
 
 
+(*
 Section PRESERVATION.
 
 Variable prog: Cmajor.program.
@@ -477,3 +480,4 @@ Qed.
 
 
 
+*)

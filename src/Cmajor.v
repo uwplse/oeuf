@@ -34,7 +34,7 @@ Inductive stmt : Type :=
   | Sassign : ident -> expr -> stmt
   | Sstore : memory_chunk -> expr -> expr -> stmt
   | Scall : option ident -> signature -> expr -> list expr -> stmt
-  | Sbuiltin : option ident -> external_function -> list expr -> stmt (* malloc *)
+  | ScallSpecial : option ident -> signature -> ident -> list expr -> stmt (* malloc *)
   | Sseq: stmt -> stmt -> stmt
   | Sswitch: bool -> expr -> list (Z * nat) -> nat -> stmt (* exit n blocks *)
   | Sblock: stmt -> stmt (* neccessary for switch to work *)
@@ -209,11 +209,13 @@ Inductive step: state -> trace -> state -> Prop :=
   (*     step (State f (Stailcall sig a bl) k (Vptr sp Int.zero) e m) *)
   (*       E0 (Callstate fd vargs (call_cont k) m') *)
 
+        (*
   | step_builtin: forall f optid ef bl k sp e m vargs t vres m',
       eval_exprlist e m sp bl vargs ->
       external_call ef ge vargs m t vres m' ->
       step (State f (Sbuiltin optid ef bl) k sp e m)
          t (State f Sskip k sp (set_optvar optid vres e) m')
+         *)
 
   | step_seq: forall f s1 s2 k sp e m,
       step (State f (Sseq s1 s2) k sp e m)
@@ -307,6 +309,7 @@ Definition semantics (p: program) :=
 
 (** This semantics is receptive to changes in events. *)
 
+(*
 Lemma semantics_receptive:
   forall (p: program), receptive (semantics p).
 Proof.
@@ -322,5 +325,5 @@ Proof.
 (* trace length *)
   red; intros; inv H; simpl; try omega; eapply external_call_trace_length; eauto.
 Qed.
-
+*)
 
