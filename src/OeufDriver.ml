@@ -678,11 +678,12 @@ let compile_oeuf ofile debug =
   let add_ty = SourceLang.Arrow (SourceLang.ADT Utopia.Tnat,
                SourceLang.Arrow (SourceLang.ADT Utopia.Tnat,
                                  SourceLang.ADT Utopia.Tnat)) in
+  let fib_ty = SourceLang.Arrow (SourceLang.ADT Utopia.Tnat,
+                                 SourceLang.ADT Utopia.Tnat) in
   let asm =
     match Compiler.apply_partial
-               (Oeuf.transf_to_asm add_ty (SourceLang.add_reflect []))
+               (Oeuf.transf_to_asm fib_ty (SourceLang.fib_reflect []))
                Asmexpand.expand_program with
-    (*match Oeuf.transf_to_asm add_ty (SourceLang.add_reflect []) with *)
     | Errors.OK asm ->
         asm
     | Errors.Error msg ->

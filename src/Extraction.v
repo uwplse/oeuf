@@ -174,6 +174,7 @@ Separate Extraction
 
    Oeuf.transf_to_cminor
    Oeuf.transf_to_asm
-   SourceLang.add_reflect.
+   SourceLang.add_reflect
+   SourceLang.fib_reflect.
 
 Cd "..".
