@@ -682,6 +682,7 @@ let compile_oeuf ofile debug =
     match Compiler.apply_partial
                (Oeuf.transf_to_asm add_ty (SourceLang.add_reflect []))
                Asmexpand.expand_program with
+    (*match Oeuf.transf_to_asm add_ty (SourceLang.add_reflect []) with *)
     | Errors.OK asm ->
         asm
     | Errors.Error msg ->

@@ -55,26 +55,27 @@ Fixpoint store_args (id : ident) (l : list Emajor.expr) (z : Z) : Dmajor.stmt :=
       store_args id es (z + 4)%Z
   end.
 
-(* Hand roll a fresh ident monad *)
 Fixpoint transf_stmt (s : Emajor.stmt) : Dmajor.stmt :=
-  let
-    fix transf_cases (targid : ident) (cases : list (Z * Emajor.stmt)) (n : nat) (bottom : Dmajor.stmt) : Dmajor.stmt :=
-    match cases with
-    | nil => bottom
-    | (tag,s) :: cases' =>
-      let s' := transf_stmt s in (* what to do in this case *)
-      let rest := transf_cases targid cases' (S n) bottom in
-      (* the rest of the cases *)
-      Dmajor.Sblock (rest ; (s'; Dmajor.Sexit n))
-        (*
-          First enter n blocks
-          next execute bottom, which is dmajor switch stmt
-          that will exit k blocks
-          leaving the (k-n)th block to execute,
-          then exit the rest of the way
-         *)
-    end
-  in
+  let transf_cases (targid : ident) (cases : list (Z * Emajor.stmt)) (target_d : Dmajor.expr) :=
+    let fix mk_cases (i : nat) (cases : list (Z * Emajor.stmt)) : list (Z * nat) :=
+        match cases with
+        | [] => []
+        | (v, s) :: cases => (v, i) :: mk_cases (S i) cases
+        end in
+    let switch := Dmajor.Sswitch false target_d (mk_cases 0%nat cases) (length cases) in
+    let swblock := Dmajor.Sblock switch in
+    let fix mk_blocks (acc : Dmajor.stmt) (i : nat) (cases : list (Z * Emajor.stmt)) :=
+        match cases with
+        | [] => acc
+        | (v, s) :: cases =>
+                let acc' :=
+                    Dmajor.Sblock (Dmajor.Sseq acc
+                                  (Dmajor.Sseq (transf_stmt s)
+                                               (Dmajor.Sexit (length cases - i)))) in
+                mk_blocks acc' (S i) cases
+        end in
+    mk_blocks swblock 0%nat cases in
+
   match s with
   | Emajor.Sskip => Dmajor.Sskip
   | Emajor.Sassign lhs rhs => Dmajor.Sassign lhs (transf_expr rhs)
@@ -85,7 +86,7 @@ Fixpoint transf_stmt (s : Emajor.stmt) : Dmajor.stmt :=
   | Emajor.Scall id efun earg =>
     Dmajor.Scall (Some id) EMsig (load (transf_expr efun)) (((transf_expr efun)) :: (transf_expr earg) :: nil)
   | Emajor.Sswitch targid cases target => 
-    transf_cases targid cases O (transf_target targid target cases) 
+    transf_cases targid cases (load (transf_expr target))
   | Emajor.SmakeConstr id tag args =>
   (* In order to translate a constructor *)
     (* First we allocate enough space *)

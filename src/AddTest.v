@@ -87,6 +87,7 @@ Definition add_one_prog : Emajor.program :=
                  (main_id,Gfun main_fn) ::
                  nil) nil main_id.
 
+(*
 Definition dM := Emajortodmajor.transf_prog add_one_prog.
 Definition cM := Dmajortocmajor.transf_prog dM.
 Definition cm := Cmajortominor.transf_prog cM.
@@ -396,3 +397,4 @@ Proof.
   econstructor; eauto. simpl. reflexivity.
   eapply star_refl. 
 Qed.
+*)
