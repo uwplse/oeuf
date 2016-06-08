@@ -112,3 +112,5 @@ void* vcall(void* f, ...) {
 
     return f;
 }
+
+#define VCALL(f, ...)   (vcall((f), __VA_ARGS__, NULL))

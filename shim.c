@@ -9,7 +9,7 @@ int main() {
     union nat* two = make_nat(2);
 
     void* add = _$8(NULL, NULL);
-    void* sum = vcall(add, one, two, NULL);
+    void* sum = VCALL(add, one, two);
     printf("add(%d, %d) = %d\n", read_nat(one), read_nat(two), read_nat(sum));
 
     /*
