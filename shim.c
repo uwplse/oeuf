@@ -38,11 +38,11 @@ int read_nat(union nat* n) {
 
 
 struct closure {
-    void (*f)(void*, void*);
+    void* (*f)(void*, void*);
 };
 
 void* call(void* f, void* a) {
-    (((struct closure*)f)->f)(f, a);
+    return (((struct closure*)f)->f)(f, a);
 }
 
 
