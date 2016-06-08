@@ -279,7 +279,10 @@ Section tests.
     - now rewrite IHm, plus_n_Sm.
   Qed.
 
-  Definition add_reflect {l} : expr l _ :=
+  Definition add_reflect_ty : type :=
+    ltac:(type_reflect (nat -> nat -> nat)).
+
+  Definition add_reflect {l} : expr l add_reflect_ty :=
     ltac:(let x := eval unfold add in add in reflect x).
 
   Example add_reflect_correct : forall l h, expr_denote(l := l) add_reflect h = add.
@@ -298,7 +301,10 @@ Section tests.
 
   Eval compute in map fib [0;1;2;3;4;5;6;7;8;9].
 
-  Definition fib_reflect {l} : expr l _ :=
+  Definition fib_reflect_ty : type :=
+    ltac:(type_reflect (nat -> nat)).
+
+  Definition fib_reflect {l} : expr l fib_reflect_ty :=
     ltac:(let x := eval unfold fib in fib in reflect x).
 
   Example fib_reflect_correct : forall l h, expr_denote(l := l) fib_reflect h = fib.

@@ -674,15 +674,12 @@ let cmdline_actions =
   ]
 
 let compile_oeuf ofile debug =
+  let the_program = SourceLang.fib_reflect [] in
+  let its_type = SourceLang.fib_reflect_ty in
   (* Convert to Asm *)
-  let add_ty = SourceLang.Arrow (SourceLang.ADT Utopia.Tnat,
-               SourceLang.Arrow (SourceLang.ADT Utopia.Tnat,
-                                 SourceLang.ADT Utopia.Tnat)) in
-  let fib_ty = SourceLang.Arrow (SourceLang.ADT Utopia.Tnat,
-                                 SourceLang.ADT Utopia.Tnat) in
   let asm =
     match Compiler.apply_partial
-               (Oeuf.transf_to_asm add_ty (SourceLang.add_reflect []))
+               (Oeuf.transf_to_asm its_type the_program)
                Asmexpand.expand_program with
     | Errors.OK asm ->
         asm
