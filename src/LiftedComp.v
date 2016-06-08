@@ -670,10 +670,205 @@ simpl in *; fold req_upvars_list in *.
 
 Qed.
 
+Definition L_subst_nth (n : nat) (v : L.expr) (l : L.expr) : option L.expr :=
+  match n with
+  | 0 => L.subst v [] l
+  | S n' => L.subst L.Arg (rep_upvar n' ++ [v]) l
+  end.
+
+Open Scope option_monad.
+
+Lemma L_subst_nth_Close_unroll :
+  forall n v fn free,
+    L_subst_nth n v (L.Close fn free) = L.Close fn <$> (map_partial (L_subst_nth n v) free).
+Admitted.
+
+Fixpoint maximum (l : list nat) : nat :=
+  match l with
+  | [] => 0
+  | x :: l => max x (maximum l)
+  end.
+
+Lemma req_vars_subst : forall arg vals e e',
+    L.subst arg vals e = Some e' ->
+    req_upvars e' <= maximum (map req_upvars (arg :: vals)).
+Admitted.
+
+
+Lemma length_rep_upvar : forall n, length (rep_upvar n) = n.
+Proof.
+Admitted.
+
+Lemma map_req_upvars_rep_upvar : forall n, maximum (map req_upvars (rep_upvar n)) = n.
+Proof.
+Admitted.
+
+Lemma maximum_cons : forall n l, maximum (n :: l) = max n (maximum l).
+Admitted.
+
+Lemma maximum_app : forall l1 l2, maximum (l1 ++ l2) = max (maximum l1) (maximum l2).
+Admitted.
+
+Lemma req_upvars_value :
+  forall l,
+    L.value l ->
+    req_upvars l = 0.
+Admitted.
+
+Lemma Forall_map : forall A B (P : A -> Prop) (Q : B -> Prop) (f : A -> B) (xs : list A),
+    Forall P xs ->
+    (forall x, P x -> Q (f x)) ->
+    Forall Q (map f xs).
+Admitted.
+
+Lemma Forall_repeat :
+  forall A (a : A) l,
+    Forall (fun x => x = a) l ->
+    l = repeat a (length l).
+Admitted.
+
+Lemma maximum_repeat0 :
+  forall n,
+    maximum (repeat 0 n) = 0.
+Admitted.
+
+Lemma L_subst_subst :
+  forall l1 l2 l3 free1 free2 n,
+    length free2 = n ->
+    Forall L.value free1 ->
+    L.subst L.Arg (rep_upvar n ++ free1) l1 = Some l2 ->
+    L.subst L.Arg free2 l2 = Some l3 ->
+    L.subst L.Arg (free2 ++ free1) l1 = Some l3.
+Admitted.
+
+Lemma L_subst_nth_value :
+  forall n lv l,
+    L.value l ->
+    L_subst_nth n lv l = Some l.
+Admitted.
+
+Lemma map_partial_Some_length :
+  forall A B (f : A -> option B) l l',
+    map_partial f l = Some l' ->
+    length l = length l'.
+Admitted.
+
+Lemma skipn_length_gt_n :
+  forall A n (l : list A),
+    n < length l ->
+    exists x, nth_error l n = Some x /\
+         skipn n l = x :: skipn (S n) l.
+Admitted.
+
+Lemma map_partial_Forall2 :
+  forall A B (f : A -> option B) l l',
+    map_partial f l = Some l' ->
+    Forall2 (fun a b => f a = Some b) l l'.
+Admitted.
+
+Lemma Forall2_skipn : forall A B (P : A -> B -> Prop) n xs ys,
+    Forall2 P xs ys ->
+    Forall2 P (skipn n xs) (skipn n ys).
+Admitted.
+Lemma Forall2_eq : forall A xs ys,
+    Forall2 (fun (a1 a2 : A) => a1 = a2) xs ys ->
+    xs = ys.
+Admitted.
+
+Lemma U_shift_value :
+  forall uv,
+    U.value uv ->
+    U.shift uv = uv.
+Admitted.
+
+Hint Constructors match_states.
+
+Lemma match_states_subst :
+  forall E n u l uv lv free l' l'',
+    L.subst L.Arg (rep_upvar n ++ free) l = Some l' ->
+    match_states E (S n) u l' ->
+    match_states E 0 uv lv ->
+    U.value uv ->
+    L.value lv ->
+    Forall L.value free ->
+    L_subst_nth n lv l' = Some l'' ->
+    match_states E n (U.subst' n uv u) l''.
+Proof.
+  intros.
+
+  prep_induction H0.
+  induction H0; intros; subst.
+  - unfold L_subst_nth in *.
+    destruct n; simpl in *.
+    + find_inversion. auto.
+    + find_inversion. auto.
+  - unfold L_subst_nth in *.
+    destruct n0; simpl in *.
+    + destruct n; simpl in *; discriminate.
+    + break_if.
+      * admit.
+      * break_match.
+        -- find_inversion. admit.
+        -- admit.
+  - simpl.
+
+    assert (exists l''_q, L.subst L.Arg (rep_upvar n ++ [lv]) l_body' = Some l''_q).
+    { apply subst_req_upvars_ok.
+      rewrite app_length. rewrite length_rep_upvar.
+      simpl.
+      fwd eapply req_vars_subst; eauto.
+      rewrite map_cons, map_app in *.
+      rewrite maximum_cons, maximum_app in *.
+      rewrite map_req_upvars_rep_upvar in *.
+      change (req_upvars L.Arg) with 0 in *.
+      rewrite Max.max_0_l in *.
+
+      erewrite Forall_repeat with (a := 0) (l := map _ _) in H9; cycle 1.
+      eapply Forall_map. eassumption. auto using req_upvars_value.
+
+      rewrite maximum_repeat0 in H9. simpl in H9. omega. }
+
+    break_exists_name l''_q.
+    specialize (IHmatch_states (S n) l_body uv lv (skipn (S n) free) l''_q).
+    repeat concludes.
+    rewrite L_subst_nth_Close_unroll in H8.
+    unfold fmap, bind_option in H8.
+    break_match; try discriminate.
+    find_inversion.
+
+    eapply MsLam with (l_body' := l''_q).
+    eauto.
+    admit. (* add values to lambda case of match_states *)
+    fwd eapply L_subst_subst with (3 := H1)(4 := H9); auto.
+    rewrite app_length, length_rep_upvar; simpl; omega.
+    rewrite app_assoc_reverse in *.
+    cbn [app] in *.
+    assert (skipn n l0 = lv :: skipn (S n) free).
+    { find_copy_apply_lem_hyp map_partial_Some_length.
+
+      fwd eapply skipn_length_gt_n with (n := n) (l := l0). admit.
+      break_exists. break_and. find_rewrite.
+      f_equal. admit.
+      fwd eapply map_partial_Forall2; eauto.
+
+      fwd eapply Forall2_skipn with (n := (S n)); eauto.
+      apply Forall2_eq.
+      rewrite Forall2_flip'.
+      eapply Forall2_apply1. eauto.
+      eapply Forall2_imp; try apply H14.
+      cbv beta.
+      intros. fwd eapply L_subst_nth_value; eauto.
+      rewrite H15 in H17. congruence. }
+    congruence.
+
+    now rewrite U_shift_value by auto.
+  -
+Admitted.
+
 Theorem match_step : forall E ue ue' le,
     match_states E 0 ue le ->
     U.step ue ue' ->
-    exists le', L.step E le le'.
+    exists le', L.step E le le' /\ match_states E 0 ue' le' .
 intros. move ue at top. generalize_all.
 induction ue using U.expr_ind'; intros0 Hmatch Ustep; try solve [invc Ustep].
 
@@ -703,18 +898,26 @@ intros ??. induction 1; intros0 Hmatch.
       { eapply subst_ok_req_upvars. eassumption. }
     destruct HH as [l_body'' ?].
 
-    eexists. eapply L.MakeCall; eauto using match_value_0_fwd.
+
+    eexists. split. eapply L.MakeCall; eauto using match_value_0_fwd.
+
+    eapply match_states_subst; eauto using match_value_0_fwd.
+
+    unfold L_subst_nth.
+
+    (* more general subst combiner *)
+    admit.
 
   + (* AppL *)
     invc Hmatch.
     destruct (IHue1 _ _ _ ltac:(eassumption) ltac:(eassumption)).
-    eexists. eapply L.CallL. eassumption.
+    eexists. break_and. split; [| admit]. eapply L.CallL. eassumption.
 
   + (* AppR *)
     invc Hmatch.
     fwd eapply match_value_0_fwd as HH; cycle 1; eauto.
     destruct (IHue2 _ _ _ ltac:(eassumption) ltac:(eassumption)).
-    eexists. eapply L.CallR; eassumption.
+    eexists. break_and. split; [| admit]. eapply L.CallR; eassumption.
 
 - (* Constr *)
   inv Ustep.
@@ -732,7 +935,7 @@ intros ??. induction 1; intros0 Hmatch.
     { eapply in_or_app. right. eapply in_or_app. left. constructor. reflexivity. }
   destruct (H _ ltac:(eassumption) _ _ _ ltac:(eassumption) ltac:(eassumption)).
 
-  eexists. eapply L.ConstrStep; eauto.
+  eexists. break_and. split; [|admit]. eapply L.ConstrStep; eauto.
     { rewrite <- Forall_forall in *.
       eapply Forall2_apply_lr.
       { intros. eapply match_value_0_fwd; eauto. }
@@ -744,7 +947,7 @@ intros ??. induction 1; intros0 Hmatch.
   + (* ElimStep *)
     invc Hmatch.
     destruct (IHue _ _ _ ltac:(eassumption) ltac:(eassumption)).
-    eexists. eapply L.ElimStep. eassumption.
+    eexists. break_and. split; [|admit]. eapply L.ElimStep. eassumption.
 
   + (* Eliminate *)
     invc Hmatch.
@@ -754,12 +957,12 @@ intros ??. induction 1; intros0 Hmatch.
     erewrite Forall2_len in * by eauto.
     fwd eapply nth_error_lt as HH; eauto. destruct HH.
 
-    eexists. eapply L.Eliminate. eassumption.
+    eexists. break_and. split; [|admit]. eapply L.Eliminate. eassumption.
       eapply Forall2_apply_lr.
       { intros. eapply match_value_0_fwd; eauto. }
       eauto.
       eauto.
-Qed.
+Admitted.
 
 (*
 
