@@ -7,10 +7,6 @@ Require Import HList.
 
 Require Import Utopia.
 
-Definition type_name_eq_dec (tn1 tn2 : type_name) : {tn1 = tn2} + {tn1 <> tn2}.
-  decide equality.
-Defined.
-
 Inductive type :=
 | ADT : type_name -> type
 | Arrow : type -> type -> type
@@ -21,12 +17,13 @@ Definition type_eq_dec (t1 t2 : type) : {t1 = t2} + {t1 <> t2}.
 Defined.
 
 Inductive constr_type : constr_name -> list type -> type_name -> Type :=
-| CTS     : constr_type CS     [ADT Tnat]                Tnat
-| CTO     : constr_type CO     []                        Tnat
-| CTtrue  : constr_type Ctrue  []                        Tbool
-| CTfalse : constr_type Cfalse []                        Tbool
-| CTnil   : constr_type Cnil   []                        Tlist_nat
-| CTcons  : constr_type Ccons  [ADT Tnat; ADT Tlist_nat] Tlist_nat
+| CTS         : constr_type CS         [ADT Tnat]                  Tnat
+| CTO         : constr_type CO         []                          Tnat
+| CTtrue      : constr_type Ctrue      []                          Tbool
+| CTfalse     : constr_type Cfalse     []                          Tbool
+| CTnil ty    : constr_type Cnil       []                          (Tlist ty)
+| CTcons ty   : constr_type Ccons      [ADT ty; ADT (Tlist ty)]   (Tlist ty)
+| CTtt        : constr_type Ctt        []                          Tunit
 .
 
 (* an eliminator that takes cases with types given by the first index,
@@ -35,7 +32,8 @@ Inductive constr_type : constr_name -> list type -> type_name -> Type :=
 Inductive elim : list type -> type -> type -> Type :=
 | EBool : forall ty, elim [ty; ty] (ADT Tbool) ty
 | ENat : forall ty, elim [ty; Arrow (ADT Tnat) (Arrow ty ty)] (ADT Tnat) ty
-| EListNat : forall ty, elim [ty; Arrow (ADT Tnat) (Arrow (ADT Tlist_nat) (Arrow ty ty))] (ADT Tlist_nat) ty
+| EList : forall tyA ty, elim [ty; Arrow (ADT tyA) (Arrow (ADT (Tlist tyA)) (Arrow ty ty))] (ADT (Tlist tyA)) ty
+| EUnit : forall ty, elim [ty] (ADT Tunit) ty
 .
 
 Section expr.
@@ -53,13 +51,6 @@ Inductive expr : list type -> type -> Type :=
 .
 End expr.
 
-Definition type_name_denote (tyn : type_name) : Type :=
-  match tyn with
-  | Tbool => bool
-  | Tnat => nat
-  | Tlist_nat => list nat
-  end.
-
 Fixpoint type_denote (ty : type) : Type :=
   match ty with
   | ADT tyn => type_name_denote tyn
@@ -74,8 +65,9 @@ Definition constr_denote {arg_tys ty c} (ct : constr_type c arg_tys ty) :
   | CTS => fun h => S (hhead h)
   | CTtrue => fun _ => true
   | CTfalse => fun _ => false
-  | CTnil => fun _ => []
-  | CTcons => fun h => cons (hhead h) (hhead (htail h))
+  | CTnil _ => fun _ => []
+  | CTcons _ => fun h => cons (hhead h) (hhead (htail h))
+  | CTtt => fun _ => tt
   end.
 
 
@@ -84,7 +76,8 @@ Definition elim_denote {case_tys target_ty ty} (e : elim case_tys target_ty ty) 
   match e with
   | EBool _ => fun cases target => (bool_rect _ (hhead cases) (hhead (htail cases)) target)
   | ENat _ => fun cases target => (nat_rect _ (hhead cases) (hhead (htail cases)) target)
-  | EListNat _ => fun cases target => (list_rect _ (hhead cases) (hhead (htail cases)) target)
+  | EList _ _ => fun cases target => (list_rect _ (hhead cases) (hhead (htail cases)) target)
+  | EUnit _ => fun cases target => unit_rect _ (hhead cases) target
   end.
 
 Definition expr_mut_rect
@@ -156,14 +149,24 @@ Eval compute in expr_denote (Constr CTtrue hnil) hnil.
 Eval compute in expr_denote (Lam(ty1 := ADT Tbool) (Var Here)) hnil.
 
 (* given a gallina term, try to find something that type_denote will map to it. *)
+Ltac typename_reflect' x :=
+  match x with
+  | nat => constr:(Tnat)
+  | bool => constr:(Tbool)
+  | list ?X => let r := typename_reflect' X in constr:(Tlist r)
+  | unit => constr:(Tunit)
+  end.
+Ltac typename_reflect x := let r := typename_reflect' x in exact r.
+
+Check ltac:(typename_reflect (list (list (list unit)))).
+
 Ltac type_reflect' x :=
   match x with
   | ?X -> ?Y => let rX := type_reflect' X in
               let rY := type_reflect' Y in
               constr:(Arrow rX rY)
-  | nat => constr:(ADT Tnat)
-  | bool => constr:(ADT Tbool)
-  | list nat => constr:(ADT Tlist_nat)
+  | ?X => let r := typename_reflect' X in
+         constr:(ADT r)
   end.
 
 (* fill in a context with the reflection of the given gallina term *)
@@ -173,6 +176,8 @@ Check ltac:(type_reflect nat).
 Check ltac:(type_reflect bool).
 Check ltac:(type_reflect (list nat)).
 Check ltac:(type_reflect ((bool -> nat) -> (list nat -> bool) -> nat)).
+Check ltac:(type_reflect unit).
+Check ltac:(type_reflect (list bool)).
 
 Ltac build_member P :=
   let rec go P :=
@@ -190,14 +195,15 @@ Ltac reflect' x :=
   | fun _ => false => uconstr:(Constr CTfalse hnil)
   | fun _ => O => uconstr:(Constr CTO hnil)
   | fun _ => S => uconstr:(Lam (Constr CTS (hcons (Var Here) hnil)))
+  | fun _ => tt => uconstr:(Constr CTtt hnil)
   | fun (x : ?T) => S (@?X x) =>
     let r := reflect' X in
     uconstr:(Constr CTS (hcons r hnil))
-  | fun _ => @nil nat => uconstr:(Constr CTnil hnil)
-  | fun (x : ?T) => @cons nat (@?X x) (@?Y x) =>
+  | fun _ => @nil ?ty => uconstr:(Constr (CTnil _) hnil)
+  | fun (x : ?T) => @cons ?ty (@?X x) (@?Y x) =>
     let r1 := reflect' X in
     let r2 := reflect' Y in
-    uconstr:(Constr CTcons (hcons r1 (hcons r2 hnil)))
+    uconstr:(Constr (CTcons _) (hcons r1 (hcons r2 hnil)))
   | fun (x : ?T) => if @?B x then @?X x else @?Y x =>
     let r1 := reflect' B in
     let r2 := reflect' X in
@@ -208,11 +214,11 @@ Ltac reflect' x :=
     let r2 := reflect' Y in
     let r3 := reflect' n in
     uconstr:(Elim (ENat _) (hcons r1 (hcons r2 hnil)) r3)
-  | fun (x : ?T) => @list_rect nat _ (@?X x) (@?Y x) (@?l x) =>
+  | fun (x : ?T) => @list_rect ?A _ (@?X x) (@?Y x) (@?l x) =>
     let r1 := reflect' X in
     let r2 := reflect' Y in
     let r3 := reflect' l in
-    uconstr:(Elim (EListNat _) (hcons r1 (hcons r2 hnil)) r3)
+    uconstr:(Elim (EList _ _) (hcons r1 (hcons r2 hnil)) r3)
   | fun (x : ?T) (y : ?A) => @?E x y =>
     let rA := type_reflect' A in
     let r := reflect' (fun (p : T * A) => E (fst p) (snd p)) in
@@ -230,6 +236,7 @@ Ltac reflect x := let r := reflect' (fun _ : unit => x) in exact r.
 Check ltac:(reflect true) : expr [] _ .
 Check ltac:(reflect O)  : expr [] _ .
 Check ltac:(reflect S)  : expr [] _ .
+Check ltac:(reflect tt)  : expr [] _ .
 Check ltac:(reflect (S O))  : expr [] _ .
 Check ltac:(reflect (fun _ : nat => (S O)))  : expr [] _ .
 Check ltac:(reflect (fun x : nat => (S x)))  : expr [] _ .
@@ -237,6 +244,7 @@ Check ltac:(reflect (fun x : bool => x))  : expr [] _ .
 Check ltac:(reflect (fun f : bool -> bool => f))  : expr [] _ .
 Check ltac:(reflect ((S O) :: nil))  : expr [] _ .
 Check ltac:(reflect [1; 2; 3])  : expr [] _ .
+Check ltac:(reflect [true; false])  : expr [] _ .
 Check ltac:(reflect (if true then 1 else 2))  : expr [] _ .
 Check ltac:(reflect S)  : expr [] _ .
 Check ltac:(reflect (fun _ : nat => S))  : expr [] _ .
@@ -244,6 +252,8 @@ Check ltac:(reflect (nat_rect (fun _ => nat) 4 (fun _ => S) 17))  : expr [] _ .
 Check ltac:(reflect (fun x : nat => x))  : expr [] _ .
 Check ltac:(reflect (@list_rect nat (fun _ => list nat) [] (fun h _ t => cons 3 (cons h t)) [0; 0; 0])) : expr [] _ .
 Eval compute in expr_denote ltac:(reflect  (@list_rect nat (fun _ => list nat) [] (fun h _ t => cons 3 (cons h t)) [0; 0; 0])) hnil.
+Check ltac:(reflect (@list_rect bool (fun _ => list bool) [] (fun h _ t => cons false (cons h t)) [true; true; true])) : expr [] _ .
+Eval compute in expr_denote (ltac:(reflect (@list_rect bool (fun _ => list bool) [] (fun h _ t => cons false (cons h t)) [true; true; true]))) hnil.
 Check ltac:(reflect (fun (x _ _ _ _ _ _ _ _ _ _ : nat) => x))  : expr [] _ .
 
 
@@ -310,7 +320,7 @@ Section tests.
   Example fib_reflect_correct : forall l h, expr_denote(l := l) fib_reflect h = fib.
   Proof. reflexivity. Qed.
 
-  Definition add_1_2 : expr [] _ := 
+  Definition add_1_2 : expr [] _ :=
     App (App add_reflect (ltac:(let x := constr:(1%nat) in reflect x)))
         (ltac:(let x := constr:(2%nat) in reflect x)).
 End tests.
@@ -446,35 +456,42 @@ Fixpoint identity_subst l : hlist (expr l) l :=
   | ty :: l' => hcons (Var Here) (hmap (fun a e => lift _ _ e) (identity_subst l'))
   end.
 
+Ltac destruct_elim e :=
+refine match e with
+         | EBool t    => _
+         | ENat t     => _
+         | EList _ t => _
+         | EUnit t    => _
+       end.
+
 Definition eliminate {case_tys target_tyn arg_tys ty l c}
            (e : elim case_tys (ADT target_tyn) ty) :
-           hlist (expr l) case_tys ->
            constr_type c arg_tys target_tyn ->
+           hlist (expr l) case_tys ->
            hlist (expr l) arg_tys ->  expr l ty.
-  refine match e with
-         | EBool t    => fun cases ct => _
-         | ENat t     => fun cases ct => _
-         | EListNat t => fun cases ct => _
-         end.
+  destruct_elim e; intros ct.
    - exact match ct with
-            | CTtrue => fun _ => hhead cases
-            | CTfalse => fun _ => hhead (htail cases)
+            | CTtrue => fun cases _ => hhead cases
+            | CTfalse => fun cases _ => hhead (htail cases)
             end.
-   - exact (let z := hhead cases in
+   - intros cases.
+     exact (let z := hhead cases in
             let s := hhead (htail cases) in
             match ct with
             | CTO => fun _ => z
             | CTS => fun args => let pred := hhead args in
                                App (App s pred) (Elim (ENat t) cases pred)
             end).
-   - exact (let nil := hhead cases in
-            let cons := hhead (htail cases) in
-            match ct with
-            | CTnil => fun _ => nil
-            | CTcons => fun args => let hd := hhead args in
-                               let tl := hhead (htail args) in
-                               App (App (App cons hd) tl) (Elim (EListNat t) cases tl)
-            end).
+   - refine match ct with
+     | CTnil _ => fun cases _ => hhead cases
+     | CTcons _ => fun cases args =>
+                    App (App (App (hhead (htail cases)) (hhead args)) (hhead (htail args)))
+                        (Elim (EList _ _) cases (hhead (htail args)))
+     end.
+   - intros cases.
+     exact match ct with
+            | CTtt => fun _ => hhead cases
+            end.
 Defined.
 
 Fixpoint arrow_all (ty_rec : type) (arg_rec : type) (args : list type) (dest : type) : type :=
@@ -487,16 +504,27 @@ Fixpoint arrow_all (ty_rec : type) (arg_rec : type) (args : list type) (dest : t
            else (arrow_all ty_rec arg_rec args' dest))
   end.
 
+Fixpoint type_size (tyn : type_name) : nat :=
+  match tyn with
+  | Tlist tyn' => S (type_size tyn')
+  | _ => 1
+  end.
+
+Lemma no_infinite_types :
+  forall ty, ty =Tlist ty -> False.
+Proof.
+  intros.
+  apply f_equal with (f := type_size) in H.
+  simpl in *.
+  omega.
+Qed.
+
 Definition eliminate_case_type
            {case_tys target_tyn arg_tys c ty}
            (e : elim case_tys (ADT target_tyn) ty) :
             constr_type c arg_tys target_tyn ->
             member (arrow_all (ADT target_tyn) ty arg_tys ty) case_tys.
-  refine match e with
-         | EBool t    => fun ct => _
-         | ENat t     => fun ct => _
-         | EListNat t => fun ct => _
-         end.
+  destruct_elim e; intros ct.
   - refine match ct with
            | CTtrue => _
            | CTfalse => _
@@ -510,11 +538,18 @@ Definition eliminate_case_type
     + exact (There Here).
     + exact Here.
   - refine match ct with
-           | CTnil => _
-           | CTcons => _
+           | CTnil _ => _
+           | CTcons _ => _
            end.
     + exact Here.
-    + exact (There Here).
+    + simpl.
+      repeat break_if; try congruence.
+      * inv e0. exfalso. eauto using no_infinite_types.
+      * exact (There Here).
+  - refine match ct with
+           | CTtt => _
+           end.
+    + exact (Here).
 Defined.
 
 Fixpoint unroll {l ty_rec arg_rec arg_tys ty}
@@ -546,38 +581,39 @@ Lemma eliminate_unroll :
     (cases : hlist (expr l) case_tys)
     (ct : constr_type c arg_tys target_tyn)
     (args : hlist (expr l) arg_tys),
-    eliminate e cases ct args =
+    eliminate e ct cases args =
     unroll args (hget cases (eliminate_case_type e ct))
            (Elim e cases).
 Proof.
   dependent destruction e; dependent destruction ct; intros;
   repeat dependent destruction args;
   repeat dependent destruction cases; auto.
+  simpl. repeat break_match; try congruence.
+  - exfalso. inv e. eauto using no_infinite_types.
+  - dependent destruction e. auto.
 Qed.
 
 Theorem eliminate_denote :
   forall case_tys target_tyn arg_tys ty l c
     (e : elim case_tys (ADT target_tyn) ty)
-    (cases : hlist (expr l) case_tys)
     (ct : constr_type c arg_tys target_tyn)
+    (cases : hlist (expr l) case_tys)
     (args : hlist (expr l) arg_tys) vs,
-    expr_denote (eliminate e cases ct args) vs =
+    expr_denote (eliminate e ct cases args) vs =
     expr_denote (Elim e cases (Constr ct args)) vs.
 Proof.
   unfold eliminate.
   intros case_tys target_tyn arg_tys ty l c e.
-  refine match e with
-         | EBool t    => fun cases ct => _
-         | ENat t     => fun cases ct => _
-         | EListNat t => fun cases ct => _
-         end.
-  - refine match ct with
+  destruct_elim e; intros ct.
+  - intros cases.
+    refine match ct with
            | CTtrue => _
            | CTfalse => _
            end; simpl; intros;
     repeat destruct cases as [? cases] using case_hlist_cons;
       simpl; auto.
-  - refine match ct with
+  - intros cases.
+    refine match ct with
            | CTO => _
            | CTS => _
            end; simpl; intros;
@@ -585,11 +621,16 @@ Proof.
     repeat destruct args as [? args] using case_hlist_cons;
       simpl; auto.
   - refine match ct with
-           | CTnil => _
-           | CTcons => _
+           | CTnil _ => _
+           | CTcons _ => _
            end; simpl; intros;
     repeat destruct cases as [? cases] using case_hlist_cons;
     repeat destruct args as [? args] using case_hlist_cons;
+      simpl; auto.
+  - refine match ct with
+           | CTtt => _
+           end; simpl; intros;
+    repeat destruct cases as [? cases] using case_hlist_cons;
       simpl; auto.
 Qed.
 
@@ -629,7 +670,7 @@ Inductive step {l} : forall {ty}, expr l ty -> expr l ty -> Prop :=
       (cases : hlist (expr l) case_tys),
       HForall (fun ty e => value e) args ->
       step (Elim e cases (Constr ct args))
-           (eliminate e cases ct args)
+           (eliminate e ct cases args)
 .
 Hint Constructors step.
 

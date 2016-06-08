@@ -15,7 +15,8 @@ Definition elim_to_type_name {l cases target} (e : S.elim l cases target) : type
   match e with
   | S.EBool _ => Tbool
   | S.ENat _ => Tnat
-  | S.EListNat _ => Tlist_nat
+  | S.EList ty _ => Tlist ty
+  | S.EUnit _ => Tunit
   end.
 
 Definition compile {l ty} (e : S.expr l ty) : U.expr :=
@@ -211,13 +212,11 @@ Proof.
   - simpl. intros. rewrite elim_to_type_name_correct. auto.
   - intros. rewrite <- plus_n_O.
     dependent destruction e; dependent destruction ct; destruct j; simpl in *; try congruence.
-    destruct j; simpl in *; try congruence.
-    destruct j; simpl in *; try congruence.
-    destruct j; simpl in *; try congruence.
+    all: repeat (destruct j; simpl in *; try congruence).
+    invc H. exfalso. eauto using S.no_infinite_types.
   - intros. rewrite <- plus_n_O.
-    dependent destruction e; dependent destruction ct; simpl; auto;
-    destruct j; simpl in *; try congruence.
-    destruct j; simpl in *; try congruence.
+    dependent destruction e; dependent destruction ct; simpl; auto.
+    all: repeat (destruct j; simpl in *; try congruence).
 Qed.
 
 Lemma constructor_index_correct :
@@ -227,6 +226,9 @@ Lemma constructor_index_correct :
     member_to_nat (S.eliminate_case_type e ct) = constructor_index c.
 Proof.
   dependent destruction e; dependent destruction ct; auto.
+  simpl. repeat break_match; try congruence.
+  - exfalso. inv e. eauto using S.no_infinite_types.
+  - auto.
 Qed.
 
 Theorem forward_simulation :
