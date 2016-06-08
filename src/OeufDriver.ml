@@ -682,7 +682,7 @@ let compile_oeuf ofile debug =
                                  SourceLang.ADT Utopia.Tnat) in
   let asm =
     match Compiler.apply_partial
-               (Oeuf.transf_to_asm fib_ty (SourceLang.fib_reflect []))
+               (Oeuf.transf_to_asm add_ty (SourceLang.add_reflect []))
                Asmexpand.expand_program with
     | Errors.OK asm ->
         asm

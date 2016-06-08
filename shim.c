@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdarg.h>
 
 union nat {
     int tag;
@@ -44,19 +45,41 @@ void* call(void* f, void* a) {
     (((struct closure*)f)->f)(f, a);
 }
 
+
+void* vcall(void* f, ...) {
+    va_list ap;
+    void* a = NULL;
+
+    va_start(ap, f);
+    while ((a = va_arg(ap, void*)) != NULL) {
+        f = call(f, a);
+    }
+    va_end(ap);
+
+    return f;
+}
+
+
 // union nat* add(union nat* a, union nat* b);
 
+extern void* _$8(void*, void*);
 extern void* _$14(void*, void*);
 
 int main() {
     union nat* one = make_nat(1);
     union nat* two = make_nat(2);
 
+    void* add = _$8(NULL, NULL);
+    void* sum = vcall(add, one, two, NULL);
+    printf("add(%d, %d) = %d\n", read_nat(one), read_nat(two), read_nat(sum));
+
+    /*
     void* fib = _$14(NULL, NULL);
     for (int i = 0; i < 8; ++i) {
         void* result = call(fib, make_nat(i));
         printf("fib(%d) = %d\n", i, read_nat(result));
     }
+    */
 
     return 0;
 }
