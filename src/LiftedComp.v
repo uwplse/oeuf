@@ -138,12 +138,13 @@ Inductive match_states (E : L.env) : nat -> U.expr -> L.expr -> Prop :=
         match_states E lvl (U.Var 0) L.Arg
 | MsUpVar : forall lvl n,
         match_states E lvl (U.Var (S n)) (L.UpVar n)
-| MsLam : forall lvl u_body fname free l_body l_body',
+| MsLam : forall lvl u_body fname free free' l_body l_body',
         nth_error E fname = Some l_body ->
-        Forall L.value (skipn lvl free) ->
-        L.subst L.Arg (rep_upvar lvl ++ skipn lvl free) l_body = Some l_body' ->
+        free' = close_vars lvl ++ free ->
+        Forall L.value free ->
+        L.subst L.Arg (rep_upvar lvl ++ free) l_body = Some l_body' ->
         match_states E (S lvl) u_body l_body' ->
-        match_states E lvl (U.Lam u_body) (L.Close fname free)
+        match_states E lvl (U.Lam u_body) (L.Close fname free')
 | MsApp : forall lvl u_f u_a l_f l_a,
         match_states E lvl u_f l_f ->
         match_states E lvl u_a l_a ->
@@ -163,10 +164,12 @@ unfold U.add_reflect, L.add_reflect.
 
 eapply MsLam.
   { compute [nth_error L.add_env L.add_lam_a]. reflexivity. }
+  { reflexivity. }
   { constructor. }
   { compute. reflexivity. }
 eapply MsLam.
   { compute [nth_error L.add_env L.add_lam_b]. reflexivity. }
+  { compute. reflexivity. }
   { constructor. }
   { compute. reflexivity. }
 eapply MsApp; eauto using MsArg, MsUpVar.
@@ -174,19 +177,19 @@ eapply MsElim; eauto using MsArg, MsUpVar.
 econstructor; [ | econstructor; [ | econstructor ] ].
 - eapply MsLam; eauto using MsArg, MsUpVar.
     { compute [nth_error L.add_env L.elim_zero_lam_b]. reflexivity. }
-    { constructor. }
+    { compute. reflexivity. }
     { compute. reflexivity. }
 - eapply MsLam; eauto using MsArg, MsUpVar.
     { compute [nth_error L.add_env L.elim_succ_lam_a]. reflexivity. }
-    { constructor. }
+    { compute. reflexivity. }
     { compute. reflexivity. }
   eapply MsLam; eauto using MsArg, MsUpVar.
     { compute [nth_error L.add_env L.elim_succ_lam_IHa]. reflexivity. }
-    { constructor. }
+    { compute. reflexivity. }
     { compute. reflexivity. }
   eapply MsLam; eauto using MsArg, MsUpVar.
     { compute [nth_error L.add_env L.elim_succ_lam_b]. reflexivity. }
-    { constructor. }
+    { compute. reflexivity. }
     { compute. reflexivity. }
   eapply MsApp; eauto using MsArg, MsUpVar.
   eapply MsConstr; eauto using MsArg, MsUpVar.
@@ -783,6 +786,34 @@ Admitted.
 
 Hint Constructors match_states.
 
+Lemma skipn_app_exact :
+  forall A n (l1 l2 : list A),
+    length l1 = n ->
+    skipn n (l1 ++ l2) = l2.
+Proof.
+  induction n; destruct l1; simpl; intros.
+  - auto.
+  - discriminate.
+  - discriminate.
+  - auto with *.
+Qed.
+
+Lemma length_close_vars' :
+  forall n, length (close_vars' n) = S n.
+Proof.
+  induction n; simpl; intros.
+  - auto.
+  - rewrite app_length. simpl. omega.
+Qed.
+
+Lemma length_close_vars :
+  forall n, length (close_vars n) = n.
+Proof.
+  unfold close_vars.
+  destruct n; auto.
+  now rewrite length_close_vars'.
+Qed.
+
 Lemma match_states_subst :
   forall E n u l uv lv free l' l'',
     L.subst L.Arg (rep_upvar n ++ free) l = Some l' ->
@@ -816,34 +847,35 @@ Proof.
     { apply subst_req_upvars_ok.
       rewrite app_length. rewrite length_rep_upvar.
       simpl.
-      fwd eapply req_vars_subst; eauto.
+
+      fwd eapply req_vars_subst with (e' := l_body'); eauto.
       rewrite map_cons, map_app in *.
       rewrite maximum_cons, maximum_app in *.
       rewrite map_req_upvars_rep_upvar in *.
       change (req_upvars L.Arg) with 0 in *.
       rewrite Max.max_0_l in *.
 
-      erewrite Forall_repeat with (a := 0) (l := map _ _) in H9; cycle 1.
-      eapply Forall_map. eassumption. auto using req_upvars_value.
 
-      rewrite maximum_repeat0 in H9. simpl in H9. omega. }
+      erewrite Forall_repeat with (a := 0) (l := map _ _) in *; cycle 1.
+      eapply Forall_map. eassumption. auto using req_upvars_value.
+      rewrite maximum_repeat0 in *. simpl in *. omega. }
+
 
     break_exists_name l''_q.
-    specialize (IHmatch_states (S n) l_body uv lv (skipn (S n) free) l''_q).
+    specialize (IHmatch_states (S n) l_body uv lv free l''_q).
     repeat concludes.
-    rewrite L_subst_nth_Close_unroll in H8.
-    unfold fmap, bind_option in H8.
+    rewrite L_subst_nth_Close_unroll in H9.
+    unfold fmap, bind_option in *.
     break_match; try discriminate.
     find_inversion.
 
-    eapply MsLam with (l_body' := l''_q).
-    eauto.
+    eapply MsLam with (l_body' := l''_q)(free := (lv :: free)); eauto.
     admit. (* add values to lambda case of match_states *)
-    fwd eapply L_subst_subst with (3 := H1)(4 := H9); auto.
+    fwd eapply L_subst_subst with (3 := H2)(4 := H0); auto.
     rewrite app_length, length_rep_upvar; simpl; omega.
     rewrite app_assoc_reverse in *.
     cbn [app] in *.
-    assert (skipn n l0 = lv :: skipn (S n) free).
+    assert (skipn n l0 = lv :: free).
     { find_copy_apply_lem_hyp map_partial_Some_length.
 
       fwd eapply skipn_length_gt_n with (n := n) (l := l0). admit.
@@ -852,10 +884,11 @@ Proof.
       fwd eapply map_partial_Forall2; eauto.
 
       fwd eapply Forall2_skipn with (n := (S n)); eauto.
+      rewrite skipn_app_exact in * by auto using length_close_vars.
       apply Forall2_eq.
       rewrite Forall2_flip'.
       eapply Forall2_apply1. eauto.
-      eapply Forall2_imp; try apply H14.
+      eapply Forall2_imp; [|eauto].
       cbv beta.
       intros. fwd eapply L_subst_nth_value; eauto.
       rewrite H15 in H17. congruence. }
