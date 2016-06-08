@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-DIRS=(src)
+DIRS=(src demos/verdi/echo)
 NAMESPACE_compcert=compcert
 LOCALDEPS=(compcert)
 DEPS=(StructTact)
