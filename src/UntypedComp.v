@@ -17,6 +17,7 @@ Definition elim_to_type_name {l cases target} (e : S.elim l cases target) : type
   | S.ENat _ => Tnat
   | S.EList ty _ => Tlist ty
   | S.EUnit _ => Tunit
+  | S.EPair ty1 ty2 _ => Tpair ty1 ty2
   end.
 
 Definition compile {l ty} (e : S.expr l ty) : U.expr :=
@@ -213,7 +214,9 @@ Proof.
   - intros. rewrite <- plus_n_O.
     dependent destruction e; dependent destruction ct; destruct j; simpl in *; try congruence.
     all: repeat (destruct j; simpl in *; try congruence).
-    invc H. exfalso. eauto using S.no_infinite_types.
+    + invc H. exfalso. eauto using S.no_infinite_types_list.
+    + invc H. exfalso. eauto using S.no_infinite_types_pair1.
+    + invc H. exfalso. eauto using S.no_infinite_types_pair2.
   - intros. rewrite <- plus_n_O.
     dependent destruction e; dependent destruction ct; simpl; auto.
     all: repeat (destruct j; simpl in *; try congruence).
@@ -226,9 +229,14 @@ Lemma constructor_index_correct :
     member_to_nat (S.eliminate_case_type e ct) = constructor_index c.
 Proof.
   dependent destruction e; dependent destruction ct; auto.
-  simpl. repeat break_match; try congruence.
-  - exfalso. inv e. eauto using S.no_infinite_types.
-  - auto.
+  - simpl. repeat break_match; try congruence.
+    + exfalso. inv e. eauto using S.no_infinite_types_list.
+    + auto.
+  - simpl. repeat break_match; try congruence.
+    + exfalso. inv e. eauto using S.no_infinite_types_pair1.
+    + exfalso. inv e. eauto using S.no_infinite_types_pair1.
+    + exfalso. inv e. eauto using S.no_infinite_types_pair2.
+    + auto.
 Qed.
 
 Theorem forward_simulation :

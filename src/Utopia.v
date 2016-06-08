@@ -3,6 +3,7 @@ Inductive type_name :=
 | Tbool
 | Tlist : type_name -> type_name
 | Tunit
+| Tpair : type_name -> type_name -> type_name
 .
 
 
@@ -16,6 +17,7 @@ Fixpoint type_name_denote (tyn : type_name) : Type :=
   | Tnat => nat
   | Tlist tyn' => list (type_name_denote tyn')
   | Tunit => unit
+  | Tpair ty1 ty2 => type_name_denote ty1 * type_name_denote ty2
   end.
 
 Inductive constr_name :=
@@ -26,6 +28,7 @@ Inductive constr_name :=
 | Cnil
 | Ccons
 | Ctt
+| Cpair
 .
 
 Definition constructor_index ctor : nat :=
@@ -40,6 +43,8 @@ Definition constructor_index ctor : nat :=
     | Ccons => 1
 
     | Ctt => 0
+
+    | Cpair => 0
     end.
 
 Definition constructor_arg_n ctor : nat :=
@@ -54,6 +59,8 @@ Definition constructor_arg_n ctor : nat :=
     | Ccons => 2
 
     | Ctt => 0
+
+    | Cpair => 2
     end.
 
 Definition ctor_arg_is_recursive ctor pos : bool :=
@@ -75,6 +82,8 @@ Definition type_constr ty idx : option constr_name :=
     | Tlist _, 1 => Some Ccons
 
     | Tunit, 0 => Some Ctt
+
+    | Tpair _ _, 0 => Some Cpair
 
     | _, _ => None
     end.
