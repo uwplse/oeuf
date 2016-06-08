@@ -1,6 +1,7 @@
 Require Import Common.
 
 Require Import Monads.
+Require Import StuartTact.
 Require Utopia.
 
 Require Lifted.
@@ -216,50 +217,78 @@ Qed.
 
 
 
-(*
-Definition index_to_count ty idx_e : option (nat * T.expr) :=
-    let '(idx, e) := idx_e in
-    match U.type_constr ty idx with
-    | Some c => Some (U.constructor_arg_n c, e)
-    | None => None
-    end.
 
-Definition compile (e : U.expr) : option T.expr :=
-    U.expr_rect_mut _ _
-    (fun n => T.Var <$> Some n)
-    (fun _ body' => T.Lam <$> body')
-    (fun _ _ f' a' => T.App <$> f' <*> a')
-    (fun c _ args' => T.Constr <$> Some (U.constructor_index c) <*> args')
-    (fun ty _ _ cases' target' =>
-        cases' >>= fun cases' =>
-        T.Switch <$> map_partial (index_to_count ty) (zip_counter cases') <*> target')
+Inductive match_states (LE : L.env) (TE : T.env) : L.expr -> T.expr -> Prop :=
+| MsArg :
+        match_states LE TE L.Arg T.Arg
+| MsUpVar : forall n,
+        match_states LE TE (L.UpVar n) (T.UpVar n)
+| MsCall : forall lf la tf ta,
+        match_states LE TE lf tf ->
+        match_states LE TE la ta ->
+        match_states LE TE (L.Call lf la) (T.Call tf ta)
+| MsConstr : forall c largs tag targs,
+        Utopia.constructor_arg_n c = tag ->
+        Forall2 (match_states LE TE) largs targs ->
+        match_states LE TE (L.Constr c largs) (T.Constr tag targs)
+| MsElim : forall ty lcases ltarget tcases0 tcases ttarget,
+        Forall2 (match_states LE TE) lcases tcases0 ->
+        mk_tagged_cases ty tcases0 = Some tcases ->
+        match_states LE TE ltarget ttarget ->
+        match_states LE TE (L.Elim ty lcases ltarget) (T.Elim tcases ttarget)
+| MsClose : forall fn largs targs,
+        Forall2 (match_states LE TE) largs targs ->
+        match_states LE TE (L.Close fn largs) (T.Close fn targs)
+.
 
-    (Some [])
-    (fun _ _ e' es' =>
-        match e', es' with
-        | Some e', Some es' => Some (e' :: es')
-        | _, _ => None
-        end)
+Lemma match_value : forall LE TE le te,
+    match_states LE TE le te ->
+    L.value le ->
+    T.value te.
+induction le using L.expr_ind'; intros0 Hmatch Lval; invc Lval; invc Hmatch.
 
-    e.
+- admit.
+- admit.
+Admitted.
 
-Fixpoint compile' (e : U.expr) : option T.expr :=
-    let fix map_p (l : list U.expr) : option (list T.expr) :=
-      match l with
-      | [] => Some []
-      | a :: l' => match compile' a, map_p l' with
-                  | Some b, Some l'' => Some (b :: l'')
-                  | _, _ => None
-                  end
-      end in
-    match e with
-    | U.Var n => T.Var <$> Some n
-    | U.Lam body => T.Lam <$> compile' body
-    | U.App f a => T.App <$> compile' f <*> compile' a
-    | U.Constr c args => T.Constr
-        <$> Some (U.constructor_index c)
-        <*> map_p args
-    | _ => None
-    end.
+Theorem match_step : forall LE TE le le' te,
+    Forall2 (match_states LE TE) LE TE ->
+    match_states LE TE le te ->
+    L.step LE le le' ->
+    exists te', T.step TE te te' /\ match_states LE TE le' te'.
+intros. move le at top. generalize_all.
+induction le using L.expr_ind'; intros0 Henv Hmatch Lstep; try solve [invc Lstep].
 
-*)
+- (* Call *)
+  invc Lstep.
+
+  + (* MakeCall *)
+    invc Hmatch. invc H4.
+
+    eexists. split.
+    -- eapply T.MakeCall; eauto using match_value.
+       ++ admit. (* need good lemmas about Forall/Forall2 *)
+       ++ admit. (* because length LE = length TE *)
+       ++ admit. (* T.subst succeeds because L.subst succeeds *)
+
+    -- admit. (* (1) needs subst/match lemma; (2) need to know how te' was made *)
+
+  + (* CallL *)
+    invc Hmatch.
+    fwd eapply IHle1; eauto. 
+    break_exists. break_and.
+    eexists. split; econstructor; eauto.
+
+  + (* CallR *)
+    invc Hmatch.
+    fwd eapply IHle2; eauto.
+    break_exists. break_and.
+    eexists. split; econstructor; solve [eauto using match_value].
+
+- (* Constr *)
+  invc Lstep. invc Hmatch.
+  admit.
+
+- admit.
+- admit.
+Admitted.
