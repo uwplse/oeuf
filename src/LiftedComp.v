@@ -1020,3 +1020,142 @@ induction 1; intros0 Ustep Lstep.
 
   + (* AppL *) 
   *)
+
+
+
+
+
+Inductive rel' (E : L.env) (later : U.expr -> L.expr -> Prop) :
+        U.expr -> L.expr -> Prop :=
+| RelConstr : forall c uargs largs,
+        Forall2 (rel' E later) uargs largs ->
+        rel' E later (U.Constr c uargs) (L.Constr c largs)
+| RelFun : forall uf lf,
+        (forall ua la ur lr,
+            U.value ua ->
+            L.value la ->
+            later ua la ->
+            U.star (U.App uf ua) ur ->
+            U.value ur ->
+            L.star E (L.Call lf la) lr ->
+            L.value lr ->
+            later ur lr) ->
+        rel' E later uf lf.
+
+Fixpoint rel (n : nat) (E : L.env) : U.expr -> L.expr -> Prop :=
+    match n with
+    | 0 => rel' E (fun _ _ => False)
+    | S n' => rel' E (rel n' E)
+    end.
+
+
+Definition U_zero := U.Constr Utopia.CO [].
+Definition L_zero := L.Constr Utopia.CO [].
+
+Definition U_one := U.Constr Utopia.CS [U.Constr Utopia.CO []].
+Definition L_one := L.Constr Utopia.CS [L.Constr Utopia.CO []].
+
+Definition U_id := U.Lam (U.Var 0).
+Definition U_succ := U.Lam (U.Constr Utopia.CS [U.Var 0]).
+
+Definition L_env := [
+    L.Arg;  (* identity *)
+    L.Constr Utopia.CS [L.Arg]  (* successor *)
+].
+Definition L_id := L.Close 0 [].
+Definition L_succ := L.Close 1 [].
+
+
+Theorem rel_zero : rel 0 L_env U_zero L_zero.
+constructor. constructor.
+Qed.
+
+Theorem rel_one : rel 0 L_env U_one L_one.
+repeat constructor.
+Qed.
+
+Require Import StuartTact.
+
+Lemma U_values_dont_step : forall e e',
+    U.value e ->
+    U.step e e' ->
+    False.
+induction e using U.expr_ind'; intros0 Hval Hstep;
+invc Hval; invc Hstep.
+
+(* Constr case.  The contradiction is that an arg of the constr just stepped,
+   but all the args are values. *)
+rewrite Forall_forall in *.
+assert (In e (pre ++ e :: post)).
+  { eapply in_or_app. right. repeat constructor. }
+eauto.
+Qed.
+
+Lemma L_values_dont_step : forall E e e',
+    L.value e ->
+    L.step E e e' ->
+    False.
+induction e using L.expr_ind'; intros0 Hval Hstep;
+invc Hval; invc Hstep.
+
+- (* constr *)
+  rewrite Forall_forall in *.
+  assert (In e (vs ++ e :: es)).
+    { eapply in_or_app. right. repeat constructor. }
+  eauto.
+
+- (* close *)
+  rewrite Forall_forall in *.
+  assert (In e (vs ++ e :: es)).
+    { eapply in_or_app. right. repeat constructor. }
+  eauto.
+Qed.
+
+
+Theorem rel_id : rel 1 L_env U_id L_id.
+econstructor.
+intros0 Uval Lval Hrel Ustar Uval' Lstar Lval'.
+
+invc Ustar. { invc Uval'. }
+on (U.step _ _), invc.
+  Focus 2. { unfold U_id in H4. inversion H4. } Unfocus.
+  Focus 2. { exfalso. eauto using U_values_dont_step. } Unfocus.
+on (U.star _ _), fun H => (compute in H; invc H).
+  Focus 2. { exfalso. eauto using U_values_dont_step. } Unfocus.
+
+invc Lstar. { invc Lval'. }
+on (L.step _ _ _), invc.
+  Focus 2. { assert (L.value L_id) by repeat constructor.
+             exfalso. eauto using L_values_dont_step. } Unfocus.
+  Focus 2. { exfalso. eauto using L_values_dont_step. } Unfocus.
+on (nth_error _ _ = _), fun H => (compute in H; invc H).
+on (L.subst _ _ _ = _), fun H => (compute in H; invc H).
+on (L.star _ _ _), fun H => invc H.
+  Focus 2. { exfalso. eauto using L_values_dont_step. } Unfocus.
+
+assumption.
+Qed.
+
+Theorem rel_succ : rel 1 L_env U_succ L_succ.
+econstructor.
+intros0 Uval Lval Hrel Ustar Uval' Lstar Lval'.
+
+assert (U.value U_succ) by repeat constructor.
+assert (L.value L_succ) by repeat constructor.
+
+on (U.star _ _), invc; try solve [on (U.value _), invc].
+on (U.step _ _), invc; try solve [exfalso; eauto using U_values_dont_step].
+on (U.star _ _), fun H => (compute in H; invc H);
+    try solve [ exfalso; eapply U_values_dont_step; [ | eassumption ];
+            repeat constructor; assumption ].
+
+on (L.star _ _ _), invc; try solve [on (L.value _), invc].
+on (L.step _ _ _), invc; try solve [exfalso; eauto using L_values_dont_step].
+  on (nth_error _ _ = _), fun H => (compute in H; invc H).
+  on (L.subst _ _ _ = _), fun H => (compute in H; invc H).
+on (L.star _ _ _), fun H => (compute in H; invc H);
+    try solve [ exfalso; eapply L_values_dont_step; [ | eassumption ];
+            repeat constructor; assumption ].
+
+econstructor. econstructor; [ | econstructor ]. assumption.
+Qed.
