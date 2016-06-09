@@ -4,7 +4,7 @@
 #include <netdb.h>
 #include <arpa/inet.h>
 
-#include "../../shim.h"
+#include "../../../shim.h"
 
 extern void* initialstate$1(void*, void*);
 extern void* handleinput$5(void*, void*);

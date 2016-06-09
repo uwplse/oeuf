@@ -19,6 +19,7 @@ open Timing
 open Oeuf
 open SourceLang
 open Utopia
+open Echo
 
 (* Location of the compatibility library *)
 
