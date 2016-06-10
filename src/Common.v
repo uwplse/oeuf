@@ -8,3 +8,4 @@ Export ListNotations.
 Global Arguments length {_} _.
 Global Arguments cons {_} _ _.
 Global Arguments Some {_} _.
+Global Arguments app {_} _ _.
