@@ -18,6 +18,8 @@ Definition elim_to_type_name {l cases target} (e : S.elim l cases target) : type
   | S.EList ty _ => Tlist ty
   | S.EUnit _ => Tunit
   | S.EPair ty1 ty2 _ => Tpair ty1 ty2
+  | S.EOption ty _ => Toption ty
+  | S.EPositive _ => Tpositive
   end.
 
 Definition compile {l ty} (e : S.expr l ty) : U.expr :=
@@ -217,6 +219,7 @@ Proof.
     + invc H. exfalso. eauto using S.no_infinite_types_list.
     + invc H. exfalso. eauto using S.no_infinite_types_pair1.
     + invc H. exfalso. eauto using S.no_infinite_types_pair2.
+    + invc H. exfalso. eauto using S.no_infinite_types_option.
   - intros. rewrite <- plus_n_O.
     dependent destruction e; dependent destruction ct; simpl; auto.
     all: repeat (destruct j; simpl in *; try congruence).
@@ -236,6 +239,9 @@ Proof.
     + exfalso. inv e. eauto using S.no_infinite_types_pair1.
     + exfalso. inv e. eauto using S.no_infinite_types_pair1.
     + exfalso. inv e. eauto using S.no_infinite_types_pair2.
+    + auto.
+  - simpl. repeat break_match; try congruence.
+    + exfalso. inv e. eauto using S.no_infinite_types_option.
     + auto.
 Qed.
 

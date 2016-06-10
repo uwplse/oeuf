@@ -1,9 +1,13 @@
+Require Import ZArith.
+
 Inductive type_name :=
 | Tnat
 | Tbool
 | Tlist : type_name -> type_name
 | Tunit
 | Tpair : type_name -> type_name -> type_name
+| Toption : type_name -> type_name
+| Tpositive
 .
 
 
@@ -18,6 +22,8 @@ Fixpoint type_name_denote (tyn : type_name) : Type :=
   | Tlist tyn' => list (type_name_denote tyn')
   | Tunit => unit
   | Tpair ty1 ty2 => type_name_denote ty1 * type_name_denote ty2
+  | Toption ty => option (type_name_denote ty)
+  | Tpositive => positive
   end.
 
 Inductive constr_name :=
@@ -29,6 +35,11 @@ Inductive constr_name :=
 | Ccons
 | Ctt
 | Cpair
+| Csome
+| Cnone
+| CxI
+| CxO
+| CxH
 .
 
 Definition constructor_index ctor : nat :=
@@ -45,6 +56,13 @@ Definition constructor_index ctor : nat :=
     | Ctt => 0
 
     | Cpair => 0
+
+    | Csome => 0
+    | Cnone => 1
+
+    | CxI => 0
+    | CxO => 1
+    | CxH => 2
     end.
 
 Definition constructor_arg_n ctor : nat :=
@@ -61,12 +79,21 @@ Definition constructor_arg_n ctor : nat :=
     | Ctt => 0
 
     | Cpair => 2
+
+    | Csome => 1
+    | Cnone => 0
+
+    | CxI => 1
+    | CxO => 1
+    | CxH => 0
     end.
 
 Definition ctor_arg_is_recursive ctor pos : bool :=
     match ctor, pos with
     | CS, 0 => true
     | Ccons, 1 => true
+    | CxI, 0 => true
+    | CxO, 0 => true
     | _, _ => false
     end.
 
@@ -84,6 +111,13 @@ Definition type_constr ty idx : option constr_name :=
     | Tunit, 0 => Some Ctt
 
     | Tpair _ _, 0 => Some Cpair
+
+    | Toption _, 0 => Some Csome
+    | Toption _, 1 => Some Cnone
+
+    | Tpositive, 0 => Some CxI
+    | Tpositive, 1 => Some CxO
+    | Tpositive, 2 => Some CxH
 
     | _, _ => None
     end.

@@ -25,6 +25,11 @@ Inductive constr_type : constr_name -> list type -> type_name -> Type :=
 | CTcons ty      : constr_type Ccons      [ADT ty; ADT (Tlist ty)]    (Tlist ty)
 | CTtt           : constr_type Ctt        []                          Tunit
 | CTpair ty1 ty2 : constr_type Cpair      [ADT ty1; ADT ty2]          (Tpair ty1 ty2)
+| CTsome ty      : constr_type Csome      [ADT ty]                    (Toption ty)
+| CTnone ty      : constr_type Cnone      []                          (Toption ty)
+| CTxI           : constr_type CxI        [ADT Tpositive]             Tpositive
+| CTxO           : constr_type CxO        [ADT Tpositive]             Tpositive
+| CTxH           : constr_type CxH        []                          Tpositive
 .
 
 (* an eliminator that takes cases with types given by the first index,
@@ -36,6 +41,10 @@ Inductive elim : list type -> type -> type -> Type :=
 | EList : forall tyA ty, elim [ty; Arrow (ADT tyA) (Arrow (ADT (Tlist tyA)) (Arrow ty ty))] (ADT (Tlist tyA)) ty
 | EUnit : forall ty, elim [ty] (ADT Tunit) ty
 | EPair : forall ty1 ty2 ty, elim [Arrow (ADT ty1) (Arrow (ADT ty2) ty)] (ADT (Tpair ty1 ty2)) ty
+| EOption : forall tyA ty, elim [Arrow (ADT tyA) ty; ty] (ADT (Toption tyA)) ty
+| EPositive : forall ty, elim [Arrow (ADT Tpositive) (Arrow ty ty);
+                          Arrow (ADT Tpositive) (Arrow ty ty);
+                          ty] (ADT Tpositive) ty
 .
 
 Section expr.
@@ -71,6 +80,11 @@ Definition constr_denote {arg_tys ty c} (ct : constr_type c arg_tys ty) :
   | CTcons _ => fun h => cons (hhead h) (hhead (htail h))
   | CTtt => fun _ => tt
   | CTpair _ _ => fun h => (hhead h, hhead (htail h))
+  | CTsome _ => fun h => Some (hhead h)
+  | CTnone _ => fun h => None
+  | CTxI => fun h => xI (hhead h)
+  | CTxO => fun h => xO (hhead h)
+  | CTxH => fun h => xH
   end.
 
 
@@ -82,6 +96,9 @@ Definition elim_denote {case_tys target_ty ty} (e : elim case_tys target_ty ty) 
   | EList _ _ => fun cases target => (list_rect _ (hhead cases) (hhead (htail cases)) target)
   | EUnit _ => fun cases target => unit_rect _ (hhead cases) target
   | EPair _ _ _ => fun cases target => prod_rect _ (hhead cases) target
+  | EOption _ _ => fun cases target => option_rect _ (hhead cases) (hhead (htail cases)) target
+  | EPositive _ => fun cases target => positive_rect _ (hhead cases) (hhead (htail cases))
+                                                 (hhead (htail (htail cases))) target
   end.
 
 Definition expr_mut_rect
@@ -158,17 +175,19 @@ Ltac typename_reflect' x :=
   | nat => constr:(Tnat)
   | bool => constr:(Tbool)
   | unit => constr:(Tunit)
+  | positive => constr:(Tpositive)
   | list ?X => let r := typename_reflect' X in constr:(Tlist r)
   | prod ?X ?Y => let rX := typename_reflect' X in
                  let rY := typename_reflect' Y in
                  constr:(Tpair rX rY)
+  | option ?X => let r := typename_reflect' X in constr:(Toption r)
 
   end.
 Ltac typename_reflect x := let r := typename_reflect' x in exact r.
 
 Check ltac:(typename_reflect (list (list (list unit)))).
 Check ltac:(typename_reflect (unit * bool * unit * nat * list bool)%type).
-
+Check ltac:(typename_reflect (option (positive * bool * unit * nat * list bool))%type).
 Ltac type_reflect' x :=
   match x with
   | ?X -> ?Y => let rX := type_reflect' X in
@@ -202,13 +221,25 @@ Ltac reflect' x :=
   lazymatch x' with
   | fun _ => true => uconstr:(Constr CTtrue hnil)
   | fun _ => false => uconstr:(Constr CTfalse hnil)
+  | fun _ => xH => uconstr:(Constr CTxH hnil)
   | fun _ => O => uconstr:(Constr CTO hnil)
   | fun _ => S => uconstr:(Lam (Constr CTS (hcons (Var Here) hnil)))
   | fun _ => tt => uconstr:(Constr CTtt hnil)
   | fun (x : ?T) => S (@?X x) =>
     let r := reflect' X in
     uconstr:(Constr CTS (hcons r hnil))
-  | fun _ => @nil ?ty => uconstr:(Constr (CTnil _) hnil)
+  | fun (x : ?T) => xI (@?X x) =>
+    let r := reflect' X in
+    uconstr:(Constr CTxI (hcons r hnil))
+  | fun (x : ?T) => xO (@?X x) =>
+    let r := reflect' X in
+    uconstr:(Constr CTxO (hcons r hnil))
+
+  | fun _ => @None ?ty => let t := typename_reflect' ty in uconstr:(Constr (CTnone t) hnil)
+  | fun (x : ?T) => @Some ?ty (@?X x) =>
+    let r := reflect' X in
+    uconstr:(Constr (CTsome _) (hcons r hnil))
+  | fun _ => @nil ?ty => let t := typename_reflect' ty in uconstr:(Constr (CTnil t) hnil)
   | fun (x : ?T) => @cons ?ty (@?X x) (@?Y x) =>
     let r1 := reflect' X in
     let r2 := reflect' Y in
@@ -217,6 +248,7 @@ Ltac reflect' x :=
     let r1 := reflect' X in
     let r2 := reflect' Y in
     uconstr:(Constr (CTpair _ _) (hcons r1 (hcons r2 hnil)))
+
 
   | fun (x : ?T) => if @?B x then @?X x else @?Y x =>
     let r1 := reflect' B in
@@ -237,6 +269,18 @@ Ltac reflect' x :=
     let r1 := reflect' X in
     let r2 := reflect' p in
     uconstr:(Elim (EPair _ _ _) (hcons r1 hnil) r2)
+  | fun (x : ?T) => @positive_rect _ (@?X x) (@?Y x) (@?Z x) (@?p x) =>
+    let r1 := reflect' X in
+    let r2 := reflect' Y in
+    let r3 := reflect' Z in
+    let r4 := reflect' p in
+    uconstr:(Elim (EPositive _) (hcons r1 (hcons r2 (hcons r3 hnil))) r4)
+  | fun (x : ?T) => @option_rect ?A _ (@?X x) (@?Y x) (@?o x) =>
+    let r1 := reflect' X in
+    let r2 := reflect' Y in
+    let r3 := reflect' o in
+    uconstr:(Elim (EOption _ _) (hcons r1 (hcons r2 hnil)) r3)
+
 
   | fun (x : ?T) (y : ?A) => @?E x y =>
     let rA := type_reflect' A in
@@ -247,6 +291,7 @@ Ltac reflect' x :=
     let r1 := reflect' (fun z : T => X) in
     let r2 := reflect' (fun z : T => Y) in
     uconstr:(App r1 r2)
+  | _ => fail 100 x x'
   end.
 
 (* fill in the context with the expression reflection of the given term *)
@@ -255,6 +300,9 @@ Ltac reflect x := let r := reflect' (fun _ : unit => x) in exact r.
 Check ltac:(reflect true) : expr [] _ .
 Check ltac:(reflect O)  : expr [] _ .
 Check ltac:(reflect S)  : expr [] _ .
+Check ltac:(reflect (Some (xO (xI xH))))  : expr [] _ .
+Check ltac:(reflect (@None nat))  : expr [] _ .
+Check ltac:(reflect (@nil nat))  : expr [] _ .
 Check ltac:(reflect tt)  : expr [] _ .
 Check ltac:(reflect (S O))  : expr [] _ .
 Check ltac:(reflect (fun _ : nat => (S O)))  : expr [] _ .
@@ -270,12 +318,14 @@ Check ltac:(reflect S)  : expr [] _ .
 Check ltac:(reflect (fun _ : nat => S))  : expr [] _ .
 Check ltac:(reflect (nat_rect (fun _ => nat) 4 (fun _ => S) 17))  : expr [] _ .
 Check ltac:(reflect (fun x : nat => x))  : expr [] _ .
-Check ltac:(reflect (@list_rect nat (fun _ => list nat) [] (fun h _ t => cons 3 (cons h t)) [0; 0; 0])) : expr [] _ .
+Check ltac:(reflect (fun x => @list_rect nat (fun _ => list nat) [] (fun h _ t => cons 3 (cons h t)) x)) : expr [] _ .
 Eval compute in expr_denote ltac:(reflect  (@list_rect nat (fun _ => list nat) [] (fun h _ t => cons 3 (cons h t)) [0; 0; 0])) hnil.
 Check ltac:(reflect (@list_rect bool (fun _ => list bool) [] (fun h _ t => cons false (cons h t)) [true; true; true])) : expr [] _ .
 Eval compute in expr_denote (ltac:(reflect (@list_rect bool (fun _ => list bool) [] (fun h _ t => cons false (cons h t)) [true; true; true]))) hnil.
 Check ltac:(reflect (fun (x _ _ _ _ _ _ _ _ _ _ : nat) => x))  : expr [] _ .
-Check ltac:(reflect (@prod_rect nat nat (fun _ => nat) (fun a b => a) (1, 3)))  : expr [] _ .
+Check ltac:(reflect (fun x => @prod_rect nat nat (fun _ => nat) (fun a b => a) x))  : expr [] _ .
+Check ltac:(reflect (fun x => @positive_rect (fun _ => positive) (fun _ r => xI r) (fun _ r => xO r) xH x))  : expr [] _ .
+Check ltac:(reflect (fun x => @option_rect nat (fun _ => option nat) (fun a => Some a) None x))  : expr [] _ .
 
 Section tests.
 
@@ -483,6 +533,8 @@ refine match e with
          | EList _ t => _
          | EUnit t    => _
          | EPair _ _ t => _
+         | EOption _ t => _
+         | EPositive t => _
        end.
 
 Definition eliminate {case_tys target_tyn arg_tys ty l c}
@@ -516,6 +568,17 @@ Definition eliminate {case_tys target_tyn arg_tys ty l c}
    - refine match ct with
             | CTpair _ _ => fun cases args => App (App (hhead cases) (hhead args)) (hhead (htail args))
             end.
+   - refine match ct with
+            | CTsome _ => fun cases args => App (hhead cases) (hhead args)
+            | CTnone _ => fun cases _ => hhead (htail cases)
+            end.
+   - refine match ct with
+            | CTxI => fun cases args => let pred := hhead args in
+                                    App (App (hhead cases) pred) (Elim (EPositive t) cases pred)
+            | CTxO => fun cases args => let pred := hhead args in
+                                    App (App (hhead (htail cases)) pred) (Elim (EPositive t) cases pred)
+            | CTxH => fun cases _ => hhead (htail (htail cases))
+            end.
 Defined.
 
 Fixpoint arrow_all (ty_rec : type) (arg_rec : type) (args : list type) (dest : type) : type :=
@@ -532,6 +595,7 @@ Fixpoint type_size (tyn : type_name) : nat :=
   match tyn with
   | Tlist tyn' => S (type_size tyn')
   | Tpair ty1 ty2 => S (type_size ty1 + type_size ty2)
+  | Toption tyn' => S (type_size tyn')
   | _ => 1
   end.
 
@@ -562,6 +626,14 @@ Proof.
   omega.
 Qed.
 
+Lemma no_infinite_types_option :
+  forall ty, ty = Toption ty -> False.
+Proof.
+  intros.
+  apply f_equal with (f := type_size) in H.
+  simpl in *.
+  omega.
+Qed.
 
 Definition eliminate_case_type
            {case_tys target_tyn arg_tys c ty}
@@ -602,6 +674,22 @@ Definition eliminate_case_type
     + break_if.
       * exfalso. inv e0. eauto using no_infinite_types_pair2.
       * exact Here.
+  - refine match ct with
+    | CTsome _ => _
+    | CTnone _ => _
+    end.
+    + simpl. break_if.
+      * exfalso. inv e0. eauto using no_infinite_types_option.
+      * exact Here.
+    + exact (There Here).
+  - refine match ct with
+           | CTxI => _
+           | CTxO => _
+           | CTxH => _
+           end.
+    + exact Here.
+    + exact (There Here).
+    + exact (There (There Here)).
 Defined.
 
 Fixpoint unroll {l ty_rec arg_rec arg_tys ty}
@@ -648,6 +736,9 @@ Proof.
     + exfalso. inv e. eauto using no_infinite_types_pair1.
     + exfalso. inv e. eauto using no_infinite_types_pair2.
     + auto.
+  - simpl. repeat break_match; try congruence.
+    + exfalso. inv e. eauto using no_infinite_types_option.
+    + auto.
 Qed.
 
 Theorem eliminate_denote :
@@ -691,6 +782,21 @@ Proof.
       simpl; auto.
   - refine match ct with
            | CTpair _ _ => _
+           end; simpl; intros;
+    repeat destruct cases as [? cases] using case_hlist_cons;
+    repeat destruct args as [? args] using case_hlist_cons;
+      simpl; auto.
+  - refine match ct with
+           | CTsome _ => _
+           | CTnone _ => _
+           end; simpl; intros;
+    repeat destruct cases as [? cases] using case_hlist_cons;
+    repeat destruct args as [? args] using case_hlist_cons;
+      simpl; auto.
+  - refine match ct with
+           | CTxI => _
+           | CTxO => _
+           | CTxH => _
            end; simpl; intros;
     repeat destruct cases as [? cases] using case_hlist_cons;
     repeat destruct args as [? args] using case_hlist_cons;
