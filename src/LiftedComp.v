@@ -125,13 +125,7 @@ Eval compute in proj1_sig add_1_2.
 (* end of test *)
 
 
-Definition rep_upvar n :=
-    let fix go n acc :=
-        match n with
-        | 0 => acc
-        | S n => go n (L.UpVar n :: acc)
-        end
-    in go n [].
+Definition rep_upvar n := map L.UpVar (List.seq 0 n).
 
 Inductive match_states (E : L.env) : nat -> U.expr -> L.expr -> Prop :=
 | MsArg : forall lvl,
@@ -700,7 +694,10 @@ Admitted.
 
 Lemma length_rep_upvar : forall n, length (rep_upvar n) = n.
 Proof.
-Admitted.
+  unfold rep_upvar.
+  intros.
+  now rewrite map_length, seq_length.
+Qed.
 
 Lemma map_req_upvars_rep_upvar : forall n, maximum (map req_upvars (rep_upvar n)) = n.
 Proof.
@@ -882,22 +879,15 @@ Lemma close_vars'_unroll_S :
     close_vars' (S n) = close_vars' n ++ [L.UpVar n].
 Proof. reflexivity. Qed.
 
-Fixpoint rep_upvar' n acc :=
-  match n with
-  | 0 => acc
-  | S n' => rep_upvar' n' (L.UpVar n' :: acc)
-  end.
-
-Lemma rep_upvar'_acc_app :
-  forall n acc,
-    rep_upvar' n acc = rep_upvar' n [] ++ acc.
+Lemma seq_extend :
+  forall n a,
+    List.seq a (S n) = List.seq a n ++ [a + n].
 Proof.
-  induction n; simpl; intros.
-  - auto.
-  - rewrite IHn.
-    rewrite IHn with (acc := [_]).
-    rewrite app_assoc_reverse.
-    auto.
+  induction n; intros.
+  - simpl. f_equal. omega.
+  - change (List.seq a (S (S n))) with (a :: List.seq (S a) (S n)).
+    rewrite IHn. simpl.
+    f_equal. f_equal. f_equal. omega.
 Qed.
 
 Lemma rep_upvar_S :
@@ -906,9 +896,10 @@ Lemma rep_upvar_S :
 Proof.
   unfold rep_upvar.
   intros.
-  fold (rep_upvar' n).
-  rewrite rep_upvar'_acc_app.
-  auto.
+  change ([L.UpVar n]) with (map L.UpVar [n]).
+  rewrite <- map_app.
+  f_equal.
+  apply seq_extend.
 Qed.
 
 Lemma L_subst_rep_var_close_vars':
@@ -980,6 +971,43 @@ Proof.
     rewrite IHl; auto.
 Qed.
 
+Lemma nth_error_map :
+  forall A B (f : A -> B) n l,
+    nth_error (map f l) n = f <$> nth_error l n.
+Proof.
+  induction n; destruct l; simpl; intros; auto.
+Qed.
+
+Lemma nth_error_seq_Some :
+  forall n' a n n'',
+    nth_error (List.seq a n) n' = Some n'' ->
+    n'' = a + n'.
+Proof.
+  induction n'; simpl; intros; break_match; try discriminate.
+  - find_inversion.
+    destruct n; simpl in *; try discriminate.
+    find_inversion. omega.
+  - destruct n; simpl in *; try discriminate.
+    find_inversion.
+    apply IHn' in H.
+    omega.
+Qed.
+
+Lemma nth_error_rep_upvar:
+  forall (n n0 : nat) (l'' : L.expr),
+    nth_error (rep_upvar n0) n = Some l'' ->
+    l'' = L.UpVar n.
+Proof.
+  unfold rep_upvar.
+  intros.
+  rewrite nth_error_map in *.
+  unfold fmap, bind_option in *.
+  break_match; try discriminate.
+  find_inversion.
+  eapply nth_error_seq_Some in Heqo.
+  simpl in *. congruence.
+Qed.
+
 Lemma match_states_subst :
   forall E n u l uv lv free l' l'',
     L.subst L.Arg (rep_upvar n ++ free) l = Some l' ->
@@ -1003,7 +1031,9 @@ Proof.
     destruct n0; simpl in *.
     + destruct n; simpl in *; discriminate.
     + break_if.
-      * admit.
+      * rewrite nth_error_app1 in * by (rewrite length_rep_upvar; omega).
+        apply nth_error_rep_upvar in H5.
+        subst. auto.
       * break_match.
         -- find_inversion. admit.
         -- admit.
