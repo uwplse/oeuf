@@ -814,6 +814,172 @@ Proof.
   now rewrite length_close_vars'.
 Qed.
 
+Lemma map_partial_app :
+  forall A B (f : A -> option B) l1 l2,
+    map_partial f (l1 ++ l2) = app <$> map_partial f l1 <*> map_partial f l2.
+Proof.
+  unfold seq, fmap, bind_option.
+  induction l1; intros; cbn.
+  - simpl. break_match; auto.
+  - simpl.
+    rewrite IHl1.
+    destruct (f a); auto.
+    destruct (map_partial f l1); auto.
+    destruct (map_partial f l2); auto.
+Qed.
+
+Lemma map_partial_id_ext : forall A (f : A -> option A) l,
+    Forall (fun a => f a = Some a) l ->
+    map_partial f l = Some l.
+Proof.
+  induction l; simpl; intros.
+  - auto.
+  - invc H. find_rewrite.
+    now rewrite IHl.
+Qed.
+
+
+Lemma L_subst_list_value:
+  forall (args : list Lifted.expr) (a : L.expr) (vs : list L.expr),
+    Forall (fun l : Lifted.expr => L.subst a vs l = Some l) args ->
+    L_subst_list a vs args = Some args.
+Proof.
+  induction args; intros.
+  - auto.
+  - simpl. unfold seq, fmap, bind_option.
+    invc H.
+    now rewrite H2, IHargs.
+Qed.
+
+Lemma L_subst_value :
+  forall l a vs,
+    L.value l ->
+    L.subst a vs l = Some l.
+Proof.
+  induction l using Lifted.expr_ind'; intros.
+  - invc H.
+  - invc H.
+  - invc H.
+  - invc H0.
+    simpl. fold (L_subst_list a vs args).
+    unfold seq, fmap, bind_option.
+    rewrite L_subst_list_value; auto.
+    eapply Forall_apply; [| apply H | apply H2 ]; auto.
+  - invc H0.
+  - invc H0.
+    simpl. fold (L_subst_list a vs free).
+    unfold seq, fmap, bind_option.
+    rewrite L_subst_list_value; auto.
+    eapply Forall_apply; [| apply H | apply H2 ]; auto.
+Qed.
+
+Lemma close_vars_S :
+  forall n, close_vars (S n) = close_vars' n.
+Proof. reflexivity. Qed.
+
+Lemma close_vars'_unroll_S :
+  forall n,
+    close_vars' (S n) = close_vars' n ++ [L.UpVar n].
+Proof. reflexivity. Qed.
+
+Fixpoint rep_upvar' n acc :=
+  match n with
+  | 0 => acc
+  | S n' => rep_upvar' n' (L.UpVar n' :: acc)
+  end.
+
+Lemma rep_upvar'_acc_app :
+  forall n acc,
+    rep_upvar' n acc = rep_upvar' n [] ++ acc.
+Proof.
+  induction n; simpl; intros.
+  - auto.
+  - rewrite IHn.
+    rewrite IHn with (acc := [_]).
+    rewrite app_assoc_reverse.
+    auto.
+Qed.
+
+Lemma rep_upvar_S :
+  forall n,
+    rep_upvar (S n) = rep_upvar n ++ [L.UpVar n].
+Proof.
+  unfold rep_upvar.
+  intros.
+  fold (rep_upvar' n).
+  rewrite rep_upvar'_acc_app.
+  auto.
+Qed.
+
+Lemma L_subst_rep_var_close_vars':
+  forall (n : nat) (l : list L.expr) free,
+    map_partial (L.subst L.Arg (rep_upvar n ++ free)) (close_vars' n) = Some l ->
+    l = close_vars' n.
+Proof.
+  induction n; intros.
+  - compute in *. congruence.
+  - rewrite close_vars'_unroll_S in H.
+    rewrite map_partial_app in H.
+    unfold seq, fmap, bind_option in *.
+    repeat (break_match; try discriminate).
+    repeat find_inversion.
+    rewrite rep_upvar_S in *.
+    rewrite app_assoc_reverse in *.
+    cbn[app] in *.
+    simpl. f_equal; eauto.
+    cbn[map_partial] in *.
+    break_match; try discriminate.
+    find_inversion.
+    cbn [L.subst] in *.
+    rewrite nth_error_app2, length_rep_upvar, minus_diag in *
+      by now rewrite length_rep_upvar.
+    simpl in *. congruence.
+Qed.
+
+Lemma L_subst_nth_close_vars' :
+  forall n v l,
+    L.value v ->
+    map_partial (L_subst_nth n v) (close_vars' n) = Some l ->
+    l = close_vars n ++ [v].
+Proof.
+  unfold L_subst_nth.
+  destruct n; intros.
+  - compute in *. congruence.
+  - rewrite close_vars_S.
+    simpl in *.
+    rewrite map_partial_app in H0.
+    unfold seq, fmap, bind_option in *.
+    repeat (break_match; try discriminate).
+    repeat find_inversion.
+    simpl in *.
+    break_match; try discriminate.
+    find_inversion.
+    rewrite nth_error_app2, length_rep_upvar, minus_diag in *
+      by now rewrite length_rep_upvar.
+    simpl in *. f_equal; try congruence.
+    eauto using L_subst_rep_var_close_vars'.
+Qed.
+
+Lemma app_cons_assoc :
+  forall A xs (y : A) zs,
+    xs ++ y :: zs = (xs ++ [y]) ++ zs.
+Proof.
+  intros.
+  now rewrite app_assoc_reverse.
+Qed.
+
+Lemma map_partial_L_subst_nth_values :
+  forall n lv l,
+    Forall L.value l ->
+    map_partial (L_subst_nth n lv) l = Some l.
+Proof.
+  induction l; simpl; intros.
+  - auto.
+  - invc H.
+    rewrite L_subst_nth_value by auto.
+    rewrite IHl; auto.
+Qed.
+
 Lemma match_states_subst :
   forall E n u l uv lv free l' l'',
     L.subst L.Arg (rep_upvar n ++ free) l = Some l' ->
@@ -870,7 +1036,19 @@ Proof.
     find_inversion.
 
     eapply MsLam with (l_body' := l''_q)(free := (lv :: free)); eauto.
-    admit. (* add values to lambda case of match_states *)
+    + rewrite map_partial_app in Heqo.
+      unfold seq, fmap, bind_option in *.
+      repeat (break_match; try discriminate).
+      repeat find_inversion.
+
+      rewrite close_vars_S in *.
+
+      rewrite app_cons_assoc.
+      f_equal.
+      * eauto using L_subst_nth_close_vars'.
+      * rewrite map_partial_L_subst_nth_values in * by auto.
+        congruence.
+    +
     fwd eapply L_subst_subst with (3 := H2)(4 := H0); auto.
     rewrite app_length, length_rep_upvar; simpl; omega.
     rewrite app_assoc_reverse in *.
@@ -894,7 +1072,7 @@ Proof.
       rewrite H15 in H17. congruence. }
     congruence.
 
-    now rewrite U_shift_value by auto.
+    + now rewrite U_shift_value by auto.
   -
 Admitted.
 
