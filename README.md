@@ -1,7 +1,20 @@
 # Oeuf
 gallina frontend for CompCert
 
-## Build instructions
+
+## Layout
+
+The Oeuf compiler is in `src/`.  For each IR "Foo" listed in the report, the
+semantics are defined in `Foo.v`, and the compiler to Foo from the previous IR
+is in either `FooComp.v` (for IRs up to Flattened) or `Bartofoo.v` (for the
+rest).
+
+See `oeuf-fib.s` for an example of the compiler's output.  This is compiled
+from the definition of `fib` in `src/SourceLang.v`.  To run it, first compile
+with `gcc -m32 oeuf-fib.s shim.c`.
+
+
+## Build instructions (incomplete)
 
 ```
 ./configure
