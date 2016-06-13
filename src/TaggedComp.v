@@ -292,3 +292,120 @@ induction le using L.expr_ind'; intros0 Henv Hmatch Lstep; try solve [invc Lstep
 - admit.
 - admit.
 Admitted.
+
+
+
+
+
+(* Utility tactic for hiding proof terms inside of functions.  This is useful
+   for functions that will sometimes need to be unfolded, to keep the giant
+   proof term from wasting tons of screen space. *)
+
+Definition HIDDEN (A : Type) (x : A) : A := x.
+(* Make all arguments implicit so `@HIDDEN P (giant proof)` prints as `HIDDEN`. *)
+Implicit Arguments HIDDEN [A x].
+
+(* The `hide` tactic wraps (with `HIDDEN`) the remainder of the proof of the
+   current goal.  Use it like `refine (...); hide; prove stuff...` or
+   `$(hide; prove stuff...)$`. *)
+Ltac hide := apply @HIDDEN.
+
+
+
+
+
+(* random junk
+
+Definition nat_ind_strong'
+    (P : nat -> Prop)
+    (HO : P 0)
+    (HS : forall n, (forall m, m <= n -> P m) -> P (S n))
+    (n : nat) : forall m, m <= n -> P m.
+induction n; intros0 Hlt.
+- assert (m = 0) by (hide; omega). subst. assumption.
+- inversion Hlt.
+  + eapply HS. eauto.
+  + eapply IHn. eauto.
+Qed.
+
+Definition nat_ind_strong
+    (P : nat -> Prop)
+    (HO : P 0)
+    (HS : forall n, (forall m, m <= n -> P m) -> P (S n))
+    (n : nat) : P n.
+eapply nat_ind_strong'; eauto.
+Qed.
+
+
+Inductive Strong (A : Type) : nat -> Type :=
+| StrongZero : Strong A 0
+| StrongSucc : forall n, A -> Strong A n -> Strong A (S n).
+*)
+
+
+(*  forall m, m < n -> rel LE TE m  *)
+
+
+Fixpoint rel (LE : L.env) (TE : T.env) (n : nat) {struct n} : L.expr -> T.expr -> Prop.
+simple refine (
+    let next : L.expr -> T.expr -> Prop :=
+        match n with
+        | 0 => fun le te => True
+        | S n' => fun le te => rel LE TE n' le te
+        end in _
+).
+
+simple refine (
+    let fix mk_strong_lst acc m {struct m} : list (L.expr -> T.expr -> Prop) :=
+        match m with
+        | 0 => acc
+        | S m' => mk_strong_lst (rel LE TE m' :: acc) m'
+        end in
+    let strong_lst := mk_strong_lst [] n in
+    _
+).
+
+(* TODO: not well founded... :(
+assert (mk_strong_lst_len : forall m acc, length (mk_strong_lst acc m) = length acc + m).
+{
+    induction m; intros.
+    - simpl. omega.
+    - simpl. rewrite IHm. simpl. omega.
+}
+*)
+
+Axiom lol : False.
+assert (length strong_lst = n) by (exfalso; eapply lol).
+
+simple refine (
+    let strong m : m < n -> L.expr -> T.expr -> Prop :=
+        fun Hlt =>
+        let opt := nth_error strong_lst m in
+        match opt as opt_ return opt = opt_ -> _ with
+        | None => fun Heq => _
+        | Some R => fun Heq => R
+        end eq_refl in _
+).
+{ hide. subst opt. rewrite nth_error_None in Heq. omega. }
+
+refine (
+    fun le te =>
+    match le, te with
+    | L.Constr c largs, T.Constr tag targs =>
+        Utopia.constructor_index c = tag /\
+        Forall2 next largs targs
+    | L.Close lfn lfree, T.Close tfn tfree =>
+        forall la ta lr tr m (Hlt : m < n),
+            L.value la -> T.value ta ->
+            L.value lr -> T.value tr ->
+            L.star LE (L.Call (L.Close lfn lfree) la) lr ->
+            T.star TE (T.Call (T.Close tfn tfree) ta) tr ->
+            strong m Hlt la ta ->
+            strong m Hlt lr tr
+    | _, _ => False
+    end
+).
+
+Defined.
+
+Eval simpl in rel L.add_env T.add_env 0.
