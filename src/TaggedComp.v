@@ -228,7 +228,7 @@ Inductive match_states (LE : L.env) (TE : T.env) : L.expr -> T.expr -> Prop :=
         match_states LE TE la ta ->
         match_states LE TE (L.Call lf la) (T.Call tf ta)
 | MsConstr : forall c largs tag targs,
-        Utopia.constructor_arg_n c = tag ->
+        Utopia.constructor_index c = tag ->
         Forall2 (match_states LE TE) largs targs ->
         match_states LE TE (L.Constr c largs) (T.Constr tag targs)
 | MsElim : forall ty lcases ltarget tcases0 tcases ttarget,
@@ -371,7 +371,8 @@ Ltac collect_entry_hyps i :=
 
 Ltac list_magic HH :=
     let i := fresh "i" in
-    (eapply nth_error_Forall || eapply nth_error_Forall2);
+    collect_length_hyps;
+    (eapply nth_error_Forall || (eapply nth_error_Forall2; [congruence | ..]));
     intro i; intros;
     specialize (HH i);
     collect_length_hyps; find_matching_entries HH i; collect_entry_hyps i;
@@ -468,6 +469,28 @@ induction le using L.expr_ind'; intros0 Henv Hmatch Lstep; try solve [invc Lstep
 - admit.
 Admitted.
 
+Theorem match_star : forall LE TE le le',
+    Forall2 (match_states LE TE) LE TE ->
+    L.star LE le le' ->
+    forall te, match_states LE TE le te ->
+    exists te', T.star TE te te' /\ match_states LE TE le' te'.
+induction 2; intros.
+- exists te. split; [constructor | assumption].
+- fwd eapply match_step; eauto. break_exists. break_and.
+  fwd eapply IHstar; eauto. break_exists. break_and.
+  eexists. split; [ | eassumption ]. econstructor; eassumption.
+Qed.
+
+Theorem match_star_value : forall LE TE le le' te te',
+    Forall2 (match_states LE TE) LE TE ->
+    L.star LE le le' ->
+    T.star TE te te' ->
+    L.value le' ->
+    T.value te' ->
+    match_states LE TE le te ->
+    match_states LE TE le' te'.
+Admitted.
+
 
 
 
@@ -555,6 +578,45 @@ eapply Acc. eapply nat_ind_strong'3. assumption.
 Defined.
 
 
+(* srel n x y = forall m, m < n -> rel m x y *)
+(* rel n x y = rel' (srel n) x y *)
+
+Inductive strong {A B} (R : nat -> A -> B -> Prop) : nat -> A -> B -> Prop :=
+| StrongZero : forall a b, strong R 0 a b
+| StrongSucc : forall n a b,
+        R n a b ->
+        strong R n a b ->
+        strong R (S n) a b.
+
+Lemma strong_forall : forall A B (R : nat -> A -> B -> Prop) n a b,
+    strong R n a b ->
+    forall m, m < n -> R m a b.
+induction n; intros0 Hstrong; intros0 Hlt.
+{ invc Hlt. }
+invc Hstrong. destruct (eq_nat_dec m n).
+- subst. assumption.
+- eapply IHn; eauto. omega.
+Qed.
+
+Lemma forall_strong : forall A B (R : nat -> A -> B -> Prop) n a b,
+    (forall m, m < n -> R m a b) ->
+    strong R n a b.
+induction n; intros0 Hr.
+{ constructor. }
+constructor.
+- eauto.
+- eapply IHn. intros. eapply Hr. omega.
+Qed.
+
+Lemma strong_forall_iff : forall A B (R : nat -> A -> B -> Prop) n a b,
+    strong R n a b <-> (forall m, m < n -> R m a b).
+intros. split.
+- eapply strong_forall.
+- eapply forall_strong.
+Qed.
+
+
+
 Inductive rel' (LE : L.env) (TE : T.env) :
     forall (n : nat) (strong : forall m, m < n -> L.expr -> T.expr -> Prop),
     L.expr -> T.expr -> Prop :=
@@ -576,5 +638,72 @@ Inductive rel' (LE : L.env) (TE : T.env) :
 
 Definition rel LE TE n := nat_ind_strong _ (rel' LE TE) n.
 
+(*
+Inductive rel' (LE : L.env) (TE : T.env) :
+    forall (n : nat) (strong : forall m, m < n -> L.expr -> T.expr -> Prop),
+    L.expr -> T.expr -> Prop :=
+| RelData : forall n strong c largs targs,
+        Forall2 (rel' LE TE n strong) largs targs ->
+        rel' LE TE n strong
+            (L.Constr c largs)
+            (T.Constr (Utopia.constructor_index c) targs)
+| RelFunc : forall n (strong : forall m, _ -> _ -> _ -> Prop) lf tf,
+        (forall la ta lr tr m (Hlt : m < n),
+            L.value la -> T.value ta ->
+            L.value lr -> T.value tr ->
+            L.star LE (L.Call lf la) lr ->
+            T.star TE (T.Call tf ta) tr ->
+            strong m Hlt la ta ->
+            strong m Hlt lr tr) ->
+        rel' LE TE n strong lf tf
+.
+
+Definition rel LE TE n := nat_ind_strong _ (rel' LE TE) n.
+*)
+
 (* The base case has magically disappeared.  Now all functions are rel at level
  * 0 because there are no `m < 0`. *)
+
+
+
+
+Theorem match_states_rel : forall LE TE n le te,
+    Forall2 (match_states LE TE) LE TE ->
+    match_states LE TE le te ->
+    L.value le ->
+    T.value te ->
+    rel LE TE n le te.
+(* party time! *)
+induction n using nat_ind_strong; rename H into IHn;
+induction le using L.expr_ind'; try rename H into IHle;
+intros0 Henv Hmatch Lval Tval; try solve [invc Lval].
+
+- (* Constr *)
+  invc Hmatch. invc Lval. invc Tval.
+  constructor.
+  change (rel' _ _ _ _) with (rel LE TE n).
+
+  assert (HH : forall i,
+    forall arg, nth_error args i = Some arg ->
+    forall targ, nth_error targs i = Some targ ->
+    (fun le => forall te,
+        match_states LE TE le te ->
+        L.value le -> T.value te ->
+        rel LE TE n le te) arg ->
+    L.value arg ->
+    T.value targ ->
+    match_states LE TE arg targ ->
+    rel LE TE n arg targ) by eauto.
+
+  list_magic **.
+
+- (* Close *)
+  inv Hmatch. inv Lval. inv Tval.
+  constructor. intros.
+
+  fwd eapply match_star_value; eauto.
+    (* uh oh *) admit.
+  fwd eapply IHn as Hrel; eauto.
+    (* ??? *)
+Admitted.
+
