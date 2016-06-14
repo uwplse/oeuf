@@ -313,9 +313,6 @@ Ltac hide := apply @HIDDEN.
 
 
 
-
-(* random junk
-
 Definition nat_ind_strong'
     (P : nat -> Prop)
     (HO : P 0)
@@ -326,86 +323,83 @@ induction n; intros0 Hlt.
 - inversion Hlt.
   + eapply HS. eauto.
   + eapply IHn. eauto.
-Qed.
-
-Definition nat_ind_strong
-    (P : nat -> Prop)
-    (HO : P 0)
-    (HS : forall n, (forall m, m <= n -> P m) -> P (S n))
-    (n : nat) : P n.
-eapply nat_ind_strong'; eauto.
-Qed.
-
-
-Inductive Strong (A : Type) : nat -> Type :=
-| StrongZero : Strong A 0
-| StrongSucc : forall n, A -> Strong A n -> Strong A (S n).
-*)
-
-
-(*  forall m, m < n -> rel LE TE m  *)
-
-
-Fixpoint rel (LE : L.env) (TE : T.env) (n : nat) {struct n} : L.expr -> T.expr -> Prop.
-simple refine (
-    let next : L.expr -> T.expr -> Prop :=
-        match n with
-        | 0 => fun le te => True
-        | S n' => fun le te => rel LE TE n' le te
-        end in _
-).
-
-simple refine (
-    let fix mk_strong_lst acc m {struct m} : list (L.expr -> T.expr -> Prop) :=
-        match m with
-        | 0 => acc
-        | S m' => mk_strong_lst (rel LE TE m' :: acc) m'
-        end in
-    let strong_lst := mk_strong_lst [] n in
-    _
-).
-
-(* TODO: not well founded... :(
-assert (mk_strong_lst_len : forall m acc, length (mk_strong_lst acc m) = length acc + m).
-{
-    induction m; intros.
-    - simpl. omega.
-    - simpl. rewrite IHm. simpl. omega.
-}
-*)
-
-Axiom lol : False.
-assert (length strong_lst = n) by (exfalso; eapply lol).
-
-simple refine (
-    let strong m : m < n -> L.expr -> T.expr -> Prop :=
-        fun Hlt =>
-        let opt := nth_error strong_lst m in
-        match opt as opt_ return opt = opt_ -> _ with
-        | None => fun Heq => _
-        | Some R => fun Heq => R
-        end eq_refl in _
-).
-{ hide. subst opt. rewrite nth_error_None in Heq. omega. }
-
-refine (
-    fun le te =>
-    match le, te with
-    | L.Constr c largs, T.Constr tag targs =>
-        Utopia.constructor_index c = tag /\
-        Forall2 next largs targs
-    | L.Close lfn lfree, T.Close tfn tfree =>
-        forall la ta lr tr m (Hlt : m < n),
-            L.value la -> T.value ta ->
-            L.value lr -> T.value tr ->
-            L.star LE (L.Call (L.Close lfn lfree) la) lr ->
-            T.star TE (T.Call (T.Close tfn tfree) ta) tr ->
-            strong m Hlt la ta ->
-            strong m Hlt lr tr
-    | _, _ => False
-    end
-).
-
 Defined.
 
-Eval simpl in rel L.add_env T.add_env 0.
+Definition nat_ind_strong'2
+    (P : nat -> Type)
+    (HO : P 0)
+    (HS : forall n, (forall m, m <= n -> P m) -> P (S n))
+    (n : nat) : forall m, m <= n -> P m.
+induction n; intros0 Hlt.
+- assert (m = 0) by (hide; omega). subst. assumption.
+- destruct (eq_nat_dec m (S n)).
+  + subst m. eapply HS. assumption.
+  + assert (m <= n) by (hide; omega). eapply IHn. assumption.
+Defined.
+
+Definition nat_ind_strong'3
+    (P : nat -> Type)
+    (Acc : forall n, (forall m, m < n -> P m) -> P n)
+    (n : nat) : forall m, m < n -> P m.
+induction n; intros0 Hlt.
+- exfalso. hide. omega.
+- destruct (eq_nat_dec m n).
+  + subst m. eapply Acc. assumption.
+  + assert (m < n) by (hide; omega). eapply IHn. assumption.
+Defined.
+
+Definition nat_ind_strong'4
+    (P : nat -> Type)
+    (HO : P 0)
+    (HS : forall n, P n -> P (S n))
+    (n : nat) : forall m, m <= n -> P m.
+induction n; intros0 Hlt.
+- assert (m = 0) by (hide; omega). subst. assumption.
+- destruct (eq_nat_dec m (S n)).
+  + subst m. eapply HS. eapply IHn. hide; omega.
+  + assert (m <= n) by (hide; omega). eapply IHn. assumption.
+Defined.
+
+Definition nat_ind_strong'5
+    (P : nat -> Type)
+    (HO : P 0)
+    (HS : forall n, P n -> P (S n))
+    (n : nat) : forall m, m < n -> P m.
+induction n; intros0 Hlt.
+- hide; omega.
+- destruct (eq_nat_dec m n).
+  + subst m. destruct n; eauto.
+  + assert (m < n) by (hide; omega). eapply IHn. assumption.
+Defined.
+
+Definition nat_ind_strong
+    (P : nat -> Type)
+    (Acc : forall n, (forall m, m < n -> P m) -> P n)
+    (n : nat) : P n.
+eapply Acc. eapply nat_ind_strong'3. assumption.
+Defined.
+
+
+Inductive rel' (LE : L.env) (TE : T.env) :
+    forall (n : nat) (strong : forall m, m < n -> L.expr -> T.expr -> Prop),
+    L.expr -> T.expr -> Prop :=
+| RelData : forall n strong c largs targs,
+        Forall2 (rel' LE TE n strong) largs targs ->
+        rel' LE TE n strong
+            (L.Constr c largs)
+            (T.Constr (Utopia.constructor_index c) targs)
+| RelFunc : forall n (strong : forall m, _ -> _ -> _ -> Prop) lf tf,
+        (forall la ta lr tr m (Hlt : m < n),
+            L.value la -> T.value ta ->
+            L.value lr -> T.value tr ->
+            L.star LE (L.Call lf la) lr ->
+            T.star TE (T.Call tf ta) tr ->
+            strong m Hlt la ta ->
+            strong m Hlt lr tr) ->
+        rel' LE TE n strong lf tf
+.
+
+Definition rel LE TE n := nat_ind_strong _ (rel' LE TE) n.
+
+(* The base case has magically disappeared.  Now all functions are rel at level
+ * 0 because there are no `m < 0`. *)
