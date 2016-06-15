@@ -510,6 +510,300 @@ Ltac hide := apply @HIDDEN.
 
 
 
+Definition Pred := L.expr -> T.expr -> Prop.
+
+(* rel n : Pred *)
+(* later n : {m | m < n} -> Pred *)
+(* later n m = rel m *)
+
+
+Inductive L_callable : L.expr -> Prop :=
+| LCallable : forall fname free, L_callable (L.Close fname free).
+
+Inductive T_callable : T.expr -> Prop :=
+| TCallable : forall fname free, T_callable (T.Close fname free).
+
+Inductive rel' (LE : L.env) (TE : T.env) (n : nat)
+    (later : forall m, m < n -> Pred) : Pred :=
+| RelData : forall c largs targs,
+        Forall2 (rel' LE TE n later) largs targs ->
+        rel' LE TE n later
+            (L.Constr c largs)
+            (T.Constr (Utopia.constructor_index c) targs)
+| RelFunc : forall lf tf,
+        L_callable lf ->
+        T_callable tf ->
+        (forall m Hlt la ta lr tr,
+            L.value la -> T.value ta ->
+            L.value lr -> T.value tr ->
+            L.star LE (L.Call lf la) lr ->
+            T.star TE (T.Call tf ta) tr ->
+            (later m Hlt) la ta ->
+            (later m Hlt) lr tr) ->
+        rel' LE TE n later lf tf
+.
+
+Fixpoint rel5 (LE : L.env) (TE : T.env) x : forall y, y < x -> Pred :=
+    fun y Hy =>
+        let later : forall z, z < y -> Pred :=
+            fun z Hz =>
+                match x as x_ return y < x_ -> Pred with
+                | 0 => fun _ _ _ => True
+                | S x => fun Hy =>
+                        rel5 LE TE x z ltac:(hide; omega)
+                end Hy
+        in rel' LE TE y later.
+
+Definition rel50 (LE : L.env) (TE : T.env) x : Pred :=
+    rel' LE TE x (rel5 LE TE x).
+
+
+
+
+
+Lemma rel'_rel' : forall LE TE n later1 later2,
+    (forall m Hm le te, later1 m Hm le te <-> later2 m Hm le te) ->
+    forall le te,
+    rel' LE TE n later1 le te ->
+    rel' LE TE n later2 le te.
+intros0 Hlater.
+induction le using L.expr_ind'; intros0 Hrel;
+invc Hrel;
+try on (L_callable _), invc;
+try on (T_callable _), invc.
+
+- constructor.
+  assert (forall i,
+    forall le, nth_error args i = Some le ->
+    forall te, nth_error targs i = Some te ->
+    (forall te,
+        rel' LE TE n later1 le te ->
+        rel' LE TE n later2 le te) ->
+    rel' LE TE n later1 le te ->
+    rel' LE TE n later2 le te) by (intros; eauto).
+  list_magic **.
+
+- constructor; try constructor.  intros.
+  rename H2 into HH.
+  specialize (HH ?? ** la ta lr tr ** ** ** ** ** **).
+  rewrite Hlater, Hlater in HH.
+  eauto.
+Qed.
+
+Lemma rel'_rel'_iff : forall LE TE n later1 later2,
+    (forall m Hm le te, later1 m Hm le te <-> later2 m Hm le te) ->
+    forall le te,
+    rel' LE TE n later1 le te <-> rel' LE TE n later2 le te.
+intros; split; eapply rel'_rel'.
+- eauto.
+- intros. split; intro; [rewrite H | rewrite <- H]; eauto.
+Qed.
+
+
+Lemma rel5_irrel : forall LE TE x y Hy1 Hy2 le te,
+    rel5 LE TE x y Hy1 le te <-> rel5 LE TE x y Hy2 le te.
+induction x; intros; try omega.
+simpl. eapply rel'_rel'_iff. intros.
+eapply IHx.
+Qed.
+
+Lemma rel5_rel5 : forall LE TE x1 x2 y Hy1 Hy2 le te,
+    rel5 LE TE x1 y Hy1 le te <-> rel5 LE TE x2 y Hy2 le te.
+induction x1; induction x2; intros; try omega.
+
+simpl. eapply rel'_rel'_iff. intros.
+eapply IHx1.
+Qed.
+
+Lemma rel5_50 : forall LE TE x y Hlt,
+    (forall le te, rel5 LE TE x y Hlt le te <-> rel50 LE TE y le te).
+induction x; intros; try omega.
+
+unfold rel50; simpl.
+eapply rel'_rel'_iff. intros.
+eapply rel5_rel5.
+Qed.
+
+Lemma rel'_pred : forall LE TE x later1 later2,
+    (forall y Hy1 Hy2 le te,
+        later1 y Hy1 le te <-> later2 y Hy2 le te) ->
+    forall le te,
+    rel' LE TE (S x) later1 le te ->
+    rel' LE TE x later2 le te.
+intros0 Hlater.
+induction le using L.expr_ind';
+intros0 Hrel; invc Hrel;
+try on (L_callable _), invc;
+try on (T_callable _), invc.
+
+- constructor.
+  assert (forall i,
+    forall le, nth_error args i = Some le ->
+    forall te, nth_error targs i = Some te ->
+    (forall te,
+        rel' LE TE (S x) later1 le te ->
+        rel' LE TE x later2 le te) ->
+    rel' LE TE (S x) later1 le te ->
+    rel' LE TE x later2 le te) by (intros; eauto).
+  list_magic **.
+
+- constructor; try constructor.  intros.
+  rename H2 into HH.
+  specialize (HH m ltac:(hide; omega) la ta lr tr ** ** ** ** ** **).
+  rewrite Hlater, Hlater in HH.
+  eauto.
+Qed.
+
+Lemma rel50_pred : forall LE TE x,
+    forall le te,
+    rel50 LE TE (S x) le te ->
+    rel50 LE TE x le te.
+unfold rel50. intros0 Hrel.
+eapply rel'_pred; eauto. intros.
+eapply rel5_rel5.
+Qed.
+
+
+
+
+(* Can't really see any way to prove this, which seems bad...
+
+Theorem match_states_rel50 : forall LE TE le te,
+    Forall2 (match_states LE TE) LE TE ->
+    L.value le ->
+    T.value te ->
+    match_states LE TE le te <-> (forall n, rel50 LE TE n le te).
+(* party time! *)
+induction le using L.expr_ind'; try rename H into IHle;
+intros0 Henv Lval Tval; try solve [invc Lval];
+split; intro Hmatch.
+
+- (* Constr *)
+  invc Hmatch. invc Lval. invc Tval.
+  constructor.
+  change (rel' _ _ _ _) with (rel LE TE n).
+
+  assert (HH : forall i,
+    forall arg, nth_error args i = Some arg ->
+    forall targ, nth_error targs i = Some targ ->
+    (fun le => forall te,
+        match_states LE TE le te ->
+        L.value le -> T.value te ->
+        rel LE TE n le te) arg ->
+    L.value arg ->
+    T.value targ ->
+    match_states LE TE arg targ ->
+    rel LE TE n arg targ) by eauto.
+
+  list_magic **.
+
+- (* Close *)
+  inv Hmatch. inv Lval. inv Tval.
+  constructor. intros.
+
+  fwd eapply match_star_value; eauto.
+    (* uh oh *) admit.
+  fwd eapply IHn as Hrel; eauto.
+    (* ??? *)
+Admitted.
+
+*)
+
+
+
+
+
+
+
+(* bunch of broken/useless stuff
+
+
+
+
+Definition rel (LE : L.env) (TE : T.env) (n : nat) : Pred.
+induction n using (Fix lt_wf).
+eapply rel'; try eassumption.
+Defined.
+
+
+Definition Fix_lt P F x :=
+    @Fix_F nat lt P F x (lt_wf x).
+
+Check Fix_lt.
+
+
+Fixpoint Fix_lt'
+    (P : nat -> Type)
+    (F : forall x, (forall y, y < x -> P y) -> P x)
+    (x : nat) {struct x} : forall y, y < x -> P y.
+intros. specialize (Fix_lt' P F).
+destruct x.
+- hide; omega.
+- specialize (Fix_lt' x).
+  destruct (eq_nat_dec x y).
+  + rewrite <- e. eapply F. assumption.
+  + eapply Fix_lt'. hide; omega.
+Defined.
+
+Definition Fix_lt'' 
+    (P : nat -> Type)
+    (F : forall x, (forall y, y < x -> P y) -> P x)
+    (x : nat) : P x.
+simple refine (
+    let fix go (n : nat) {struct n} : forall (m : nat), m < n -> P m := _ in
+    F x (go x)
+).
+
+destruct n; intros.
+- hide; omega.
+- destruct (eq_nat_dec m n) as [Heq | Hne].
+  + rewrite Heq. eapply F. eapply go.
+  + eapply (go n). hide; omega.
+Defined.
+
+Definition Fix_lt'''
+    (P : nat -> Type)
+    (F : forall x, (forall y, y < x -> P y) -> P x) :
+    forall x, forall y, y < x -> P y.
+fix 1.
+intros. eapply F.
+destruct x. { hide. exfalso. omega. }
+specialize (Fix_lt''' x).
+
+destruct (eq_nat_dec y x) as [Heq | Hne].
+- rewrite Heq. eapply Fix_lt'''.
+- intros. eapply Fix_lt'''. hide. omega.
+Defined.
+
+Print Fix_lt'''.
+
+Definition rel3 (LE : L.env) (TE : T.env) : forall x, forall y, y < x -> Pred.
+fix 1.
+destruct x; intros.
+{ hide. omega. }
+
+eapply (rel' LE TE x). eauto.
+Defined.
+Print rel3.
+
+Fixpoint rel4 (LE : L.env) (TE : T.env) x : forall y, y < x -> Pred :=
+    match x as x_ return forall y, y < x_ -> Pred with
+    | 0 => fun _ _ _ _ => True
+    | S x => fun y Hy =>
+        let later : forall z, z < y -> Pred :=
+            fun z Hz => rel4 LE TE x z ltac:(hide; omega) in
+        rel' LE TE y later
+    end.
+
+Print rel4.
+
+Definition rel40 (LE : L.env) (TE : T.env) x : Pred :=
+    rel' LE TE x (rel4 LE TE x).
+
+
+
+
+
 
 Definition nat_ind_strong'
     (P : nat -> Prop)
@@ -617,24 +911,154 @@ Qed.
 
 
 
-Inductive rel' (LE : L.env) (TE : T.env) :
-    forall (n : nat) (strong : forall m, m < n -> L.expr -> T.expr -> Prop),
-    L.expr -> T.expr -> Prop :=
-| RelData : forall n strong c largs targs,
-        Forall2 (rel' LE TE n strong) largs targs ->
-        rel' LE TE n strong
-            (L.Constr c largs)
-            (T.Constr (Utopia.constructor_index c) targs)
-| RelFunc : forall n (strong : forall m, _ -> _ -> _ -> Prop) lf tf,
-        (forall la ta lr tr m (Hlt : m < n),
-            L.value la -> T.value ta ->
-            L.value lr -> T.value tr ->
-            L.star LE (L.Call lf la) lr ->
-            T.star TE (T.Call tf ta) tr ->
-            strong m Hlt la ta ->
-            strong m Hlt lr tr) ->
-        rel' LE TE n strong lf tf
-.
+
+
+
+Lemma rel5_pred : forall LE TE x le te,
+    x > 0 ->
+    rel50 LE TE x le te ->
+    rel50 LE TE (pred x) le te.
+induction x; intros0 Hgt Hrel; try omega.
+
+unfold rel50 in *; simpl in *.
+
+Focus 2.
+
+- unfold rel50 in *. invc Hrel.
+  constructor.
+unfold rel50.
+
+
+
+
+Fixpoint rel4 (LE : L.env) (TE : T.env) x : forall y, y < x -> Pred.
+refine (fun y Hy => rel' LE TE x _).
+    rel' LE TE x 
+    match x as x_ return forall y, y < x_ -> Pred with
+    | 0 => fun y Hy => ltac:(hide; exfalso; omega)
+    | S x => fun y Hy => rel' LE TE x (rel4 LE TE x)
+    end.
+
+destruct (eq_nat_dec y x) as [Heq | Hne].
+- eapply (rel' LE TE x).
+
+intros. eapply (rel' LE TE x).
+destruct x eqn:?. { hide. exfalso. omega. }
+specialize (rel3 n).
+
+destruct (eq_nat_dec y n) as [Heq | Hne].
+- rewrite <- Heqn. eapply (rel
+- intros. eapply Fix_lt'''. hide. omega.
+Defined.
+
+
+Definition Fix_lt'4
+    (P : nat -> Type)
+    (F : forall x, (forall y, y < x -> P y) -> P x) :
+    forall x, forall y, y < x -> P y.
+fix 1.
+intros. eapply F.
+destruct (eq_nat_dec (S y) x) as [Heq | Hne].
+- intros. eapply F.
+rewrite Heq. eapply Fix_lt'4.
+- intros. eapply Fix_lt'4. hide. omega.
+Defined.
+
+Print Fix_lt'4.
+
+
+
+- eapply (go n). hide; omega.
+
+- omega.
+
+simple refine (
+    
+
+
+
+
+Fixpoint Fix_lt''
+    (P : nat -> Type)
+    (F : forall x, (forall y, y < x -> P y) -> P x)
+    (x : nat) {struct x} : forall y, y < x -> P y.
+
+intros. specialize (Fix_lt' P F).
+destruct x.
+- omega.
+- specialize (Fix_lt' x).
+  destruct (eq_nat_dec x y).
+  + subst y. eapply F. assumption.
+  + eapply Fix_lt'. omega.
+Defined.
+
+Definition rel2 (LE : L.env) (TE : T.env) (n : nat) : Pred.
+refine (let fix go n m Hlt := rel' LE TE n 
+generalize n. clear n. fix 1. intro n.
+
+
+  + eapply F.
+
+
+
+
+refine (F x (fun y Hlt => _)).
+
+generalize dependent x. fix 1.
+intros. dest
+- hide; omega.
+- destruct (eq_nat_dec x y) as [Heq | Hne].
+  + rewrite <- Heq. eapply Fix_lt'. exact F.
+  + 
+induction y.
+- eapply F. intros. exfalso; hide; omega.
+- eapply F.
+
+
+
+Definition rel (LE : L.env) (TE : T.env) (n : nat) : Pred.
+induction n using Fix_lt.
+eapply rel'; try eassumption.
+Defined.
+
+Print rel.
+
+
+Lemma Fix_lt_eq :
+    forall P F x,
+    F x (fun (y : nat) (Hlt : y < x) => Fix_lt P F y) = Fix_lt P F x.
+intros. unfold Fix_lt. rewrite <- Fix_F_eq.
+f_equal. unfold lt_wf, well_founded_ltof.
+
+
+Lemma Fix_F_eq :
+    forall (x:A) (r:Acc x),
+    F (fun (y:A) (p:R y x) => Fix_F (x:=y) (Acc_inv r p)) = Fix_F (x:=x) r.
+
+Check Fix_eq.
+
+(*
+Definition later (LE : L.env) (TE : T.env) n : forall m, m < n -> Pred.
+induction n using (Fix lt_wf).
+intros m Hlt.
+eapply rel'; try eassumption.
+specialize (X ?? Hlt).
+eassumption.
+Defined.
+
+Eval cbv beta delta[later] in later.
+Eval cbv beta delta[rel] in rel.
+*)
+
+
+Lemma rel_pred : forall LE TE n le te,
+    rel LE TE (S n) le te ->
+    rel LE TE n le te.
+induction n; intros0 Hrel.
+- unfold rel in *.
+
+
+
 
 Definition rel LE TE n := nat_ind_strong _ (rel' LE TE) n.
 
@@ -667,12 +1091,11 @@ Definition rel LE TE n := nat_ind_strong _ (rel' LE TE) n.
 
 
 
-Theorem match_states_rel : forall LE TE n le te,
+Theorem match_states_rel : forall LE TE le te,
     Forall2 (match_states LE TE) LE TE ->
-    match_states LE TE le te ->
     L.value le ->
     T.value te ->
-    rel LE TE n le te.
+    match_states LE TE le te <-> (forall n, rel LE TE n le te).
 (* party time! *)
 induction n using nat_ind_strong; rename H into IHn;
 induction le using L.expr_ind'; try rename H into IHle;
@@ -707,3 +1130,4 @@ intros0 Henv Hmatch Lval Tval; try solve [invc Lval].
     (* ??? *)
 Admitted.
 
+*)
