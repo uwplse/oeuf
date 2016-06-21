@@ -60,6 +60,34 @@ Definition expr_rect_mut
         | Close f free => HClose f free (go_list free)
         end in go e.
 
+(* Useful wrapper for `expr_rect_mut with (Pl := Forall P)` *)
+Definition expr_ind' (P : expr -> Prop) (Pp : (expr * rec_info) -> Prop)
+    (HArg :     P Arg)
+    (HUpVar :   forall n, P (UpVar n))
+    (HCall :    forall f a, P f -> P a -> P (Call f a))
+    (HConstr :  forall c args, Forall P args -> P (Constr c args))
+    (HElim :    forall cases target, Forall Pp cases -> P target -> P (Elim cases target))
+    (HClose :   forall f free, Forall P free -> P (Close f free))
+    (Hpair :    forall e r, P e -> Pp (e, r))
+    (e : expr) : P e :=
+    ltac:(refine (@expr_rect_mut P (Forall P) Pp (Forall Pp)
+        HArg HUpVar HCall HConstr HElim HClose _ _ Hpair _ _ e); eauto).
+
+(* Useful wrapper for `expr_rect_mut with (Pl := Forall P)` *)
+Definition expr_ind'' (P : expr -> Prop)
+    (HArg :     P Arg)
+    (HUpVar :   forall n, P (UpVar n))
+    (HCall :    forall f a, P f -> P a -> P (Call f a))
+    (HConstr :  forall c args, Forall P args -> P (Constr c args))
+    (HElim :    forall cases target,
+        Forall (fun c => P (fst c)) cases ->
+        P target ->
+        P (Elim cases target))
+    (HClose :   forall f free, Forall P free -> P (Close f free))
+    (e : expr) : P e :=
+    ltac:(refine (@expr_rect_mut P (Forall P) (fun c => P (fst c)) (Forall (fun c => P (fst c)))
+        HArg HUpVar HCall HConstr HElim HClose _ _ _ _ _ e); eauto).
+
 Definition env := list expr.
 
 Inductive value : expr -> Prop :=

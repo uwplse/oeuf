@@ -666,6 +666,189 @@ Qed.
 
 
 
+
+
+
+Inductive match_states2' (LE : L.env) (TE : T.env) (n : nat)
+    (later : forall m, m < n -> Pred) : Pred :=
+| Ms2Arg :
+        match_states2' LE TE n later L.Arg T.Arg
+| Ms2UpVar : forall i,
+        match_states2' LE TE n later (L.UpVar i) (T.UpVar i)
+| Ms2Call : forall lf la tf ta,
+        match_states2' LE TE n later lf tf ->
+        match_states2' LE TE n later la ta ->
+        match_states2' LE TE n later (L.Call lf la) (T.Call tf ta)
+| Ms2Constr : forall c largs tag targs,
+        Utopia.constructor_index c = tag ->
+        Forall2 (match_states2' LE TE n later) largs targs ->
+        match_states2' LE TE n later (L.Constr c largs) (T.Constr tag targs)
+| Ms2Elim : forall ty lcases ltarget tcases0 tcases ttarget,
+        Forall2 (match_states2' LE TE n later) lcases tcases0 ->
+        mk_tagged_cases ty tcases0 = Some tcases ->
+        match_states2' LE TE n later ltarget ttarget ->
+        match_states2' LE TE n later (L.Elim ty lcases ltarget) (T.Elim tcases ttarget)
+| Ms2Close : forall fn largs targs,
+        Forall2 (match_states2' LE TE n later) largs targs ->
+        match_states2' LE TE n later (L.Close fn largs) (T.Close fn targs)
+
+| Ms2FExt : forall lfn lfree tfn tfree,
+        Forall L.value lfree ->
+        Forall T.value tfree ->
+        (forall m Hlt la ta lr tr,
+            L.value la -> T.value ta ->
+            L.value lr -> T.value tr ->
+            L.star LE (L.Call (L.Close lfn lfree) la) lr ->
+            T.star TE (T.Call (T.Close tfn tfree) ta) tr ->
+            (later m Hlt) la ta ->
+            (later m Hlt) lr tr) ->
+        match_states2' LE TE n later (L.Close lfn lfree) (T.Close tfn tfree)
+.
+
+Fixpoint match_states2_later (LE : L.env) (TE : T.env) x : forall y, y < x -> Pred :=
+    fun y Hy =>
+        let later : forall z, z < y -> Pred :=
+            fun z Hz =>
+                match x as x_ return y < x_ -> Pred with
+                | 0 => fun _ _ _ => True
+                | S x => fun Hy =>
+                        match_states2_later LE TE x z ltac:(hide; omega)
+                end Hy
+        in match_states2' LE TE y later.
+
+Definition match_states2 (LE : L.env) (TE : T.env) x : Pred :=
+    match_states2' LE TE x (match_states2_later LE TE x).
+
+
+Theorem match2_value_LT : forall LE TE n le te,
+    match_states2 LE TE n le te ->
+    L.value le ->
+    T.value te.
+induction le using L.expr_ind'; intros0 Hmatch Lval; invc Lval; invc Hmatch; constructor;
+fold (match_states2 LE TE n) in *.
+
+- assert (forall i,
+    forall le, nth_error args i = Some le ->
+    forall te, nth_error targs i = Some te ->
+    (forall te, match_states2 LE TE n le te -> L.value le -> T.value te) ->
+    match_states2 LE TE n le te ->
+    L.value le ->
+    T.value te) by eauto.
+  list_magic **.
+
+- assert (forall i,
+    forall le, nth_error free i = Some le ->
+    forall te, nth_error targs i = Some te ->
+    (forall te, match_states2 LE TE n le te -> L.value le -> T.value te) ->
+    match_states2 LE TE n le te ->
+    L.value le ->
+    T.value te) by eauto.
+  list_magic **.
+
+- assumption.
+Qed.
+
+Theorem match2_value_TL : forall LE TE n te le,
+    match_states2 LE TE n le te ->
+    T.value te ->
+    L.value le.
+Admitted.    (* missing T.expr_ind' *)
+
+
+Theorem L_value_cant_step : forall LE le le',
+    L.value le ->
+    L.step LE le le' ->
+    False.
+induction le using L.expr_ind'; intros0 Hval Hstep; invc Hval; invc Hstep.
+
+- rewrite Forall_forall in *.
+  assert (In e (vs ++ e :: es)). { eapply in_or_app. right. left. reflexivity. }
+  eauto.
+
+- rewrite Forall_forall in *.
+  assert (In e (vs ++ e :: es)). { eapply in_or_app. right. left. reflexivity. }
+  eauto.
+Qed.
+
+Theorem T_value_cant_step : forall TE te te',
+    T.value te ->
+    T.step TE te te' ->
+    False.
+Admitted.    (* missing T.expr_ind' *)
+
+
+    (*
+Theorem match2_step : forall LE TE n le le' te te',
+    Forall2 (match_states2 LE TE n) LE TE ->
+    match_states2 LE TE n le te ->
+    L.step LE le le' ->
+    T.step TE te te' ->
+    match_states2 LE TE n le' te'.
+intros. move le at top. generalize_all.
+induction le using L.expr_ind'; intros0 Henv Hmatch Lstep Tstep;
+try solve [invc Lstep]; invc Hmatch.
+
+- (* Call *)
+  inv Lstep.
+
+  + (* MakeCall *)
+    inv Tstep.
+    Focus 2. fwd eapply match2_value_LT; eauto using L.VClose.
+      exfalso. eauto using T_value_cant_step.
+    Focus 2. assert (T.value ta) by (eauto using match2_value_LT).
+      exfalso. eauto using T_value_cant_step.
+
+    invc H1.
+    -- (* Ms2Close - arg + free match, same fname *)
+       admit. (* need substitution lemma *)
+    -- 
+
+  +  
+
+  + (* MakeCall *)
+    invc Hmatch. invc H4.
+
+    eexists. split.
+    -- fwd eapply Forall2_nth_error_Some with (xs := LE) (ys := TE); eauto.  break_exists.
+       eapply T.MakeCall; eauto using match_value.
+
+       ++ assert (forall i,
+            forall lv, nth_error free i = Some lv ->
+            forall tv, nth_error targs i = Some tv ->
+            match_states LE TE lv tv ->
+            L.value lv ->
+            T.value tv) by (eauto using match_value).
+          list_magic **.
+
+       ++ admit. (* T.subst succeeds because L.subst succeeds *)
+
+    -- admit. (* (1) needs subst/match lemma; (2) need to know how te' was made *)
+
+  + (* CallL *)
+    invc Hmatch.
+    fwd eapply IHle1; eauto. 
+    break_exists. break_and.
+    eexists. split; econstructor; eauto.
+
+  + (* CallR *)
+    invc Hmatch.
+    fwd eapply IHle2; eauto.
+    break_exists. break_and.
+    eexists. split; econstructor; solve [eauto using match_value].
+
+- (* Constr *)
+  invc Lstep. invc Hmatch.
+  admit.
+
+- admit.
+- admit.
+Admitted.
+*)
+
+
+
+
+
 (* Can't really see any way to prove this, which seems bad...
 
 Theorem match_states_rel50 : forall LE TE le te,
@@ -1131,3 +1314,512 @@ intros0 Henv Hmatch Lval Tval; try solve [invc Lval].
 Admitted.
 
 *)
+
+
+
+Definition T_rename_globals (rename : nat -> nat) : T.expr -> T.expr :=
+    let fix go e :=
+        let fix go_list es :=
+            match es with
+            | [] => []
+            | e :: es => go e :: go_list es
+            end in
+        let fix go_cases cs :=
+            match cs with
+            | [] => []
+            | (e, r) :: cs => (go e, r) :: go_cases cs
+            end in
+        match e with
+        | T.Arg => T.Arg
+        | T.UpVar i => T.UpVar i
+        | T.Call f a => T.Call (go f) (go a)
+        | T.Constr tag args => T.Constr tag (go_list args)
+        | T.Elim cases target => T.Elim (go_cases cases) (go target)
+        | T.Close fname free => T.Close (rename fname) (go_list free)
+        end in go.
+
+Definition T_rename_globals_list (rename : nat -> nat) :=
+    let go := T_rename_globals rename in
+    let fix go_list es :=
+        match es with
+        | [] => []
+        | e :: es => go e :: go_list es
+        end in go_list.
+
+Definition T_rename_globals_cases (rename : nat -> nat) :=
+    let go := T_rename_globals rename in
+    let fix go_cases cs : list (T.expr * T.rec_info) :=
+        match cs with
+        | [] => []
+        | (e, r) :: cs => (go e, r) :: go_cases cs
+        end in go_cases.
+
+Inductive T_prog_equiv (E1 E2 : T.env) : (nat -> nat) -> T.expr -> T.expr -> Prop :=
+| TProgEquiv : forall rename e1 e2,
+        (forall fname code,
+            nth_error E1 fname = Some code ->
+            (* Looking up the renamed fname gives the renamed function *)
+            nth_error E2 (rename fname) = Some (T_rename_globals rename code)) ->
+        T_rename_globals rename e1 = e2 ->
+        T_prog_equiv E1 E2 rename e1 e2.
+
+
+
+Lemma T_rename_globals_list_app : forall rename es1 es2,
+    T_rename_globals_list rename (es1 ++ es2) =
+    T_rename_globals_list rename es1 ++ T_rename_globals_list rename es2.
+induction es1; intros; simpl.
+- reflexivity.
+- rewrite IHes1. reflexivity.
+Qed.
+
+Lemma T_rename_globals_list_cons : forall rename e es,
+    T_rename_globals_list rename (e :: es) =
+    T_rename_globals rename e :: T_rename_globals_list rename es.
+intros. simpl. reflexivity.
+Qed.
+
+Lemma T_rename_globals_list_map : forall rename es,
+    T_rename_globals_list rename es = map (T_rename_globals rename) es.
+induction es; simpl; eauto.
+Qed.
+
+Lemma T_rename_globals_list_length : forall rename es,
+    length (T_rename_globals_list rename es) = length es.
+intros. rewrite T_rename_globals_list_map. eapply map_length.
+Qed.
+
+Lemma Forall_map : forall A B (P : B -> Prop) (f : A -> B) xs,
+    Forall (fun x => P (f x)) xs ->
+    Forall P (map f xs).
+induction xs; intros.
+- constructor.
+- on (Forall _ _), invc. constructor; eauto.
+Qed.
+
+Lemma Forall_map_rev : forall A B (P : B -> Prop) (f : A -> B) xs,
+    Forall P (map f xs) ->
+    Forall (fun x => P (f x)) xs.
+induction xs; intros.
+- constructor.
+- on (Forall _ _), invc. constructor; eauto.
+Qed.
+
+Lemma app_inv_length : forall A (xs1 xs2 ys1 ys2 : list A),
+    length xs1 = length ys1 ->
+    xs1 ++ xs2 = ys1 ++ ys2 ->
+    xs1 = ys1 /\ xs2 = ys2.
+induction xs1; intros0 Hlen Happ; destruct ys1; simpl in *; try discriminate.
+- split; eauto.
+- invc Happ. invc Hlen. destruct (IHxs1 ?? ?? ?? ** **). subst. eauto.
+Qed.
+
+Lemma T_rename_globals_value : forall rename e,
+    T.value e ->
+    T.value (T_rename_globals rename e).
+induction e using T.expr_ind''; inversion 1; subst.
+
+- simpl. fold (T_rename_globals_list rename).
+  rewrite T_rename_globals_list_map.
+  constructor.
+
+  assert (forall i,
+    forall arg, nth_error args i = Some arg ->
+    (T.value arg -> T.value (T_rename_globals rename arg)) ->
+    T.value arg ->
+    T.value (T_rename_globals rename arg)) by (intros; eauto).
+  eapply Forall_map.
+  list_magic **.
+
+- simpl. fold (T_rename_globals_list rename).
+  rewrite T_rename_globals_list_map.
+  constructor.
+
+  assert (forall i,
+    forall val, nth_error free i = Some val ->
+    (T.value val -> T.value (T_rename_globals rename val)) ->
+    T.value val ->
+    T.value (T_rename_globals rename val)) by (intros; eauto).
+  eapply Forall_map.
+  list_magic **.
+
+Qed.
+
+Lemma T_rename_globals_list_value : forall rename es,
+    Forall T.value es ->
+    Forall T.value (T_rename_globals_list rename es).
+intros.
+rewrite T_rename_globals_list_map. eapply Forall_map.
+
+assert (forall i,
+    forall e, nth_error es i = Some e ->
+    T.value e ->
+    T.value (T_rename_globals rename e))
+    by (intros; eauto using T_rename_globals_value).
+list_magic **.
+Qed.
+
+Lemma T_rename_globals_value_rev : forall rename e,
+    T.value (T_rename_globals rename e) ->
+    T.value e.
+induction e using T.expr_ind''; inversion 1; subst.
+
+- simpl. fold (T_rename_globals_list rename) in *.
+  rewrite T_rename_globals_list_map in *.
+  constructor.
+
+  assert (forall i,
+    forall arg, nth_error args i = Some arg ->
+    (T.value (T_rename_globals rename arg) -> T.value arg) ->
+    T.value (T_rename_globals rename arg) ->
+    T.value arg) by (intros; eauto).
+  on _, fun H => eapply Forall_map_rev in H.
+  list_magic **.
+
+- simpl. fold (T_rename_globals_list rename) in *.
+  rewrite T_rename_globals_list_map in *.
+  constructor.
+
+  assert (forall i,
+    forall arg, nth_error free i = Some arg ->
+    (T.value (T_rename_globals rename arg) -> T.value arg) ->
+    T.value (T_rename_globals rename arg) ->
+    T.value arg) by (intros; eauto).
+  on _, fun H => eapply Forall_map_rev in H.
+  list_magic **.
+
+Qed.
+
+Lemma T_rename_globals_value_iff : forall rename e,
+    T.value (T_rename_globals rename e) <-> T.value e.
+intros; split; eauto using T_rename_globals_value, T_rename_globals_value_rev.
+Qed.
+
+Lemma leftmost_step_length : forall A (P : A -> Prop) vs1 e1 es1 vs2 e2 es2,
+    vs1 ++ [e1] ++ es1 = vs2 ++ [e2] ++ es2 ->
+    Forall P vs1 ->
+    ~P e1 ->
+    Forall P vs2 ->
+    ~P e2 ->
+    length vs1 = length vs2.
+induction vs1; intros0 Heq Hyes1 Hno1 Hyes2 Hno2; destruct vs2; simpl in *.
+
+- reflexivity.
+- invc Heq. invc Hyes2. exfalso. eauto.
+- invc Heq. invc Hyes1. exfalso. eauto.
+- invc Heq. invc Hyes1. invc Hyes2.
+  f_equal. eapply IHvs1; eauto.
+Qed.
+
+Lemma Forall_app_inv : forall A (P : A -> Prop) xs ys,
+    Forall P (xs ++ ys) ->
+    Forall P xs /\ Forall P ys.
+induction xs; intros; simpl in *.
+- eauto.
+- invc H. destruct (IHxs ?? **). eauto.
+Qed.
+
+Lemma map_Forall2 : forall A B (f : A -> B) xs ys,
+    Forall2 (fun x y => f x = y) xs ys ->
+    map f xs = ys.
+induction xs; intros0 Hfa; destruct ys; invc Hfa; simpl in *; eauto.
+f_equal. eapply IHxs; eauto.
+Qed.
+
+Lemma TEqCall : forall E1 E2 rename f1 a1 f2 a2,
+    (forall fname code,
+        nth_error E1 fname = Some code ->
+        (* Looking up the renamed fname gives the renamed function *)
+        nth_error E2 (rename fname) = Some (T_rename_globals rename code)) ->
+    T_prog_equiv E1 E2 rename f1 f2 ->
+    T_prog_equiv E1 E2 rename a1 a2 ->
+    T_prog_equiv E1 E2 rename (T.Call f1 a1) (T.Call f2 a2).
+intros0 Henv Heq1 Heq2.
+constructor; eauto.
+simpl. f_equal.
+- invc Heq1. reflexivity.
+- invc Heq2. reflexivity.
+Qed.
+
+Lemma TEqConstr : forall E1 E2 rename tag args1 args2,
+    (forall fname code,
+        nth_error E1 fname = Some code ->
+        (* Looking up the renamed fname gives the renamed function *)
+        nth_error E2 (rename fname) = Some (T_rename_globals rename code)) ->
+    Forall2 (T_prog_equiv E1 E2 rename) args1 args2 ->
+    T_prog_equiv E1 E2 rename (T.Constr tag args1) (T.Constr tag args2).
+intros0 Henv Heq.
+constructor; eauto.
+simpl. fold (T_rename_globals_list rename). f_equal.
+rewrite T_rename_globals_list_map.
+eapply map_Forall2.
+
+assert (forall i,
+    forall arg1, nth_error args1 i = Some arg1 ->
+    forall arg2, nth_error args2 i = Some arg2 ->
+    T_prog_equiv E1 E2 rename arg1 arg2 ->
+    T_rename_globals rename arg1 = arg2). {
+  intros. on (T_prog_equiv _ _ _ _ _), invc. reflexivity.
+}
+list_magic **.
+Qed.
+
+Lemma TEqClose : forall E1 E2 rename fname1 fname2 free1 free2,
+    (forall fname code,
+        nth_error E1 fname = Some code ->
+        (* Looking up the renamed fname gives the renamed function *)
+        nth_error E2 (rename fname) = Some (T_rename_globals rename code)) ->
+    rename fname1 = fname2 ->
+    Forall2 (T_prog_equiv E1 E2 rename) free1 free2 ->
+    T_prog_equiv E1 E2 rename (T.Close fname1 free1) (T.Close fname2 free2).
+intros0 Henv Hfn Hfree.
+constructor; eauto.
+simpl. fold (T_rename_globals_list rename). f_equal; eauto.
+rewrite T_rename_globals_list_map.
+eapply map_Forall2.
+
+assert (forall i,
+    forall arg1, nth_error free1 i = Some arg1 ->
+    forall arg2, nth_error free2 i = Some arg2 ->
+    T_prog_equiv E1 E2 rename arg1 arg2 ->
+    T_rename_globals rename arg1 = arg2). {
+  intros. on (T_prog_equiv _ _ _ _ _), invc. reflexivity.
+}
+list_magic **.
+Qed.
+
+Derive Inversion test_inv with
+    (forall E tag vs e es e', T.step E (T.Constr tag (vs ++ [e] ++ es)) e') Sort Prop.
+Check test_inv.
+
+Lemma T_step_constr_inv :
+    forall E tag vs e es rhs
+        (P : _ -> _ -> _ -> _ -> _ -> _ -> Prop),
+    Forall T.value vs ->
+    ~T.value e ->
+    (T.step E (T.Constr tag (vs ++ e :: es)) rhs ->
+     forall e'',
+     T.step E e e'' ->
+     rhs = T.Constr tag (vs ++ e'' :: es) ->
+     P E tag vs e es (T.Constr tag (vs ++ [e''] ++ es))) ->
+    T.step E (T.Constr tag (vs ++ [e] ++ es)) rhs ->
+    P E tag vs e es rhs.
+intros0 Hvals Hstep; intros0 Hinv Htop.
+inversion Htop.
+
+assert (length vs0 = length vs) by
+  (eapply leftmost_step_length; simpl; eauto using T_value_cant_step).
+
+on (_ ++ _ = _ ++ _), fun H => (eapply app_inv_length in H0; eauto). break_and.
+on (_ :: _ = _ :: _), fun H => invc H.
+eapply Hinv; eauto.
+Qed.
+
+Lemma Forall2_app : forall A B (P : A -> B -> Prop) xs1 xs2 ys1 ys2,
+    Forall2 P xs1 ys1 ->
+    Forall2 P xs2 ys2 ->
+    Forall2 P (xs1 ++ xs2) (ys1 ++ ys2).
+induction xs1; inversion 1; intros; simpl in *; eauto.
+Qed.
+
+Lemma T_rename_globals_prog_equiv : forall E1 E2 rename e,
+    (forall fname code,
+        nth_error E1 fname = Some code ->
+        (* Looking up the renamed fname gives the renamed function *)
+        nth_error E2 (rename fname) = Some (T_rename_globals rename code)) ->
+    T_prog_equiv E1 E2 rename e (T_rename_globals rename e).
+induction e using T.expr_ind''; intros; simpl; constructor; eauto.
+Qed.
+
+Lemma T_rename_globals_list_prog_equiv : forall E1 E2 rename es,
+    (forall fname code,
+        nth_error E1 fname = Some code ->
+        (* Looking up the renamed fname gives the renamed function *)
+        nth_error E2 (rename fname) = Some (T_rename_globals rename code)) ->
+    Forall2 (T_prog_equiv E1 E2 rename) es (T_rename_globals_list rename es).
+induction es; intros; simpl.
+- constructor.
+- specialize (IHes **).
+  constructor; eauto using T_rename_globals_prog_equiv.
+Qed.
+
+Theorem T_prog_equiv_step : forall E1 E2 rename e1 e2 e1' e2',
+    T.step E1 e1 e1' ->
+    T.step E2 e2 e2' ->
+    T_prog_equiv E1 E2 rename e1 e2 ->
+    T_prog_equiv E1 E2 rename e1' e2'.
+induction e1 using T.expr_ind''; intros0 Hstep1 Hstep2 Hequiv;
+invc Hstep1; invc Hequiv;
+simpl in *;
+try fold (T_rename_globals_list rename) in *;
+try fold (T_rename_globals_cases rename) in *.
+
+- admit.
+
+- invc Hstep2.
+  { assert (T.value e1_1).
+      { rewrite <- T_rename_globals_value_iff, <- **. constructor. eauto. }
+    exfalso. eapply T_value_cant_step; eauto.  }
+  Focus 2. { rewrite T_rename_globals_value_iff in *.
+    exfalso. eauto using T_value_cant_step. } Unfocus.
+
+  eapply TEqCall; eauto using T_rename_globals_prog_equiv.
+
+- invc Hstep2.
+  { rewrite T_rename_globals_value_iff in *. exfalso. eauto using T_value_cant_step. }
+  { rewrite <- T_rename_globals_value_iff in *. exfalso. eauto using T_value_cant_step. }
+
+  eapply TEqCall; eauto using T_rename_globals_prog_equiv.
+
+- rewrite T_rename_globals_list_app, T_rename_globals_list_cons in Hstep2.
+  inversion Hstep2 using T_step_constr_inv; intros.
+    { eauto using T_rename_globals_list_value. }
+    { rewrite T_rename_globals_value_iff. eauto using T_value_cant_step. }
+  subst.  clear Hstep2 H1.
+
+  eapply TEqConstr; eauto.
+  eapply Forall2_app; [ | constructor ].
+
+  + eapply T_rename_globals_list_prog_equiv; eauto.
+
+  + on (Forall _ (_ ++ _)), fun H => eapply Forall_app_inv in H. break_and.
+    on (Forall _ (_ :: _)), invc.
+    eapply H7; eauto.
+    eapply T_rename_globals_prog_equiv; eauto.
+
+  + eapply T_rename_globals_list_prog_equiv; eauto.
+
+- admit.
+
+- admit.
+
+- admit.
+
+Admitted.
+
+
+Inductive rel (LE : L.env) (TE : T.env) : L.expr -> T.expr -> Prop :=
+| RConstr : forall c largs targs,
+        Forall2 (rel LE TE) largs targs ->
+        rel LE TE
+            (L.Constr c largs)
+            (T.Constr (Utopia.constructor_index c) targs)
+| RClose : forall rename lfn tfn lf tf TE' tf' lfree tfree,
+        nth_error LE lfn = Some lf ->
+        nth_error TE tfn = Some tf ->
+        compile_program (lf, LE) = Some (tf', TE') ->
+        T_prog_equiv TE TE' rename tf tf' ->
+        Forall2 (rel LE TE) lfree tfree ->
+        rel LE TE
+            (L.Close lfn lfree)
+            (T.Close tfn tfree)
+.
+
+(*
+- rewrite T_rename_globals_list_app, T_rename_globals_list_cons in Hstep2.
+  assert (Forall T.value (T_rename_globals_list rename vs))
+    by (eauto using T_rename_globals_list_value).
+  invc Hstep2.
+
+  assert (length vs0 = length (T_rename_globals_list rename vs)). {
+    eapply leftmost_step_length; simpl; try eassumption.
+    - intro. eapply T_value_cant_step; eauto.
+    - rewrite T_rename_globals_value_iff.
+      intro. eapply T_value_cant_step; eauto.
+  }
+  fwd eapply app_inv_length; eauto. break_and.
+  on _, invc.
+
+  econstructor; eauto. simpl. fold (T_rename_globals_list rename).
+  rewrite T_rename_globals_list_app, T_rename_globals_list_cons in *.
+  f_equal. f_equal; eauto. f_equal; eauto.
+
+  on (Forall _ (_ ++ _)), fun H => eapply Forall_app_inv in H. break_and.
+  on (Forall _ (_ :: _)), invc.
+  specialize ( H11 ?? ?? ?? ** ** ).
+*)
+
+
+(*
+  invc H1.
+
+  fwd simple refine (T_step_constr_inv vs e ** _); eauto using T_value_cant_step.
+  inversion Hstep2 using H1.
+  inversion Hstep2 using (T_step_constr_inv ?? vs e e' ** ** ).
+
+  fwd simple refine (fun rhs P => T_step_constr_inv ?? ?? ?? ?? ?? ?? rhs P ** ** ) as HH.
+  inversion Hstep2 using HH.
+
+invc Hstep2. eapply TEqConstr; eauto. simpl.
+  on (Forall _ (_ ++ _)), fun H => eapply Forall_app_inv in H. break_and.
+  on (Forall _ (_ :: _)), invc.
+    (eapply Forall_app_inv in H; destruct H as [? H]).
+
+
+
+
+  eapply Forall2_app; [ | constructor ].
+
+
+  assert (Forall T.value (T_rename_globals_list rename vs))
+    by (eauto using T_rename_globals_list_value).
+  invc Hstep2.
+  rewrite T_rename_globals_list_app, T_rename_globals_list_cons in *.
+
+  assert (length vs0 = length (T_rename_globals_list rename vs)). {
+    eapply leftmost_step_length; simpl; try eassumption.
+    - intro. eapply T_value_cant_step; eauto.
+    - rewrite T_rename_globals_value_iff.
+      intro. eapply T_value_cant_step; eauto.
+  }
+  fwd eapply app_inv_length; eauto. break_and.
+  on _, invc.
+
+  econstructor; eauto. simpl. fold (T_rename_globals_list rename).
+  rewrite T_rename_globals_list_app, T_rename_globals_list_cons in *.
+  f_equal. f_equal; eauto. f_equal; eauto.
+  SearchAbout (Forall _ (_ ++ _)).
+  fwd eapply Forall_app; eauto. break_and.
+  on (Forall _ (_ :: _)), invc.
+
+  specialize (H12 ?? ?? ?? ** ** ).
+  fwd eapply H12. { econstructor; eauto. }
+  invc H9. eauto.
+
+
+  on (Forall _ (_ ++ _)), invc.  { destruct vs; discriminate. }
+
+  assert (length vs = length vs0).
+
+  fwd eapply app_inv_length; try eassumption; eauto using T_rename_globals_list_length.
+  eapply app_inv_length in H3.
+  SearchAbout (_ ++ _ = _ ++ _ -> _).
+  congruence.
+
+        
+
+Inductive T_prog_equiv : T.env -> T.env -> T.expr -> T.expr :
+    exists f,
+        (forall i , nth_error E1 
+        T_rename_globals 
+
+
+Inductive T_prog_equiv (E1 E2 : T.env) : (nat -> nat) -> T.expr -> T.expr -> Prop :=
+| EqArg : T_prog_equiv E1 E2 T.Arg T.Arg
+| EqUpvar : forall i, T_prog_equiv E1 E2 (T.UpVar i) (T.UpVar i)
+| EqCall : forall f1 a1 f2 a2,
+        T_prog_equiv E1 E2 f1 f2 ->
+        T_prog_equiv E1 E2 a1 a2 ->
+        T_prog_equiv E1 E2 (T.Call f1 a1) (T.Call f2 a2)
+| EqConstr : forall tag args1 args2,
+        Forall2 (T_prog_equiv E1 E2) args1 args2 ->
+        T_prog_equiv E1 E2 (T.Constr tag args1) (T.Constr tag args2)
+| EqElim : forall cases1 cases2 target1 target2,
+        Forall2 (fun case1 case2 => T_prog_equip E1 E2 (fst case1) (fst case2)) cases1 cases2 ->
+        T_prog_equip E1 E2 target1 target2 ->
+        T_prog_equiv E1 E2 (T.Elim cases1 target1) (T.Elim cases2 target2)
+| EqClose
+
+.
+
+  *)
