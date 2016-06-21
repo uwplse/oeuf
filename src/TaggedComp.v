@@ -1823,3 +1823,132 @@ Inductive T_prog_equiv (E1 E2 : T.env) : (nat -> nat) -> T.expr -> T.expr -> Pro
 .
 
   *)
+
+
+Inductive match_states3 (LE : L.env) (TE : T.env) : L.expr -> T.expr -> Prop :=
+| MatchStates3 : forall le te,
+        compile_list LE = Some TE ->
+        compile le = Some te ->
+        match_states3 LE TE le te.
+
+Theorem compile_match_states3 : forall LE le TE te,
+    compile_program (le, LE) = Some (te, TE) ->
+    match_states3 LE TE le te.
+intros0 Hcomp.
+unfold compile_program in Hcomp.
+compute [seq fmap bind_option] in Hcomp. repeat (break_match; try discriminate).
+repeat (on (Some _ = Some _), invc). compute [fst snd] in *.
+on ((_, _) = (_, _)), invc.
+constructor; assumption.
+Qed.
+
+Lemma compile_list_Forall2 : forall es es',
+    compile_list es = Some es' ->
+    Forall2 (fun e e' => compile e = Some e') es es'.
+induction es; intros0 Heq; simpl in *; invc Heq.
+- constructor.
+- compute [seq fmap bind_option] in *.
+  destruct (compile _) eqn:?; simpl in *; try discriminate.
+  destruct (compile_list _) eqn:?; simpl in *; try discriminate.
+  on (Some _ = Some _), invc.
+  constructor; eauto.
+Qed.
+
+Lemma compile_value : forall le te,
+    L.value le ->
+    compile le = Some te ->
+    T.value te.
+induction le using L.expr_ind'; inversion 1; subst; intros0 Hcomp.
+
+- simpl in Hcomp. fold compile_list in Hcomp. unfold seq, fmap in Hcomp.
+  destruct (compile_list args) as [targs|] eqn:?; simpl in Hcomp; try discriminate Hcomp.
+  invc Hcomp.
+  constructor.
+
+  fwd eapply compile_list_Forall2; try eassumption.
+  assert (forall i,
+    forall le, nth_error args i = Some le ->
+    forall te, nth_error targs i = Some te ->
+    (forall te, L.value le -> compile le = Some te -> T.value te) ->
+    compile le = Some te ->
+    L.value le ->
+    T.value te) by (intros; eauto).
+  list_magic **.
+
+- simpl in Hcomp. fold compile_list in Hcomp. unfold seq, fmap in Hcomp.
+  destruct (compile_list free) as [tfree|] eqn:?; simpl in Hcomp; try discriminate Hcomp.
+  invc Hcomp.
+  constructor.
+
+  fwd eapply compile_list_Forall2; try eassumption.
+  assert (forall i,
+    forall le, nth_error free i = Some le ->
+    forall te, nth_error tfree i = Some te ->
+    (forall te, L.value le -> compile le = Some te -> T.value te) ->
+    compile le = Some te ->
+    L.value le ->
+    T.value te) by (intros; eauto).
+  list_magic **.
+
+Qed.
+
+Lemma compile_list_value : forall ls ts,
+    Forall L.value ls ->
+    compile_list ls = Some ts ->
+    Forall T.value ts.
+induction ls; inversion 1; subst; intros0 Hcomp.
+- simpl in Hcomp. invc Hcomp. constructor.
+- on (Forall _ (_ :: _)), invc.
+  simpl in Hcomp.
+  destruct (compile _) eqn:?; simpl in Hcomp; try discriminate Hcomp.
+  destruct (compile_list _) eqn:?; simpl in Hcomp; try discriminate Hcomp.
+  compute in Hcomp. invc Hcomp.
+  constructor; eauto using compile_value.
+Qed.
+
+Theorem match_states3_sim : forall LE TE le te le',
+    match_states3 LE TE le te ->
+    L.step LE le le' ->
+    exists te', T.step TE te te' /\ match_states3 LE TE le' te'.
+induction le using L.expr_ind'; intros0 Hms Lstep; invc Lstep.
+
+- invc Hms. simpl in H0. fold compile_list in H0. unfold seq, fmap in H0.
+  destruct (compile_list free) as [tfree|] eqn:?; simpl in H0; try discriminate H0.
+  destruct (compile le2) as [te2|] eqn:?; simpl in H0; try discriminate H0.
+  invc H0.
+
+  fwd eapply compile_value; eauto.
+
+  eexists. split; [eapply T.MakeCall | ]; eauto using compile_list_value.
+  admit. (* T's function lookup succeeds *)
+  admit. (* T's subst succeeds *)
+  admit. (* results match *)
+
+
+- invc Hms. simpl in H0. unfold seq, fmap in H0.
+  destruct (compile le1) as [te1|] eqn:?; simpl in H0; try discriminate H0.
+  destruct (compile le2) as [te2|] eqn:?; simpl in H0; try discriminate H0.
+  invc H0.
+
+  assert (match_states3 LE TE le1 te1) by (constructor; assumption).
+  destruct (IHle1 ?? ?? ** **) as (te1' & ? & ?).
+
+  eexists. split.  { constructor. eassumption. }
+  repeat on (match_states3 _ _ _ _), invc.
+  constructor; eauto. simpl. unfold seq, fmap.
+  repeat on (compile _ = _), fun H => rewrite H.
+  simpl. reflexivity.
+
+- admit.
+
+- admit.
+
+- admit.
+
+- admit.
+
+- admit.
+
+Admitted.
+
+
