@@ -1854,6 +1854,12 @@ induction es; intros0 Heq; simpl in *; invc Heq.
   constructor; eauto.
 Qed.
 
+Lemma compile_list_length : forall es es',
+    compile_list es = Some es' ->
+    length es = length es'.
+intros. eapply Forall2_length. eapply compile_list_Forall2. assumption.
+Qed.
+
 Lemma compile_value : forall le te,
     L.value le ->
     compile le = Some te ->
@@ -1906,6 +1912,52 @@ induction ls; inversion 1; subst; intros0 Hcomp.
   constructor; eauto using compile_value.
 Qed.
 
+Lemma compile_list_nth_error : forall ls ts n le te,
+    compile_list ls = Some ts ->
+    nth_error ls n = Some le ->
+    nth_error ts n = Some te ->
+    compile le = Some te.
+intros. fwd eapply compile_list_Forall2; eauto.
+eapply Forall2_nth_error with (1 := **); eauto.
+Qed.
+
+Ltac inject_some := repeat on (Some _ = Some _), invc.
+Ltac break_bind_option :=
+    repeat match goal with
+    | [ H : bind_option ?x _ = Some _ |- _ ] =>
+            destruct x eqn:?; [ simpl in H | discriminate H ]
+    end.
+
+Theorem subst_compile : forall larg lfree lbody lr  targ tfree tbody tr,
+    compile larg = Some targ ->
+    compile_list lfree = Some tfree ->
+    compile lbody = Some tbody ->
+    L.subst larg lfree lbody = Some lr ->
+    T.subst targ tfree tbody = Some tr ->
+    compile lr = Some tr.
+induction lbody using L.expr_ind'; intros0 Carg Cfree Cbody Lsub Tsub;
+simpl in *; try fold compile_list in *; try fold (L.subst_list larg lfree) in *;
+unfold seq, fmap in *.
+
+- inject_some. assumption.
+- inject_some. simpl in *. eauto using compile_list_nth_error.
+- break_bind_option. inject_some.
+  simpl in *. unfold seq, fmap in *.  break_bind_option. inject_some.
+  fwd eapply (IHlbody1 ?? ?? ?? ?? ?? ** **) as HH; eauto.
+    rewrite HH. clear HH. simpl.
+  fwd eapply (IHlbody2 ?? ?? ?? ?? ?? ** **) as HH; eauto.
+    rewrite HH. clear HH. simpl.
+  reflexivity.
+- break_bind_option. inject_some.
+  simpl in *. fold (T.subst_list targ tfree) in *. fold compile_list.
+  simpl in *. unfold seq, fmap in *.  break_bind_option. inject_some.
+  admit.
+- admit.
+- admit.
+Admitted.
+    
+
+
 Theorem match_states3_sim : forall LE TE le te le',
     match_states3 LE TE le te ->
     L.step LE le le' ->
@@ -1918,12 +1970,15 @@ induction le using L.expr_ind'; intros0 Hms Lstep; invc Lstep.
   invc H0.
 
   fwd eapply compile_value; eauto.
+  fwd eapply length_nth_error_Some with (ys := TE) as HH;
+    try eassumption; eauto using compile_list_length.
+  destruct HH as [ tbody ? ]. rename e into lbody.
+  fwd eapply compile_list_nth_error with (ls := LE) (ts := TE); eauto.
+  assert (exists te', T.subst te2 tfree tbody = Some te') by admit.  break_exists.
 
   eexists. split; [eapply T.MakeCall | ]; eauto using compile_list_value.
-  admit. (* T's function lookup succeeds *)
-  admit. (* T's subst succeeds *)
-  admit. (* results match *)
-
+  constructor; eauto.
+  eapply subst_compile; [ .. | eassumption | eassumption ]; assumption.
 
 - invc Hms. simpl in H0. unfold seq, fmap in H0.
   destruct (compile le1) as [te1|] eqn:?; simpl in H0; try discriminate H0.
@@ -1952,3 +2007,56 @@ induction le using L.expr_ind'; intros0 Hms Lstep; invc Lstep.
 Admitted.
 
 
+Theorem match_states3_rel : forall LE TE le te,
+    match_states3 LE TE le te ->
+    L.value le -> T.value te ->
+    rel LE TE le te.
+induction le using L.expr_ind';
+intros0 Hms Lval Tval; invc Lval; invc Tval.
+
+Focus 2. {
+      exfalso. invc Hms. simpl in *. unfold seq, fmap in *.
+      break_bind_option. congruence.
+} Unfocus.
+Focus 2. {
+      exfalso. invc Hms. simpl in *. unfold seq, fmap in *.
+      break_bind_option. congruence.
+} Unfocus.
+
+- invc Hms. simpl in *. fold compile_list in *.
+  unfold seq, fmap in *. break_bind_option. inject_some.
+  constructor.
+  fwd eapply compile_list_Forall2; eauto.
+  admit.
+
+- invc Hms. simpl in *. fold compile_list in *.
+  unfold seq, fmap in *. break_bind_option. inject_some.
+
+  assert (exists lbody, nth_error LE f0 = Some lbody) by admit.  break_exists.
+  assert (exists tbody, nth_error TE f0 = Some tbody) by admit.  break_exists.
+    (* missing premises: le/te are well formed, no Calls to bad fnames *)
+  fwd eapply compile_list_nth_error with (ls := LE) (ts := TE); eauto.
+
+  eapply RClose with (rename := id); eauto.
+
+  + unfold compile_program, seq, fmap. simpl.
+    on (compile _ = Some _), fun H => rewrite H.  simpl.
+    on (compile_list _ = Some _), fun H => rewrite H.  simpl.
+    reflexivity.
+
+  + admit. (* program is equivalent to itself under identity renaming *)
+
+  + fwd eapply compile_list_Forall2; eauto.
+    assert (forall i,
+        forall le, nth_error free i = Some le ->
+        forall te, nth_error free0 i = Some te ->
+        (forall te, match_states3 LE TE le te -> L.value le -> T.value te -> rel LE TE le te) ->
+        L.value le ->
+        T.value te ->
+        compile le = Some te ->
+        rel LE TE le te). {
+      intros. on _, fun H => eapply H; eauto.  constructor; eauto.
+    }
+    list_magic **.
+
+Admitted.

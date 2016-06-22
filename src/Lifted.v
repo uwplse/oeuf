@@ -77,6 +77,14 @@ Definition subst (arg : expr) (vals : list expr) (e : expr) : option expr :=
         | Close f free => Close f <$> go_list free
         end in
     go e.
+
+Definition subst_list arg vals :=
+    let go := subst arg vals in
+    let fix go_list es : option (list expr) :=
+        match es with
+        | [] => Some []
+        | e :: es => cons <$> go e <*> go_list es
+        end in go_list.
 End subst.
 
 
