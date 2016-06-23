@@ -104,20 +104,22 @@ Definition subst (arg : expr) (vals : list expr) (e : expr) : option expr :=
             | [] => Some []
             | e :: es => cons <$> go e <*> go_list es
             end in
-        let go_pair p : option (expr * rec_info) :=
+        (* NB: go_pair is non-recursive, but making it a fixpoint changes the
+         * behavior of `simpl` such that `refold` (below) works better. *)
+        let fix go_pair p : option (expr * rec_info) :=
             let '(e, r) := p in
             go e >>= fun e' => Some (e', r) in
-        let fix go_pair_list ps : option (list (expr * rec_info)) :=
+        let fix go_list_pair ps : option (list (expr * rec_info)) :=
             match ps with
             | [] => Some []
-            | p :: ps => cons <$> go_pair p <*> go_pair_list ps
+            | p :: ps => cons <$> go_pair p <*> go_list_pair ps
             end in
         match e with
         | Arg => Some arg
         | UpVar n => nth_error vals n
         | Call f a => Call <$> go f <*> go a
         | Constr c es => Constr c <$> go_list es
-        | Elim cases target => Elim <$> go_pair_list cases <*> go target
+        | Elim cases target => Elim <$> go_list_pair cases <*> go target
         | Close f free => Close f <$> go_list free
         end in
     go e.
@@ -129,6 +131,26 @@ Definition subst_list arg vals :=
         | [] => Some []
         | e :: es => cons <$> go e <*> go_list es
         end in go_list.
+
+Definition subst_pair arg vals :=
+    let go := subst arg vals in
+    let fix go_pair p : option (expr * rec_info) :=
+        let '(e, r) := p in
+        go e >>= fun e' => Some (e', r) in go_pair.
+
+Definition subst_list_pair arg vals :=
+    let go_pair := subst_pair arg vals in
+    let fix go_list_pair ps : option (list (expr * rec_info)) :=
+        match ps with
+        | [] => Some []
+        | p :: ps => cons <$> go_pair p <*> go_list_pair ps
+        end in go_list_pair.
+
+Ltac refold_subst arg vals :=
+    fold (subst_list arg vals) in *;
+    fold (subst_pair arg vals) in *;
+    fold (subst_list_pair arg vals) in *.
+
 End subst.
 
 
