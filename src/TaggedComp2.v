@@ -52,6 +52,7 @@ Definition compile (e : L.expr) : option T.expr :=
         | L.Close f free => T.Close f <$> go_list free
         end in go e.
 
+(* Nested fixpoint alias for `compile`, but also used as a top-level function *)
 Definition compile_list :=
     let fix go_list (es : list L.expr) : option (list T.expr) :=
         match es with
@@ -93,64 +94,11 @@ Inductive I (LE : L.env) (TE : T.env) : L.expr -> T.expr -> Prop :=
         I LE TE l t.
 
 
-(* program equivalence for Tagged *)
-
-Definition T_rename_globals (rename : nat -> nat) : T.expr -> T.expr :=
-    let fix go e :=
-        let fix go_list es :=
-            match es with
-            | [] => []
-            | e :: es => go e :: go_list es
-            end in
-        let fix go_cases cs :=
-            match cs with
-            | [] => []
-            | (e, r) :: cs => (go e, r) :: go_cases cs
-            end in
-        match e with
-        | T.Arg => T.Arg
-        | T.UpVar i => T.UpVar i
-        | T.Call f a => T.Call (go f) (go a)
-        | T.Constr tag args => T.Constr tag (go_list args)
-        | T.Elim cases target => T.Elim (go_cases cases) (go target)
-        | T.Close fname free => T.Close (rename fname) (go_list free)
-        end in go.
-
-Definition T_rename_globals_list (rename : nat -> nat) :=
-    let go := T_rename_globals rename in
-    let fix go_list es :=
-        match es with
-        | [] => []
-        | e :: es => go e :: go_list es
-        end in go_list.
-
-Definition T_rename_globals_cases (rename : nat -> nat) :=
-    let go := T_rename_globals rename in
-    let fix go_cases cs : list (T.expr * T.rec_info) :=
-        match cs with
-        | [] => []
-        | (e, r) :: cs => (go e, r) :: go_cases cs
-        end in go_cases.
-
-Inductive T_prog_equiv (E1 E2 : T.env) : (nat -> nat) -> T.expr -> T.expr -> Prop :=
-| TProgEquiv : forall rename e1 e2,
-        (forall fname code,
-            nth_error E1 fname = Some code ->
-            (* Looking up the renamed fname gives the renamed function *)
-            nth_error E2 (rename fname) = Some (T_rename_globals rename code)) ->
-        T_rename_globals rename e1 = e2 ->
-        T_prog_equiv E1 E2 rename e1 e2.
-
 
 (* proofs *)
 
-Ltac inject_some := repeat on (Some _ = Some _), invc.
-Ltac break_bind_option :=
-    unfold seq, fmap in *;
-    repeat match goal with
-    | [ H : bind_option ?x _ = Some _ |- _ ] =>
-            destruct x eqn:?; [ simpl in H | discriminate H ]
-    end.
+Ltac refold_compile := fold compile_list in *.
+Ltac simpl_compile := simpl in *; refold_compile.
 
 Lemma Forall2_I_compile_list : forall LE TE ls ts,
     Forall2 (I LE TE) ls ts ->
@@ -201,9 +149,6 @@ invc Lval; invc RR; invc Tval.
     rewrite HH. clear HH. simpl.
   reflexivity.
 Qed.
-
-Ltac inject_pair := repeat on ((_, _) = (_, _)), invc.
-Ltac simpl_compile := simpl in *; fold compile_list in *.
 
 Lemma compile_list_Forall2 : forall ls ts,
     compile_list ls = Some ts ->
@@ -399,183 +344,6 @@ list_magic **.
 Qed.
 
 
-Definition T_num_upvars :=
-    let fix go e :=
-        let fix go_list es :=
-            match es with
-            | [] => 0
-            | e :: es => max (go e) (go_list es)
-            end in
-        let fix go_pair p :=
-            match p with
-            | (e, _) => go e
-            end in
-        let fix go_list_pair ps :=
-            match ps with
-            | [] => 0
-            | p :: ps => max (go_pair p) (go_list_pair ps)
-            end in
-        match e with
-        | T.Arg => 0
-        | T.UpVar i => S i
-        | T.Call f a => max (go f) (go a)
-        | T.Constr _ args => go_list args
-        | T.Elim cases target => max (go_list_pair cases) (go target)
-        | T.Close _ free => go_list free
-        end in go.
-
-Definition T_num_upvars_list :=
-    let go := T_num_upvars in
-    let fix go_list es :=
-        match es with
-        | [] => 0
-        | e :: es => max (go e) (go_list es)
-        end in go_list.
-
-Definition T_num_upvars_pair :=
-    let go := T_num_upvars in
-    let fix go_pair (p : T.expr * T.rec_info) :=
-        match p with
-        | (e, _) => go e
-        end in go_pair.
-
-Definition T_num_upvars_list_pair :=
-    let go_pair := T_num_upvars_pair in
-    let fix go_list_pair ps :=
-        match ps with
-        | [] => 0
-        | p :: ps => max (go_pair p) (go_list_pair ps)
-        end in go_list_pair.
-
-Ltac refold_T_num_upvars :=
-    fold T_num_upvars_list in *;
-    fold T_num_upvars_pair in *;
-    fold T_num_upvars_list_pair in *.
-
-
-Ltac T_refold_subst arg vals :=
-    fold (T.subst_list arg vals) in *;
-    fold (T.subst_pair arg vals) in *;
-    fold (T.subst_list_pair arg vals) in *.
-
-Lemma nat_max_le : forall n1 n2 m,
-    max n1 n2 <= m ->
-    n1 <= m /\ n2 <= m.
-intros0 Hle. destruct (Max.max_spec n1 n2) as [[? ?] | [? ?]]; split; omega.
-Qed.
-
-Lemma nat_max_le1 : forall n1 n2 m, max n1 n2 <= m -> n1 <= m.
-intros. destruct (nat_max_le ?? ?? ?? **). assumption.
-Qed.
-
-Lemma nat_max_le2 : forall n1 n2 m, max n1 n2 <= m -> n2 <= m.
-intros. destruct (nat_max_le ?? ?? ?? **). assumption.
-Qed.
-
-Lemma T_Forall_subst_list_exists : forall arg free es,
-    Forall (fun e => exists e', T.subst arg free e = Some e') es ->
-    exists es', T.subst_list arg free es = Some es'.
-induction es; intros0 Hfa; invc Hfa; simpl in *.
-{ eauto. }
-break_exists. find_rewrite.
-specialize (IHes **). break_exists. find_rewrite.
-unfold seq, fmap. simpl. eauto.
-Qed.
-
-Lemma T_num_upvars_list_le_Forall : forall es n,
-    T_num_upvars_list es <= n ->
-    Forall (fun e => T_num_upvars e <= n) es.
-induction es; intros0 Hle; simpl in *.
-{ constructor. }
-destruct (nat_max_le ?? ?? ?? **).
-specialize (IHes ?? **).
-constructor; eauto.
-Qed.
-
-Lemma T_Forall_subst_list_pair_exists : forall arg free es,
-    Forall (fun e => exists e', T.subst_pair arg free e = Some e') es ->
-    exists es', T.subst_list_pair arg free es = Some es'.
-(* copy-pasted from non-pair version above *)
-induction es; intros0 Hfa; invc Hfa; simpl in *.
-{ eauto. }
-break_exists. find_rewrite.
-specialize (IHes **). break_exists. find_rewrite.
-unfold seq, fmap. simpl. eauto.
-Qed.
-
-Lemma T_num_upvars_list_pair_le_Forall : forall es n,
-    T_num_upvars_list_pair es <= n ->
-    Forall (fun e => T_num_upvars_pair e <= n) es.
-(* copy-pasted from non-pair version above *)
-induction es; intros0 Hle; simpl in *.
-{ constructor. }
-destruct (nat_max_le ?? ?? ?? **).
-specialize (IHes ?? **).
-constructor; eauto.
-Qed.
-
-
-Lemma T_num_upvars_subst : forall arg free body,
-    T_num_upvars body <= length free ->
-    exists body', T.subst arg free body = Some body'.
-induction body using T.expr_ind''; intros0 Hup;
-simpl in *; refold_T_num_upvars; T_refold_subst arg free.
-
-- eauto.
-
-- destruct (nth_error _ _) eqn:?; cycle 1.
-    { (* None *) rewrite nth_error_None in *. omega. }
-  eauto.
-
-- unfold seq, fmap.
-  destruct (nat_max_le ?? ?? ?? **).
-  specialize (IHbody1 **). destruct IHbody1 as [? HH1]. rewrite HH1.
-  specialize (IHbody2 **). destruct IHbody2 as [? HH2]. rewrite HH2.
-  simpl. eauto.
-
-- fwd eapply T_num_upvars_list_le_Forall; eauto.
-  fwd eapply T_Forall_subst_list_exists with (es := args).
-    { assert (forall i,
-        forall e, nth_error args i = Some e ->
-        (T_num_upvars e <= length free -> exists e', T.subst arg free e = Some e') ->
-        T_num_upvars e <= length free ->
-        exists e', T.subst arg free e = Some e') by eauto.
-      list_magic **. }
-  break_exists. find_rewrite. unfold seq, fmap. simpl. eauto.
-
-- destruct (nat_max_le _ _ _ **).
-
-  (* cases *)
-  fwd eapply T_num_upvars_list_pair_le_Forall; eauto.
-  fwd eapply T_Forall_subst_list_pair_exists with (es := cases).
-    { assert (forall i,
-        forall p, nth_error cases i = Some p ->
-        (T_num_upvars (fst p) <= length free -> exists e', T.subst arg free (fst p) = Some e') ->
-        T_num_upvars_pair p <= length free ->
-        exists p', T.subst_pair arg free p = Some p'); [ | list_magic ** ].
-      intros. destruct p. simpl in *.
-      fwd refine (_ _); try eassumption. break_exists. repeat find_rewrite.
-      simpl. eauto. }
-  break_exists. find_rewrite.
-
-  (* target *)
-  destruct (IHbody **). repeat find_rewrite.
-
-  unfold seq, fmap. simpl. eauto.
-
-- fwd eapply T_num_upvars_list_le_Forall; eauto.
-  fwd eapply T_Forall_subst_list_exists with (es := free0).
-    { assert (forall i,
-        forall e, nth_error free0 i = Some e ->
-        (T_num_upvars e <= length free -> exists e', T.subst arg free e = Some e') ->
-        T_num_upvars e <= length free ->
-        exists e', T.subst arg free e = Some e') by eauto.
-      list_magic **. }
-  break_exists. find_rewrite. unfold seq, fmap. simpl. eauto.
-
-Qed.
-
-
 
 Definition L_num_upvars :=
     let fix go e :=
@@ -606,14 +374,6 @@ Ltac refold_L_num_upvars :=
 
 Ltac L_refold_subst arg vals :=
     fold (L.subst_list arg vals) in *.
-
-
-Lemma nat_le_max : forall n1 n2 m,
-    n1 <= m ->
-    n2 <= m ->
-    max n1 n2 <= m.
-intros0 Hle1 Hle2. destruct (Max.max_spec n1 n2) as [[? ?] | [? ?]]; omega.
-Qed.
 
 Lemma L_subst_list_Forall2 : forall arg free es es',
     L.subst_list arg free es = Some es' ->

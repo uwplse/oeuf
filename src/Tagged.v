@@ -2,6 +2,7 @@ Require Import Common.
 
 Require Import Utopia.
 Require Import Monads.
+Require Import ListLemmas.
 
 
 Definition function_name := nat.
@@ -19,74 +20,6 @@ Inductive expr :=
 | Elim (cases : list (expr * rec_info)) (target : expr)
 | Close (f : function_name) (free : list expr)
 .
-
-Definition expr_rect_mut
-        (P : expr -> Type)
-        (Pl : list expr -> Type)
-        (Pp : expr * rec_info -> Type)
-        (Plp : list (expr * rec_info) -> Type)
-    (HArg :     P Arg)
-    (HUpVar :   forall n, P (UpVar n))
-    (HCall :    forall f a, P f -> P a -> P (Call f a))
-    (HConstr :  forall tag args, Pl args -> P (Constr tag args))
-    (HElim :    forall cases target, Plp cases -> P target -> P (Elim cases target))
-    (HClose :   forall f free, Pl free -> P (Close f free))
-    (Hnil :     Pl [])
-    (Hcons :    forall e es, P e -> Pl es -> Pl (e :: es))
-    (Hpair :    forall e r, P e -> Pp (e, r))
-    (Hnil_p :   Plp [])
-    (Hcons_p :  forall p ps, Pp p -> Plp ps -> Plp (p :: ps))
-    (e : expr) : P e :=
-    let fix go e :=
-        let fix go_list es :=
-            match es as es_ return Pl es_ with
-            | [] => Hnil
-            | e :: es => Hcons e es (go e) (go_list es)
-            end in
-        let go_pair p :=
-            let '(e, r) := p in
-            Hpair e r (go e) in
-        let fix go_pair_list ps :=
-            match ps as ps_ return Plp ps_ with
-            | [] => Hnil_p
-            | p :: ps => Hcons_p p ps (go_pair p) (go_pair_list ps)
-            end in
-        match e as e_ return P e_ with
-        | Arg => HArg
-        | UpVar n => HUpVar n
-        | Call f a => HCall f a (go f) (go a)
-        | Constr tag args => HConstr tag args (go_list args)
-        | Elim cases target => HElim cases target (go_pair_list cases) (go target)
-        | Close f free => HClose f free (go_list free)
-        end in go e.
-
-(* Useful wrapper for `expr_rect_mut with (Pl := Forall P)` *)
-Definition expr_ind' (P : expr -> Prop) (Pp : (expr * rec_info) -> Prop)
-    (HArg :     P Arg)
-    (HUpVar :   forall n, P (UpVar n))
-    (HCall :    forall f a, P f -> P a -> P (Call f a))
-    (HConstr :  forall c args, Forall P args -> P (Constr c args))
-    (HElim :    forall cases target, Forall Pp cases -> P target -> P (Elim cases target))
-    (HClose :   forall f free, Forall P free -> P (Close f free))
-    (Hpair :    forall e r, P e -> Pp (e, r))
-    (e : expr) : P e :=
-    ltac:(refine (@expr_rect_mut P (Forall P) Pp (Forall Pp)
-        HArg HUpVar HCall HConstr HElim HClose _ _ Hpair _ _ e); eauto).
-
-(* Useful wrapper for `expr_rect_mut with (Pl := Forall P)` *)
-Definition expr_ind'' (P : expr -> Prop)
-    (HArg :     P Arg)
-    (HUpVar :   forall n, P (UpVar n))
-    (HCall :    forall f a, P f -> P a -> P (Call f a))
-    (HConstr :  forall c args, Forall P args -> P (Constr c args))
-    (HElim :    forall cases target,
-        Forall (fun c => P (fst c)) cases ->
-        P target ->
-        P (Elim cases target))
-    (HClose :   forall f free, Forall P free -> P (Close f free))
-    (e : expr) : P e :=
-    ltac:(refine (@expr_rect_mut P (Forall P) (fun c => P (fst c)) (Forall (fun c => P (fst c)))
-        HArg HUpVar HCall HConstr HElim HClose _ _ _ _ _ e); eauto).
 
 Definition env := list expr.
 
@@ -124,33 +57,6 @@ Definition subst (arg : expr) (vals : list expr) (e : expr) : option expr :=
         end in
     go e.
 
-Definition subst_list arg vals :=
-    let go := subst arg vals in
-    let fix go_list es : option (list expr) :=
-        match es with
-        | [] => Some []
-        | e :: es => cons <$> go e <*> go_list es
-        end in go_list.
-
-Definition subst_pair arg vals :=
-    let go := subst arg vals in
-    let fix go_pair p : option (expr * rec_info) :=
-        let '(e, r) := p in
-        go e >>= fun e' => Some (e', r) in go_pair.
-
-Definition subst_list_pair arg vals :=
-    let go_pair := subst_pair arg vals in
-    let fix go_list_pair ps : option (list (expr * rec_info)) :=
-        match ps with
-        | [] => Some []
-        | p :: ps => cons <$> go_pair p <*> go_list_pair ps
-        end in go_list_pair.
-
-Ltac refold_subst arg vals :=
-    fold (subst_list arg vals) in *;
-    fold (subst_pair arg vals) in *;
-    fold (subst_list_pair arg vals) in *.
-
 End subst.
 
 
@@ -166,37 +72,6 @@ Fixpoint unroll_elim (case : expr)
             unroll_elim case args rec mk_rec
     | _, _ => None
     end.
-
-Ltac generalize_all :=
-    repeat match goal with
-    | [ y : _ |- _ ] => generalize y; clear y
-    end.
-
-(* Change the current goal to an equivalent one in which argument "x" is the
- * first one. *)
-Tactic Notation "make_first" ident(x) :=
-    try intros until x;
-    move x at top;
-    generalize_all.
-
-(* Move "x" to the front of the goal, then perform induction. *)
-Ltac first_induction x := make_first x; induction x.
-
-Tactic Notation "fwd" tactic3(tac) "as" ident(H) :=
-    simple refine (let H : _ := _ in _);
-    [ shelve
-    | tac
-    | clearbody H ].
-
-Lemma unroll_elim_length : forall case args rec mk_rec,
-    length args = length rec <-> unroll_elim case args rec mk_rec <> None.
-first_induction args; destruct rec; intros; split; simpl;
-  try solve [intro; congruence].
-
-- intro Hlen. simpl. eapply IHargs. congruence.
-- intro Hcall. f_equal. apply <- IHargs. eauto.
-Qed.
-
 
 Inductive step (E : env) : expr -> expr -> Prop :=
 | MakeCall : forall f a free e e',
@@ -293,3 +168,300 @@ eright. eapply MakeCall; try solve [repeat econstructor].
 eleft.
 Defined.
 Eval compute in proj1_sig add_1_2.
+
+
+(* Proofs *)
+
+
+(*
+ * Mutual recursion/induction schemes for expr
+ *)
+
+Definition expr_rect_mut
+        (P : expr -> Type)
+        (Pl : list expr -> Type)
+        (Pp : expr * rec_info -> Type)
+        (Plp : list (expr * rec_info) -> Type)
+    (HArg :     P Arg)
+    (HUpVar :   forall n, P (UpVar n))
+    (HCall :    forall f a, P f -> P a -> P (Call f a))
+    (HConstr :  forall tag args, Pl args -> P (Constr tag args))
+    (HElim :    forall cases target, Plp cases -> P target -> P (Elim cases target))
+    (HClose :   forall f free, Pl free -> P (Close f free))
+    (Hnil :     Pl [])
+    (Hcons :    forall e es, P e -> Pl es -> Pl (e :: es))
+    (Hpair :    forall e r, P e -> Pp (e, r))
+    (Hnil_p :   Plp [])
+    (Hcons_p :  forall p ps, Pp p -> Plp ps -> Plp (p :: ps))
+    (e : expr) : P e :=
+    let fix go e :=
+        let fix go_list es :=
+            match es as es_ return Pl es_ with
+            | [] => Hnil
+            | e :: es => Hcons e es (go e) (go_list es)
+            end in
+        let go_pair p :=
+            let '(e, r) := p in
+            Hpair e r (go e) in
+        let fix go_pair_list ps :=
+            match ps as ps_ return Plp ps_ with
+            | [] => Hnil_p
+            | p :: ps => Hcons_p p ps (go_pair p) (go_pair_list ps)
+            end in
+        match e as e_ return P e_ with
+        | Arg => HArg
+        | UpVar n => HUpVar n
+        | Call f a => HCall f a (go f) (go a)
+        | Constr tag args => HConstr tag args (go_list args)
+        | Elim cases target => HElim cases target (go_pair_list cases) (go target)
+        | Close f free => HClose f free (go_list free)
+        end in go e.
+
+(* Useful wrapper for `expr_rect_mut with (Pl := Forall P)` *)
+Definition expr_ind' (P : expr -> Prop) (Pp : (expr * rec_info) -> Prop)
+    (HArg :     P Arg)
+    (HUpVar :   forall n, P (UpVar n))
+    (HCall :    forall f a, P f -> P a -> P (Call f a))
+    (HConstr :  forall c args, Forall P args -> P (Constr c args))
+    (HElim :    forall cases target, Forall Pp cases -> P target -> P (Elim cases target))
+    (HClose :   forall f free, Forall P free -> P (Close f free))
+    (Hpair :    forall e r, P e -> Pp (e, r))
+    (e : expr) : P e :=
+    ltac:(refine (@expr_rect_mut P (Forall P) Pp (Forall Pp)
+        HArg HUpVar HCall HConstr HElim HClose _ _ Hpair _ _ e); eauto).
+
+(* Useful wrapper for `expr_rect_mut with (Pl := Forall P)` *)
+Definition expr_ind'' (P : expr -> Prop)
+    (HArg :     P Arg)
+    (HUpVar :   forall n, P (UpVar n))
+    (HCall :    forall f a, P f -> P a -> P (Call f a))
+    (HConstr :  forall c args, Forall P args -> P (Constr c args))
+    (HElim :    forall cases target,
+        Forall (fun c => P (fst c)) cases ->
+        P target ->
+        P (Elim cases target))
+    (HClose :   forall f free, Forall P free -> P (Close f free))
+    (e : expr) : P e :=
+    ltac:(refine (@expr_rect_mut P (Forall P) (fun c => P (fst c)) (Forall (fun c => P (fst c)))
+        HArg HUpVar HCall HConstr HElim HClose _ _ _ _ _ e); eauto).
+
+
+(*
+ * Nested fixpoint aliases for subst
+ *)
+
+Section subst_alias.
+Open Scope option_monad.
+
+Definition subst_list arg vals :=
+    let go := subst arg vals in
+    let fix go_list es : option (list expr) :=
+        match es with
+        | [] => Some []
+        | e :: es => cons <$> go e <*> go_list es
+        end in go_list.
+
+Definition subst_pair arg vals :=
+    let go := subst arg vals in
+    let fix go_pair p : option (expr * rec_info) :=
+        let '(e, r) := p in
+        go e >>= fun e' => Some (e', r) in go_pair.
+
+Definition subst_list_pair arg vals :=
+    let go_pair := subst_pair arg vals in
+    let fix go_list_pair ps : option (list (expr * rec_info)) :=
+        match ps with
+        | [] => Some []
+        | p :: ps => cons <$> go_pair p <*> go_list_pair ps
+        end in go_list_pair.
+
+End subst_alias.
+
+Ltac refold_subst arg vals :=
+    fold (subst_list arg vals) in *;
+    fold (subst_pair arg vals) in *;
+    fold (subst_list_pair arg vals) in *.
+
+
+(*
+ * Misc lemmas
+ *)
+
+Lemma unroll_elim_length : forall case args rec mk_rec,
+    length args = length rec <-> unroll_elim case args rec mk_rec <> None.
+first_induction args; destruct rec; intros; split; simpl;
+  try solve [intro; congruence].
+
+- intro Hlen. simpl. eapply IHargs. congruence.
+- intro Hcall. f_equal. apply <- IHargs. eauto.
+Qed.
+
+
+(*
+ * Guaranteed success of subst
+ *)
+
+Definition num_upvars :=
+    let fix go e :=
+        let fix go_list es :=
+            match es with
+            | [] => 0
+            | e :: es => max (go e) (go_list es)
+            end in
+        let fix go_pair p :=
+            match p with
+            | (e, _) => go e
+            end in
+        let fix go_list_pair ps :=
+            match ps with
+            | [] => 0
+            | p :: ps => max (go_pair p) (go_list_pair ps)
+            end in
+        match e with
+        | Arg => 0
+        | UpVar i => S i
+        | Call f a => max (go f) (go a)
+        | Constr _ args => go_list args
+        | Elim cases target => max (go_list_pair cases) (go target)
+        | Close _ free => go_list free
+        end in go.
+
+(* Nested fixpoint aliases *)
+Definition num_upvars_list :=
+    let go := num_upvars in
+    let fix go_list es :=
+        match es with
+        | [] => 0
+        | e :: es => max (go e) (go_list es)
+        end in go_list.
+
+Definition num_upvars_pair :=
+    let go := num_upvars in
+    let fix go_pair (p : expr * rec_info) :=
+        match p with
+        | (e, _) => go e
+        end in go_pair.
+
+Definition num_upvars_list_pair :=
+    let go_pair := num_upvars_pair in
+    let fix go_list_pair ps :=
+        match ps with
+        | [] => 0
+        | p :: ps => max (go_pair p) (go_list_pair ps)
+        end in go_list_pair.
+
+Ltac refold_num_upvars :=
+    fold num_upvars_list in *;
+    fold num_upvars_pair in *;
+    fold num_upvars_list_pair in *.
+
+
+Lemma num_upvars_list_is_maximum : forall es,
+    num_upvars_list es = maximum (map num_upvars es).
+induction es; simpl in *; eauto.
+Qed.
+
+Lemma num_upvars_list_pair_is_maximum : forall ps,
+    num_upvars_list_pair ps = maximum (map num_upvars_pair ps).
+induction ps; simpl in *; eauto.
+Qed.
+
+
+
+Lemma Forall_map : forall A B (P : B -> Prop) (f : A -> B) xs,
+    Forall (fun x => P (f x)) xs <-> Forall P (map f xs).
+induction xs; intros; split; inversion 1; subst; simpl in *; eauto.
+- constructor; eauto. rewrite <- IHxs. assumption.
+- constructor; eauto. rewrite -> IHxs. assumption.
+Qed.
+
+Lemma num_upvars_list_le_Forall : forall es n,
+    num_upvars_list es <= n ->
+    Forall (fun e => num_upvars e <= n) es.
+intros.
+erewrite Forall_map with (P := fun x => x <= n).
+erewrite <- maximum_le_Forall.
+rewrite <- num_upvars_list_is_maximum.
+assumption.
+Qed.
+
+Lemma num_upvars_list_pair_le_Forall : forall es n,
+    num_upvars_list_pair es <= n ->
+    Forall (fun p => num_upvars_pair p <= n) es.
+intros.
+erewrite Forall_map with (P := fun x => x <= n).
+erewrite <- maximum_le_Forall.
+rewrite <- num_upvars_list_pair_is_maximum.
+assumption.
+Qed.
+
+(* TODO: refactor this lemma *)
+Lemma Forall_subst_list_exists : forall arg free es,
+    Forall (fun e => exists e', subst arg free e = Some e') es ->
+    exists es', subst_list arg free es = Some es'.
+induction es; intros0 Hfa; invc Hfa; simpl in *.
+{ eauto. }
+break_exists. find_rewrite.
+specialize (IHes **). break_exists. find_rewrite.
+unfold seq, fmap. simpl. eauto.
+Qed.
+
+(* TODO: refactor this lemma *)
+Lemma Forall_subst_list_pair_exists : forall arg free es,
+    Forall (fun e => exists e', subst_pair arg free e = Some e') es ->
+    exists es', subst_list_pair arg free es = Some es'.
+(* copy-pasted from non-pair version above *)
+induction es; intros0 Hfa; invc Hfa; simpl in *.
+{ eauto. }
+break_exists. find_rewrite.
+specialize (IHes **). break_exists. find_rewrite.
+unfold seq, fmap. simpl. eauto.
+Qed.
+
+
+
+Lemma num_upvars_subst : forall arg free body,
+    num_upvars body <= length free ->
+    exists body', subst arg free body = Some body'.
+induction body using expr_ind''; intros0 Hup;
+simpl in *; refold_num_upvars; refold_subst arg free.
+
+- eauto.
+
+- destruct (nth_error _ _) eqn:?; cycle 1.
+    { (* None *) rewrite nth_error_None in *. omega. }
+  eauto.
+
+- unfold seq, fmap.
+  destruct (nat_max_le ?? ?? ?? **).
+  specialize (IHbody1 **). destruct IHbody1 as [? HH1]. rewrite HH1.
+  specialize (IHbody2 **). destruct IHbody2 as [? HH2]. rewrite HH2.
+  simpl. eauto.
+
+- fwd eapply num_upvars_list_le_Forall; eauto.
+  fwd eapply Forall_subst_list_exists with (es := args).
+    { list_magic_on (args, tt). }
+  break_exists. find_rewrite. unfold seq, fmap. simpl. eauto.
+
+- destruct (nat_max_le _ _ _ **).
+
+  (* cases *)
+  fwd eapply num_upvars_list_pair_le_Forall; eauto.
+  fwd eapply Forall_subst_list_pair_exists with (es := cases).
+    { list_magic_on (cases, tt).
+      destruct cases_i. simpl in *.
+      fwd refine (_ _); try eassumption. break_exists. erewrite **.
+      simpl. eauto. }
+  break_exists. find_rewrite.
+
+  (* target *)
+  destruct (IHbody **). repeat find_rewrite.
+
+  unfold seq, fmap. simpl. eauto.
+
+- fwd eapply num_upvars_list_le_Forall; eauto.
+  fwd eapply Forall_subst_list_exists with (es := free0).
+    { list_magic_on (free0, tt). }
+  break_exists. find_rewrite. unfold seq, fmap. simpl. eauto.
+
+Qed.

@@ -76,8 +76,10 @@ Notation "***" := (ltac:(eauto)) (only parsing).
 Notation "??" := (ltac:(shelve)) (only parsing).
 
 
-(* list_magic *)
 
+(* list_magic and friends *)
+
+(* core lemmas used by list_magic *)
 Lemma Forall_nth_error : forall X (P : X -> Prop) xs,
     Forall P xs ->
     (forall i x, nth_error xs i = Some x -> P x).
@@ -92,7 +94,6 @@ Lemma nth_error_Forall : forall X (P : X -> Prop) xs,
 intros. rewrite Forall_forall in *. intros.
 fwd eapply In_nth_error; eauto. break_exists. eauto.
 Qed.
-
 
 Lemma Forall2_length : forall X Y (P : X -> Y -> Prop) xs ys,
     Forall2 P xs ys ->
@@ -147,19 +148,26 @@ Lemma Forall2_nth_error_Some : forall X Y (P : X -> Y -> Prop) xs ys x i,
 intros. eapply length_nth_error_Some. eapply Forall2_length. all:eauto.
 Qed.
 
-Lemma Forall2_flip : forall A B (P : A -> B -> Prop) (Q : B -> A -> Prop) (xs : list A) (ys : list B),
-    (forall x y, P x y -> Q y x) ->
-    Forall2 P xs ys -> Forall2 Q ys xs.
-induction xs; intros0 Hpq Hfa; invc Hfa; constructor; firstorder eauto.
-Qed.
 
-Lemma Forall2_flip' : forall A B (P : A -> B -> Prop) (xs : list A) (ys : list B),
-    Forall2 P xs ys -> Forall2 (fun y x => P x y) ys xs.
-intros; eapply Forall2_flip; eauto.
-Qed.
+(* list_magic_using H:
+   
+   Given this context and goal:
 
+    H : forall i,
+        forall x, nth_error xs i = Some x ->
+        forall y, nth_error ys i = Some y ->
+        P x ->
+        Q y ->
+        R x y ->
+        S x
+    Hp : Forall P xs
+    Hq : Forall Q ys
+    Hr : Forall2 R xs ys
+     -----
+    Forall S x
 
-
+   Complete the entire proof, by combining `H` with the lemmas above.
+ *)
 
 Ltac collect_length_hyps :=
     repeat match goal with
@@ -205,7 +213,7 @@ Ltac collect_entry_hyps i :=
                 (eapply Forall2_nth_error with (1 := Hfa) (2 := Hnx) (3 := Hny))
     end.
 
-Ltac list_magic HH :=
+Ltac list_magic_using HH :=
     let i := fresh "i" in
     collect_length_hyps;
     (eapply nth_error_Forall || (eapply nth_error_Forall2; [congruence | ..]));
@@ -213,6 +221,69 @@ Ltac list_magic HH :=
     specialize (HH i);
     collect_length_hyps; find_matching_entries HH i; collect_entry_hyps i;
     eapply HH; eauto.
+
+
+(* list_magic_on (xs, (ys, (zs, tt))):
+
+   Assert and attempt to prove a suitable `H`, based on the uses of `Forall` on
+   `xs`, `ys`, and `zs` in the context and goal.  Solves goals of the form
+   `Forall P xs` or `Forall P xs ys`, but may produce a subgoal to prove that
+   `P` holds on a particular `x`. *)
+
+Ltac build_list_magic_hyp_type_inner lists G :=
+    let i := fresh "i" in
+    simple refine (forall i : nat, (_ : Prop));
+    let rec loop ls :=
+        lazymatch ls with
+        | (?l, ?ls) =>
+                let x := fresh l "_" i in
+                let Hx := fresh "H" x in
+                simple refine (forall x, forall Hx : nth_error l i = Some x, (_ : Prop));
+                loop ls
+        | tt => idtac
+        end in
+    loop lists;
+    repeat match goal with
+    | [ Hfa : Forall ?P ?xs,
+        Hnth : nth_error ?xs i = Some ?x |- _ ] =>
+            simple refine (P x -> (_ : Prop));
+            clear Hfa
+    | [ Hfa : Forall2 ?P ?xs ?ys,
+        Hnthx : nth_error ?xs i = Some ?x,
+        Hnthy : nth_error ?ys i = Some ?y |- _ ] =>
+            simple refine (P x y -> (_ : Prop));
+            clear Hfa
+    end;
+    lazymatch G with
+    | Forall ?P ?xs =>
+            lazymatch goal with
+            | [ Hnth : nth_error xs i = Some ?x |- _ ] =>
+                    exact (P x)
+            end
+    | Forall2 ?P ?xs ?ys =>
+            lazymatch goal with
+            | [ Hnthx : nth_error xs i = Some ?x,
+                Hnthx : nth_error ys i = Some ?y |- _ ] =>
+                    exact (P x y)
+            end
+    end.
+
+Ltac build_list_magic_hyp_type H_ty lists :=
+    match goal with
+    | [ |- ?G ] =>
+            simple refine (let H_ty : Prop := _ in _);
+            [ build_list_magic_hyp_type_inner lists G
+            | simpl in H_ty ]
+    end.
+
+Ltac list_magic_on lists :=
+    let H := fresh "H" in
+    let H_ty := fresh H "_ty" in
+    build_list_magic_hyp_type H_ty lists;
+    assert (H : H_ty); unfold H_ty in *; clear H_ty;
+        [ intros; eauto | try list_magic_using H ].
+
+
 
 
 (* hide terms for printing *)
@@ -229,3 +300,9 @@ Implicit Arguments HIDDEN [A x].
    current goal.  Use it like `refine (...); hide; prove stuff...` or
    `$(hide; prove stuff...)$`. *)
 Ltac hide := apply @HIDDEN.
+
+
+(* Exploit injectivity of constructors *)
+
+Ltac inject_some := repeat on (Some _ = Some _), invc.
+Ltac inject_pair := repeat on ((_, _) = (_, _)), invc.
