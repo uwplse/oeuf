@@ -60,6 +60,24 @@ Fixpoint map_partial {A B : Type} (f : A -> option B) (l : list A) : option (lis
               end
   end.
 
+Lemma map_partial_Forall_exists : forall A B (f : A -> option B) xs,
+    Forall (fun x => exists y, f x = Some y) xs ->
+    exists ys, map_partial f xs = Some ys.
+induction xs; intros0 Hfa; invc Hfa.
+- eexists. reflexivity.
+- specialize (IHxs **). do 2 break_exists.
+  eexists. simpl. repeat find_rewrite. reflexivity.
+Qed.
+
+Lemma Forall_map_partial_exists : forall A B (f : A -> option B) xs ys,
+    map_partial f xs = Some ys ->
+    Forall (fun x => exists y, f x = Some y) xs.
+induction xs; intros0 Hmp; simpl in *; invc Hmp.
+- constructor.
+- repeat (break_match; try discriminate). inject_some.
+  constructor; eauto.
+Qed.
+
 Lemma map_partial_Forall2 : forall A B (f : A -> option B) xs ys,
     map_partial f xs = Some ys ->
     Forall2 (fun x y => f x = Some y) xs ys.
@@ -74,4 +92,12 @@ Lemma Forall2_map_partial : forall A B (f : A -> option B) xs ys,
 induction xs; inversion 1; subst; simpl in *.
 - reflexivity.
 - find_rewrite. erewrite IHxs by eauto. reflexivity.
+Qed.
+
+
+Lemma Forall_map : forall A B (P : B -> Prop) (f : A -> B) xs,
+    Forall (fun x => P (f x)) xs <-> Forall P (map f xs).
+induction xs; intros; split; inversion 1; subst; simpl in *; eauto.
+- constructor; eauto. rewrite <- IHxs. assumption.
+- constructor; eauto. rewrite -> IHxs. assumption.
 Qed.

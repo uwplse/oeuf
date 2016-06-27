@@ -106,7 +106,6 @@ Inductive step (E : env) : expr -> expr -> Prop :=
 .
 
 
-
 (* Demo *)
 
 Definition add_lam_a :=             0.
@@ -247,6 +246,29 @@ Definition expr_ind'' (P : expr -> Prop)
 
 
 (*
+ * value_ok
+ *)
+
+
+Inductive value_ok (E : env) : expr -> Prop :=
+| ConstrOk :
+        forall tag args,
+        Forall (value_ok E) args ->
+        value_ok E (Constr tag args)
+| CloseOk : forall f free body,
+        nth_error E f = Some body ->
+        Forall (value_ok E) free ->
+        value_ok E (Close f free).
+
+Theorem value_ok_value : forall E e, value_ok E e -> value e.
+induction e using expr_ind''; intro Hok; invc Hok.
+- constructor. list_magic_on (args, tt).
+- constructor. list_magic_on (free, tt).
+Qed.
+Hint Resolve value_ok_value.
+
+
+(*
  * Nested fixpoint aliases for subst
  *)
 
@@ -366,15 +388,6 @@ Lemma num_upvars_list_pair_is_maximum : forall ps,
 induction ps; simpl in *; eauto.
 Qed.
 
-
-
-Lemma Forall_map : forall A B (P : B -> Prop) (f : A -> B) xs,
-    Forall (fun x => P (f x)) xs <-> Forall P (map f xs).
-induction xs; intros; split; inversion 1; subst; simpl in *; eauto.
-- constructor; eauto. rewrite <- IHxs. assumption.
-- constructor; eauto. rewrite -> IHxs. assumption.
-Qed.
-
 Lemma num_upvars_list_le_Forall : forall es n,
     num_upvars_list es <= n ->
     Forall (fun e => num_upvars e <= n) es.
@@ -395,27 +408,35 @@ rewrite <- num_upvars_list_pair_is_maximum.
 assumption.
 Qed.
 
-(* TODO: refactor this lemma *)
+
+Lemma subst_list_is_map_partial : forall arg free es,
+    subst_list arg free es = map_partial (subst arg free) es.
+induction es.
+- reflexivity.
+- simpl. unfold seq, fmap, bind_option. simpl. repeat break_match; congruence.
+Qed.
+
+Lemma subst_list_pair_is_map_partial : forall arg free ps,
+    subst_list_pair arg free ps = map_partial (subst_pair arg free) ps.
+induction ps.
+- reflexivity.
+- simpl. unfold seq, fmap, bind_option. simpl. repeat break_match; congruence.
+Qed.
+
 Lemma Forall_subst_list_exists : forall arg free es,
     Forall (fun e => exists e', subst arg free e = Some e') es ->
     exists es', subst_list arg free es = Some es'.
-induction es; intros0 Hfa; invc Hfa; simpl in *.
-{ eauto. }
-break_exists. find_rewrite.
-specialize (IHes **). break_exists. find_rewrite.
-unfold seq, fmap. simpl. eauto.
+intros.
+rewrite subst_list_is_map_partial.
+eauto using map_partial_Forall_exists.
 Qed.
 
-(* TODO: refactor this lemma *)
 Lemma Forall_subst_list_pair_exists : forall arg free es,
     Forall (fun e => exists e', subst_pair arg free e = Some e') es ->
     exists es', subst_list_pair arg free es = Some es'.
-(* copy-pasted from non-pair version above *)
-induction es; intros0 Hfa; invc Hfa; simpl in *.
-{ eauto. }
-break_exists. find_rewrite.
-specialize (IHes **). break_exists. find_rewrite.
-unfold seq, fmap. simpl. eauto.
+intros.
+rewrite subst_list_pair_is_map_partial.
+eauto using map_partial_Forall_exists.
 Qed.
 
 

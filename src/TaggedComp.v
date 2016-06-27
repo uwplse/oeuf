@@ -2,6 +2,7 @@ Require Import Common.
 
 Require Import Monads.
 Require Import StuartTact.
+Require Import ListLemmas.
 Require Utopia.
 
 Require Lifted.
@@ -65,6 +66,9 @@ Definition compile_program (lp : L.expr * list L.expr) : option (T.expr * list T
 
 End compile.
 
+Ltac refold_compile := fold compile_list in *.
+Ltac simpl_compile := simpl in *; refold_compile.
+
 
 (* spec *)
 
@@ -77,7 +81,7 @@ Inductive R (LE : L.env) (TE : T.env) : L.expr -> T.expr -> Prop :=
 | RClose : forall fn lf tf lfree tfree,
         nth_error LE fn = Some lf ->
         nth_error TE fn = Some tf ->
-        compile_program (lf, LE) = Some (tf, TE) ->
+        compile lf = Some tf ->
         Forall2 (R LE TE) lfree tfree ->
         R LE TE
             (L.Close fn lfree)
@@ -85,236 +89,92 @@ Inductive R (LE : L.env) (TE : T.env) : L.expr -> T.expr -> Prop :=
 .
 
 
-(* inductive relation *)
+(* induction hypothesis *)
 
-Inductive I (LE : L.env) (TE : T.env) : L.expr -> T.expr -> Prop :=
-| ICompile : forall l t,
-        compile_list LE = Some TE ->
-        compile l = Some t ->
-        I LE TE l t.
-
+Definition I l t := compile l = Some t.
+Hint Unfold I.
 
 
 (* proofs *)
 
-Ltac refold_compile := fold compile_list in *.
-Ltac simpl_compile := simpl in *; refold_compile.
-
-Lemma Forall2_I_compile_list : forall LE TE ls ts,
-    Forall2 (I LE TE) ls ts ->
-    compile_list ls = Some ts.
-induction ls; intros0 Hfa; destruct ts; invc Hfa; simpl in *; eauto.
-unfold seq, fmap.
-specialize (IHls ?? **). rewrite IHls. simpl.
-on (I _ _ _ _), invc. rewrite **. simpl.
-reflexivity.
+Lemma compile_list_is_map_partial : forall es,
+    compile_list es = map_partial compile es.
+induction es.
+- reflexivity.
+- simpl. unfold seq, fmap, bind_option. simpl. repeat break_match; congruence.
 Qed.
 
-Lemma I_R_value_fwd : forall LE TE l t,
+Lemma Forall2_Forall_exists : forall A B (P : A -> B -> Prop) xs ys,
+    Forall2 P xs ys ->
+    Forall (fun x => exists y, P x y) xs.
+induction xs; destruct ys; intros0 Hfa; invc Hfa; eauto.
+Qed.
+
+Lemma value_R_I : forall LE TE l t,
     L.value l -> T.value t ->
     compile_list LE = Some TE ->
-    R LE TE l t -> I LE TE l t.
+    R LE TE l t -> I l t.
 induction l using L.expr_ind'; intros0 Lval Tval Henv RR;
 invc Lval; invc RR; invc Tval.
 
-- constructor; eauto.
-  simpl. fold compile_list. unfold seq, fmap.
+- unfold I in *. simpl. refold_compile. unfold seq, fmap.
+  assert (compile_list args = Some targs). {
+    rewrite compile_list_is_map_partial. eapply Forall2_map_partial.
+    list_magic_on (args, (targs, tt)).
+  }
+  repeat find_rewrite. simpl. reflexivity.
 
-  assert (forall i,
-    forall l, nth_error args i = Some l ->
-    forall t, nth_error targs i = Some t ->
-    (forall t, L.value l -> T.value t -> compile_list LE = Some TE ->
-        R LE TE l t -> I LE TE l t) ->
-    L.value l -> T.value t ->
-    R LE TE l t ->
-    I LE TE l t) by (intros; eauto).
-  on _, fun H => (assert (Forall2 (I LE TE) args targs) by (list_magic **); clear H).
-  fwd eapply Forall2_I_compile_list as HH; eauto.
-    rewrite HH. clear HH. simpl.
-  reflexivity.
-
-- constructor; eauto.
-  simpl. fold compile_list. unfold seq, fmap.
-
-  assert (forall i,
-    forall l, nth_error free i = Some l ->
-    forall t, nth_error tfree i = Some t ->
-    (forall t, L.value l -> T.value t -> compile_list LE = Some TE ->
-        R LE TE l t -> I LE TE l t) ->
-    L.value l -> T.value t ->
-    R LE TE l t ->
-    I LE TE l t) by (intros; eauto).
-  on _, fun H => (assert (Forall2 (I LE TE) free tfree) by (list_magic **); clear H).
-  fwd eapply Forall2_I_compile_list as HH; eauto.
-    rewrite HH. clear HH. simpl.
-  reflexivity.
+- unfold I in *. simpl. refold_compile. unfold seq, fmap.
+  assert (compile_list free = Some tfree). {
+    rewrite compile_list_is_map_partial. eapply Forall2_map_partial.
+    list_magic_on (free, (tfree, tt)).
+  }
+  repeat find_rewrite. simpl. reflexivity.
 Qed.
+
+Lemma value_I_R : forall LE TE l t,
+    L.value_ok LE l -> T.value_ok TE t ->
+    compile_list LE = Some TE ->
+    I l t -> R LE TE l t.
+induction l using L.expr_ind'; intros0 Lval Tval Henv II;
+invc Lval; unfold I in *; invc Tval.
+
+- simpl_compile. break_bind_option. inject_some.
+
+  rewrite compile_list_is_map_partial with (es := args) in *.
+  on _, fun H => eapply map_partial_Forall2 in H.
+
+  constructor. list_magic_on (args, (args0, tt)).
+
+- simpl_compile. break_bind_option. congruence.
+
+- simpl_compile. break_bind_option. congruence.
+
+- simpl_compile. break_bind_option. inject_some.
+
+  rewrite compile_list_is_map_partial with (es := free) in *.
+  on _, fun H => eapply map_partial_Forall2 in H.
+
+  econstructor; eauto.
+  + eapply Forall2_nth_error with (P := I) (xs := LE); eauto.
+    rewrite compile_list_is_map_partial in *. eauto using map_partial_Forall2.
+  + list_magic_on (free, (free0, tt)).
+Qed.
+
+Lemma value_I_R_iff : forall LE TE l t,
+    L.value_ok LE l -> T.value_ok TE t ->
+    compile_list LE = Some TE ->
+    I l t <-> R LE TE l t.
+intros. split; eauto using value_R_I, value_I_R.
+Qed.
+
 
 Lemma compile_list_Forall2 : forall ls ts,
     compile_list ls = Some ts ->
     Forall2 (fun l t => compile l = Some t) ls ts.
-induction ls; intros0 Heq; simpl in *; invc Heq.
-- constructor.
-- compute [seq fmap bind_option] in *.
-  destruct (compile _) eqn:?; simpl in *; try discriminate.
-  destruct (compile_list _) eqn:?; simpl in *; try discriminate.
-  on (Some _ = Some _), invc.
-  constructor; eauto.
-Qed.
-
-Lemma Forall2_nth_error_exists : forall X Y (P : X -> Y -> Prop) xs ys,
-    Forall2 P xs ys ->
-    forall i x,
-    nth_error xs i = Some x ->
-    exists y, nth_error ys i = Some y /\ P x y.
 intros.
-fwd eapply Forall2_nth_error_Some; eauto. break_exists.
-eexists; split; [ eassumption | ].
-eapply Forall2_nth_error; eauto.
-Qed.
-
-Lemma compile_program_def : forall LE TE l t,
-    compile l = Some t ->
-    compile_list LE = Some TE ->
-    compile_program (l, LE) = Some (t, TE).
-intros0 Heq Heqs.
-unfold compile_program. simpl. rewrite Heq, Heqs. reflexivity.
-Qed.
-
-Lemma I_R_value_rev : forall LE TE l t,
-    L.value l -> T.value t ->
-    compile_list LE = Some TE ->
-    I LE TE l t -> R LE TE l t.
-induction l using L.expr_ind'; intros0 Lval Tval Henv II;
-invc Lval; invc II; invc Tval.
-
-- simpl_compile. break_bind_option. inject_some.
-  constructor.
-  fwd eapply compile_list_Forall2 with (ls := args); eauto.
-
-  assert (forall i,
-    forall l, nth_error args i = Some l ->
-    forall t, nth_error args0 i = Some t ->
-    (forall t, L.value l -> T.value t -> compile_list LE = Some TE ->
-        I LE TE l t -> R LE TE l t) ->
-    L.value l -> T.value t ->
-    compile l = Some t ->
-    R LE TE l t) by (intros; eauto using ICompile).
-  list_magic **.
-
-- simpl_compile. break_bind_option. congruence.
-
-- simpl_compile. break_bind_option. congruence.
-
-- simpl_compile. break_bind_option. inject_some.
-
-  (* TODO: missing premise: l is well formed, no closures with bad fnames *)
-  assert (exists lbody, nth_error LE f0 = Some lbody) by admit. break_exists.
-  fwd eapply compile_list_Forall2 with (ls := LE); eauto.
-  fwd eapply Forall2_nth_error_exists; eauto. break_exists. break_and.
-  fwd eapply compile_list_Forall2 with (ls := free); eauto.
-
-  econstructor; eauto using compile_program_def.
-  assert (forall i,
-    forall l, nth_error free i = Some l ->
-    forall t, nth_error free0 i = Some t ->
-    (forall t, L.value l -> T.value t -> compile_list LE = Some TE ->
-        I LE TE l t -> R LE TE l t) ->
-    L.value l -> T.value t ->
-    compile l = Some t ->
-    R LE TE l t) by (intros; eauto using ICompile).
-  list_magic **.
-
-Admitted.
-
-Lemma I_R_value : forall LE TE l t,
-    L.value l -> T.value t ->
-    compile_list LE = Some TE ->
-    I LE TE l t <-> R LE TE l t.
-intros. split; eauto using I_R_value_fwd, I_R_value_rev.
-Qed.
-
-
-Lemma compile_list_length : forall es es',
-    compile_list es = Some es' ->
-    length es = length es'.
-intros. eapply Forall2_length. eapply compile_list_Forall2. assumption.
-Qed.
-
-Lemma compile_R : forall LE TE l t,
-    L.value l ->
-    compile_program (l, LE) = Some (t, TE) ->
-    R LE TE l t.
-induction l using L.expr_ind'; intros0 Lval Hcomp;
-invc Lval;
-unfold compile_program in Hcomp.
-
-- break_bind_option. inject_some. inject_pair.
-  simpl_compile. break_bind_option. inject_some.
-  rename l into targs.
-
-  constructor.
-  fwd eapply compile_list_Forall2 with (ls := args); eauto.
-
-  assert (forall i,
-    forall l, nth_error args i = Some l ->
-    forall t, nth_error targs i = Some t ->
-    (forall t, L.value l -> compile_program (l, LE) = Some (t, TE) -> R LE TE l t) ->
-    L.value l ->
-    compile l = Some t ->
-    R LE TE l t) by eauto using compile_program_def.
-  list_magic **.
-
-- break_bind_option. inject_some. inject_pair.
-  simpl_compile. break_bind_option. inject_some.
-  rename l into tfree.
-
-  (* TODO: missing premise: l is well formed, no closures with bad fnames *)
-  assert (exists lbody, nth_error LE f = Some lbody) by admit.  break_exists.
-  fwd eapply length_nth_error_Some with (ys := TE);
-    try eassumption; eauto using compile_list_length.  break_exists.
-  fwd eapply compile_list_Forall2 with (ls := LE); try eassumption.
-  fwd eapply Forall2_nth_error; try eassumption. cbv beta in *.
-
-  econstructor; eauto using compile_program_def.
-
-  fwd eapply compile_list_Forall2 with (ls := free); try eassumption.
-  assert (forall i,
-    forall l, nth_error free i = Some l ->
-    forall t, nth_error tfree i = Some t ->
-    (forall t, L.value l -> compile_program (l, LE) = Some (t, TE) -> R LE TE l t) ->
-    L.value l ->
-    compile l = Some t ->
-    R LE TE l t) by eauto using compile_program_def.
-  list_magic **.
-
-Admitted.
-
-
-Lemma R_value : forall LE TE l t,
-    R LE TE l t ->
-    L.value l ->
-    T.value t.
-induction l using L.expr_ind'; intros0 RR Lval; invc Lval; invc RR; constructor.
-
-- assert (forall i,
-    forall l, nth_error args i = Some l ->
-    forall t, nth_error targs i = Some t ->
-    (forall t, R LE TE l t -> L.value l -> T.value t) ->
-    R LE TE l t ->
-    L.value l ->
-    T.value t) by eauto.
-  list_magic **.
-
-- assert (forall i,
-    forall l, nth_error free i = Some l ->
-    forall t, nth_error tfree i = Some t ->
-    (forall t, R LE TE l t -> L.value l -> T.value t) ->
-    R LE TE l t ->
-    L.value l ->
-    T.value t) by eauto.
-  list_magic **.
-
+rewrite compile_list_is_map_partial in *.
+eauto using map_partial_Forall2.
 Qed.
 
 
@@ -322,10 +182,29 @@ Lemma compile_value : forall l t,
     compile l = Some t ->
     L.value l ->
     T.value t.
-intros.
-fwd eapply compile_R with (LE := []) (TE := []); try eassumption.
-  { unfold compile_program. simpl. unfold seq, fmap. rewrite H. reflexivity. }
-eapply R_value; eauto.
+induction l using L.expr_ind'; intros0 Hcomp Lval; invc Lval;
+simpl_compile; break_bind_option; inject_some;
+on _, fun H => eapply compile_list_Forall2 in H;
+constructor.
+- list_magic_on (args, (l, tt)).
+- list_magic_on (free, (l, tt)).
+Qed.
+
+Lemma compile_value_ok : forall LE TE l t,
+    compile_list LE = Some TE ->
+    compile l = Some t ->
+    L.value_ok LE l ->
+    T.value_ok TE t.
+induction l using L.expr_ind'; intros0 Henv Hcomp Lval; invc Lval;
+simpl_compile; break_bind_option; inject_some;
+on _, fun H => eapply compile_list_Forall2 in H.
+
+- constructor. list_magic_on (args, (l, tt)).
+
+- fwd eapply length_nth_error_Some with (xs := LE) (ys := TE);
+    eauto using Forall2_length, compile_list_Forall2. break_exists.
+  econstructor; eauto.
+  list_magic_on (free, (l, tt)).
 Qed.
 
 Lemma compile_list_value : forall ls ts,
@@ -333,16 +212,32 @@ Lemma compile_list_value : forall ls ts,
     Forall L.value ls ->
     Forall T.value ts.
 intros.
-fwd eapply compile_list_Forall2; eauto.
-assert (forall i,
-  forall l, nth_error ls i = Some l ->
-  forall t, nth_error ts i = Some t ->
-  compile l = Some t ->
-  L.value l ->
-  T.value t) by eauto using compile_value.
-list_magic **.
+on _, fun H => eapply compile_list_Forall2 in H.
+list_magic_on (ls, (ts, tt)); eauto using compile_value.
 Qed.
 
+Lemma compile_list_value_ok : forall LE TE ls ts,
+    compile_list LE = Some TE ->
+    compile_list ls = Some ts ->
+    Forall (L.value_ok LE) ls ->
+    Forall (T.value_ok TE) ts.
+intros.
+on _, fun H => eapply compile_list_Forall2 in H.
+list_magic_on (ls, (ts, tt)); eauto using compile_value_ok.
+Qed.
+
+
+Lemma compile_program_R : forall LE TE l t,
+    L.value_ok LE l ->
+    compile_program (l, LE) = Some (t, TE) ->
+    R LE TE l t.
+intros0 Lval Hcomp.
+unfold compile_program in Hcomp. break_bind_option. inject_some. inject_pair. simpl in *.
+eapply value_I_R; eauto using compile_value_ok.
+Qed.
+
+
+(* TODO *)
 
 
 Definition L_num_upvars :=

@@ -263,7 +263,7 @@ Ltac build_list_magic_hyp_type_inner lists G :=
     | Forall2 ?P ?xs ?ys =>
             lazymatch goal with
             | [ Hnthx : nth_error xs i = Some ?x,
-                Hnthx : nth_error ys i = Some ?y |- _ ] =>
+                Hnthy : nth_error ys i = Some ?y |- _ ] =>
                     exact (P x y)
             end
     end.

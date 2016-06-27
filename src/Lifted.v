@@ -140,6 +140,25 @@ Inductive step (E : env) : expr -> expr -> Prop :=
 
 
 
+Inductive value_ok (E : env) : expr -> Prop :=
+| ConstrOk :
+        forall ctor args,
+        Forall (value_ok E) args ->
+        value_ok E (Constr ctor args)
+| CloseOk : forall f free body,
+        nth_error E f = Some body ->
+        Forall (value_ok E) free ->
+        value_ok E (Close f free).
+
+Theorem value_ok_value : forall E e, value_ok E e -> value e.
+induction e using expr_ind'; intro Hok; invc Hok.
+- constructor. list_magic_on (args, tt).
+- constructor. list_magic_on (free, tt).
+Qed.
+Hint Resolve value_ok_value.
+
+
+
 (* Demo *)
 
 Definition add_lam_a :=             0.
