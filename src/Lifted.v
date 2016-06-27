@@ -3,6 +3,9 @@ Require Import Common.
 Require Import Utopia.
 Require Import Monads.
 
+Require Import StuartTact.
+Require Import ListLemmas.
+
 
 Definition function_name := nat.
 
@@ -77,14 +80,6 @@ Definition subst (arg : expr) (vals : list expr) (e : expr) : option expr :=
         | Close f free => Close f <$> go_list free
         end in
     go e.
-
-Definition subst_list arg vals :=
-    let go := subst arg vals in
-    let fix go_list es : option (list expr) :=
-        match es with
-        | [] => Some []
-        | e :: es => cons <$> go e <*> go_list es
-        end in go_list.
 End subst.
 
 
@@ -220,3 +215,132 @@ eright. eapply MakeCall; try solve [repeat econstructor].
 eleft.
 Defined.
 Eval compute in proj1_sig add_1_2.
+
+
+
+(*
+ * Nested fixpoint aliases for subst
+ *)
+
+Section subst_alias.
+Open Scope option_monad.
+
+Definition subst_list arg vals :=
+    let go := subst arg vals in
+    let fix go_list es : option (list expr) :=
+        match es with
+        | [] => Some []
+        | e :: es => cons <$> go e <*> go_list es
+        end in go_list.
+
+End subst_alias.
+
+Ltac refold_subst arg vals :=
+    fold (subst_list arg vals) in *.
+
+
+
+
+(*
+ * Guaranteed success of subst
+ *)
+
+Definition num_upvars :=
+    let fix go e :=
+        let fix go_list es :=
+            match es with
+            | [] => 0
+            | e :: es => max (go e) (go_list es)
+            end in
+        match e with
+        | Arg => 0
+        | UpVar i => S i
+        | Call f a => max (go f) (go a)
+        | Constr _ args => go_list args
+        | Elim _ cases target => max (go_list cases) (go target)
+        | Close _ free => go_list free
+        end in go.
+
+(* Nested fixpoint aliases *)
+Definition num_upvars_list :=
+    let go := num_upvars in
+    let fix go_list es :=
+        match es with
+        | [] => 0
+        | e :: es => max (go e) (go_list es)
+        end in go_list.
+
+Ltac refold_num_upvars :=
+    fold num_upvars_list in *.
+
+
+Lemma num_upvars_list_is_maximum : forall es,
+    num_upvars_list es = maximum (map num_upvars es).
+induction es; simpl in *; eauto.
+Qed.
+
+Lemma Forall_num_upvars_list_le : forall es n,
+    Forall (fun e => num_upvars e <= n) es ->
+    num_upvars_list es <= n.
+intros.
+erewrite Forall_map with (P := fun x => x <= n) in *.
+erewrite <- maximum_le_Forall in *.
+rewrite num_upvars_list_is_maximum.
+assumption.
+Qed.
+
+
+Lemma subst_list_is_map_partial : forall arg free es,
+    subst_list arg free es = map_partial (subst arg free) es.
+induction es.
+- reflexivity.
+- simpl. unfold seq, fmap, bind_option. simpl. repeat break_match; congruence.
+Qed.
+
+Lemma subst_list_Forall2 : forall arg free es es',
+    subst_list arg free es = Some es' ->
+    Forall2 (fun e e' => subst arg free e = Some e') es es'.
+intros.
+rewrite subst_list_is_map_partial in *.
+eauto using map_partial_Forall2.
+Qed.
+
+
+Lemma subst_num_upvars : forall arg free body body',
+    subst arg free body = Some body' ->
+    num_upvars body <= length free.
+induction body using expr_ind'; intros0 Hsub;
+simpl in *; refold_num_upvars; refold_subst arg free.
+
+- omega.
+
+- assert (HH : nth_error free n <> None) by congruence.
+  rewrite nth_error_Some in HH.
+  omega.
+
+- break_bind_option. inject_some.
+  specialize (IHbody1 ?? ***).
+  specialize (IHbody2 ?? ***).
+  eauto using nat_le_max.
+
+- break_bind_option. inject_some.
+  on _, fun H => eapply subst_list_Forall2 in H.
+  eapply Forall_num_upvars_list_le.
+  list_magic_on (args, (l, tt)).
+
+- break_bind_option. inject_some.
+
+  (* target *)
+  specialize (IHbody _ ***). eapply nat_le_max; eauto.
+
+  (* cases *)
+  on _, fun H => eapply subst_list_Forall2 in H.
+  eapply Forall_num_upvars_list_le.
+  list_magic_on (cases, (l, tt)).
+
+- break_bind_option. inject_some.
+  on _, fun H => eapply subst_list_Forall2 in H.
+  eapply Forall_num_upvars_list_le.
+  list_magic_on (free0, (l, tt)).
+
+Qed.

@@ -173,7 +173,7 @@ Ltac collect_length_hyps :=
     repeat match goal with
     | [ H : Forall2 _ ?xs_ ?ys_ |- _ ] =>
             lazymatch goal with
-            | [ H : length xs_ = length ys_ |- _ ] => idtac (* already known *)
+            | [ H : length xs_ = length ys_ |- _ ] => fail (* already known *)
             | [ |- _ ] => 
                     fwd eapply Forall2_length with (xs := xs_) (ys := ys_) (1 := H)
             end

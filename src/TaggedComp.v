@@ -237,144 +237,60 @@ eapply value_I_R; eauto using compile_value_ok.
 Qed.
 
 
-(* TODO *)
-
-
-Definition L_num_upvars :=
-    let fix go e :=
-        let fix go_list es :=
-            match es with
-            | [] => 0
-            | e :: es => max (go e) (go_list es)
-            end in
-        match e with
-        | L.Arg => 0
-        | L.UpVar i => S i
-        | L.Call f a => max (go f) (go a)
-        | L.Constr _ args => go_list args
-        | L.Elim _ cases target => max (go_list cases) (go target)
-        | L.Close _ free => go_list free
-        end in go.
-
-Definition L_num_upvars_list :=
-    let go := L_num_upvars in
-    let fix go_list es :=
-        match es with
-        | [] => 0
-        | e :: es => max (go e) (go_list es)
-        end in go_list.
-
-Ltac refold_L_num_upvars :=
-    fold L_num_upvars_list in *.
-
-Ltac L_refold_subst arg vals :=
-    fold (L.subst_list arg vals) in *.
-
-Lemma L_subst_list_Forall2 : forall arg free es es',
-    L.subst_list arg free es = Some es' ->
-    Forall2 (fun e e' => L.subst arg free e = Some e') es es'.
-induction es; intros0 Hsub; destruct es'.
-- constructor.
-- simpl in Hsub. discriminate.
-- simpl in Hsub. break_bind_option. inject_some. discriminate.
-- simpl in Hsub. break_bind_option. inject_some.
-  on (_ :: _ = _ :: _), invc.
-  constructor; eauto.
+Lemma Forall2_map_eq : forall A B R (fx : A -> R) (fy : B -> R) xs ys,
+    Forall2 (fun x y => fx x = fy y) xs ys ->
+    map fx xs = map fy ys.
+induction xs; destruct ys; intros0 Hfa; invc Hfa; eauto.
+simpl. specialize (IHxs ?? **). repeat find_rewrite. reflexivity.
 Qed.
 
-Lemma L_Forall_num_upvars_list_le : forall es n,
-    Forall (fun e => L_num_upvars e <= n) es ->
-    L_num_upvars_list es <= n.
-induction es; intros0 Hle; simpl in *.
-{ omega. }
-invc Hle.  eapply nat_le_max; eauto.
+Lemma mk_tagged_cases'_Forall2 : forall ty idx cases cases',
+    mk_tagged_cases' ty idx cases = Some cases' ->
+    Forall2 (fun case case' => case = fst case') cases cases'.
+first_induction cases; destruct cases'; intros0 Hmk;
+simpl in *; break_bind_option; inject_some;
+try discriminate; constructor; eauto.
 Qed.
 
-Lemma L_subst_num_upvars : forall arg free body body',
-    L.subst arg free body = Some body' ->
-    L_num_upvars body <= length free.
-induction body using L.expr_ind'; intros0 Hsub;
-simpl in *; refold_L_num_upvars; L_refold_subst arg free.
-
-- omega.
-
-- assert (HH : nth_error free n <> None) by congruence.
-  rewrite nth_error_Some in HH.
-  omega.
-
-- break_bind_option. inject_some.
-  specialize (IHbody1 ?? ***).
-  specialize (IHbody2 ?? ***).
-  eauto using nat_le_max.
-
-- break_bind_option. inject_some.
-  fwd eapply L_subst_list_Forall2; try eassumption.
-  rename l into args'.
-  eapply L_Forall_num_upvars_list_le.
-  assert (forall i,
-    forall e, nth_error args i = Some e ->
-    forall e', nth_error args' i = Some e' ->
-    (forall e', L.subst arg free e = Some e' -> L_num_upvars e <= length free) ->
-    L.subst arg free e = Some e' ->
-    L_num_upvars e <= length free) by eauto.
-  list_magic **.
-
-- break_bind_option. inject_some.
-
-  (* target *)
-  specialize (IHbody _ ***). eapply nat_le_max; eauto.
-
-  (* cases *)
-  fwd eapply L_subst_list_Forall2; eauto.
-  rename l into cases'.
-  eapply L_Forall_num_upvars_list_le.
-  assert (forall i,
-    forall e, nth_error cases i = Some e ->
-    forall e', nth_error cases' i = Some e' ->
-    (forall e', L.subst arg free e = Some e' -> L_num_upvars e <= length free) ->
-    L.subst arg free e = Some e' ->
-    L_num_upvars e <= length free) by eauto.
-  list_magic **.
-
-- break_bind_option. inject_some.
-  fwd eapply L_subst_list_Forall2; try eassumption.
-  rename free0 into es.
-  rename l into es'.
-  eapply L_Forall_num_upvars_list_le.
-  assert (forall i,
-    forall e, nth_error es i = Some e ->
-    forall e', nth_error es' i = Some e' ->
-    (forall e', L.subst arg free e = Some e' -> L_num_upvars e <= length free) ->
-    L.subst arg free e = Some e' ->
-    L_num_upvars e <= length free) by eauto.
-  list_magic **.
-
+Lemma mk_tagged_cases_Forall2 : forall ty cases cases',
+    mk_tagged_cases ty cases = Some cases' ->
+    Forall2 (fun case case' => case = fst case') cases cases'.
+intros.
+eapply mk_tagged_cases'_Forall2; eauto.
 Qed.
-
 
 Lemma compile_num_upvars : forall l t,
     compile l = Some t ->
-    L_num_upvars l = T_num_upvars t.
+    L.num_upvars l = T.num_upvars t.
 induction l using L.expr_ind'; intros0 Hcomp;
-simpl_compile; refold_L_num_upvars.
+simpl_compile; break_bind_option; inject_some;
+simpl in *; L.refold_num_upvars; T.refold_num_upvars.
 
-- inject_some. simpl. reflexivity.
+- reflexivity.
+- reflexivity.
+- rewrite (IHl1 ?? ***), (IHl2 ?? ***). reflexivity.
 
-- inject_some. simpl. reflexivity.
+- rewrite L.num_upvars_list_is_maximum, T.num_upvars_list_is_maximum.
+  f_equal. eapply Forall2_map_eq.
+  on _, fun H => eapply compile_list_Forall2 in H.
+  list_magic_on (args, (l, tt)).
 
-- break_bind_option. inject_some.
-  specialize (IHl1 _ ***). find_rewrite.
-  specialize (IHl2 _ ***). find_rewrite.
-  simpl. reflexivity.
+- f_equal; eauto.
+  rewrite L.num_upvars_list_is_maximum, T.num_upvars_list_pair_is_maximum.
+  f_equal. eapply Forall2_map_eq.
+  on _, fun H => eapply compile_list_Forall2 in H.
+  on _, fun H => eapply mk_tagged_cases_Forall2 in H.
+  list_magic_on (cases, (l0, (l1, tt))).
+    { destruct l1_i. simpl in *. subst. eauto. }
 
-- break_bind_option. inject_some. simpl. refold_T_num_upvars.
-  admit.
+- rewrite L.num_upvars_list_is_maximum, T.num_upvars_list_is_maximum.
+  f_equal. eapply Forall2_map_eq.
+  on _, fun H => eapply compile_list_Forall2 in H.
+  list_magic_on (free, (l, tt)).
+Qed.
 
-- admit.
 
-- admit.
-Admitted.
-
+(* TODO *)
 
 Theorem I_sim : forall LE TE l l' t,
     I LE TE l t ->
