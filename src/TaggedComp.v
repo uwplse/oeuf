@@ -290,14 +290,150 @@ simpl in *; L.refold_num_upvars; T.refold_num_upvars.
 Qed.
 
 
+Lemma map_id : forall A (xs : list A), map id xs = xs.
+induction xs; unfold id in *; simpl; congruence.
+Qed.
+
+Lemma Forall2_map : forall A A' B B' (P : A' -> B' -> Prop) (fx : A -> A') (fy : B -> B') xs ys,
+    Forall2 (fun x y => P (fx x) (fy y)) xs ys <-> Forall2 P (map fx xs) (map fy ys).
+induction xs; destruct ys; intros; split; inversion 1; subst; simpl in *; eauto.
+- constructor; eauto. rewrite <- IHxs. assumption.
+- constructor; eauto. rewrite -> IHxs. assumption.
+Qed.
+
+Lemma T_subst_pair_fst : forall arg free p p',
+    T.subst_pair arg free p = Some p' ->
+    T.subst arg free (fst p) = Some (fst p').
+intros0 Hsub. destruct p. destruct p'. simpl in *.
+break_bind_option. inject_some. reflexivity.
+Qed.
+
+Lemma subst_mk_tagged_cases' : forall ty arg free cases idx cases' cases_p cases_p',
+    mk_tagged_cases' ty idx cases = Some cases_p ->
+    T.subst_list arg free cases = Some cases' ->
+    T.subst_list_pair arg free cases_p = Some cases_p' ->
+    mk_tagged_cases' ty idx cases' = Some cases_p'.
+induction cases; intros0 Htag Hsub Hsub_p; simpl in *; inject_some; simpl in *.
+- reflexivity.
+
+- break_bind_option. inject_some.
+  simpl in *. break_bind_option. inject_some.
+
+  specialize (IHcases ?? ?? ?? ?? ** *** **).
+  repeat find_rewrite. simpl.
+  reflexivity.
+Qed.
+
+Lemma subst_mk_tagged_cases : forall ty arg free cases cases' cases_p cases_p',
+    mk_tagged_cases ty cases = Some cases_p ->
+    T.subst_list arg free cases = Some cases' ->
+    T.subst_list_pair arg free cases_p = Some cases_p' ->
+    mk_tagged_cases ty cases' = Some cases_p'.
+intros. unfold mk_tagged_cases in *.
+eauto using subst_mk_tagged_cases'.
+Qed.
+
+Lemma subst_I : forall larg targ lfree tfree l t l' t',
+    I larg targ ->
+    Forall2 I lfree tfree ->
+    I l t ->
+    L.subst larg lfree l = Some l' ->
+    T.subst targ tfree t = Some t' ->
+    I l' t'.
+induction l using L.expr_ind'; intros0 IIarg IIfree II Lsub Tsub;
+invc II; unfold I in *; refold_compile.
+
+- simpl in *. inject_some. assumption.
+- simpl in *. eapply Forall2_nth_error in IIfree; eassumption.
+
+- break_bind_option. inject_some.
+  simpl in *. break_bind_option. inject_some.
+  specialize (IHl1 ?? ?? ?? ** ** *** *** **).
+  specialize (IHl2 ?? ?? ?? ** ** *** *** **).
+  simpl in *. repeat find_rewrite. compute. reflexivity.
+
+- break_bind_option. inject_some.
+  simpl in *. L.refold_subst larg lfree. T.refold_subst targ tfree.
+    break_bind_option. inject_some.
+
+  rewrite L.subst_list_is_map_partial in *. on _, fun H => eapply map_partial_Forall2 in H.
+  rewrite T.subst_list_is_map_partial in *. on _, fun H => eapply map_partial_Forall2 in H.
+  on _, fun H => eapply compile_list_Forall2 in H.
+  assert (Forall2 (fun l t => compile l = Some t) l1 l0).
+    { list_magic_on (args, (l, (l0, (l1, tt)))). }
+  on _, fun H => eapply Forall2_map_partial in H.
+  on _, fun H => rewrite <- compile_list_is_map_partial in H.
+
+  simpl in *. refold_compile. repeat find_rewrite. reflexivity.
+
+- break_bind_option. inject_some.
+  simpl in *. L.refold_subst larg lfree. T.refold_subst targ tfree.
+    break_bind_option. inject_some.
+
+  (* target *)
+  specialize (IHl ?? ?? ?? ** ** *** *** **).
+
+  (* cases *)
+  rewrite L.subst_list_is_map_partial in *. on _, fun H => eapply map_partial_Forall2 in H.
+  rewrite T.subst_list_pair_is_map_partial in *. on _, fun H => eapply map_partial_Forall2 in H.
+  on _, fun H => eapply compile_list_Forall2 in H.
+
+  simpl in *. refold_compile.
+  rename l0 into tcases.
+  rename l1 into tcases_p.
+  rename l2 into tcases_p'.
+  rename l3 into cases'.
+
+  assert (tcases = map fst tcases_p). {
+    fwd eapply mk_tagged_cases_Forall2 as HH; eauto.
+    rewrite <- map_id at 1. eapply Forall2_map_eq.
+    eassumption.
+  }
+
+  remember (map fst tcases_p') as tcases' in *.
+  assert (Forall2 (fun t t' => T.subst targ tfree t = Some t') tcases tcases'). {
+    subst tcases tcases'.  rewrite <- Forall2_map.
+    list_magic_on (tcases_p, (tcases_p', tt)). eauto using T_subst_pair_fst.
+  }
+
+  assert (Forall2 (fun l t => compile l = Some t) cases' tcases').
+    { list_magic_on (cases, (cases', (tcases, (tcases', tt)))). }
+  on _, fun H => eapply Forall2_map_partial in H.
+  on _, fun H => rewrite <- compile_list_is_map_partial in H.
+  repeat find_rewrite. simpl.
+
+  on (tcases = _), fun H => rewrite <- H in *.
+  on (tcases' = _), fun H => rewrite <- H in *.
+  repeat on _, fun H => eapply Forall2_map_partial in H.
+  rewrite <- T.subst_list_is_map_partial in *.
+  rewrite <- T.subst_list_pair_is_map_partial in *.
+  erewrite subst_mk_tagged_cases; eauto.
+
+  reflexivity.
+
+- break_bind_option. inject_some.
+  simpl in *. L.refold_subst larg lfree. T.refold_subst targ tfree.
+    break_bind_option. inject_some.
+
+  rewrite L.subst_list_is_map_partial in *. on _, fun H => eapply map_partial_Forall2 in H.
+  rewrite T.subst_list_is_map_partial in *. on _, fun H => eapply map_partial_Forall2 in H.
+  on _, fun H => eapply compile_list_Forall2 in H.
+  assert (Forall2 (fun l t => compile l = Some t) l1 l0).
+    { list_magic_on (free, (l, (l0, (l1, tt)))). }
+  on _, fun H => eapply Forall2_map_partial in H.
+  on _, fun H => rewrite <- compile_list_is_map_partial in H.
+
+  simpl in *. refold_compile. repeat find_rewrite. reflexivity.
+Qed.
+
 (* TODO *)
 
 Theorem I_sim : forall LE TE l l' t,
-    I LE TE l t ->
+    I l t ->
     L.step LE l l' ->
     exists t',
         T.step TE t t' /\
-        I LE TE l' t'.
+        I l' t'.
 induction l using L.expr_ind'; intros0 II Lstep;
 invc Lstep; invc II; simpl_compile; break_bind_option; inject_some.
 
