@@ -306,3 +306,19 @@ Ltac hide := apply @HIDDEN.
 
 Ltac inject_some := repeat on (Some _ = Some _), invc.
 Ltac inject_pair := repeat on ((_, _) = (_, _)), invc.
+
+
+(* `inversion ... using` variants of `inv` *)
+
+Ltac inv_using I H := inversion H using I; intros; subst_max.
+Ltac invc_using I H := inv_using I H; clear H.
+Ltac invcs_using I H := invc_using I H; simpl in *.
+
+
+(* Wrappers for various tactics, for use with `on` *)
+
+Ltac apply_ lem H := apply lem in H.
+Ltac eapply_ lem H := eapply lem in H.
+
+Ltac rewrite_fwd lem H := rewrite -> lem in H.
+Ltac rewrite_rev lem H := rewrite <- lem in H.
