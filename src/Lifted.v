@@ -97,7 +97,7 @@ Fixpoint unroll_elim' (case : expr)
             unroll_elim' case ctor args mk_rec (S idx)
     end.
 
-Fixpoint unroll_elim case ctor args mk_rec :=
+Definition unroll_elim case ctor args mk_rec :=
     unroll_elim' case ctor args mk_rec 0.
 
 
@@ -123,6 +123,8 @@ Inductive step (E : env) : expr -> expr -> Prop :=
         step E t t' ->
         step E (Elim ty cases t) (Elim ty cases t')
 | Eliminate : forall c args ty cases case,
+    is_ctor_for_type ty c ->
+    constructor_arg_n c = length args ->
     nth_error cases (constructor_index c) = Some case ->
     Forall value args ->
     step E (Elim ty cases (Constr c args))
@@ -206,9 +208,11 @@ eright. eapply CallL, MakeCall; try solve [repeat econstructor].
 eright. eapply MakeCall; try solve [repeat econstructor].
 eright. eapply CallL, Eliminate; try solve [repeat econstructor].
   compute [unroll_elim unroll_elim' ctor_arg_is_recursive].
+  exists (constructor_index CS). reflexivity.
 eright. eapply CallL, CallL, MakeCall; try solve [repeat econstructor].
 eright. eapply CallL, CallR, Eliminate; try solve [repeat econstructor].
   compute [unroll_elim unroll_elim' ctor_arg_is_recursive].
+  exists (constructor_index CO). reflexivity.
 eright. eapply CallL, MakeCall; try solve [repeat econstructor].
 eright. eapply MakeCall; try solve [repeat econstructor].
 eright. eapply MakeCall; try solve [repeat econstructor].

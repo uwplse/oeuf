@@ -102,8 +102,8 @@ Definition type_constr ty idx : option constr_name :=
     | Tnat, 0 => Some CO
     | Tnat, 1 => Some CS
 
-    | Tbool, 0 => Some Cfalse
-    | Tbool, 1 => Some Ctrue
+    | Tbool, 0 => Some Ctrue
+    | Tbool, 1 => Some Cfalse
 
     | Tlist _, 0 => Some Cnil
     | Tlist _, 1 => Some Ccons
@@ -121,3 +121,32 @@ Definition type_constr ty idx : option constr_name :=
 
     | _, _ => None
     end.
+
+
+Definition is_ctor_for_type ty ctor :=
+    exists idx, type_constr ty idx = Some ctor.
+
+Lemma type_constr_index : forall ty i ctor,
+    type_constr ty i = Some ctor ->
+    i = constructor_index ctor.
+intros. destruct ty; unfold type_constr in H;
+  repeat (destruct i as [|i]; try discriminate H);
+  inversion H; reflexivity.
+Qed.
+
+Lemma type_constr_injective : forall ty i j ctor,
+    type_constr ty i = Some ctor ->
+    type_constr ty j = Some ctor ->
+    i = j.
+intros ? ? ? ? Hi Hj.
+eapply type_constr_index in Hi.
+eapply type_constr_index in Hj.
+congruence.
+Qed.
+
+Lemma ctor_for_type_constr_index : forall ty ctor,
+    is_ctor_for_type ty ctor ->
+    type_constr ty (constructor_index ctor) = Some ctor.
+inversion 1.  erewrite <- type_constr_index; eassumption.
+Qed.
+

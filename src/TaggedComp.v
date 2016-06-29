@@ -563,6 +563,158 @@ repeat (break_match; try discriminate); try discriminate.
   eapply map_partial_cons; eassumption.
 Qed.
 
+
+Lemma mk_tagged_cases'_nth_ctor : forall cases cases' ty base idx ctor case info,
+    mk_tagged_cases' ty base cases = Some cases' ->
+    Utopia.type_constr ty (base + idx) = Some ctor ->
+    nth_error cases' idx = Some (case, info) ->
+    info = mk_rec_info ctor.
+induction cases; intros0 Htag Hctor Hnth.
+- simpl in *. inject_some.
+  contradict Hnth. induction idx; simpl in *; congruence.
+- simpl in Htag. break_bind_option. inject_some. simpl in *.
+  destruct idx; simpl in *.
+  + inject_some. replace (base + 0) with (base) in * by omega. congruence.
+  + replace (base + S idx) with (S base + idx) in * by omega. eauto.
+Qed.
+
+Lemma compile_list_mk_tagged_cases_nth_case :
+    forall lcases tcases tcases' ty idx lcase tcase info,
+    compile_list lcases = Some tcases ->
+    mk_tagged_cases ty tcases = Some tcases' ->
+    nth_error lcases idx = Some lcase ->
+    nth_error tcases' idx = Some (tcase, info) ->
+    compile lcase = Some tcase.
+intros.
+rewrite compile_list_is_map_partial in *.
+on _, eapply_ map_partial_Forall2.
+on _, eapply_ mk_tagged_cases_Forall2.
+change tcase with (fst (tcase, info)).
+eapply Forall2_nth_error with (P := fun l t' => compile l = Some (fst t'));
+  try eassumption.
+list_magic_on (lcases, (tcases, (tcases', tt))). congruence.
+Qed.
+
+Lemma mk_tagged_cases_nth_ctor : forall cases cases' ty idx ctor case info,
+    mk_tagged_cases ty cases = Some cases' ->
+    Utopia.type_constr ty idx = Some ctor ->
+    nth_error cases' idx = Some (case, info) ->
+    info = mk_rec_info ctor.
+intros. eapply mk_tagged_cases'_nth_ctor; eauto.
+Qed.
+
+Lemma skipn_more : forall A i (xs : list A) y ys,
+    skipn i xs = y :: ys ->
+    skipn (S i) xs = ys.
+induction i; intros; simpl in *; subst.
+- reflexivity.
+- destruct xs; try discriminate. eapply IHi; eauto.
+Qed.
+
+Lemma skipn_nth_error : forall A i (xs : list A) y ys,
+    skipn i xs = y :: ys ->
+    nth_error xs i = Some y.
+induction i; intros; simpl in *; subst.
+- reflexivity.
+- destruct xs; try discriminate. eauto.
+Qed.
+
+Definition mk_rec_info' ctor :=
+    let fix go acc n :=
+        match n with
+        | 0 => acc
+        | S n => go (Utopia.ctor_arg_is_recursive ctor n :: acc) n
+        end in
+    go.
+
+Lemma mk_rec_info'_nth_error : forall ctor acc i j rec,
+    (forall j,
+        nth_error acc j = Some rec ->
+        Utopia.ctor_arg_is_recursive ctor (i + j) = rec) ->
+    nth_error (mk_rec_info' ctor acc i) j = Some rec ->
+    Utopia.ctor_arg_is_recursive ctor j = rec.
+first_induction i; intros; simpl in *.
+{ eauto. }
+
+eapply IHi.
+2: eassumption.
+intro k. destruct k; simpl.
+- replace (i + 0) with i by omega. intro. inject_some. reflexivity.
+- replace (i + S k) with (S (i + k)) by omega. eauto.
+Qed.
+
+Lemma mk_rec_info_nth_error : forall ctor j rec,
+    nth_error (mk_rec_info ctor) j = Some rec ->
+    Utopia.ctor_arg_is_recursive ctor j = rec.
+intros. eapply mk_rec_info'_nth_error; try eassumption.
+intro k. induction k; simpl in *; discriminate.
+Qed.
+
+Lemma mk_rec_info'_length : forall ctor acc i,
+    length (mk_rec_info' ctor acc i) = length acc + i.
+first_induction i; intros; simpl in *.
+- omega.
+- rewrite IHi. simpl. omega.
+Qed.
+
+Lemma mk_rec_info_length : forall ctor,
+    length (mk_rec_info ctor) = Utopia.constructor_arg_n ctor.
+intros. unfold mk_rec_info. fold (mk_rec_info' ctor). eapply mk_rec_info'_length.
+Qed.
+
+Lemma unroll_elim'_compile :
+    forall lcase ctor largs lmk idx lexpr,
+    forall tcase targs tmk texpr,
+    compile lcase = Some tcase ->
+    compile_list largs = Some targs ->
+    (forall l t, compile l = Some t -> compile (lmk l) = Some (tmk t)) ->
+    L.unroll_elim' lcase ctor largs lmk idx = lexpr ->
+    T.unroll_elim tcase targs (skipn idx (mk_rec_info ctor)) tmk = Some texpr ->
+    compile lexpr = Some texpr.
+first_induction largs; intros0 IIcase IIargs IImk Lelim Telim.
+
+{ simpl in *. inject_some. simpl in *. break_match; try discriminate.
+  inject_some. assumption. }
+
+rename a into larg.
+simpl in *. break_bind_option. inject_some. rename l0 into targs, e into targ.
+simpl in *. destruct (skipn _ _) eqn:?; try discriminate. simpl in *.
+remember (L.unroll_elim' _ _ _ _ _) as lexpr. symmetry in Heqlexpr.
+
+fwd eapply skipn_nth_error; try eassumption.
+fwd eapply mk_rec_info_nth_error; try eassumption. subst b.
+on _, fun H => (eapply skipn_more in H; rewrite <- H in *).
+eapply IHlargs; [ | try eassumption.. ]; try reflexivity.
+
+break_match.
+- simpl. repeat find_rewrite. erewrite IImk; try eassumption.
+  compute. reflexivity.
+- simpl. repeat find_rewrite.
+  compute. reflexivity.
+Qed.
+
+Lemma unroll_elim_compile :
+    forall lcase ctor largs lmk lexpr,
+    forall tcase targs tmk texpr,
+    compile lcase = Some tcase ->
+    compile_list largs = Some targs ->
+    (forall l t, compile l = Some t -> compile (lmk l) = Some (tmk t)) ->
+    L.unroll_elim lcase ctor largs lmk = lexpr ->
+    T.unroll_elim tcase targs (mk_rec_info ctor) tmk = Some texpr ->
+    compile lexpr = Some texpr.
+intros. eapply unroll_elim'_compile; try eassumption.
+Qed.
+
+Lemma T_length_unroll_elim : forall case args rec mk_rec,
+    length args = length rec ->
+    exists e, T.unroll_elim case args rec mk_rec = Some e.
+first_induction args; destruct rec; intros0 Hlen; simpl in Hlen; try discriminate Hlen.
+- eexists. reflexivity.
+- inv Hlen.
+  fwd eapply IHargs; try eassumption.
+Qed.
+
+
 Lemma I_sim : forall LE TE l l' t,
     compile_list LE = Some TE ->
     I l t ->
@@ -628,21 +780,44 @@ invc Lstep; invc II; simpl_compile; break_bind_option; inject_some.
   unfold I in *. simpl_compile. unfold seq, fmap. repeat (find_rewrite; simpl).
   reflexivity.
 
-- fwd eapply length_nth_error_Some; try eassumption.
+- rename l into tcases, l1 into tcases', l0 into targs.
+
+  fwd eapply length_nth_error_Some; try eassumption.
     { eapply Forall2_length, map_partial_Forall2.
       erewrite <- compile_list_is_map_partial. eauto. }
     break_exists.
+  rename x into tcase.
 
   fwd eapply length_nth_error_Some; try eassumption.
     { eapply Forall2_length, mk_tagged_cases_Forall2. eauto. }
     break_exists.
-  destruct x0.
+  on (_ * _)%type, fun p => destruct p.
+  rename e into tcase', r into info.
+
+  remember (L.unroll_elim _ _ _ _) as lexpr. symmetry in Heqlexpr.
+
+  assert (tcase' = tcase). {
+    fwd eapply mk_tagged_cases_Forall2; eauto.
+    fwd eapply Forall2_nth_error; try eassumption. simpl in *. eauto.
+  }
+  subst tcase'.
+  fwd eapply compile_list_mk_tagged_cases_nth_case;
+    [ | eassumption.. | ]; [ eassumption | ].
+
+  fwd eapply mk_tagged_cases_nth_ctor; eauto using Utopia.ctor_for_type_constr_index.
+  fwd eapply (T_length_unroll_elim tcase targs info _).
+    { rewrite compile_list_is_map_partial in *.
+      erewrite <- map_partial_length; try eassumption.
+      subst. rewrite mk_rec_info_length. eauto. }
+  break_exists. rename x into texpr.
+  subst info.
 
   eexists. split. eapply T.Eliminate; eauto.
-  + admit.
   + repeat on _, eapply_ compile_list_Forall2.
-    list_magic_on (l0, (args, tt)). eauto using compile_value.
-  + admit.
+    list_magic_on (args, (targs, tt)). eauto using compile_value.
+  + eapply unroll_elim_compile; try eassumption.
+    intros. simpl_compile. repeat find_rewrite. simpl. find_rewrite.
+    compute. reflexivity.
 
 - on _, rewrite_fwd compile_list_is_map_partial.
   on _, invc_using map_partial_3part_inv.
@@ -657,7 +832,7 @@ invc Lstep; invc II; simpl_compile; break_bind_option; inject_some.
     erewrite map_partial_app by (eauto using Forall2_map_partial).
     reflexivity.
 
-Admitted.
+Qed.
 
 Lemma I_sim_star : forall LE l l',
     L.star LE l l' ->
