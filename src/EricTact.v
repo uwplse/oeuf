@@ -1,3 +1,6 @@
+Require Import StructTact.StructTactics.
+
+
 Ltac app lem pat :=
   match goal with
   | [ H : context[pat], H2: context[pat] |- _ ] => fail 2 "ambiguous pattern"
@@ -15,6 +18,9 @@ Ltac invp pat :=
   | [ H : context[pat], H2 : context[pat] |- _ ] => fail 2 "ambiguous pattern"
   | [ H : context[pat] |- _ ] => inv H
   end.
+
+
+Require Import compcert.common.Events.
 
 (* useful little tactic for empty traces *)
 Ltac nil_trace :=

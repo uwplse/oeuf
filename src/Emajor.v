@@ -143,10 +143,11 @@ Inductive step : state -> trace -> state -> Prop :=
   | step_skip_seq: forall f s k e,
       step (State f Sskip (Kseq s k) e)
         E0 (State f s k e)
-  | step_call: forall f k (e : env) id efunc earg varg fname cargs fn,
+  | step_call: forall f k (e : env) id efunc earg varg fname cargs fn bcode,
       eval_expr e earg varg -> (* the argument *)
       eval_expr e efunc (Close fname cargs) -> (* the function itself *)
-      Genv.find_funct_ptr ge fname = Some fn ->
+      Genv.find_symbol ge fname = Some bcode ->
+      Genv.find_funct_ptr ge bcode = Some fn ->
       step (State f (Scall id efunc earg) k e) E0
            (Callstate fn ((Close fname cargs) :: varg :: nil) (Kcall id f e k))
   | step_return: forall v f id e k,
@@ -178,7 +179,7 @@ Inductive step : state -> trace -> state -> Prop :=
       step (State f (Sexit n) (Kseq s k) e)
         E0 (State f (Sexit n) k e)
   | step_exit_zero: forall f k e,
-      step (State f (Sexit O) k e)
+      step (State f (Sexit O) (Kblock k) e)
         E0 (State f Sskip k e)
   | step_block: forall f k e s,
       step (State f (Sblock s) k e)
