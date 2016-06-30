@@ -2,15 +2,6 @@ Require Import List.
 Import ListNotations.
 
 
-Fixpoint map_partial {A B : Type} (f : A -> option B) (l : list A) : option (list B) :=
-  match l with
-  | [] => Some []
-  | a :: l' => match f a, map_partial f l' with
-              | Some b, Some l'' => Some (b :: l'')
-              | _, _ => None
-              end
-  end.
-
 
 
 Definition fmap {M : Type -> Type}
@@ -74,4 +65,11 @@ Notation "f <$> x" := (fmap (@bind_state _) (@ret_state _) f x)
 Notation "f <*> x" := (seq (@bind_state _) (@ret_state _) f x)
     (at level 42, left associativity) : state_monad.
 
+
+Ltac break_bind_option :=
+    unfold seq, fmap in *;
+    repeat match goal with
+    | [ H : bind_option ?x _ = Some _ |- _ ] =>
+            destruct x eqn:?; [ simpl in H | discriminate H ]
+    end.
 

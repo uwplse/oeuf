@@ -1,12 +1,13 @@
 Require Import Common.
 Require Import Monads.
+Require Import ListLemmas.
 
 Require Untyped.
 Require Lifted.
+Require Utopia.
 
 Module U := Untyped.
 Module L := Lifted.
-
 
 
 Definition U_add_1_2 := U.App (U.App U.add_reflect (U.nat_reflect 1)) (U.nat_reflect 2).
@@ -112,9 +113,11 @@ eright. eapply L.CallL, L.MakeCall; try solve [repeat econstructor].
 eright. eapply L.MakeCall; try solve [repeat econstructor].
 eright. eapply L.CallL, L.Eliminate; try solve [repeat econstructor].
   compute [L.unroll_elim L.unroll_elim' Utopia.ctor_arg_is_recursive].
+  exists 1. reflexivity.
 eright. eapply L.CallL, L.CallL, L.MakeCall; try solve [repeat econstructor].
 eright. eapply L.CallL, L.CallR, L.Eliminate; try solve [repeat econstructor].
   compute [L.unroll_elim L.unroll_elim' Utopia.ctor_arg_is_recursive].
+  exists 0. reflexivity.
 eright. eapply L.CallL, L.MakeCall; try solve [repeat econstructor].
 eright. eapply L.MakeCall; try solve [repeat econstructor].
 eright. eapply L.MakeCall; try solve [repeat econstructor].
@@ -633,7 +636,7 @@ simpl in *; fold req_upvars_list in *.
   destruct (L.subst _ _ e2) eqn:Heq2; try discriminate.
   specialize (IHe1 _ eq_refl).
   specialize (IHe2 _ eq_refl).
-  destruct (Max.max_spec (req_upvars e1) (req_upvars e2)) as [[??] | [??]]; omega.
+  destruct (Max.max_spec (req_upvars e1) (req_upvars e2)) as [[? ?] | [? ?]]; omega.
 
 - (* Constr *)
   fold (L_subst_list arg vals) in Hsubst.
@@ -1198,7 +1201,7 @@ intros ??. induction 1; intros0 Hmatch.
     erewrite Forall2_len in * by eauto.
     fwd eapply nth_error_lt as HH; eauto. destruct HH.
 
-    eexists. break_and. split; [|admit]. eapply L.Eliminate. eassumption.
+    eexists. break_and. split; [|admit]. eapply L.Eliminate. admit. admit. eassumption.
       eapply Forall2_apply_lr.
       { intros. eapply match_value_0_fwd; eauto. }
       eauto.
