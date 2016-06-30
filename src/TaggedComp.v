@@ -850,79 +850,54 @@ induction 1; intros0 Henv II.
   eexists. split; [ | eassumption ]. econstructor; eassumption.
 Qed.
 
-(* TODO *)
+Inductive L_data : L.expr -> Prop :=
+| IsData : forall ctor args,
+        Forall L_data args ->
+        L_data (L.Constr ctor args).
 
-Lemma I_value : forall LE TE l t,
-    I LE TE l t ->
-    L.value l ->
-    T.value t.
-induction l using L.expr_ind'; intros0 II Lval;
-invc Lval; invc II; simpl_compile; break_bind_option; inject_some.
-
-- constructor.
-  fwd eapply compile_list_Forall2; eauto.
-
-  rename l into targs.
-  assert (forall i,
-    forall l, nth_error args i = Some l ->
-    forall t, nth_error targs i = Some t ->
-    (forall t, I LE TE l t -> L.value l -> T.value t) ->
-    compile l = Some t ->
-    L.value l ->
-    T.value t) by (intros; eauto using ICompile).
-  list_magic **.
-
-- constructor.
-  fwd eapply compile_list_Forall2; eauto.
-
-  rename l into tfree.
-  assert (forall i,
-    forall l, nth_error free i = Some l ->
-    forall t, nth_error tfree i = Some t ->
-    (forall t, I LE TE l t -> L.value l -> T.value t) ->
-    compile l = Some t ->
-    L.value l ->
-    T.value t) by (intros; eauto using ICompile).
-  list_magic **.
+Lemma L_data_value_ok : forall LE e,
+    L_data e ->
+    L.value_ok LE e.
+induction e using L.expr_ind'; intros0 Ldat; invc Ldat.
+constructor. list_magic_on (args, tt).
 Qed.
 
 Theorem R_compile : forall LE TE l l' t,
     compile_program (l, LE) = Some (t, TE) ->
-    L.value l' ->
+    L.value_ok LE l' ->
     L.star LE l l' ->
     exists t',
         T.star TE t t' /\
-        T.value t' /\
+        T.value_ok TE t' /\
         R LE TE l' t'.
 intros0 Hcomp Lval Lstar.
 unfold compile_program in *. break_bind_option. inject_some. inject_pair. simpl in *.
-fwd eapply ICompile; eauto.
 fwd eapply I_sim_star; eauto. break_exists. break_and.
-fwd eapply I_value; eauto.
-rewrite I_R_value in * by eauto.
+fwd eapply compile_value_ok; eauto.
+rewrite value_I_R_iff in * by eauto.
 eexists; eauto.
 Qed.
 
 Theorem R_call : forall LE TE lf la lr tf ta,
     compile_list LE = Some TE ->
-    L.value lf -> L.value la -> L.value lr ->
-    T.value tf -> T.value ta ->
+    L.value_ok LE lf -> L.value_ok LE la -> L.value_ok LE lr ->
+    T.value_ok TE tf -> T.value_ok TE ta ->
     R LE TE lf tf ->
     R LE TE la ta ->
     L.star LE (L.Call lf la) lr ->
     exists tr,
         T.star TE (T.Call tf ta) tr /\
-        T.value tr /\
+        T.value_ok TE tr /\
         R LE TE lr tr.
 intros0 Henv Lvalf Lvala Lvalr Tvalf Tvala RRf RRa Lstar.
 
 assert (compile (L.Call lf la) = Some (T.Call tf ta)). {
-  rewrite <- I_R_value in * by eauto. invc RRf. invc RRa.
+  rewrite <- value_I_R_iff in * by eauto. invc RRf. invc RRa.
   simpl_compile. repeat find_rewrite.
   unfold seq, fmap. simpl. reflexivity.
 }
 
-fwd eapply I_sim_star; eauto using ICompile. break_exists. break_and.
+fwd eapply I_sim_star; eauto. break_exists. break_and.
 
-eexists; split; [ | split ]; eauto using I_value, I_R_value_rev.
+eexists; split; [ | split ]; eauto using compile_value_ok, value_I_R.
 Qed.
