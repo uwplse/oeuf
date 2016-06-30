@@ -304,6 +304,13 @@ Ltac refold_subst arg vals :=
     fold (subst_pair arg vals) in *;
     fold (subst_list_pair arg vals) in *.
 
+Lemma subst_pair_fst : forall arg free p p',
+    subst_pair arg free p = Some p' ->
+    subst arg free (fst p) = Some (fst p').
+intros0 Hsub. destruct p. destruct p'. simpl in *.
+break_bind_option. inject_some. reflexivity.
+Qed.
+
 
 (*
  * Misc lemmas
@@ -485,4 +492,14 @@ simpl in *; refold_num_upvars; refold_subst arg free.
     { list_magic_on (free0, tt). }
   break_exists. find_rewrite. unfold seq, fmap. simpl. eauto.
 
+Qed.
+
+
+Lemma length_unroll_elim : forall case args rec mk_rec,
+    length args = length rec ->
+    exists e, unroll_elim case args rec mk_rec = Some e.
+first_induction args; destruct rec; intros0 Hlen; simpl in Hlen; try discriminate Hlen.
+- eexists. reflexivity.
+- inv Hlen.
+  fwd eapply IHargs; try eassumption.
 Qed.

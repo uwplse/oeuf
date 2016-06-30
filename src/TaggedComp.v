@@ -97,17 +97,14 @@ Hint Unfold I.
 
 (* proofs *)
 
+
+(* Basic lemmas *)
+
 Lemma compile_list_is_map_partial : forall es,
     compile_list es = map_partial compile es.
 induction es.
 - reflexivity.
 - simpl. unfold seq, fmap, bind_option. simpl. repeat break_match; congruence.
-Qed.
-
-Lemma Forall2_Forall_exists : forall A B (P : A -> B -> Prop) xs ys,
-    Forall2 P xs ys ->
-    Forall (fun x => exists y, P x y) xs.
-induction xs; destruct ys; intros0 Hfa; invc Hfa; eauto.
 Qed.
 
 Lemma value_R_I : forall LE TE l t,
@@ -237,12 +234,7 @@ eapply value_I_R; eauto using compile_value_ok.
 Qed.
 
 
-Lemma Forall2_map_eq : forall A B R (fx : A -> R) (fy : B -> R) xs ys,
-    Forall2 (fun x y => fx x = fy y) xs ys ->
-    map fx xs = map fy ys.
-induction xs; destruct ys; intros0 Hfa; invc Hfa; eauto.
-simpl. specialize (IHxs ?? **). repeat find_rewrite. reflexivity.
-Qed.
+(* Proof that `L.subst` and `T.subst` preserve the inductive relation `I` *)
 
 Lemma mk_tagged_cases'_Forall2 : forall ty idx cases cases',
     mk_tagged_cases' ty idx cases = Some cases' ->
@@ -290,24 +282,6 @@ simpl in *; L.refold_num_upvars; T.refold_num_upvars.
 Qed.
 
 
-Lemma map_id : forall A (xs : list A), map id xs = xs.
-induction xs; unfold id in *; simpl; congruence.
-Qed.
-
-Lemma Forall2_map : forall A A' B B' (P : A' -> B' -> Prop) (fx : A -> A') (fy : B -> B') xs ys,
-    Forall2 (fun x y => P (fx x) (fy y)) xs ys <-> Forall2 P (map fx xs) (map fy ys).
-induction xs; destruct ys; intros; split; inversion 1; subst; simpl in *; eauto.
-- constructor; eauto. rewrite <- IHxs. assumption.
-- constructor; eauto. rewrite -> IHxs. assumption.
-Qed.
-
-Lemma T_subst_pair_fst : forall arg free p p',
-    T.subst_pair arg free p = Some p' ->
-    T.subst arg free (fst p) = Some (fst p').
-intros0 Hsub. destruct p. destruct p'. simpl in *.
-break_bind_option. inject_some. reflexivity.
-Qed.
-
 Lemma subst_mk_tagged_cases' : forall ty arg free cases idx cases' cases_p cases_p',
     mk_tagged_cases' ty idx cases = Some cases_p ->
     T.subst_list arg free cases = Some cases' ->
@@ -332,6 +306,7 @@ Lemma subst_mk_tagged_cases : forall ty arg free cases cases' cases_p cases_p',
 intros. unfold mk_tagged_cases in *.
 eauto using subst_mk_tagged_cases'.
 Qed.
+
 
 Lemma subst_I : forall larg targ lfree tfree l t l' t',
     I larg targ ->
@@ -393,7 +368,7 @@ invc II; unfold I in *; refold_compile.
   remember (map fst tcases_p') as tcases' in *.
   assert (Forall2 (fun t t' => T.subst targ tfree t = Some t') tcases tcases'). {
     subst tcases tcases'.  rewrite <- Forall2_map.
-    list_magic_on (tcases_p, (tcases_p', tt)). eauto using T_subst_pair_fst.
+    list_magic_on (tcases_p, (tcases_p', tt)). eauto using T.subst_pair_fst.
   }
 
   assert (Forall2 (fun l t => compile l = Some t) cases' tcases').
@@ -426,143 +401,8 @@ invc II; unfold I in *; refold_compile.
   simpl in *. refold_compile. repeat find_rewrite. reflexivity.
 Qed.
 
-Lemma map_partial_length : forall A B (f : A -> option B) xs ys,
-    map_partial f xs = Some ys ->
-    length xs = length ys.
-intros0 Hmap. eapply map_partial_Forall2 in Hmap. eauto using Forall2_length.
-Qed.
 
-Lemma map_partial_app_inv : forall A B (f : A -> option B) xs1 xs2 ys,
-    map_partial f (xs1 ++ xs2) = Some ys ->
-    exists ys1 ys2,
-        map_partial f xs1 = Some ys1 /\
-        map_partial f xs2 = Some ys2 /\
-        ys = ys1 ++ ys2.
-induction xs1; intros0 Hmap.
-- simpl in *. do 2 eexists; repeat split. assumption.
-- destruct ys.
-    { fwd eapply map_partial_length; eauto. discriminate. }
-  rewrite <- app_comm_cons in *.
-  simpl in * |-. repeat (break_match; try discriminate). inject_some.
-  destruct (IHxs1 ?? ?? **) as (?&?&?&?&?). subst.
-  simpl. repeat find_rewrite. eauto.
-Qed.
-
-Lemma map_partial_cons_inv : forall A B (f : A -> option B) x1 xs2 ys,
-    map_partial f (x1 :: xs2) = Some ys ->
-    exists y1 ys2,
-        f x1 = Some y1 /\
-        map_partial f xs2 = Some ys2 /\
-        ys = y1 :: ys2.
-intros0 Hmap.
-destruct ys.
-  { fwd eapply map_partial_length; eauto. discriminate. }
-simpl in * |-. repeat (break_match; try discriminate). inject_some.
-eauto.
-Qed.
-
-Lemma map_partial_split : forall A B (f : A -> option B) xs1 x2 xs3 ys,
-    map_partial f (xs1 ++ x2 :: xs3) = Some ys ->
-    exists ys1 y2 ys3,
-        map_partial f xs1 = Some ys1 /\
-        f x2 = Some y2 /\
-        map_partial f xs3 = Some ys3 /\
-        ys = ys1 ++ y2 :: ys3.
-intros.
-fwd eapply map_partial_app_inv; eauto. break_exists. break_and.
-fwd eapply map_partial_cons_inv; eauto. break_exists. break_and.
-repeat find_rewrite. repeat econstructor.
-Qed.
-
-Derive Inversion test_inv with (forall A (P : A -> Prop) xs, Forall P xs).
-Check test_inv.
-
-Lemma Forall_app_inv : forall A (P : A -> Prop) xs1 xs2
-        (Q : _ -> _ -> _ -> _ -> Prop),
-    (Forall P xs1 -> Forall P xs2 -> Q A P xs1 xs2) ->
-    Forall P (xs1 ++ xs2) -> Q A P xs1 xs2.
-induction xs1; intros0 HQ Hfa.
-- eauto.
-- rewrite <- app_comm_cons in *. invc Hfa.
-  on _, invc_using IHxs1. eauto.
-Qed.
-
-Lemma Forall_3part_inv : forall A (P : A -> Prop) xs1 x2 xs3
-        (Q : _ -> _ -> _ -> _ -> _ -> Prop),
-    (Forall P xs1 -> P x2 -> Forall P xs3 -> Q A P xs1 x2 xs3) ->
-    Forall P (xs1 ++ x2 :: xs3) -> Q A P xs1 x2 xs3.
-intros0 HQ Hfa.
-inversion Hfa using Forall_app_inv; intros.
-on (Forall _ (_ :: _)), invc.
-eauto.
-Qed.
-
-Lemma map_partial_cons_inv' : forall A B (f : A -> option B) x1 xs2 ys
-        (P : _ -> _ -> _ -> Prop),
-    (forall y1 ys2,
-        f x1 = Some y1 ->
-        map_partial f xs2 = Some ys2 ->
-        ys = y1 :: ys2 ->
-        P x1 xs2 ys) ->
-    map_partial f (x1 :: xs2) = Some ys -> P x1 xs2 ys.
-intros0 HQ Hmap.
-simpl in Hmap. repeat (break_match; try discriminate).
-inject_some. eauto.
-Qed.
-
-Lemma map_partial_app_inv' : forall A B (f : A -> option B) xs1 xs2 ys
-        (P : _ -> _ -> _ -> Prop),
-    (forall ys1 ys2,
-        map_partial f xs1 = Some ys1 ->
-        map_partial f xs2 = Some ys2 ->
-        ys = ys1 ++ ys2 ->
-        P xs1 xs2 ys) ->
-    map_partial f (xs1 ++ xs2) = Some ys -> P xs1 xs2 ys.
-induction xs1; intros0 HQ Hmap; simpl in Hmap.
-- simpl in HQ. eauto. 
-- repeat (break_match; try congruence). inject_some.
-  inversion Heqo0 using (IHxs1 xs2 l).
-  intros. subst. eapply HQ.
-  + simpl. repeat find_rewrite. reflexivity.
-  + eassumption.
-  + reflexivity.
-Qed.
-
-Lemma map_partial_3part_inv : forall A B (f : A -> option B) xs1 x2 xs3 ys
-        (P : _ -> _ -> _ -> _ -> Prop),
-    (forall ys1 y2 ys3,
-        map_partial f xs1 = Some ys1 ->
-        f x2 = Some y2 ->
-        map_partial f xs3 = Some ys3 ->
-        ys = ys1 ++ y2 :: ys3 ->
-        P xs1 x2 xs3 ys) ->
-    map_partial f (xs1 ++ x2 :: xs3) = Some ys -> P xs1 x2 xs3 ys.
-intros0 HQ Hmap.
-on _, invc_using map_partial_app_inv'.
-on _, invc_using map_partial_cons_inv'.
-eauto.
-Qed.
-
-
-Lemma map_partial_cons : forall A B (f : A -> option B) x xs y ys,
-    f x = Some y ->
-    map_partial f xs = Some ys ->
-    map_partial f (x :: xs) = Some (y :: ys).
-intros0 Hx Hxs. simpl. repeat find_rewrite. reflexivity.
-Qed.
-
-Lemma map_partial_app : forall A B (f : A -> option B) xs1 xs2 ys1 ys2,
-    map_partial f xs1 = Some ys1 ->
-    map_partial f xs2 = Some ys2 ->
-    map_partial f (xs1 ++ xs2) = Some (ys1 ++ ys2).
-induction xs1; destruct ys1; intros0 Hxs1 Hxs2; simpl in * |-;
-repeat (break_match; try discriminate); try discriminate.
-- eauto.
-- inject_some. specialize (IHxs1 xs2 ?? ?? *** **).
-  repeat rewrite <- app_comm_cons in *. repeat find_rewrite.
-  eapply map_partial_cons; eassumption.
-Qed.
-
+(* I_sim *)
 
 Lemma mk_tagged_cases'_nth_ctor : forall cases cases' ty base idx ctor case info,
     mk_tagged_cases' ty base cases = Some cases' ->
@@ -601,22 +441,6 @@ Lemma mk_tagged_cases_nth_ctor : forall cases cases' ty idx ctor case info,
     nth_error cases' idx = Some (case, info) ->
     info = mk_rec_info ctor.
 intros. eapply mk_tagged_cases'_nth_ctor; eauto.
-Qed.
-
-Lemma skipn_more : forall A i (xs : list A) y ys,
-    skipn i xs = y :: ys ->
-    skipn (S i) xs = ys.
-induction i; intros; simpl in *; subst.
-- reflexivity.
-- destruct xs; try discriminate. eapply IHi; eauto.
-Qed.
-
-Lemma skipn_nth_error : forall A i (xs : list A) y ys,
-    skipn i xs = y :: ys ->
-    nth_error xs i = Some y.
-induction i; intros; simpl in *; subst.
-- reflexivity.
-- destruct xs; try discriminate. eauto.
 Qed.
 
 Definition mk_rec_info' ctor :=
@@ -703,15 +527,6 @@ Lemma unroll_elim_compile :
     T.unroll_elim tcase targs (mk_rec_info ctor) tmk = Some texpr ->
     compile lexpr = Some texpr.
 intros. eapply unroll_elim'_compile; try eassumption.
-Qed.
-
-Lemma T_length_unroll_elim : forall case args rec mk_rec,
-    length args = length rec ->
-    exists e, T.unroll_elim case args rec mk_rec = Some e.
-first_induction args; destruct rec; intros0 Hlen; simpl in Hlen; try discriminate Hlen.
-- eexists. reflexivity.
-- inv Hlen.
-  fwd eapply IHargs; try eassumption.
 Qed.
 
 
@@ -805,7 +620,7 @@ invc Lstep; invc II; simpl_compile; break_bind_option; inject_some.
     [ | eassumption.. | ]; [ eassumption | ].
 
   fwd eapply mk_tagged_cases_nth_ctor; eauto using Utopia.ctor_for_type_constr_index.
-  fwd eapply (T_length_unroll_elim tcase targs info _).
+  fwd eapply (T.length_unroll_elim tcase targs info _).
     { rewrite compile_list_is_map_partial in *.
       erewrite <- map_partial_length; try eassumption.
       subst. rewrite mk_rec_info_length. eauto. }
@@ -850,17 +665,8 @@ induction 1; intros0 Henv II.
   eexists. split; [ | eassumption ]. econstructor; eassumption.
 Qed.
 
-Inductive L_data : L.expr -> Prop :=
-| IsData : forall ctor args,
-        Forall L_data args ->
-        L_data (L.Constr ctor args).
 
-Lemma L_data_value_ok : forall LE e,
-    L_data e ->
-    L.value_ok LE e.
-induction e using L.expr_ind'; intros0 Ldat; invc Ldat.
-constructor. list_magic_on (args, tt).
-Qed.
+(* main theorems *)
 
 Theorem R_compile : forall LE TE l l' t,
     compile_program (l, LE) = Some (t, TE) ->

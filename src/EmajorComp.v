@@ -4,6 +4,7 @@ Require Import compcert.common.AST.
 Require Import Common Monads.
 Require Import StuartTact.
 Require Import HighValues.
+Require Import ListLemmas.
 Require Flattened Emajor.
 
 Module F := Flattened.
