@@ -255,6 +255,7 @@ Proof.
 
 Qed.      
 
+
 (* parameterize this by the memory *)
 Inductive match_cont: Emajor.cont -> Dmajor.cont -> mem -> Prop :=
 | match_cont_stop: forall m,
@@ -437,6 +438,305 @@ Proof.
   eauto.
 Qed.
 
+Definition mem_locked' (m m' : mem) (b : block) : Prop :=
+  forall b',
+    (b' < b)%positive ->
+    forall ofs c v,
+      Mem.load c m b' ofs = Some v ->
+      Mem.load c m' b' ofs = Some v.
+
+Definition mem_locked (m m' : mem) : Prop :=
+  mem_locked' m m' (Mem.nextblock m).
+
+
+Lemma load_lt_nextblock :
+  forall c m b ofs v,
+    Mem.load c m b ofs = Some v ->
+    (b < Mem.nextblock m)%positive.
+Proof.
+  intros.
+  remember (Mem.nextblock_noaccess m) as H2.
+  clear HeqH2.
+  destruct (plt b (Mem.nextblock m)). assumption.
+  app Mem.load_valid_access Mem.load.
+  unfold Mem.valid_access in *.
+  break_and. unfold Mem.range_perm in *.
+  specialize (H ofs).
+  assert (ofs <= ofs < ofs + size_chunk c).
+  destruct c; simpl; omega.
+  specialize (H H3).
+  unfold Mem.perm in *.
+  unfold Mem.perm_order' in H.
+  rewrite H2 in H; eauto. inversion H.
+Qed.
+
+Lemma alloc_mem_locked :
+  forall m lo hi m' b,
+    Mem.alloc m lo hi = (m',b) ->
+    mem_locked m m'.
+Proof.
+  unfold mem_locked.
+  unfold mem_locked'.
+  intros.
+  app Mem.alloc_result Mem.alloc. subst b.
+  app load_lt_nextblock Mem.load.
+  erewrite Mem.load_alloc_unchanged; eauto.
+Qed.
+
+
+Lemma load_all_mem_locked :
+  forall m m',
+    mem_locked m m' ->
+    forall b,
+      (b < Mem.nextblock m)%positive ->
+      forall l ofs l',
+        load_all (arg_addrs b ofs l) m = Some l' ->
+        load_all (arg_addrs b ofs l) m' = Some l'.
+Proof.
+  induction l; intros.
+  simpl in H1. inv H1. simpl. reflexivity.
+  simpl in H1. repeat break_match_hyp; try congruence.
+  invc H1.
+  eapply IHl in Heqo0.
+  simpl. rewrite Heqo0.
+  unfold mem_locked in H.
+  unfold mem_locked' in H.
+  apply H in Heqo; auto. find_rewrite. reflexivity.
+Qed.  
+
+Lemma mem_locked_value_inject :
+  forall m m',
+    mem_locked m m' ->
+    forall {A B} (ge : Genv.t A B) v v',
+      value_inject ge m v v' ->
+      value_inject ge m' v v'.
+Proof.
+  induction 2; intros;
+    simpl in H0;
+    app load_lt_nextblock Mem.load;
+  app load_all_mem_locked load_all;
+  econstructor; eauto.
+Qed.
+
+
+Lemma mem_locked_env_inject :
+  forall m m',
+    mem_locked m m' ->
+    forall {A B} e e' (ge : Genv.t A B),
+      env_inject e e' ge m ->
+      env_inject e e' ge m'.
+Proof.
+  intros.
+  unfold env_inject in *.
+  intros. eapply H0 in H1.
+  break_exists.
+  break_and.
+  exists x.
+  split; eauto.
+  eapply mem_locked_value_inject; eauto.
+Qed.
+
+Lemma mem_locked_match_cont :
+  forall k k' m m',
+    match_cont k k' m ->
+    mem_locked m m' ->
+    match_cont k k' m'.
+Proof.
+  induction 1; intros;
+    econstructor; eauto.
+  eapply mem_locked_env_inject; eauto.
+Qed.
+
+Lemma disjoint_set_locals :
+  forall l e e' m,
+    env_inject e e' tge m ->
+    (forall x, In x l -> e ! x = None) ->
+    env_inject e (set_locals l e') tge m.
+Proof.
+  induction l; intros.
+  simpl. auto.
+  simpl. unfold env_inject in *.
+  intros.
+  destruct (peq id a). subst.
+  simpl in H0. rewrite H0 in H1; eauto. congruence.
+  rewrite PTree.gso by congruence.
+  eapply IHl; eauto.
+  intros. eapply H0. simpl. right. auto.
+Qed.
+
+Definition writable (m : mem) (b : block) (lo hi : Z) : Prop :=
+  forall ofs k,
+    lo <= ofs < hi ->
+    Mem.perm m b ofs k Freeable.
+
+Lemma alloc_writable :
+  forall m lo hi m' b,
+    Mem.alloc m lo hi = (m',b) ->
+    writable m' b lo hi.
+Proof.
+  intros.
+  unfold writable.
+  intros.
+  eapply Mem.perm_alloc_2; eauto.
+Qed.  
+
+Lemma mem_locked_store_nextblock :
+  forall m m',
+    mem_locked m m' ->
+    forall c ofs v m'',
+      Mem.store c m' (Mem.nextblock m) ofs v = Some m'' ->
+      mem_locked m m''.
+Proof.
+  (* tis true *)
+Admitted.  
+
+Lemma writable_storeable :
+  forall m b lo hi,
+    writable m b lo hi ->
+    forall c v ofs,
+      lo <= ofs < hi ->
+      (align_chunk c | ofs) ->
+      {m' : mem | Mem.store c m b ofs v = Some m' /\ writable m' b lo hi }.
+Proof.
+  (* tis true *)
+Admitted.
+
+Lemma writable_storevable :
+  forall m b lo hi,
+    writable m b lo hi ->
+    forall c v ofs,
+      lo <= Int.unsigned ofs < hi ->
+      (align_chunk c | Int.unsigned ofs) ->
+      {m' : mem | Mem.storev c m (Vptr b ofs) v = Some m' /\ writable m' b lo hi }.
+Proof.
+  (* tis true *)
+Admitted.
+
+
+Ltac st :=
+  match goal with
+  | [ H : writable _ _ _ _ |- _ ] =>
+    eapply writable_storeable in H
+  end.
+
+Ltac ore :=
+  match goal with
+  | [ H : { _ | _ } |- _ ] => destruct H; repeat break_and
+  end.
+
+
+Lemma SmakeClose_sim :
+  forall k k' m e e' l vargs fname id sp f,
+    match_cont k k' m ->
+    env_inject e e' tge m ->
+    Emajor.eval_exprlist e l vargs ->
+    exists st0',
+      plus step tge
+           (State (transf_function f) (transf_stmt (SmakeClose id fname l)) k' sp e' m)
+           E0 st0' /\
+      match_states
+        (Emajor.State f Emajor.Sskip k (PTree.set id (Close fname vargs) e)) st0'.
+Proof.
+Admitted.
+
+Lemma writable_head :
+  forall m b lo hi,
+    writable m b lo hi ->
+    forall ofs,
+      lo <= ofs <= hi ->
+      writable m b ofs hi.
+Proof.
+Admitted.
+
+Lemma step_store_args :
+  forall l ofs f id k sp env m b o,
+    env ! id = Some (Vptr b o) ->
+    writable m b ofs (ofs + 4 * Z.of_nat (length l)) ->
+  exists m',
+    star step tge (State f (store_args id l ofs) k sp env m) E0
+         (State f Dmajor.Sskip k sp env m').
+Proof.
+  induction l; intros.
+  eexists; simpl. eapply star_refl.
+  simpl. 
+  edestruct (IHl ((ofs + 4)%Z)); eauto.
+  replace ((ofs + 4 * Z.of_nat (length (a :: l)))%Z) with
+  ((ofs + (4 + 4 * Z.of_nat (length (l))))%Z) in H0.
+  Focus 2.
+  f_equal.
+  replace (Z.of_nat (length (a :: l))) with (Z.of_nat (S (length l))) by (simpl; auto).
+  rewrite Nat2Z.inj_succ.
+  omega.
+  instantiate (1 := m).
+  eapply writable_head; eauto.
+  rewrite Z.add_assoc in H0. eassumption.
+  assert (Z.of_nat (length l) >= 0).
+  destruct l. simpl; omega.
+  replace (length (e :: l)) with (S (length l)) by (auto).
+  rewrite Nat2Z.inj_succ.
+  omega.
+  split; omega.
+  
+
+  eexists.
+  eapply star_left; nil_trace.
+  econstructor; eauto.
+  eapply star_left; nil_trace.
+  econstructor; eauto.
+  econstructor; eauto.
+  econstructor; eauto.
+  econstructor; eauto.
+  econstructor; eauto.
+  
+Admitted.
+  
+Lemma SmakeConstr_sim :
+  forall k k' m e e' l vargs id tag sp f,
+    match_cont k k' m ->
+    env_inject e e' tge m ->
+    Emajor.eval_exprlist e l vargs ->
+    exists st0',
+      plus step tge
+           (State (transf_function f) (transf_stmt (SmakeConstr id tag l)) k' sp e' m)
+           E0 st0' /\
+      match_states
+        (Emajor.State f Emajor.Sskip k (PTree.set id (Constr tag vargs) e)) st0'.
+Proof.
+  intros.
+  (* due to stupid unification issues, get names into space *)
+  destruct (Mem.alloc m (-4) (Int.unsigned (Int.repr (4 + 4 * Z.of_nat (length l))))) eqn:?.
+  app alloc_writable Mem.alloc.
+  app alloc_mem_locked Mem.alloc.
+
+  st. ore. (* original malloc length *)
+  eapply writable_storevable in H5. ore. (* tag *)
+  app eval_exprlist_transf Emajor.eval_exprlist.
+  
+  (* now construct the steps *)
+  eexists. split.
+  eapply plus_left; nil_trace.
+  econstructor; eauto.
+  eapply star_left; nil_trace.
+  econstructor; eauto.
+  eapply star_left; nil_trace.
+  econstructor; eauto.
+  repeat (econstructor; eauto).
+  repeat (econstructor; eauto).
+  eapply star_left; nil_trace.
+  econstructor; eauto.
+  eapply star_left; nil_trace.
+  econstructor; eauto.
+  econstructor; eauto.
+  rewrite PTree.gss. reflexivity.
+  econstructor; eauto.
+  econstructor; eauto.
+  eapply star_left; nil_trace.
+  econstructor; eauto.
+
+  
+  
+Admitted.
+
 
 (* This is sorta what we want *)
 Theorem step_sim_no_trace :
@@ -451,20 +751,20 @@ Proof.
   invp match_states; invp Emajor.step.
 
   (* assign *)
-  app transf_expr_inject Emajor.eval_expr.
+  + app transf_expr_inject Emajor.eval_expr.
   eexists.  split. try eapply plus_one.
   econstructor; eauto.
   econstructor; eauto.
   eapply env_inject_update; eauto.
   
   (* sequence from continuation *)
-  invp match_cont.
+  + invp match_cont.
   eexists.  split. eapply plus_one.
   econstructor; eauto.
   econstructor; eauto.
 
   (* function call *)
-  app transf_expr_inject (Emajor.eval_expr e efunc).
+  + app transf_expr_inject (Emajor.eval_expr e efunc).
   app transf_expr_inject (Emajor.eval_expr e earg).
   inv H5.
   eexists. split.
@@ -487,47 +787,21 @@ Proof.
   econstructor; eauto.
 
   (* seq *)
-  eexists. split.
+  + eexists. split.
   eapply plus_one.
   econstructor; eauto.
   econstructor; eauto.
   econstructor; eauto.
 
   (* make_constr *)
-  (* need some heap reasoning *)
-  admit.
-  (* destruct (Mem.alloc m (-4) (Int.unsigned (Int.repr (4 + 4 * Z.of_nat (length l))))) eqn:?. *)
-  (* app alloc_store Mem.alloc. *)
-  (* destruct Heqp. *)
-  (* eexists. split. *)
-  (* eapply plus_left; nil_trace. *)
-  (* econstructor; eauto. *)
-  (* eapply star_left; nil_trace. *)
-  (* econstructor; eauto. *)
-  (* eapply star_left; nil_trace. *)
-  (* econstructor; eauto. *)
-  (* repeat (econstructor; eauto). *)
-  (* repeat (econstructor; eauto). *)
-  (* eapply star_left; nil_trace. *)
-  (* econstructor; eauto. *)
-  (* eapply star_left; nil_trace. *)
-  (* econstructor; eauto. *)
-  (* econstructor; eauto. *)
-  (* eapply PTree.gss. *)
-  (* econstructor; eauto. *)
-  (* econstructor; eauto. *)
+  + eapply SmakeConstr_sim; eauto.
 
-  (* We need a predicate over memories *)
-  (* i.e. we just allocated this block, and we can write here *)
-  
-  
   (* make close *)
   (* same as make constr *)
-  admit.
-
+  + eapply SmakeClose_sim; eauto.
 
   (* switch *)
-  app transf_expr_inject Emajor.eval_expr.
+  + app transf_expr_inject Emajor.eval_expr.
   eexists.  split. try eapply plus_left; nil_trace.
   econstructor; eauto.
   eapply star_left; nil_trace.
@@ -548,21 +822,21 @@ Proof.
   eapply env_inject_update; eauto.
   
   (* Exit/Block *)
-  invp match_cont.
+  + invp match_cont.
   eexists.  split.
   eapply plus_one; nil_trace.
   econstructor; eauto.
   econstructor; eauto.
 
   (* Exit/Seq *)
-  invp match_cont.
+  + invp match_cont.
   eexists.  split.
   eapply plus_one; nil_trace.
   econstructor; eauto.
   econstructor; eauto.
 
   (* Exit/0 *)
-  invp match_cont.
+  + invp match_cont.
   eexists.  split.
   eapply plus_one; nil_trace.
   simpl.
@@ -570,7 +844,7 @@ Proof.
   econstructor; eauto.
 
   (* Sblock *)
-  eexists.  split.
+  + eexists.  split.
   eapply plus_one; nil_trace.
   simpl.
   econstructor; eauto.
@@ -578,27 +852,34 @@ Proof.
   econstructor; eauto.
 
   (* callstate *)
-  destruct (Mem.alloc m 0 (fn_stackspace (transf_fundef fd))) eqn:?.
+  + destruct (Mem.alloc m 0 (fn_stackspace (transf_fundef fd))) eqn:?.
   eexists.  split.
   eapply plus_one; nil_trace.
   simpl.
   econstructor; eauto.
   econstructor; eauto.
-  admit. (* match_cont commutes over alloc *)
+  eapply mem_locked_match_cont; eauto.
+  eapply alloc_mem_locked; eauto.
   app env_inject_set_params_locals list_forall2.
   unfold transf_fundef. simpl.
   instantiate (1 := Emajor.fn_params fd) in H2.
-  admit. (* almost there, bit more injecting *)
+  app alloc_mem_locked Mem.alloc.
+  eapply mem_locked_env_inject in H2; eauto.
 
+  eapply disjoint_set_locals; eauto.
+  admit. (* params are not locals *)
+  (* this will need to be a global program property, ensured by something *)
+  (* shouldn't be that hard *)
+  
   (* returnstate *)
-  invp match_cont.
+  + invp match_cont.
   eexists. split.
   eapply plus_one; nil_trace.
   econstructor; eauto.
   econstructor; eauto.
   simpl. eapply env_inject_update; eauto.
   
-  
+
 Admitted.
 
 (* Easier to prove originally with no trace *)
