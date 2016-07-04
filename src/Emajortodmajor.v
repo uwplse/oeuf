@@ -255,7 +255,25 @@ Proof.
 
 Qed.      
 
-
+Lemma transf_exprlist_inject :
+  forall Ee De m sp,
+    env_inject Ee De tge m ->
+    forall (expl : list Emajor.expr) vlist,
+      Emajor.eval_exprlist Ee expl vlist ->
+      exists vlist',
+        Dmajor.eval_exprlist tge De m sp (map transf_expr expl) vlist' /\ list_forall2 (value_inject tge m) vlist vlist'.
+Proof.
+  induction expl; intros.
+  inversion H0. exists nil. simpl. split; econstructor; eauto.
+  inversion H0. eapply IHexpl in H5; eauto.
+  break_exists; break_and.
+  app transf_expr_inject Emajor.eval_expr.
+  subst.
+  exists (x0 :: x).
+  split. econstructor; eauto.
+  econstructor; eauto.
+Qed.
+  
 (* parameterize this by the memory *)
 Inductive match_cont: Emajor.cont -> Dmajor.cont -> mem -> Prop :=
 | match_cont_stop: forall m,
@@ -580,6 +598,18 @@ Proof.
   eapply Mem.perm_alloc_2; eauto.
 Qed.  
 
+Lemma pos_lt_neq :
+  forall p q,
+    (p < q)%positive ->
+    p <> q.
+Proof.
+  intros.
+  unfold Pos.lt in H.
+  intro. rewrite <- Pos.compare_eq_iff in H0.
+  congruence.
+Qed.
+  
+
 Lemma mem_locked_store_nextblock :
   forall m m',
     mem_locked m m' ->
@@ -587,8 +617,16 @@ Lemma mem_locked_store_nextblock :
       Mem.store c m' (Mem.nextblock m) ofs v = Some m'' ->
       mem_locked m m''.
 Proof.
-  (* tis true *)
-Admitted.  
+  intros.
+  unfold mem_locked in *.
+  unfold mem_locked' in *.
+  intros.
+  app Mem.load_store_other Mem.store.
+  rewrite H0.
+  eapply H; eauto.
+  left.
+  eapply pos_lt_neq; eauto.
+Qed.
 
 Lemma writable_storeable :
   forall m b lo hi,
@@ -596,10 +634,22 @@ Lemma writable_storeable :
     forall c v ofs,
       lo <= ofs < hi ->
       (align_chunk c | ofs) ->
+      hi >= ofs + size_chunk c ->
       {m' : mem | Mem.store c m b ofs v = Some m' /\ writable m' b lo hi }.
 Proof.
-  (* tis true *)
-Admitted.
+  intros.
+  assert (Mem.valid_access m c b ofs Writable).
+  unfold Mem.valid_access. split; auto.
+  unfold Mem.range_perm. intros.
+  unfold writable in H.
+  eapply Mem.perm_implies; try apply H; eauto; try solve [econstructor].
+  omega.
+  app Mem.valid_access_store Mem.valid_access.
+  destruct H3.
+  exists x. split. apply e.
+  unfold writable. intros.
+  eapply Mem.perm_store_1; eauto.
+Qed.
 
 Lemma writable_storevable :
   forall m b lo hi,
@@ -607,11 +657,54 @@ Lemma writable_storevable :
     forall c v ofs,
       lo <= Int.unsigned ofs < hi ->
       (align_chunk c | Int.unsigned ofs) ->
+      hi >= (Int.unsigned ofs) + size_chunk c ->
       {m' : mem | Mem.storev c m (Vptr b ofs) v = Some m' /\ writable m' b lo hi }.
 Proof.
-  (* tis true *)
-Admitted.
+  intros.
+  app writable_storeable writable.
+Qed.
 
+Lemma mem_locked_load :
+  forall m m',
+    mem_locked m m' ->
+    forall c b ofs v,
+      Mem.load c m b ofs = Some v ->
+      Mem.load c m' b ofs = Some v.
+Proof.
+  intros.
+  unfold mem_locked in *.
+  unfold mem_locked' in *.
+  eapply H; eauto.
+  eapply load_lt_nextblock; eauto.
+Qed.
+      
+Lemma eval_expr_mem_locked :
+  forall m m',
+    mem_locked m m' ->
+    forall env sp exp v,
+      eval_expr tge env m sp exp v ->
+      eval_expr tge env m' sp exp v.
+Proof.
+  induction 2; intros;
+    econstructor; eauto.
+  unfold Mem.loadv in *.
+  break_match_hyp; try congruence.
+  subst vaddr.
+  eapply mem_locked_load; eauto.
+Qed.
+
+Lemma eval_exprlist_mem_locked :
+  forall m m',
+    mem_locked m m' ->
+    forall env sp expl vals,
+      eval_exprlist tge env m sp expl vals ->
+      eval_exprlist tge env m' sp expl vals.
+Proof.
+  induction 2; intros.
+  econstructor; eauto.
+  econstructor; eauto.
+  eapply eval_expr_mem_locked; eauto.
+Qed.
 
 Ltac st :=
   match goal with
@@ -646,50 +739,116 @@ Lemma writable_head :
       lo <= ofs <= hi ->
       writable m b ofs hi.
 Proof.
-Admitted.
+  intros.
+  unfold writable in *.
+  intros. eapply H. omega.
+Qed.
 
+Lemma int_unsigned_add_zero :
+  forall i,
+    Int.unsigned (Int.add Int.zero i) = Int.unsigned i.
+Proof.
+  intros.
+  unfold Int.add.
+  rewrite Int.unsigned_zero.
+  simpl.
+  rewrite Int.repr_unsigned; eauto.
+Qed.
+
+(* need more conclusions *)
+(* everything we store injects *)
 Lemma step_store_args :
-  forall l ofs f id k sp env m b o,
-    env ! id = Some (Vptr b o) ->
-    writable m b ofs (ofs + 4 * Z.of_nat (length l)) ->
-  exists m',
+  forall l ofs m f id k env m0 sp vs,
+    env ! id = Some (Vptr (Mem.nextblock m0) Int.zero) ->
+    writable m (Mem.nextblock m0) ofs (ofs + 4 * Z.of_nat (length l)) ->
+    eval_exprlist tge env m0 sp (map transf_expr l) vs ->
+    mem_locked m0 m ->
+    Int.unsigned (Int.repr ofs) = ofs ->
+    (align_chunk Mint32 | ofs) ->
+    exists m',
     star step tge (State f (store_args id l ofs) k sp env m) E0
          (State f Dmajor.Sskip k sp env m').
 Proof.
   induction l; intros.
   eexists; simpl. eapply star_refl.
-  simpl. 
-  edestruct (IHl ((ofs + 4)%Z)); eauto.
+  simpl.
+  inversion H1.
+
+
+  assert (exists m', Mem.storev Mint32 m (Val.add (Vptr (Mem.nextblock m0) Int.zero) (Vint (Int.repr ofs))) v1 = Some m' /\ writable m' (Mem.nextblock m0) ofs (ofs + 4 * (Z.of_nat (length (a :: l))))).
+  {
+    
+    eapply writable_storevable in H0; eauto.
+    destruct H0. break_and.
+    exists x. split. eauto.
+    simpl. eauto.
+    rewrite int_unsigned_add_zero.
+    rewrite H3.
+    replace (Z.of_nat (length (a :: l))) with (Z.of_nat (S (length l))) by (simpl; auto).
+    rewrite Nat2Z.inj_succ.
+    omega.
+    rewrite int_unsigned_add_zero. rewrite H3.
+    assumption.
+    replace (Z.of_nat (length (a :: l))) with (Z.of_nat (S (length l))) by (simpl; auto).
+    rewrite Nat2Z.inj_succ.
+    rewrite int_unsigned_add_zero. rewrite H3.
+    destruct l. simpl. omega.
+    replace (Z.of_nat (length (e :: l))) with (Z.of_nat (S (length l))) by (simpl; auto).
+    rewrite Nat2Z.inj_succ.
+    unfold size_chunk. assert (Z.of_nat (length l) >= 0).
+    omega. omega.
+  } idtac.
+
+  break_exists. break_and.
+
+  remember H2 as Hmem_locked0.
+  clear HeqHmem_locked0.
+  eapply mem_locked_store_nextblock in H2; try solve [unfold Mem.storev in *; simpl in *; eauto].
+  
+  edestruct (IHl ((ofs + 4)%Z) x); eauto.
   replace ((ofs + 4 * Z.of_nat (length (a :: l)))%Z) with
-  ((ofs + (4 + 4 * Z.of_nat (length (l))))%Z) in H0.
+  ((ofs + (4 + 4 * Z.of_nat (length (l))))%Z) in H11.
   Focus 2.
   f_equal.
   replace (Z.of_nat (length (a :: l))) with (Z.of_nat (S (length l))) by (simpl; auto).
   rewrite Nat2Z.inj_succ.
-  omega.
-  instantiate (1 := m).
+  omega. 
   eapply writable_head; eauto.
-  rewrite Z.add_assoc in H0. eassumption.
+  rewrite Z.add_assoc in H11.
+  eassumption.
   assert (Z.of_nat (length l) >= 0).
   destruct l. simpl; omega.
   replace (length (e :: l)) with (S (length l)) by (auto).
   rewrite Nat2Z.inj_succ.
   omega.
   split; omega.
-  
 
+  (* eventually need some kind of overflow info here *)
+  (* not going to be pretty *)
+  admit.
+
+  simpl in H4. simpl.
+  eapply Z.divide_add_r; eauto.
+  eapply Z.divide_refl.
+
+  
   eexists.
   eapply star_left; nil_trace.
   econstructor; eauto.
   eapply star_left; nil_trace.
   econstructor; eauto.
+  
   econstructor; eauto.
   econstructor; eauto.
   econstructor; eauto.
+  eapply eval_expr_mem_locked; eauto.  
+  eapply star_left; nil_trace.
   econstructor; eauto.
+  eauto.
   
 Admitted.
-  
+
+
 Lemma SmakeConstr_sim :
   forall k k' m e e' l vargs id tag sp f,
     match_cont k k' m ->
@@ -703,14 +862,25 @@ Lemma SmakeConstr_sim :
         (Emajor.State f Emajor.Sskip k (PTree.set id (Constr tag vargs) e)) st0'.
 Proof.
   intros.
+  
   (* due to stupid unification issues, get names into space *)
   destruct (Mem.alloc m (-4) (Int.unsigned (Int.repr (4 + 4 * Z.of_nat (length l))))) eqn:?.
   app alloc_writable Mem.alloc.
   app alloc_mem_locked Mem.alloc.
-
+  app Mem.alloc_result Mem.alloc. subst b.
+  
   st. ore. (* original malloc length *)
   eapply writable_storevable in H5. ore. (* tag *)
-  app eval_exprlist_transf Emajor.eval_exprlist.
+  app transf_exprlist_inject Emajor.eval_exprlist.
+  app mem_locked_store_nextblock mem_locked.
+  clear H9.
+  unfold Mem.storev in *.
+  app mem_locked_store_nextblock mem_locked.
+  clear H9.
+  app eval_exprlist_mem_locked eval_exprlist.
+  clear H9.
+  
+  (* edestruct step_store_args; eauto. *)
   
   (* now construct the steps *)
   eexists. split.
@@ -730,9 +900,10 @@ Proof.
   rewrite PTree.gss. reflexivity.
   econstructor; eauto.
   econstructor; eauto.
+  simpl. eauto.
   eapply star_left; nil_trace.
   econstructor; eauto.
-
+  
   
   
 Admitted.
