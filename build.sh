@@ -1,9 +1,22 @@
 #!/bin/bash
 set -e
 
-#make -f Makefile.extr depend
-#make -f Makefile.extr extraction/OeufDriver.cmx
-ocamlopt -o ccomp str.cmxa unix.cmxa \
-    -I /usr/lib/ocaml/menhirLib menhirLib.cmx  \
+ocamlbuild \
+    -use-menhir -pkg menhirLib \
+    -yaccflag --table \
+    -lib str \
+    -lib unix \
+    -I src \
     -I extraction \
-    `compcert/tools/modorder .depend.extr extraction/OeufDriver.cmx`
+    -I compcert/driver \
+    -I compcert/cfrontend \
+    -I compcert/cparser \
+    -I compcert/ia32 \
+    -I compcert/lib \
+    -I compcert/common \
+    -I compcert/debug \
+    -I compcert/backend \
+    OeufDriver.native
+
+rm OeufDriver.native
+cp _build/src/OeufDriver.native .
