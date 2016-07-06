@@ -187,3 +187,62 @@ eright. eapply MakeCall; try solve [repeat econstructor].
 eleft.
 Defined.
 Eval compute in proj1_sig add_1_2.
+
+
+
+
+Definition num_upvars :=
+    let fix go e :=
+        let fix go_list es :=
+            match es with
+            | [] => 0
+            | e :: es => max (go e) (go_list es)
+            end in
+        let fix go_pair p :=
+            match p with
+            | (e, _) => go e
+            end in
+        let fix go_list_pair ps :=
+            match ps with
+            | [] => 0
+            | p :: ps => max (go_pair p) (go_list_pair ps)
+            end in
+        match e with
+        | Arg => 0
+        | UpVar i => S i
+        | Call f a => max (go f) (go a)
+        | Constr _ args => go_list args
+        | ElimBody rec cases target => max (go rec) (max (go_list_pair cases) (go target))
+        | Close _ free => go_list free
+        end in go.
+
+(* Nested fixpoint aliases *)
+Definition num_upvars_list :=
+    let go := num_upvars in
+    let fix go_list es :=
+        match es with
+        | [] => 0
+        | e :: es => max (go e) (go_list es)
+        end in go_list.
+
+Definition num_upvars_pair :=
+    let go := num_upvars in
+    let fix go_pair (p : expr * rec_info) :=
+        match p with
+        | (e, _) => go e
+        end in go_pair.
+
+Definition num_upvars_list_pair :=
+    let go_pair := num_upvars_pair in
+    let fix go_list_pair ps :=
+        match ps with
+        | [] => 0
+        | p :: ps => max (go_pair p) (go_list_pair ps)
+        end in go_list_pair.
+
+Ltac refold_num_upvars :=
+    fold num_upvars_list in *;
+    fold num_upvars_pair in *;
+    fold num_upvars_list_pair in *.
+
+
