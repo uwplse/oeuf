@@ -755,43 +755,55 @@ Proof.
   rewrite Int.repr_unsigned; eauto.
 Qed.
 
+  
+
 (* need more conclusions *)
 (* everything we store injects *)
+
+(*     load_all (arg_addrs (Mem.nextblock m0) (Int.add Int.zero (Int.repr 4)) vs) m' = Some ll /\
+ forall (a : value) (b : val), In (a, b) ?l' -> value_inject tge x2 a b.
+Check arg_addrs. *)
 Lemma step_store_args :
   forall l ofs m f id k env m0 sp vs,
     env ! id = Some (Vptr (Mem.nextblock m0) Int.zero) ->
     writable m (Mem.nextblock m0) ofs (ofs + 4 * Z.of_nat (length l)) ->
     eval_exprlist tge env m0 sp (map transf_expr l) vs ->
     mem_locked m0 m ->
-    Int.unsigned (Int.repr ofs) = ofs ->
+    (forall x,
+        0 <= x <= 4 * Z.of_nat (length l) ->
+        Int.unsigned (Int.repr (ofs + x)) = (ofs + x)%Z) ->
     (align_chunk Mint32 | ofs) ->
     exists m',
     star step tge (State f (store_args id l ofs) k sp env m) E0
          (State f Dmajor.Sskip k sp env m').
+    
 Proof.
   induction l; intros.
   eexists; simpl. eapply star_refl.
   simpl.
   inversion H1.
-
-
+  
   assert (exists m', Mem.storev Mint32 m (Val.add (Vptr (Mem.nextblock m0) Int.zero) (Vint (Int.repr ofs))) v1 = Some m' /\ writable m' (Mem.nextblock m0) ofs (ofs + 4 * (Z.of_nat (length (a :: l))))).
   {
+    assert (Huns : Int.unsigned (Int.repr ofs) = ofs).
+    specialize (H3 0).
+    rewrite Z.add_0_r in H3.
+    apply H3. split; omega.
     
     eapply writable_storevable in H0; eauto.
     destruct H0. break_and.
     exists x. split. eauto.
     simpl. eauto.
     rewrite int_unsigned_add_zero.
-    rewrite H3.
+    rewrite Huns.
     replace (Z.of_nat (length (a :: l))) with (Z.of_nat (S (length l))) by (simpl; auto).
     rewrite Nat2Z.inj_succ.
     omega.
-    rewrite int_unsigned_add_zero. rewrite H3.
+    rewrite int_unsigned_add_zero. rewrite Huns.
     assumption.
     replace (Z.of_nat (length (a :: l))) with (Z.of_nat (S (length l))) by (simpl; auto).
     rewrite Nat2Z.inj_succ.
-    rewrite int_unsigned_add_zero. rewrite H3.
+    rewrite int_unsigned_add_zero. rewrite Huns.
     destruct l. simpl. omega.
     replace (Z.of_nat (length (e :: l))) with (Z.of_nat (S (length l))) by (simpl; auto).
     rewrite Nat2Z.inj_succ.
@@ -823,10 +835,15 @@ Proof.
   omega.
   split; omega.
 
-  (* eventually need some kind of overflow info here *)
-  (* not going to be pretty *)
-  admit.
 
+  intros. specialize (H3 (4 + x0)%Z).
+  rewrite <- Z.add_assoc.
+  rewrite H3. reflexivity.
+  split. omega.
+  replace (Z.of_nat (length (a :: l))) with (Z.of_nat (S (length l))) by (simpl; auto).
+  rewrite Nat2Z.inj_succ.
+  omega.
+  
   simpl in H4. simpl.
   eapply Z.divide_add_r; eauto.
   eapply Z.divide_refl.
@@ -845,21 +862,68 @@ Proof.
   eapply star_left; nil_trace.
   econstructor; eauto.
   eauto.
+Qed.  
+
+
+
+
+(* Lemma step_store_args_inject : *)
+(*   forall l ofs m f id k env m0 sp vs hvs, *)
+(*     env ! id = Some (Vptr (Mem.nextblock m0) Int.zero) -> *)
+(*     writable m (Mem.nextblock m0) ofs (ofs + 4 * Z.of_nat (length l)) -> *)
+(*     eval_exprlist tge env m0 sp (map transf_expr l) vs -> *)
+(*     list_forall2 (value_inject tge m) hvs vs -> *)
+(*     mem_locked m0 m -> *)
+(*     (forall x, *)
+(*         0 <= x <= 4 * Z.of_nat (length l) -> *)
+(*         Int.unsigned (Int.repr (ofs + x)) = (ofs + x)%Z) -> *)
+(*     (align_chunk Mint32 | ofs) -> *)
+(*     exists m', *)
+(*       star step tge (State f (store_args id l ofs) k sp env m) E0 *)
+(*            (State f Dmajor.Sskip k sp env m') /\ *)
+(*       exists ll, *)
+(*         list_forall2 (value_inject tge m') hvs vs /\ *)
+(*         load_all (arg_addrs (Mem.nextblock m) (Int.repr 4) hvs) m' = Some ll /\ *)
+(*         (forall a b, In (a,b) ll -> value_inject tge m' a b). *)
+(* Proof. *)
+(*   induction l; intros. *)
+(*   exists m. split. *)
+(*   eapply star_refl. *)
+(*   exists nil. *)
+(*   simpl in H1. inv H1. *)
+(*   split. *)
+(*   assumption. *)
+(*   split. inv H2. *)
+(*   simpl. reflexivity. *)
+(*   intros. simpl in H6. inv H6. *)
+
+(*   app step_store_args (writable m (Mem.nextblock m0)). *)
   
+(*   exists x. *)
+(*   split. *)
+(*   eauto. *)
+  
+
+Lemma store_args_mem_locked :
+  forall l m0 m m' f id ofs k sp e,
+    star step tge (State f (store_args id l ofs) k sp e m)
+         E0 (State f Sskip k sp e m') ->
+    e ! id = Some (Vptr (Mem.nextblock m0) Int.zero) ->
+    mem_locked m0 m ->
+    mem_locked m0 m'.
+Proof.
 Admitted.
 
-
-Lemma SmakeConstr_sim :
+Lemma SmakeConstr_name :
   forall k k' m e e' l vargs id tag sp f,
     match_cont k k' m ->
     env_inject e e' tge m ->
     Emajor.eval_exprlist e l vargs ->
-    exists st0',
+    Int.unsigned (Int.repr (4 + 4 * Z.of_nat (length l))) = (4 + 4 * Z.of_nat (length l))%Z ->
+    exists m',
       plus step tge
            (State (transf_function f) (transf_stmt (SmakeConstr id tag l)) k' sp e' m)
-           E0 st0' /\
-      match_states
-        (Emajor.State f Emajor.Sskip k (PTree.set id (Constr tag vargs) e)) st0'.
+           E0 (State (transf_function f) Sskip k' sp (PTree.set id (Vptr (Mem.nextblock m) Int.zero) e') m').
 Proof.
   intros.
   
@@ -870,20 +934,43 @@ Proof.
   app Mem.alloc_result Mem.alloc. subst b.
   
   st. ore. (* original malloc length *)
-  eapply writable_storevable in H5. ore. (* tag *)
+  eapply writable_storevable in H6. ore. (* tag *)
   app transf_exprlist_inject Emajor.eval_exprlist.
   app mem_locked_store_nextblock mem_locked.
-  clear H9.
+  clear H10.
   unfold Mem.storev in *.
   app mem_locked_store_nextblock mem_locked.
-  clear H9.
+  clear H10.
   app eval_exprlist_mem_locked eval_exprlist.
-  clear H9.
+  clear H10.
   
-  (* edestruct step_store_args; eauto. *)
+  edestruct step_store_args.
+  instantiate (2 := (PTree.set id (Vptr (Mem.nextblock m) Int.zero) e')).
+  instantiate (2 := id).
+  instantiate (1 := m).
+  rewrite PTree.gss. reflexivity.
+  instantiate (2 := 4).
+  eapply writable_head; eauto.
+  instantiate (3 := x0).
+  instantiate (1 := l).
+  instantiate (1 := -4).
+  rewrite H2 in H7. assumption.
+  split; omega.
+
+  (* This requires showing id wasn't in the env previously *)
+  admit.
+
+  assumption.
+
+  (* some kind of overflow *)
+  admit.
+
+
+  eapply Z.divide_refl.
+
   
   (* now construct the steps *)
-  eexists. split.
+  eexists.
   eapply plus_left; nil_trace.
   econstructor; eauto.
   eapply star_left; nil_trace.
@@ -903,7 +990,140 @@ Proof.
   simpl. eauto.
   eapply star_left; nil_trace.
   econstructor; eauto.
+  eassumption.
+
+  rewrite Int.unsigned_zero.
+  split; try omega.
+  rewrite Int.unsigned_zero.
+  simpl. 
+  eapply Z.divide_0_r.
+  rewrite Int.unsigned_zero.
+  unfold size_chunk.
+  rewrite H2.
+  omega.
+
+  split; try omega.
+  simpl. 
+  rewrite <- Z.divide_Zpos_Zneg_r.
+  eapply Z.divide_refl.
+
+  rewrite H2.
+  unfold size_chunk. omega.
+
+
+Admitted.
+
+(* break apart seqs *)
+
+Lemma no_inf_cont :
+  forall k s,
+    ~ Kseq s k = k.
+Proof.
+  induction k; intros; congruence.
+Qed.
+
+Lemma star_seq_inv :
+  forall f sp k st1 t st2,
+    star step tge st1 t st2 ->
+    forall s1 s2 e e' m m',
+      st1 = (State f s1 (Kseq s2 k) sp e m) ->
+      st2 = (State f Sskip k sp e' m') ->
+      t = E0 ->
+      exists e0 m0,
+        star step tge (State f s1 (Kseq s2 k) sp e m) 
+             E0 (State f Sskip (Kseq s2 k) sp e0 m0) /\
+        star step tge (State f s2 k sp e0 m0)
+             E0 (State f Sskip k sp e' m').
+Proof.
+  induction 1; intros; subst.
+  inv H0.
+  eapply no_inf_cont in H3. inversion H3.
+  inversion H; subst;
+    try (simpl in H4; subst t2);
+    try solve [exists e; exists m; split;
+                      try solve [eapply star_refl];
+                          assumption];
+    match goal with
+    | [ H : is_call_cont _ |- _ ] =>
+      try solve [simpl in H; inversion H]
+    | [ |- _ ] => idtac
+    end;
+
+  try solve [edestruct IHstar; 
+             try reflexivity;
+             repeat break_exists; repeat break_and;
+             eexists; eexists;
+             split;
+             try solve [eassumption];
+             try solve [ eapply star_left; nil_trace;
+                         eassumption]].
+        
   
+  (* exercise for a rainy day *)
+  (* or maybe sooner *)
+  
+Admitted.
+
+(* There is a middle stage *)
+Lemma plus_seq :
+  forall f s1 s2 k sp e e' m m',
+    plus step tge (State f (s1 ; s2) k sp e m)
+         E0 (State f Sskip k sp e' m') ->
+    exists m0 e0,
+    plus step tge (State f (s1 ; s2) k sp e m)
+         E0 (State f s2 k sp e0 m0) /\
+    star step tge (State f s2 k sp e0 m0)
+         E0 (State f Sskip k sp e' m').
+Proof.
+  intros.
+  inversion H. inversion H0.
+  app star_seq_inv star; subst;  try solve [simpl in *; congruence].
+  simpl in H2. subst t2.
+  eexists; eexists.
+  split.
+  eapply plus_left; nil_trace. eassumption.
+  eapply star_right; nil_trace.
+  
+  apply H1. econstructor; eauto.
+  assumption.
+Qed.
+  
+  
+(* make holes in this better *)
+(* HERE *)
+Lemma SmakeConstr_sim :
+  forall k k' m e e' l vargs id tag sp f,
+    match_cont k k' m ->
+    env_inject e e' tge m ->
+    Emajor.eval_exprlist e l vargs ->
+    Int.unsigned (Int.repr (4 + 4 * Z.of_nat (length l))) = (4 + 4 * Z.of_nat (length l))%Z ->
+    exists st0',
+      plus step tge
+           (State (transf_function f) (transf_stmt (SmakeConstr id tag l)) k' sp e' m)
+           E0 st0' /\
+      match_states
+        (Emajor.State f Emajor.Sskip k (PTree.set id (Constr tag vargs) e)) st0'.
+Proof.
+
+  intros.
+  app SmakeConstr_name match_cont.
+  eexists. split. eassumption.
+  
+  app plus_seq plus.
+  assert ((PTree.set id (Vptr (Mem.nextblock m) Int.zero) e') = x1). admit.
+  subst x1.
+  econstructor; eauto.
+  eapply mem_locked_match_cont. eassumption.
+  eapply store_args_mem_locked; eauto.
+  
+  rewrite PTree.gss. reflexivity.
+  
+  eapply plus_star in H.
+
+
+  (* problems here *)
+  (* can we generalize plus_seq to not just use Sskip *)
+  (* but some arbitrary statement? *)
   
   
 Admitted.
