@@ -52,6 +52,11 @@ Definition genv := Genv.t fundef unit.
 
 (* Begin Dynamic Semantics *)
 
+(* At lower levels, every function will take two pointers as arguments, the closure and the additional argument, and return one pointer *)
+(* Thus, the fn_sig parameter of the function is irrelevant *)
+(* we will always have exactly one signature *)
+Definition EMsig : signature := mksignature (Tint::Tint::nil) (Some Tint) cc_default.
+
 (* local environment for computation *)
 Definition env := PTree.t value.
 
@@ -134,10 +139,10 @@ Fixpoint set_params (vl: list value) (il: list ident) {struct il} : env :=
   end.
 
 
-
 Inductive step : state -> trace -> state -> Prop :=
   | step_assign: forall f lhs rhs k e v,
       eval_expr e rhs v ->
+      e ! lhs = None ->
       step (State f (Sassign lhs rhs) k e)
         E0 (State f Sskip k (PTree.set lhs v e))
   | step_skip_seq: forall f s k e,
@@ -148,9 +153,11 @@ Inductive step : state -> trace -> state -> Prop :=
       eval_expr e efunc (Close fname cargs) -> (* the function itself *)
       Genv.find_symbol ge fname = Some bcode ->
       Genv.find_funct_ptr ge bcode = Some fn ->
+      fn_sig fn = EMsig ->
       step (State f (Scall id efunc earg) k e) E0
            (Callstate fn ((Close fname cargs) :: varg :: nil) (Kcall id f e k))
   | step_return: forall v f id e k,
+      e ! id = None ->
       step (Returnstate v (Kcall id f e k))
         E0 (State f Sskip k (PTree.set id v e))
   | step_into_function: forall f vargs k,
@@ -162,14 +169,17 @@ Inductive step : state -> trace -> state -> Prop :=
         E0 (State f s1 (Kseq s2 k) e)
   | step_make_constr: forall id tag l f k e vargs,
       eval_exprlist e l vargs ->
+      e ! id = None ->
       step (State f (SmakeConstr id tag l) k e)
         E0 (State f Sskip k (PTree.set id (Constr tag vargs) e))
   | step_make_close: forall id fname l f k e vargs,
       eval_exprlist e l vargs ->
+      e ! id = None ->
       step (State f (SmakeClose id fname l) k e)
         E0 (State f Sskip k (PTree.set id (Close fname vargs) e))
   | step_switch:  forall e target tag vargs k cases default targid f,
       eval_expr e target (Constr tag vargs) -> (* eval match target *)
+      e ! targid = None ->
       step (State f (Sswitch targid target cases default) k e)
         E0 (State f (Sexit (switch_target (Int.unsigned tag) default cases)) k (PTree.set targid (Constr tag vargs) e))
   | step_exit_succ: forall f n k e,
