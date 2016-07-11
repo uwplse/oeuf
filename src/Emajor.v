@@ -172,9 +172,11 @@ Inductive step : state -> trace -> state -> Prop :=
       e ! id = None ->
       step (State f (SmakeConstr id tag l) k e)
         E0 (State f Sskip k (PTree.set id (Constr tag vargs) e))
-  | step_make_close: forall id fname l f k e vargs,
+  | step_make_close: forall id fname l f k e vargs bcode fn,
       eval_exprlist e l vargs ->
       e ! id = None ->
+      Genv.find_symbol ge fname = Some bcode ->
+      Genv.find_funct_ptr ge bcode = Some fn ->
       step (State f (SmakeClose id fname l) k e)
         E0 (State f Sskip k (PTree.set id (Close fname vargs) e))
   | step_switch:  forall e target tag vargs k cases default targid f,

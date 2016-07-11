@@ -827,7 +827,7 @@ Proof.
   rewrite Int.repr_unsigned; eauto.
 Qed.
 
-  
+(* key store_args lemma *)  
 Lemma step_store_args :
   forall l ofs m f id k env m0 sp vs hvs,
     env ! id = Some (Vptr (Mem.nextblock m0) Int.zero) ->
@@ -997,6 +997,134 @@ Proof.
 
 Qed.  
 
+Lemma SmakeClose_name :
+  forall k k' m e e' l vargs id fname sp f bcode fn,
+    let sz := (4 + 4 * Z.of_nat (length l))%Z in
+    match_cont k k' m ->
+    env_inject e e' tge m ->
+    Emajor.eval_exprlist e l vargs ->
+    e ! id = None ->
+    Genv.find_symbol tge fname = Some bcode ->
+    Genv.find_funct_ptr tge bcode = Some fn ->
+    (forall x,
+        0 <= x <= Z.of_nat (length l) ->
+        Int.unsigned (Int.repr (4 + 4 * x)) = (4 + 4 * x)%Z) ->
+    exists st st' st'' st''' m' m'' m''' m'''',
+      step tge ((State f ((alloc id sz; store (var id) (Econst (Oaddrsymbol fname Int.zero))); store_args id l 4) k' sp e' m)) E0 st /\
+      step tge st E0 st' /\
+      step tge st' E0 st'' /\
+      step tge st'' E0 (State f (store (var id) (Econst (Oaddrsymbol fname Int.zero))) (Kseq (store_args id l 4) k') sp (PTree.set id (Vptr (Mem.nextblock m) Int.zero) e') m'') /\
+      Mem.alloc m (-4) (4 + 4 * Z.of_nat (length l)) = (m',Mem.nextblock m) /\
+      Mem.store Mint32 m' (Mem.nextblock m) (-4) (Vint (Int.repr sz)) = Some m'' /\
+      step tge (State f (store (var id) (Econst (Oaddrsymbol fname Int.zero))) (Kseq (store_args id l 4) k') sp (PTree.set id (Vptr (Mem.nextblock m) Int.zero) e') m'') E0 st''' /\
+      step tge st''' E0 (State f (store_args id l 4) k' sp (PTree.set id (Vptr (Mem.nextblock m) Int.zero) e') m''') /\
+      Mem.store Mint32 m'' (Mem.nextblock m) 0 (Vptr bcode Int.zero) = Some m''' /\ 
+      star step tge (State f (store_args id l 4) k' sp (PTree.set id (Vptr (Mem.nextblock m) Int.zero) e') m''') E0 (State f Sskip k' sp (PTree.set id (Vptr (Mem.nextblock m) Int.zero) e') m'''') /\
+      mem_locked m m'''' /\
+      Mem.loadv Mint32 m'''' (Vptr (Mem.nextblock m) Int.zero) = Some (Vptr bcode Int.zero) /\
+      exists l',
+        load_all (arg_addrs (Mem.nextblock m) (Int.repr 4) vargs) m'''' = Some l' /\
+        (forall a b, In (a,b) l' -> value_inject tge m'''' a b).
+Proof.
+  intros.
+  
+  (* due to stupid unification issues, get names into space *)
+  destruct (Mem.alloc m (-4) (Int.unsigned (Int.repr (4 + 4 * Z.of_nat (length l))))) eqn:?.
+  app alloc_writable Mem.alloc.
+  app alloc_mem_locked Mem.alloc.
+  app Mem.alloc_result Mem.alloc. subst b.
+  
+  st. ore. (* original malloc length *)
+  eapply writable_storevable in H9. ore. (* tag *)
+  app transf_exprlist_inject_id Emajor.eval_exprlist.
+  app mem_locked_store_nextblock mem_locked.
+  clear H13.
+  unfold Mem.storev in *.
+  app mem_locked_store_nextblock mem_locked.
+  clear H13.
+  
+  edestruct step_store_args. 
+  instantiate (2 := (PTree.set id (Vptr (Mem.nextblock m) Int.zero) e')).
+  instantiate (2 := id).
+  instantiate (1 := m).
+  rewrite PTree.gss. reflexivity.
+  instantiate (2 := 4).
+  eapply writable_head; eauto.
+  instantiate (3 := x0).
+  instantiate (1 := l).
+  instantiate (1 := -4). 
+  rewrite H5 in H10 by omega. assumption. 
+  split; omega.
+
+  eassumption. 
+
+  assumption.
+
+  intros. apply H5. omega.
+
+  eapply Z.divide_refl.
+  eassumption.
+  
+  (* now construct the steps *)
+  do 8 eexists.
+  isplit. econstructor; eauto.
+  isplit. econstructor; eauto.
+  isplit. econstructor; eauto.
+  econstructor; eauto. simpl. reflexivity.
+  econstructor. subst sz.
+  eassumption. eassumption.
+  
+  isplit. econstructor; eauto.
+  isplit. rewrite H5 in H8 by omega.
+  eassumption.
+  isplit.
+  eassumption.
+  isplit.
+  econstructor; eauto.
+  econstructor; eauto.
+  rewrite PTree.gss. reflexivity.
+  econstructor; eauto. simpl. reflexivity.
+  simpl. eassumption.
+  isplit. econstructor; eauto.
+  isplit. rewrite H3 in *.
+  eassumption.
+  repeat break_and. isplit.
+  eassumption.
+  isplit. eassumption.
+
+  isplit.
+  simpl. eapply e0.
+  rewrite Int.unsigned_zero. omega.
+  erewrite Mem.load_store_same; eauto.
+  simpl. reflexivity.
+
+  repeat break_exists.
+  repeat break_and.
+  eexists. isplit.
+  eassumption. solve [eauto].
+  
+  rewrite Int.unsigned_zero.
+  split; try omega.
+  rewrite H5 by omega. omega.
+  rewrite Int.unsigned_zero.
+  simpl. 
+  eapply Z.divide_0_r.
+  rewrite Int.unsigned_zero.
+  unfold size_chunk.
+  rewrite H5 by omega.
+  omega.
+
+  split; try omega.
+  rewrite H5 by omega.
+  omega.
+  simpl. 
+  rewrite <- Z.divide_Zpos_Zneg_r.
+  eapply Z.divide_refl.
+
+  rewrite H5 by omega.
+  unfold size_chunk. omega.
+Qed.
+
 Lemma SmakeConstr_name :
   forall k k' m e e' l vargs id tag sp f,
     let sz := (4 + 4 * Z.of_nat (length l))%Z in
@@ -1123,16 +1251,6 @@ Proof.
 
 Qed.
 
-(* yeah *)
-Lemma no_inf_cont :
-  forall k s,
-    ~ Kseq s k = k.
-Proof.
-  induction k; intros; congruence.
-Qed.
-
-  
-(* make holes in this better *)
 Lemma SmakeConstr_sim :
   forall k k' m e e' l vargs id tag sp f,
     match_cont k k' m ->
@@ -1152,16 +1270,6 @@ Proof.
   intros.
   app SmakeConstr_name match_cont.
 
-  assert (Hlocked : mem_locked m x5). {
-    match goal with
-    | [ H : mem_locked _ _ |- _ ] => clear H
-    end.
-    eapply mem_locked_store_nextblock; eauto.
-    eapply mem_locked_store_nextblock; eauto.
-    eapply alloc_mem_locked; eauto.
-    
-  } idtac.
-  
   eexists. split.
   eapply plus_left; nil_trace. eassumption.
   repeat (eapply star_left; nil_trace; [eassumption | idtac]).
@@ -1171,7 +1279,6 @@ Proof.
   eapply mem_locked_match_cont. eassumption.
   assumption.
   
-
   unfold env_inject. intros.
   destruct (peq id id0). subst id.
   rewrite PTree.gss in *.
@@ -1191,10 +1298,15 @@ Proof.
 Qed.
 
 Lemma SmakeClose_sim :
-  forall k k' m e e' l vargs fname id sp f,
+  forall k k' m e e' l vargs fname id sp f bcode fn,
     match_cont k k' m ->
     env_inject e e' tge m ->
+    e ! id = None ->
     Emajor.eval_exprlist e l vargs ->
+    Genv.find_symbol tge fname = Some bcode ->
+    Genv.find_funct_ptr tge bcode = Some fn ->
+    (forall x : Z,
+        0 <= x <= Z.of_nat (length l) -> Int.unsigned (Int.repr (4 + 4 * x)) = (4 + 4 * x)%Z) ->
     exists st0',
       plus step tge
            (State (transf_function f) (transf_stmt (SmakeClose id fname l)) k' sp e' m)
@@ -1202,7 +1314,36 @@ Lemma SmakeClose_sim :
       match_states
         (Emajor.State f Emajor.Sskip k (PTree.set id (Close fname vargs) e)) st0'.
 Proof.
-Admitted.
+
+  intros.
+  app SmakeClose_name match_cont.
+
+  eexists. split.
+  eapply plus_left; nil_trace. eassumption.
+  repeat (eapply star_left; nil_trace; [eassumption | idtac]).
+  eassumption.
+
+  econstructor; eauto.
+  eapply mem_locked_match_cont. eassumption.
+  assumption.
+  
+  unfold env_inject. intros.
+  destruct (peq id id0). subst id.
+  rewrite PTree.gss in *.
+  eexists. split. reflexivity.
+  match goal with
+  | [ H : Some _ = Some _ |- _ ] => inversion H
+  end.
+  subst v. econstructor; eauto.
+  
+  rewrite PTree.gso in * by congruence.
+  unfold env_inject in *.
+  apply H0 in H20. break_exists.
+  break_and.
+
+  eexists. split; eauto.
+  eapply mem_locked_value_inject; try eassumption.
+Qed.  
 
 (* This is sorta what we want *)
 Theorem step_sim_no_trace :
@@ -1266,7 +1407,12 @@ Proof.
     
   (* make close *)
   (* same as make constr *)
-  + eapply SmakeClose_sim; eauto.
+  + app symbols_transf Genv.find_symbol.
+    app functions_transf Genv.find_funct_ptr.
+    eapply SmakeClose_sim; eauto.
+
+  (* need fact that lists in program aren't too long *)
+    admit.
 
   (* switch *)
   + app transf_expr_inject Emajor.eval_expr.
