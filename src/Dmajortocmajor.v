@@ -105,6 +105,14 @@ Let ge := Genv.globalenv prog.
 Let tge := Genv.globalenv tprog.
 Hypothesis TRANSF : transf_prog prog = OK tprog.
 Hypothesis NOREP : list_norepet (prog_defs_names prog).
+Hypothesis NEW_GLOBS_NOT_PUBLIC :
+  forall id,
+    In id
+       (map fst
+            (new_globs (Pos.succ (Pos.succ (largest_id_prog prog)))
+                       (Pos.succ (largest_id_prog prog)))) ->
+   ~ In id (Genv.genv_public tge).
+
 
 Definition malloc_id := Pos.succ (largest_id_prog prog).
 
@@ -305,7 +313,7 @@ Proof.
   erewrite Genv.find_symbol_match; eauto; try eapply match_prog.
   intro.
   app find_symbol_smaller Genv.find_symbol.
-  app new_globs_id In.
+  app new_globs_id (In id).
   unfold Pos.le in H1.
   app Pos.compare_ngt_iff Pos.compare. apply H1.
   rewrite Pos.lt_succ_r. assumption.
@@ -447,7 +455,20 @@ Lemma nothing_public_added :
     Genv.find_symbol tge id = Some x ->
     ~ In id (Genv.genv_public tge).
 Proof.
-Admitted.
+  name match_prog MP.
+  intros.
+
+  destruct (in_dec ident_eq id (map fst ((new_globs (Pos.succ (Pos.succ (largest_id_prog prog)))
+            (Pos.succ (largest_id_prog prog)))))).
+
+  Focus 2.
+  unfold ge in H. unfold tge in H0.
+  eapply Genv.find_symbol_match in MP.
+  rewrite MP in H0. congruence.
+  eassumption.
+
+  eauto.
+Qed.
 
 Lemma public_symbol_transf :
   forall id,
@@ -510,13 +531,38 @@ Proof.
   simpl. eapply env_lessdef_set; eauto.
 Qed.
 
+Lemma norepet_tprog :
+  list_norepet (prog_defs_names tprog).
+Proof.
+  unfold transf_prog in *.
+  unfold transform_partial_augment_program in *.
+  eapply bind_inversion in TRANSF.
+  destruct TRANSF.
+  clear TRANSF.
+  break_and. inv H0.
+  clear H0.
+  unfold prog_defs_names.
+  simpl.
+
+Admitted.
+
 Lemma find_malloc_symbol :
   exists b,
     Genv.find_symbol tge malloc_id = Some b /\
     Genv.find_funct_ptr tge b = Some (External (EF_malloc)).
 Proof.
-  (* need this *)
-Admitted.
+  assert (In (malloc_id,Gfun (External EF_malloc)) (prog_defs tprog)).
+  unfold transf_prog in TRANSF.
+  unfold transform_partial_augment_program in *.
+  eapply bind_inversion in TRANSF. destruct TRANSF. clear TRANSF.
+  break_and.
+  inv H0. simpl.
+  rewrite in_app. right.
+  simpl. do 13 right.
+  left. reflexivity.
+  apply Genv.find_funct_ptr_exists in H; eauto.
+  eapply norepet_tprog.
+Qed.
 
 Lemma env_lessdef_set_params :
   forall ids vs vs',
