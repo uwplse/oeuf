@@ -325,7 +325,6 @@ Proof.
 
 Qed.      
 
-Check transf_expr_inject_id.
 
 Lemma transf_exprlist_inject_id :
   forall Ee De m sp id,
@@ -1496,7 +1495,7 @@ Proof.
 
 Admitted.
 
-(* Easier to prove originally with no trace *)
+(* Easier to prove originally with no trace, now just thin wrapper *)
 Lemma step_sim :
   forall st st',
     match_states st st' ->
@@ -1527,3 +1526,8 @@ Qed.
 (* How do we compose a forward simulation with what we currently have? *)
 
 End PRESERVATION.
+
+(* TODO: *)
+(* 1. We need a way to refer to parts of the original program, and show that anything reached in execution is part of the original prog *)
+(* 2. We need a way to prove properties about the program text, and show they correspond to properties about execution *)
+(* Once we have these, we can dispatch the admits *)
