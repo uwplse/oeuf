@@ -676,6 +676,46 @@ Proof.
     simpl. assumption.
 Qed.    
 
+Lemma alloc_drop_perm :
+  forall m lo hi m' b,
+    Mem.alloc m lo hi = (m',b) ->
+    exists m'',
+      Mem.drop_perm m' b lo hi Nonempty = Some m''.
+Proof.
+  intros.
+  unfold Mem.drop_perm.
+  break_match; try solve [eauto].
+  exfalso. apply n. unfold Mem.range_perm. intros.
+  app Mem.perm_alloc_2 Mem.alloc.
+Qed.  
+
+Lemma alloc_global_succeeds :
+  forall {F V : Type} (ge : Genv.t F V) i g m,
+  exists m',
+    Genv.alloc_global ge m (i,g) = Some m'.
+Proof.
+  intros. destruct g.
+  simpl;
+    break_let.
+  eapply alloc_drop_perm; eauto.
+  simpl.
+  break_let.
+  (* This is true but a pain in the ass *)
+Admitted.
+
+Lemma alloc_globals_succeeds :
+  forall {F V : Type} (ge : Genv.t F V) l m,
+    exists m',
+      Genv.alloc_globals ge m l = Some m'.
+Proof.
+  induction l; intros.
+  simpl. eauto.
+  simpl. destruct a.
+  edestruct (@alloc_global_succeeds F V).
+  rewrite H.
+  eapply IHl.
+Qed.
+
 Lemma init_mem_transf :
   forall m,
     Genv.init_mem prog = Some m ->
@@ -683,11 +723,16 @@ Lemma init_mem_transf :
       Genv.init_mem tprog = Some m' /\ Mem.extends m m'.
 Proof.
   intros.
-  eapply Genv.init_mem_transf in H.
-  unfold transf_prog in TRANSF. rewrite TRANSF in H.
-  exists m. split; eauto.
-  eapply Mem.extends_refl.
-Qed.
+  unfold transf_prog in TRANSF.
+  eapply Genv.init_mem_transf_augment in H; eauto.
+  rewrite H.
+  edestruct (@alloc_globals_succeeds Cmajor.fundef unit).
+  rewrite H0. eexists. split. reflexivity.
+  clear H.
+
+  admit. (* adding more globals extends the mem *)
+  admit. (* no name collisions to new globals *)
+Admitted.
 
 Lemma match_final_state :
  forall (s1 : Smallstep.state (semantics prog))
@@ -716,8 +761,11 @@ Proof.
   eexists; split; econstructor; eauto;
     simpl; try solve [econstructor; eauto].
   erewrite find_symbol_transf; eauto.
-  rewrite <- TRANSF. simpl. eauto.
-  eapply find_funct_ptr_transf; eauto.
+  unfold transf_prog in TRANSF.
+  erewrite transform_partial_augment_program_main; eauto.
+  app find_funct_ptr_transf Genv.find_funct_ptr.
+  unfold tge in *. find_rewrite.
+  unfold transf_fundef in *. congruence.
   eauto.
 Qed.  
 
@@ -726,11 +774,14 @@ End PRESERVATION.
 
 Theorem transf_program_correct:
   forall prog tprog,
-    transf_prog prog = tprog ->
+    list_norepet (prog_defs_names prog) ->
+    (forall id : ident, In id (map fst (new_globs (Pos.succ (Pos.succ (largest_id_prog prog))) (Pos.succ (largest_id_prog prog)))) ->
+                        ~ In id (Genv.genv_public (Genv.globalenv tprog))) ->
+    transf_prog prog = OK tprog ->
     forward_simulation (Dmajor.semantics prog) (Cmajor.semantics tprog).
 Proof.
   intros.
-  eapply forward_simulation_step with (match_states := match_states).
+  eapply forward_simulation_plus.
   eapply public_symbol_transf; eauto.
   eapply initial_states_match; eauto.
   eapply match_final_state; eauto.
