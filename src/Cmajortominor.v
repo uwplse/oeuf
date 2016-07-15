@@ -62,7 +62,6 @@ Definition transf_prog (prog : Cmajor.program) : Cminor.program :=
   AST.transform_program transf_fundef prog.
 
 
-(*
 Section PRESERVATION.
 
 Variable prog: Cmajor.program.
@@ -365,14 +364,6 @@ Proof.
     eapply find_funct_transf; eauto.
     eapply funsig_transf; eauto.
     econstructor; eauto.
-  * (* builtin *)
-    eapply eval_exprlist_transf in H; eauto.
-    break_exists; break_and.
-    eapply external_call_transf in H0; eauto.
-    break_exists; break_and.
-    eexists; split; try econstructor; eauto; simpl.
-    destruct optid. simpl. eapply env_lessdef_set; eauto.
-    simpl. assumption.
   * (* seq *)
     simpl.
     eexists; split; try econstructor; eauto.
@@ -479,5 +470,3 @@ Proof.
 Qed.
 
 
-
-*)
