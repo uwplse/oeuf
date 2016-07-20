@@ -129,6 +129,8 @@ Definition compile_program (tp : T.expr * T.env) : E.expr * E.env :=
     (e, old ++ new).
 
 
+End compile.
+
 Eval compute in compile_program (T.add_reflect, T.add_env).
 
 Lemma compile_test : compile_program (T.add_reflect, T.add_env) = (E.add_reflect, E.add_env).
