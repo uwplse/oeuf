@@ -5,10 +5,10 @@ Require Import Common Monads.
 Require Import StuartTact.
 Require Import HighValues.
 Require Import ListLemmas.
-Require Flattened Emajor.
+Require Flattened Fmajor.
 
 Module F := Flattened.
-Module E := Emajor.
+Module E := Fmajor.
 
 Fixpoint compile_expr (e : F.expr) : E.expr :=
     match e with

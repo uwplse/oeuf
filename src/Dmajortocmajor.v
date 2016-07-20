@@ -9,12 +9,16 @@ Require Import compcert.common.Memory.
 Require Import compcert.common.Events.
 Require Import compcert.common.Switch.
 Require Import compcert.common.Smallstep.
+Require Import compcert.common.Errors.
+Require compcert.backend.SelectLong.
 
 Require Import Cmajor.
 Require Import Dmajor.
 
 Require Import StructTact.StructTactics.
 Require Import StructTact.Util.
+
+Require Import EricTact.
 
 Definition transf_const (c : Dmajor.constant) : Cmajor.constant :=
   match c with
@@ -54,25 +58,76 @@ Definition transf_function (alloc : ident) (f : Dmajor.function) : Cmajor.functi
                     (fn_stackspace f)
                     (transf_stmt alloc (fn_body f)).
 
-Definition transf_fundef (alloc : ident) (fd : Dmajor.fundef) : Cmajor.fundef :=
-  Internal (transf_function alloc fd).
+Definition transf_fundef (alloc : ident) (fd : Dmajor.fundef) : res Cmajor.fundef :=
+  OK (Internal (transf_function alloc fd)).
 
-Definition add_malloc_prog (id : ident) (prog : Cmajor.program) : Cmajor.program :=
-  mkprogram ((prog_defs prog) ++ (id,Gfun (External EF_malloc)) :: nil) (prog_public prog) (prog_main prog).
 
-Definition transf_prog (prog : Dmajor.program) : Cmajor.program :=
-  (* first make an id for malloc *)
-  let malloc_id := 5013%positive(* Pos.of_nat (length (prog_defs prog))*) in
-  add_malloc_prog malloc_id (AST.transform_program (transf_fundef malloc_id) prog).
+Definition new_globs (bump : ident) (alloc : ident) : list (ident * globdef Cmajor.fundef unit) :=
+  ((bump, Gfun (External (EF_external "__i64_dtos" SelectLong.sig_f_l)))::
+  (bump+1, Gfun (External (EF_external "__i64_dtou" SelectLong.sig_f_l)))::
+  (bump+2, Gfun (External (EF_external "__i64_stod" SelectLong.sig_l_f)))::
+  (bump+3, Gfun (External (EF_external "__i64_utod" SelectLong.sig_l_f)))::
+  (bump+4, Gfun (External (EF_external "__i64_stof" SelectLong.sig_l_s)))::
+  (bump+5, Gfun (External (EF_external "__i64_utof" SelectLong.sig_l_s)))::
+  (bump+6, Gfun (External (EF_external "__i64_sdiv" SelectLong.sig_ll_l)))::
+  (bump+7, Gfun (External (EF_external "__i64_udiv" SelectLong.sig_ll_l)))::
+  (bump+8, Gfun (External (EF_external "__i64_smod" SelectLong.sig_ll_l)))::
+  (bump+9, Gfun (External (EF_external "__i64_umod" SelectLong.sig_ll_l)))::
+  (bump+10, Gfun (External (EF_external "__i64_shl" SelectLong.sig_li_l)))::
+  (bump+11, Gfun (External (EF_external "__i64_shr" SelectLong.sig_li_l)))::
+  (bump+12, Gfun (External (EF_external "__i64_sar" SelectLong.sig_li_l)))::
+  (alloc, Gfun (External EF_malloc)) :: nil)%positive.
+                                                           
 
-(*
+Fixpoint largest_id (x : ident) (l : list ident) : ident :=
+  match l with
+  | nil => x
+  | f :: r =>
+    if plt x f then largest_id f r else largest_id x r
+  end.
+
+Definition largest_id_prog (prog : Dmajor.program) : ident :=
+  largest_id (1%positive) (map fst (prog_defs prog)).
+
+
+Definition transf_prog (prog : Dmajor.program) : res Cmajor.program :=
+  let malloc_id := Pos.succ (largest_id_prog prog) in
+  let bump := Pos.succ malloc_id in
+  transform_partial_augment_program (transf_fundef malloc_id) (fun x => OK x)
+                                    (new_globs bump malloc_id) (prog_main prog) prog.
+
+
 Section PRESERVATION.
 
 Variable prog: Dmajor.program.
 Variable tprog: Cmajor.program.
 Let ge := Genv.globalenv prog.
 Let tge := Genv.globalenv tprog.
-Hypothesis TRANSF : transf_prog prog = tprog.
+Hypothesis TRANSF : transf_prog prog = OK tprog.
+Hypothesis NOREP : list_norepet (prog_defs_names prog).
+Hypothesis NEW_GLOBS_NOT_PUBLIC :
+  forall id,
+    In id
+       (map fst
+            (new_globs (Pos.succ (Pos.succ (largest_id_prog prog)))
+                       (Pos.succ (largest_id_prog prog)))) ->
+   ~ In id (Genv.genv_public tge).
+
+
+Definition malloc_id := Pos.succ (largest_id_prog prog).
+
+Lemma match_prog :
+  match_program
+             (fun (fd : fundef) (tfd : Cmajor.fundef) =>
+              transf_fundef (Pos.succ (largest_id_prog prog)) fd = OK tfd)
+             (fun info tinfo : unit => OK info = OK tinfo)
+             (new_globs (Pos.succ (Pos.succ (largest_id_prog prog)))
+                (Pos.succ (largest_id_prog prog))) (prog_main prog) prog tprog.  
+Proof.
+  intros.
+  unfold transf_prog in TRANSF.
+  app transform_partial_augment_program_match transform_partial_augment_program.
+Qed.
 
 (* extensionally equal environments *)
 Definition env_lessdef (e1 e2: env) : Prop :=
@@ -85,28 +140,28 @@ Inductive match_cont: Dmajor.cont -> Cmajor.cont -> Prop :=
       forall k k',
         match_cont k k' ->
         match_cont (Dmajor.Kblock k) (Cmajor.Kblock k')
-  | match_cont_seq: forall s s' id k k',
-      transf_stmt id s = s' ->
+  | match_cont_seq: forall s s' k k',
+      transf_stmt malloc_id s = s' ->
       match_cont k k' ->
       match_cont (Dmajor.Kseq s k) (Cmajor.Kseq s' k')
-  | match_cont_call: forall alloc id f sp e k f' e' k',
-      transf_function alloc f = f' ->
+  | match_cont_call: forall id f sp e k f' e' k',
+      transf_function malloc_id f = f' ->
       match_cont k k' ->
       env_lessdef e e' ->
       match_cont (Dmajor.Kcall id f sp e k) (Cmajor.Kcall id f' sp e' k').
 
 Inductive match_states : Dmajor.state -> Cmajor.state -> Prop :=
-  | match_state: forall f f' s k s' k' sp e m e' m' alloc
-        (TF: transf_function alloc f = f')
-        (TS: transf_stmt alloc s = s')
+  | match_state: forall f f' s k s' k' sp e m e' m'
+        (TF: transf_function malloc_id f = f')
+        (TS: transf_stmt malloc_id s = s')
         (MC: match_cont k k')
         (LD: env_lessdef e e')
         (ME: Mem.extends m m'),
       match_states
         (Dmajor.State f s k sp e m)
         (Cmajor.State f' s' k' sp e' m')
-  | match_callstate: forall f f' args args' k k' m m' alloc
-        (TF: transf_fundef alloc f = f')
+  | match_callstate: forall f f' args args' k k' m m'
+        (TF: transf_fundef malloc_id f = OK f')
         (MC: match_cont k k')
         (LD: Val.lessdef_list args args')
         (ME: Mem.extends m m'),
@@ -142,23 +197,141 @@ Ltac invp pat :=
   | [ H : context[pat] |- _ ] => inversion H
   end.
 
+Ltac inv_false :=
+  match goal with
+  | [ H : False |- _ ] => solve [inversion H]
+  end.
+
+Ltac break_or :=
+  match goal with
+  | [ H : _ \/ _ |- _ ] => destruct H
+  end.
+
+Lemma largest_id_base :
+  forall l base,
+    (base <= (largest_id base l))%positive.
+Proof.
+  induction l; intros.
+  simpl. eapply Ple_refl.
+  simpl. break_match. specialize (IHl a).
+  eapply Ple_trans.
+  eapply Plt_Ple. eauto.
+  eapply IHl.
+  eapply IHl.
+Qed.
+
+Ltac use H :=
+  let HH := fresh "H" in
+  let H2 := fresh "H" in
+  remember H as H2 eqn:HH;
+  clear HH.
+
+Lemma not_Plt_Ple :
+  forall a b,
+    ~ Plt a b ->
+    Ple b a.
+Proof.
+  intros.
+  unfold Ple. unfold Plt in *.
+  unfold Pos.le. unfold Pos.lt in *.
+  intro. apply H.
+  apply Pos.compare_gt_iff in H0. assumption.
+Qed.
+
+Lemma largest_id_in :
+  forall l (id : ident) base,
+    In id l ->
+    (id <= largest_id base l)%positive.
+Proof.
+  induction l; intros.
+  simpl in H. inv_false.
+  simpl in H. break_or. subst a.
+  simpl. break_match.
+  eapply largest_id_base.
+  use (largest_id_base l base).
+  assert (Ple id base) by (eapply not_Plt_Ple; eauto).
+  eapply Ple_trans; eauto.
+  simpl. break_match; eapply IHl; eauto.
+Qed.
+
+Lemma find_symbol_smaller :
+  forall id x,
+    Genv.find_symbol ge id = Some x ->
+    (id <= largest_id_prog prog)%positive.
+Proof.
+  intros.
+  destruct prog.
+  unfold largest_id_prog.
+  simpl.
+  app Genv.find_symbol_inversion Genv.find_symbol.
+  unfold prog_defs_names in H. simpl in H.
+  eapply largest_id_in; eauto.
+Qed.
+
+Lemma id_larger_no_symbol :
+  forall id,
+    (id > largest_id_prog prog)%positive ->
+    Genv.find_symbol ge id = None.
+Proof.
+  intros.
+  destruct (Genv.find_symbol ge id) eqn:?; eauto.
+  app find_symbol_smaller Genv.find_symbol.
+  congruence.
+Qed.
+
+Lemma new_globs_id :
+  forall id bound,
+    In id (map fst (new_globs (Pos.succ bound) bound)) ->
+    (bound <= id)%positive.
+Proof.
+  intros.
+  unfold new_globs in *.
+  simpl in *.
+  repeat break_or; try inv_false; subst; simpl;
+    try eapply Ple_refl;
+
+  match goal with
+  | [ |- (_ <= ?Z + ?Y)%positive ] =>
+    use (Pos.lt_add_diag_r Z Y)
+  | [ |- _ ] => idtac
+  end;
+
+  try (app Plt_Ple Pos.lt);
+  try eapply Ple_trans; eauto;
+    try eapply Ple_succ.
+  eapply Ple_refl.
+Qed.  
 
 Lemma find_symbol_transf :
-  forall id,
-    Genv.find_symbol tge id = Genv.find_symbol ge id.
+  forall id x,
+    Genv.find_symbol ge id = Some x ->
+    Genv.find_symbol tge id = Some x.
 Proof.
-  intros. unfold tge.
-  unfold ge. rewrite <- TRANSF.
-  try apply Genv.find_symbol_transf.
-Admitted.
+  intros.
+  app find_symbol_smaller Genv.find_symbol.
+  unfold ge,tge in *.
+  erewrite Genv.find_symbol_match; eauto; try eapply match_prog.
+  intro.
+  app find_symbol_smaller Genv.find_symbol.
+  app new_globs_id (In id).
+  unfold Pos.le in H1.
+  app Pos.compare_ngt_iff Pos.compare. apply H1.
+  rewrite Pos.lt_succ_r. assumption.
+Qed.  
 
-Lemma eval_const_transf :
+
+Lemma eval_const_transf_lessdef :
   forall sp c v,
     Dmajor.eval_constant ge sp c = Some v ->
-    Cmajor.eval_constant tge sp (transf_const c) = Some v.
+    exists v',
+      Cmajor.eval_constant tge sp (transf_const c) = Some v' /\ Val.lessdef v v'.
 Proof.
-  intros. destruct c; simpl in *; auto.
-  erewrite find_symbol_transf; eauto.
+  intros.
+  destruct c; simpl in *; eauto.
+  break_match_hyp. app find_symbol_transf Genv.find_symbol.
+  collapse_match. eauto.
+  break_match; eauto.
+  inv H. eauto.
 Qed.
 
 Lemma eval_expr_transf :
@@ -178,8 +351,10 @@ Proof.
     split. econstructor.
     eassumption. assumption.
   * inversion H.
-    eapply eval_const_transf in H3.
-    eexists; split; simpl; econstructor; eauto.
+    app eval_const_transf_lessdef eval_constant.
+    exists x. split; eauto. simpl.
+    econstructor; eauto.
+    
   * inv H.
     eapply IHa1 in H4; eauto.
     eapply IHa2 in H6; eauto.
@@ -234,77 +409,107 @@ Proof.
   eexists; split; eauto.
 Qed.
 
-Lemma find_funct_transf :
-  forall vf vf',
-    Val.lessdef vf vf' ->
-    forall fd alloc,
-      Genv.find_funct ge vf = Some fd ->
-      Genv.find_funct tge vf' = Some (transf_fundef alloc fd).
-Proof.
-  intros.
-  remember H0 as H1. clear HeqH1.
-  eapply Genv.find_funct_transf in H0; eauto.
-  instantiate (1 := transf_fundef (Pos.of_nat (length (prog_defs prog)))) in H0.
-  inv H. unfold tge. 
-  unfold transf_prog.
-
-Admitted.
-(* 
 Lemma find_funct_ptr_transf :
   forall b f,
     Genv.find_funct_ptr ge b = Some f ->
-    Genv.find_funct_ptr tge b = Some (transf_fundef f).    
+    exists f',
+      transf_fundef malloc_id f = OK f' /\
+      Genv.find_funct_ptr tge b = Some f'.
 Proof.
   intros.
-  unfold tge. rewrite <- TRANSF.
-  eapply Genv.find_funct_ptr_transf; eauto.
+  app Genv.find_funct_ptr_transf_augment Genv.find_funct_ptr.
+  eauto.
+Qed.
+
+Lemma find_funct_transf :
+  forall vf vf',
+    Val.lessdef vf vf' ->
+    forall fd,
+      Genv.find_funct ge vf = Some fd ->
+      exists fd',
+        transf_fundef malloc_id fd = OK fd' /\        
+        Genv.find_funct tge vf' = Some fd'.
+Proof.
+  intros.
+  unfold Genv.find_funct in *.
+  repeat (break_match_hyp; try congruence).
+  subst vf. subst i. inversion H.
+  subst v.
+  break_match; try congruence.
+  eapply find_funct_ptr_transf; eauto.
 Qed.
   
 Lemma funsig_transf :
-  forall fd,
-    Cmajor.funsig (transf_fundef fd) = funsig fd.
+  forall fd fd',
+    transf_fundef malloc_id fd = OK fd' ->
+    Cmajor.funsig fd' = funsig fd.
 Proof.
-  intros. destruct fd; simpl; reflexivity.
+  intros. unfold transf_fundef in *.
+  destruct fd; simpl in H; inv H;
+  simpl. reflexivity.
 Qed.
 
+Lemma nothing_public_added :
+  forall id x,
+    Genv.find_symbol ge id = None ->
+    Genv.find_symbol tge id = Some x ->
+    ~ In id (Genv.genv_public tge).
+Proof.
+  name match_prog MP.
+  intros.
+
+  destruct (in_dec ident_eq id (map fst ((new_globs (Pos.succ (Pos.succ (largest_id_prog prog)))
+            (Pos.succ (largest_id_prog prog)))))).
+
+  Focus 2.
+  unfold ge in H. unfold tge in H0.
+  eapply Genv.find_symbol_match in MP.
+  rewrite MP in H0. congruence.
+  eassumption.
+
+  eauto.
+Qed.
 
 Lemma public_symbol_transf :
   forall id,
     Genv.public_symbol tge id = Genv.public_symbol ge id.
 Proof.
-  intros. unfold tge.
-  unfold ge. rewrite <- TRANSF.
-  apply Genv.public_symbol_transf.
-Qed.
+  intros.
+  unfold tge. unfold ge.
+  unfold Genv.public_symbol.
+  symmetry. break_match.
+  app find_symbol_transf Genv.find_symbol.
+  unfold tge in *. collapse_match.
+  repeat rewrite Genv.globalenv_public.
+  unfold transf_prog in *.
+  unfold transform_partial_augment_program in *.
+  eapply bind_inversion in TRANSF.
+  destruct TRANSF. destruct H0.
+  inversion H1. simpl. reflexivity.
 
-Lemma find_var_info_transf :
-  forall b,
-    Genv.find_var_info tge b = Genv.find_var_info ge b.
-Proof.
-  intros. unfold tge.
-  unfold ge. rewrite <- TRANSF.
-  apply Genv.find_var_info_transf.
+  break_match; eauto.
+  eapply nothing_public_added in Heqo; eauto.
+  destruct (in_dec ident_eq id (Genv.genv_public (Genv.globalenv tprog))); simpl; try congruence.
+  unfold tge in *. apply Heqo in i. inv_false.
 Qed.
 
 Lemma external_call_transf :
-  forall ef vargs m t vres m',
-    external_call ef ge vargs m t vres m' ->
-    forall m0 vargs0,
-      Val.lessdef_list vargs vargs0 ->
+  forall v m t vres m',
+    external_call EF_malloc ge (v :: nil) m t vres m' ->
+    forall m0 v0,
+      Val.lessdef v v0 ->
       Mem.extends m m0 ->
       exists vres0 m0',
-        external_call ef tge vargs0 m0 t vres0 m0' /\ Mem.extends m' m0' /\ Val.lessdef vres vres0.
+        external_call EF_malloc tge (v0 :: nil) m0 t vres0 m0' /\ Mem.extends m' m0' /\ Val.lessdef vres vres0.
 Proof.
   intros.
-  eapply external_call_mem_extends in H1; eauto.
-  repeat break_exists; repeat break_and.
-  exists x. exists x0.
-  split.
-  eapply external_call_symbols_preserved; eauto.
-  eapply find_symbol_transf.
-  eapply public_symbol_transf.
-  eapply find_var_info_transf.
-  split; assumption.
+  simpl in H. inv H.
+  inv H0.
+  app Mem.alloc_extends Mem.alloc; try eapply Z.le_refl.
+  app Mem.store_within_extends Mem.store.
+  eexists. eexists. split.
+  econstructor; eauto.
+  split; eauto.
 Qed.
 
 Lemma match_call_cont :
@@ -326,6 +531,39 @@ Proof.
   simpl. eapply env_lessdef_set; eauto.
 Qed.
 
+Lemma norepet_tprog :
+  list_norepet (prog_defs_names tprog).
+Proof.
+  unfold transf_prog in *.
+  unfold transform_partial_augment_program in *.
+  eapply bind_inversion in TRANSF.
+  destruct TRANSF.
+  clear TRANSF.
+  break_and. inv H0.
+  clear H0.
+  unfold prog_defs_names.
+  simpl.
+
+Admitted.
+
+Lemma find_malloc_symbol :
+  exists b,
+    Genv.find_symbol tge malloc_id = Some b /\
+    Genv.find_funct_ptr tge b = Some (External (EF_malloc)).
+Proof.
+  assert (In (malloc_id,Gfun (External EF_malloc)) (prog_defs tprog)).
+  unfold transf_prog in TRANSF.
+  unfold transform_partial_augment_program in *.
+  eapply bind_inversion in TRANSF. destruct TRANSF. clear TRANSF.
+  break_and.
+  inv H0. simpl.
+  rewrite in_app. right.
+  simpl. do 13 right.
+  left. reflexivity.
+  apply Genv.find_funct_ptr_exists in H; eauto.
+  eapply norepet_tprog.
+Qed.
+
 Lemma env_lessdef_set_params :
   forall ids vs vs',
     Val.lessdef_list vs vs' ->
@@ -340,20 +578,21 @@ Qed.
 Lemma single_step_correct:
   forall S1 t S2, Dmajor.step ge S1 t S2 ->
   forall T1, match_states S1 T1 ->
-   (exists T2, Cmajor.step tge T1 t T2 /\ match_states S2 T2).
+   (exists T2, plus Cmajor.step tge T1 t T2 /\ match_states S2 T2).
 Proof.
   induction 1; intros; invp match_states;
-    try solve [simpl; inv MC; eexists; split; try econstructor; eauto];
+    try solve [simpl; inv MC; eexists; split; try eapply plus_one; try econstructor; eauto];
     remember tprog; subst.
   * (* return *)
     eapply Mem.free_parallel_extends in ME; eauto.
     break_exists. break_and.
-    eexists; split; try econstructor; eauto.
+    eexists; split;
+      try eapply plus_one; econstructor; eauto.
     eapply is_call_cont_transf; eauto.
   * (* assign *)
     eapply eval_expr_transf in H; eauto.
     break_exists. break_and.
-    eexists; split; try econstructor; eauto.
+    eexists; split; try eapply plus_one; try econstructor; eauto.
     eapply env_lessdef_set; eauto.
   * (* store *)
     eapply eval_expr_transf in H; eauto.
@@ -361,63 +600,121 @@ Proof.
     repeat break_exists; repeat break_and.
     eapply Mem.storev_extends in ME; eauto.
     repeat break_exists; repeat break_and.
-    eexists; split; try econstructor; eauto.
+    eexists; split; try eapply plus_one; try econstructor; eauto.
   * (* call *)
     eapply eval_expr_transf in H; eauto.
     eapply eval_exprlist_transf in H0; eauto.
-    repeat break_exists; repeat break_and.
-    eexists; split; try econstructor; eauto; simpl.
-    eapply find_funct_transf; eauto.
+    repeat break_exists. repeat break_and.
+    app find_funct_transf Genv.find_funct.
+    eexists; split; try eapply plus_one; try econstructor; eauto; simpl.
     eapply funsig_transf; eauto.
     econstructor; eauto.
   * (* builtin *)
+    assert (t = E0) by (inv H0; eauto). subst t.
     eapply eval_expr_transf in H; eauto.
     break_exists; break_and.
     eapply external_call_transf in H0; eauto.
     break_exists; break_and.
-    eexists; split; try econstructor; eauto; simpl.
-    econstructor; eauto. econstructor.
+    name find_malloc_symbol Hmalloc.
+    break_exists; break_and.
+    eexists; split. eapply plus_left. econstructor; eauto.
+    econstructor; eauto. simpl.
+    collapse_match. reflexivity.
+    econstructor; eauto. econstructor; eauto.
+    simpl. find_rewrite. break_match; try congruence.
+    reflexivity.
+    reflexivity.
+    eapply star_left; nil_trace; try reflexivity.
+    econstructor; eauto.
+    eapply star_left; nil_trace; try reflexivity.
+    econstructor; eauto.
+    eapply star_refl.
+    reflexivity.
+    econstructor; eauto.
     eapply env_lessdef_set; eauto.
   * (* seq *)
     simpl.
-    eexists; split; try econstructor; eauto.
+    eexists; split; try eapply plus_one; try econstructor; eauto.
     econstructor; eauto.
   * (* block *)
     simpl in *.
-    eexists; split; try econstructor; eauto.
+    eexists; split; try eapply plus_one; try econstructor; eauto.
     econstructor; eauto.
   * (* switch *)
     simpl.
     eapply eval_expr_transf in H; eauto.
     break_exists; break_and.
-    eexists; split; try econstructor; eauto; simpl; eauto.
+    eexists; split; try eapply plus_one; try econstructor; eauto; simpl; eauto.
     inv H0; inv H2; econstructor; eauto.
   * (* return *)
     simpl.
     eapply Mem.free_parallel_extends in H; eauto.
     break_exists; break_and.
-    eexists; split; try econstructor; eauto; simpl; eauto.
+    eexists; split; try eapply plus_one; try econstructor; eauto; simpl; eauto.
     eapply match_call_cont; eauto.
   * (* return *)
     eapply eval_expr_transf in H; eauto.
     eapply Mem.free_parallel_extends in H0; eauto.
     repeat (break_exists; break_and).
-    eexists; split; try econstructor; eauto; simpl; eauto.
+    eexists; split; try eapply plus_one; try econstructor; eauto; simpl; eauto.
     eapply match_call_cont; eauto.
   * (* call internal *)
+    unfold transf_fundef in TF. inv TF.
     eapply Mem.alloc_extends in H; eauto.
     break_exists. break_and.
-    eexists; split; try econstructor; eauto; simpl; eauto.
+    eexists; split; try eapply plus_one; nil_trace; try reflexivity;
+    econstructor; eauto.
     eapply env_lessdef_set_locals.
     eapply env_lessdef_set_params; eauto.
     omega.
     simpl. omega.
   * (* return *)
     inversion MC. remember tprog. subst.
-    eexists; split; try econstructor; eauto; simpl; eauto.
-    destruct optid. simpl. eapply env_lessdef_set; eauto.
+    eexists; split; try eapply plus_one; try econstructor; eauto; simpl; eauto.
+    destruct optid. simpl.
+    eapply env_lessdef_set; eauto.
     simpl. assumption.
 Qed.    
+
+Lemma alloc_drop_perm :
+  forall m lo hi m' b,
+    Mem.alloc m lo hi = (m',b) ->
+    exists m'',
+      Mem.drop_perm m' b lo hi Nonempty = Some m''.
+Proof.
+  intros.
+  unfold Mem.drop_perm.
+  break_match; try solve [eauto].
+  exfalso. apply n. unfold Mem.range_perm. intros.
+  app Mem.perm_alloc_2 Mem.alloc.
+Qed.  
+
+Lemma alloc_global_succeeds :
+  forall {F V : Type} (ge : Genv.t F V) i g m,
+  exists m',
+    Genv.alloc_global ge m (i,g) = Some m'.
+Proof.
+  intros. destruct g.
+  simpl;
+    break_let.
+  eapply alloc_drop_perm; eauto.
+  simpl.
+  break_let.
+  (* This is true but a pain in the ass *)
+Admitted.
+
+Lemma alloc_globals_succeeds :
+  forall {F V : Type} (ge : Genv.t F V) l m,
+    exists m',
+      Genv.alloc_globals ge m l = Some m'.
+Proof.
+  induction l; intros.
+  simpl. eauto.
+  simpl. destruct a.
+  edestruct (@alloc_global_succeeds F V).
+  rewrite H.
+  eapply IHl.
+Qed.
 
 Lemma init_mem_transf :
   forall m,
@@ -426,11 +723,16 @@ Lemma init_mem_transf :
       Genv.init_mem tprog = Some m' /\ Mem.extends m m'.
 Proof.
   intros.
-  eapply Genv.init_mem_transf in H.
-  unfold transf_prog in TRANSF. rewrite TRANSF in H.
-  exists m. split; eauto.
-  eapply Mem.extends_refl.
-Qed.
+  unfold transf_prog in TRANSF.
+  eapply Genv.init_mem_transf_augment in H; eauto.
+  rewrite H.
+  edestruct (@alloc_globals_succeeds Cmajor.fundef unit).
+  rewrite H0. eexists. split. reflexivity.
+  clear H.
+
+  admit. (* adding more globals extends the mem *)
+  admit. (* no name collisions to new globals *)
+Admitted.
 
 Lemma match_final_state :
  forall (s1 : Smallstep.state (semantics prog))
@@ -459,26 +761,31 @@ Proof.
   eexists; split; econstructor; eauto;
     simpl; try solve [econstructor; eauto].
   erewrite find_symbol_transf; eauto.
-  rewrite <- TRANSF. simpl. eauto.
-  eapply find_funct_ptr_transf; eauto.
+  unfold transf_prog in TRANSF.
+  erewrite transform_partial_augment_program_main; eauto.
+  app find_funct_ptr_transf Genv.find_funct_ptr.
+  unfold tge in *. find_rewrite.
+  unfold transf_fundef in *. congruence.
   eauto.
 Qed.  
-*)
+
 End PRESERVATION.
 
-(* 
+
 Theorem transf_program_correct:
   forall prog tprog,
-    transf_prog prog = tprog ->
+    list_norepet (prog_defs_names prog) ->
+    (forall id : ident, In id (map fst (new_globs (Pos.succ (Pos.succ (largest_id_prog prog))) (Pos.succ (largest_id_prog prog)))) ->
+                        ~ In id (Genv.genv_public (Genv.globalenv tprog))) ->
+    transf_prog prog = OK tprog ->
     forward_simulation (Dmajor.semantics prog) (Cmajor.semantics tprog).
 Proof.
   intros.
-  eapply forward_simulation_step with (match_states := match_states).
+  eapply forward_simulation_plus.
   eapply public_symbol_transf; eauto.
   eapply initial_states_match; eauto.
   eapply match_final_state; eauto.
   eapply single_step_correct; eauto.
 Qed.
 
-*)
-*)
+

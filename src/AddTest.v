@@ -21,12 +21,15 @@ Require Import Ring.
 Require Import StructTact.StructTactics.
 Require Import StructTact.Util.
 
-
+Require Import Fmajortoemajor.
 Require Import Emajortodmajor.
 Require Import Dmajortocmajor.
 Require Import Cmajortominor.
 
+
 Require Import Emajor.
+Require Import Fmajor.
+
 
 (* test add *)
 (* first idents need to be function names *)
@@ -48,41 +51,41 @@ Definition main_tmp1 : ident := 20%positive.
 Definition main_tmp2 : ident := 21%positive.
 
 
-Definition rec_case : Emajor.stmt :=
-  Emajor.Sseq 
-    (Emajor.Scall tmp (Var add_one_id) (Deref (Var targid) O))
-    (Emajor.Sseq 
+Definition rec_case : Fmajor.stmt :=
+  Fmajor.Sseq 
+    (Fmajor.Scall tmp (Var add_one_id) (Deref (Var targid) O))
+    (Fmajor.Sseq 
        (SmakeConstr tmp2 (Int.repr tag_S) ((Var tmp)::nil))
        (SmakeConstr ans (Int.repr tag_S) ((Var tmp2)::nil))).
 
 
-Definition add_one_body : Emajor.stmt :=
-  Emajor.Sseq
-    (Emajor.SmakeClose add_one_id add_one_id nil)
-    (Emajor.Sswitch targid ((tag_0,Emajor.SmakeConstr ans (Int.repr tag_0) nil) ::
+Definition add_one_body : Fmajor.stmt :=
+  Fmajor.Sseq
+    (Fmajor.SmakeClose add_one_id add_one_id nil)
+    (Fmajor.Sswitch targid ((tag_0,Fmajor.SmakeConstr ans (Int.repr tag_0) nil) ::
                            (tag_S,rec_case)
                         ::nil) (Var arg)).
 
-Definition add_one_fn : Emajor.function :=
-  Emajor.mkfunction (add_one_id :: arg :: nil) EMsig 8%Z (add_one_body,Var ans).
+Definition add_one_fn : Fmajor.function :=
+  Fmajor.mkfunction (add_one_id :: arg :: nil) EMsig 8%Z (add_one_body,Var ans).
 
 
-Definition main_body : Emajor.stmt :=
-  Emajor.Sseq
-    (Emajor.SmakeClose add_one_id add_one_id nil)
-    (Emajor.Sseq
-       (Emajor.SmakeConstr main_tmp0 (Int.repr tag_0) nil)
-       (Emajor.Sseq (Emajor.SmakeConstr main_tmp1 (Int.repr tag_S) ((Var main_tmp0)::nil))
-                    (Emajor.Scall main_tmp2 (Var add_one_id) (Var main_tmp1)))).
+Definition main_body : Fmajor.stmt :=
+  Fmajor.Sseq
+    (Fmajor.SmakeClose add_one_id add_one_id nil)
+    (Fmajor.Sseq
+       (Fmajor.SmakeConstr main_tmp0 (Int.repr tag_0) nil)
+       (Fmajor.Sseq (Fmajor.SmakeConstr main_tmp1 (Int.repr tag_S) ((Var main_tmp0)::nil))
+                    (Fmajor.Scall main_tmp2 (Var add_one_id) (Var main_tmp1)))).
 
 Definition main_sig :=
   mksignature [] (Some Tint) cc_default.
 
-Definition main_fn : Emajor.function :=
-  Emajor.mkfunction nil main_sig
+Definition main_fn : Fmajor.function :=
+  Fmajor.mkfunction nil main_sig
                     16%Z (main_body,Var main_tmp2).
 
-Definition add_one_prog : Emajor.program :=
+Definition add_one_prog : Fmajor.program :=
   AST.mkprogram ((add_one_id,Gfun add_one_fn) ::
                  (main_id,Gfun main_fn) ::
                  nil) nil main_id.
