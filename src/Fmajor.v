@@ -147,6 +147,7 @@ Fixpoint find_case (tag : Z) (cases : list (Z * stmt)) : option stmt :=
 Inductive step : state -> trace -> state -> Prop :=
   | step_assign: forall f lhs rhs exp k e v,
       eval_expr e rhs v ->
+      e ! lhs = None ->
       step (State f (Sassign lhs rhs) exp k e)
         E0 (State f Sskip exp k (PTree.set lhs v e))
   | step_skip_seq: forall f s k e exp,
@@ -157,13 +158,15 @@ Inductive step : state -> trace -> state -> Prop :=
       eval_expr e exp v ->
       step (State f Sskip exp k e)
            E0 (Returnstate v k)
-  | step_call: forall f k (e : env) id efunc earg varg fname cargs fn exp,
+  | step_call: forall f k (e : env) id efunc earg varg fname cargs fn exp bcode,
       eval_expr e earg varg -> (* the argument *)
       eval_expr e efunc (Close fname cargs) -> (* the function itself *)
-      Genv.find_funct_ptr ge fname = Some fn ->
+      Genv.find_symbol ge fname = Some bcode ->
+      Genv.find_funct_ptr ge bcode = Some fn ->
       step (State f (Scall id efunc earg) exp k e) E0
            (Callstate fn ((Close fname cargs) :: varg :: nil) (Kcall id exp f e k))
   | step_return: forall v f id e k exp,
+      e ! id = None ->
       step (Returnstate v (Kcall id exp f e k))
         E0 (State f Sskip exp k (PTree.set id v e))
   | step_into_function: forall f vargs k,
@@ -175,15 +178,20 @@ Inductive step : state -> trace -> state -> Prop :=
         E0 (State f s1 exp (Kseq s2 k) e)
   | step_make_constr: forall id tag l f exp k e vargs,
       eval_exprlist e l vargs ->
+      e ! id = None ->
       step (State f (SmakeConstr id tag l) exp k e)
         E0 (State f Sskip exp k (PTree.set id (Constr tag vargs) e))
-  | step_make_close: forall id fname l f exp k e vargs,
+  | step_make_close: forall id fname l f exp k e vargs bcode fn,
       eval_exprlist e l vargs ->
+      e ! id = None ->
+      Genv.find_symbol ge fname = Some bcode ->
+      Genv.find_funct_ptr ge bcode = Some fn ->
       step (State f (SmakeClose id fname l) exp k e)
         E0 (State f Sskip exp k (PTree.set id (Close fname vargs) e))
   | step_switch: forall e target targid tag vargs cases s k exp f,
       eval_expr e target (Constr tag vargs) -> (* eval match target *)
-      find_case (Int.unsigned tag) cases = Some s -> (* find the right case *)
+      find_case (Int.unsigned tag) cases = Some s -> (* find the right case *) 
+      e ! targid = None ->
       step (State f (Sswitch targid cases target) exp k e)
         E0 (State f s exp k (PTree.set targid (Constr tag vargs) e)).
   (* | step_switch_cont: forall f exp k e e' ansid v, *)
