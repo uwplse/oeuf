@@ -246,3 +246,57 @@ Ltac refold_num_upvars :=
     fold num_upvars_list_pair in *.
 
 
+
+Definition renumber (f : function_name -> function_name) : expr -> expr :=
+    let fix go e :=
+        let fix go_list es :=
+            match es with
+            | [] => []
+            | e :: es => go e :: go_list es
+            end in
+        let fix go_pair p :=
+            match p with
+            | (e, r) => (go e, r)
+            end in
+        let fix go_list_pair ps :=
+            match ps with
+            | [] => []
+            | p :: ps => go_pair p :: go_list_pair ps
+            end in
+        match e with
+        | Arg => Arg
+        | UpVar i => UpVar i
+        | Call f a => Call (go f) (go a)
+        | Constr tag args => Constr tag (go_list args)
+        | ElimBody rec cases target => ElimBody (go rec) (go_list_pair cases) (go target)
+        | Close fname free => Close (f fname) (go_list free)
+        end in go.
+
+Definition renumber_list (f : function_name -> function_name) :=
+    let go := renumber f in
+    let fix go_list es :=
+        match es with
+        | [] => []
+        | e :: es => go e :: go_list es
+        end in go_list.
+
+Definition renumber_pair (f : function_name -> function_name) :
+        (expr * rec_info) -> (expr * rec_info) :=
+    let go := renumber f in
+    let fix go_pair p :=
+        match p with
+        | (e, r) => (go e, r)
+        end in go_pair.
+
+Definition renumber_list_pair (f : function_name -> function_name) :=
+    let go_pair := renumber_pair f in
+    let fix go_list_pair ps :=
+        match ps with
+        | [] => []
+        | p :: ps => go_pair p :: go_list_pair ps
+        end in go_list_pair.
+
+Ltac refold_renumber f :=
+    fold renumber_list in *;
+    fold renumber_pair in *;
+    fold renumber_list_pair in *.
