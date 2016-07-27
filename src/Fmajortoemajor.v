@@ -79,44 +79,39 @@ Let ge := Genv.globalenv prog.
 Let tge := Genv.globalenv tprog.
 Hypothesis TRANSF : transf_program prog = tprog.
 
+(* We need to wrap up which thing is getting returned in the match_cont? *)
+(* We need to wrap that up somewhere *)
 
-(* This is indexed by an expression *)
-(* This expression is what will be returned *)
-Inductive match_cont: Fmajor.cont -> Emajor.cont -> Emajor.expr -> Prop :=
+
+Inductive match_cont: Fmajor.cont -> Emajor.cont -> Prop :=
 | match_stop :
-    forall e,
-      match_cont Fmajor.Kstop Emajor.Kstop e
+    match_cont Fmajor.Kstop Emajor.Kstop
+| match_return :
+    forall k k' exp,
+      match_cont k k' ->
+      match_cont (Fmajor.Kreturn exp k) (Emajor.Kseq (Sreturn (transf_expr exp)) k')
 | match_seq :
-    forall k k' e s s',
-      match_cont k k' e ->
+    forall k k' s s',
+      match_cont k k' ->
       transf_stmt s = s' ->
-      match_cont (Fmajor.Kseq s k) (Emajor.Kseq s' k') e.
-(*
+      match_cont (Fmajor.Kseq s k) (Emajor.Kseq s' k')
 | match_call :
-  (* TODO: not sure what to do with this, could be tricky *)
- *)
-
+    forall id f env k k' exp,
+      match_cont k k' ->
+      match_cont (Fmajor.Kcall id exp f env k) (Emajor.Kcall id (transf_fundef f) env k').
 
   
 Inductive match_states: Fmajor.state -> Emajor.state -> Prop :=
 | match_state :
-    forall f f' s s' k k' e e' env,
+    forall f f' s s' k k' e env,
       transf_fundef f = f' ->
       transf_stmt s = s' ->
-      transf_expr e = e' ->
-      match_cont k k' e' ->
-      match_states (Fmajor.State f s e k env) (Emajor.State f' s' k' env).
-(* | match_callstate : *)
-(*     forall fd fd' vals vals' m k k', *)
-(*       transf_fundef fd = fd' -> *)
-(*       list_forall2 (value_inject tge m) vals vals' -> *)
-(*       match_cont k k' m -> *)
-(*       match_states (Emajor.Callstate fd vals k) (Dmajor.Callstate fd' vals' k' m) *)
-(* | match_returnstate : *)
-(*     forall v v' k k' m, *)
-(*       value_inject tge m v v' -> *)
-(*       match_cont k k' m -> *)
-(*       match_states (Emajor.Returnstate v k) (Dmajor.Returnstate v' k' m). *)
+      match_cont k k' ->
+      match_states (Fmajor.State f s e k env) (Emajor.State f' s' k' env)
+| match_returnstate :
+    forall v k k',
+      match_cont k k' ->
+      match_states (Fmajor.Returnstate v k) (Emajor.Returnstate v k').
 
 Lemma eval_expr_transf :
   forall env exp v,
@@ -181,16 +176,59 @@ Proof.
     econstructor; eauto.
 
   (* skip/seq *)
-  + invp match_cont.
+  + (* What we need: *)
+    (* k' is some kind of Kseq *)
+
+    invp match_cont.
     eexists. split. eapply plus_one.
     econstructor; eauto.
     econstructor; eauto.
 
   (* skip/return *)
-  + admit.
+  + destruct k0; simpl in H6;
+      try solve [inv H6].
+    (* Kstop case: end of program return *)
+    inv H3. inv H5.
+    app eval_expr_transf Fmajor.eval_expr.
+    eexists. split. eapply plus_left; nil_trace.
+    simpl.
+    econstructor; eauto.
+    eapply star_one.
+    econstructor; eauto.
+    econstructor; eauto.
+
+    (* Kcall case: end of function *)
+    inv H3. inv H5.
+    app eval_expr_transf Fmajor.eval_expr.
+    eexists. split. eapply plus_left; nil_trace.
+    simpl.
+    econstructor; eauto.
+    eapply star_one.
+    econstructor; eauto.
+    econstructor; eauto.
 
   (* scall to callstate *)
-  + admit.
+  + app eval_expr_transf (Fmajor.eval_expr env earg).
+    app eval_expr_transf (Fmajor.eval_expr env efunc).
+    destruct (Fmajor.fn_body fn) eqn:?.
+    eexists. split.
+    eapply plus_left; nil_trace.
+    simpl. econstructor; eauto.
+    eapply find_symbol_transf; eauto.
+    eapply find_funct_ptr_transf; eauto.
+    simpl. find_rewrite. reflexivity.
+    eapply star_left; nil_trace.
+    econstructor; eauto.
+    eapply star_one.
+    simpl. unfold transf_fun_body.
+    find_rewrite.
+    eapply step_seq.
+
+    econstructor; eauto.
+    
+    simpl.
+    econstructor; eauto.
+    econstructor; eauto.
 
   (* seq *)
   + eexists. split.
@@ -217,6 +255,16 @@ Proof.
 
   (* switch *)
   + admit.
+
+  (* Returnstate *)
+  + inv H5.
+    invp match_cont.
+    
+    eexists. split.
+    eapply plus_one.
+    econstructor; eauto.
+    econstructor; eauto.
+    
 Admitted.
 
 Lemma step_sim :

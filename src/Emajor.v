@@ -159,7 +159,12 @@ Inductive step : state -> trace -> state -> Prop :=
   | step_return: forall v f id e k,
       e ! id = None ->
       step (Returnstate v (Kcall id f e k))
-        E0 (State f Sskip k (PTree.set id v e))
+           E0 (State f Sskip k (PTree.set id v e))
+  | step_return_statement: forall f k e exp v,
+      is_call_cont k ->
+      eval_expr e exp v ->
+      step (State f (Sreturn exp) k e)
+        E0 (Returnstate v k)
   | step_into_function: forall f vargs k,
       length vargs = length f.(fn_params) ->
       step (Callstate f vargs k)

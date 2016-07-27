@@ -1392,6 +1392,20 @@ Proof.
   repeat (econstructor; eauto).
   econstructor; eauto.
 
+  (* return *)
+  + destruct k; simpl in H8; try solve [inv H8]; invp match_cont.
+    eexists; split.
+    eapply plus_one.
+    simpl.
+  (* need facts about stack pointer built into match_states *)
+    admit. admit.
+
+    eexists; split.
+    eapply plus_one.
+    simpl.
+  (* need facts about stack pointer built into match_states *)
+    admit. admit.
+    
   (* seq *)
   + eexists. split.
   eapply plus_one.
