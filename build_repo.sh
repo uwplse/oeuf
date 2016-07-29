@@ -8,3 +8,6 @@ cd ..
 
 ./configure
 make -j8
+
+bash build.sh
+
