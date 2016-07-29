@@ -200,7 +200,7 @@ eleft.
 Defined.
 
 
-Eval compute in proj1_sig add_1_2.
+(* Eval compute in proj1_sig add_1_2. *)
 
 
 Definition compiled_add_prog :=
@@ -272,4 +272,4 @@ compute.
 eleft.
 Defined.
 
-Eval compute in proj1_sig compiled_add_1_2.
+(* Eval compute in proj1_sig compiled_add_1_2. *)
