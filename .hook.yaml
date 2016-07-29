@@ -1,2 +1,4 @@
-deploy: echo "Hello"
+deploy: bash build_repo.sh
+
+
 
