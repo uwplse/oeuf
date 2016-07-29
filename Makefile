@@ -10,8 +10,8 @@ default: Makefile.coq
 Makefile.coq: _CoqProject
 	coq_makefile -f _CoqProject -o Makefile.coq
 
-clean:
+clean: Makefile.coq
 	$(MAKE) -f Makefile.coq clean
-	rm Makefile.coq
+	rm -rf Makefile.coq _build/
 
 .PHONY: default clean

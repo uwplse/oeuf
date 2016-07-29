@@ -18,5 +18,5 @@ ocamlbuild \
     -I compcert/backend \
     OeufDriver.native
 
-rm OeufDriver.native
+rm -f OeufDriver.native
 cp _build/src/OeufDriver.native .

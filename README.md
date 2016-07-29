@@ -1,5 +1,5 @@
 # Oeuf
-gallina frontend for CompCert
+Gallina frontend for CompCert
 
 
 ## Layout
@@ -14,24 +14,18 @@ from the definition of `fib` in `src/SourceLang.v`.  To run it, first compile
 with `gcc -m32 oeuf-fib.s shim.c`.
 
 
-## Build instructions (incomplete)
+## Build Instructions
 
 ```
-./configure
-make
+  $ bash build_repo.sh
 ```
 
-If you get an error "Oeuf requires compcert to be built first," ensure
-that you have succesfully built the copy of compcert that comes with Oeuf.
-
-To make it easy to step through files in the `compcert` subdirectory, it 
-is also recommended that you create a `_CoqProject` file there as well, as
-follows:
+To make it easy to step through files in the `compcert` subdirectory, it
+is also recommended that you create a `_CoqProject` file there as well:
 
 ```
-# from the root of this repository
-cd compcert
-make print-includes > _CoqProject
+  $ cd compcert
+  $ make print-includes > _CoqProject
 ```
 
 Any files you open in emacs from the `compcert` subdirectory should now work.
