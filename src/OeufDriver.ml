@@ -387,6 +387,80 @@ let process_h_file sourcename =
     exit 2
   end
 
+
+(* Processing of .oeuf "files" *)
+
+let compile_oeuf the_program its_type sourcename asmname =
+  (* Prepare to dump Clight, RTL, etc, if requested *)
+  let set_dest dst opt ext =
+    dst := if !opt then Some (output_filename sourcename ".oeuf" ext)
+                   else None in
+  set_dest PrintCminor.destination option_dcminor ".cm";
+  set_dest PrintCminor.destination option_dcminor ".cm";
+  set_dest PrintRTL.destination option_drtl ".rtl";
+  set_dest Regalloc.destination_alloctrace option_dalloctrace ".alloctrace";
+  set_dest PrintLTL.destination option_dltl ".ltl";
+  set_dest PrintMach.destination option_dmach ".mach";
+
+  (* Convert to Asm *)
+  let asm =
+    match Compiler.apply_partial
+               (Oeuf.transf_to_asm its_type the_program)
+               Asmexpand.expand_program with
+    | Errors.OK asm ->
+        asm
+    | Errors.Error msg ->
+        eprintf "it's busted\n";
+        eprintf "%s: %a" sourcename print_error msg;
+        exit 2 in
+
+  (* Dump Asm in binary and JSON format *)
+  if !option_sdump then
+      dump_jasm asm sourcename (output_filename sourcename ".oeuf" !sdump_suffix);
+
+  (* Print Asm in text form *)
+  let oc = open_out asmname in
+  PrintAsm.print_program oc asm (*debug=*)None;
+  close_out oc
+
+let process_oeuf sourcename =
+  let (the_program, its_type) = match Filename.chop_suffix sourcename ".oeuf" with
+    | "fib" -> (SourceLang.fib_reflect [], SourceLang.fib_reflect_ty)
+    | "add" -> (SourceLang.add_reflect [], SourceLang.add_reflect_ty)
+    | "echo_initial_state" ->
+            (Echo.initial_state_reflect,
+             Echo.initial_state_reflect_ty)
+    | "echo_handleInput" ->
+            (Echo.handleInput_reflect,
+             Echo.handleInput_reflect_ty)
+    | "echo_handleMsg" ->
+            (Echo.handleMsg_reflect,
+             Echo.handleMsg_reflect_ty)
+    | s ->
+            eprintf "no such extracted term: \"%s\"\n" s;
+            exit 1
+    in
+
+  PrintCminor.destination := Some (output_filename sourcename ".oeuf" ".minor.c");
+
+  if !option_S then begin
+    compile_oeuf the_program its_type sourcename
+                   (output_filename ~final:true sourcename ".oeuf" ".s");
+    ""
+  end else begin
+    let asmname =
+      if !option_dasm
+      then output_filename sourcename ".oeuf" ".s"
+      else Filename.temp_file "compcert" ".s" in
+    compile_oeuf the_program its_type sourcename asmname;
+    let objname = output_filename ~final: !option_c sourcename ".oeuf" ".o" in
+    assemble asmname objname;
+    if not !option_dasm then safe_remove asmname;
+    objname
+  end
+
+
+
 (* Record actions to be performed after parsing the command line *)
 
 let actions : ((string -> string) * string) list ref = ref []
@@ -672,39 +746,9 @@ let cmdline_actions =
   (* GCC compatibility: .h files can be preprocessed with -E *)
   Suffix ".h", Self (fun s ->
       push_action process_h_file s; incr num_source_files; incr num_input_files);
+  Suffix ".oeuf", Self (fun s ->
+      push_action process_oeuf s; incr num_source_files; incr num_input_files);
   ]
-
-let compile_oeuf ofile debug =
-  let the_program = SourceLang.fib_reflect [] in
-  let its_type = SourceLang.fib_reflect_ty in
-  (* Convert to Asm *)
-  let asm =
-    match Compiler.apply_partial
-               (Oeuf.transf_to_asm its_type the_program)
-               Asmexpand.expand_program with
-    | Errors.OK asm ->
-        asm
-    | Errors.Error msg ->
-        eprintf "it's busted\n";
-        eprintf "oeuf.in: %a" print_error msg;
-        exit 2 in
-  (* Dump Asm in binary and JSON format *)
-  if !option_sdump then
-      dump_jasm asm "oeuf.in" (output_filename "oeuf.in" ".c" !sdump_suffix);
-  (* Print Asm in text form *)
-  let oc = open_out ofile in
-  PrintAsm.print_program oc asm debug;
-  close_out oc
-
-let process_oeuf () =
-  let asmname = "oeuf.s" in
-  let objname = "oeuf.o" in
-  PrintCminor.destination := Some "oeuf.minor.c";
-  compile_oeuf asmname None;
-  assemble asmname objname;
-  if not !option_dasm then safe_remove asmname;
-  objname
-
 
 let _ =
   try
@@ -733,10 +777,6 @@ let _ =
       eprintf "Ambiguous '-o' option (multiple source files)\n";
       exit 2
     end;
-
-    (* oeuf-specific nonsense *)
-    push_action (fun s -> process_oeuf ()) "oeuf.in";
-    incr num_input_files;
 
     if !num_input_files = 0 then
       begin
