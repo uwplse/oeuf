@@ -6,7 +6,7 @@ cd compcert
 ./configure ia32-linux
 make proof -j8
 make driver/Version.ml
-make cparser/pre_parser_messages.ml
+make -f Makefile.extr cparser/pre_parser_messages.ml
 cd ..
 
 ./configure
