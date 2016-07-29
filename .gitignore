@@ -17,3 +17,6 @@ src/*.o
 /extraction/*.mli
 /extraction/*.cm*
 /extraction/*.o
+
+OeufDriver.native
+_build/

@@ -1,16 +1,23 @@
+#!/usr/bin/env bash
 
+set -e
 
+if [ "$(uname)" = "Darwin" ]; then
+  NBUILDPROCS="$(expr $(gnproc) - 1)"
+  CCOMPCONFIG="ia32-macosx"
+else
+  NBUILDPROCS="$(expr $(nproc) - 1)"
+  CCOMPCONFIG="ia32-linux"
+fi
 
-cd compcert
-
-./configure ia32-linux
-make proof -j8
+pushd compcert
+./configure "$CCOMPCONFIG"
+make proof -j"$NBUILDPROCS"
 make driver/Version.ml
 make -f Makefile.extr cparser/pre_parser_messages.ml
-cd ..
+popd
 
 ./configure
-make -j8
+make -j"$NBUILDPROCS"
 
 bash build.sh
-
