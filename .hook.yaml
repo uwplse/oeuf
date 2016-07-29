@@ -1,4 +1,4 @@
-deploy: bash build_repo.sh
+deploy: bash build_repo.sh $$ bash run_tests.sh
 
 
 
