@@ -13,7 +13,11 @@ fi
 
 pushd compcert
 ./configure "$CCOMPCONFIG"
-make -j"$NBUILDPROCS" # not just proof, need compcert.ini
+if [ -f "compcert.ini" ]; then
+  make -j"$NBUILDPROCS" proof
+else
+  make -j"$NBUILDPROCS"
+fi
 make driver/Version.ml
 make -f Makefile.extr cparser/pre_parser_messages.ml
 popd
@@ -22,10 +26,8 @@ ln -sf compcert/compcert.ini compcert.ini
 ./configure
 make -j"$NBUILDPROCS"
 
-# absurd: build.sh once so ocamlbuild tells us what
-# files to sanitize, sanitize them, clear out ocamlbuild
-# dir, then try to build again
-#
-# this appears to work every other attempt (?!)
-bash build.sh || \
-  _build/sanitize.sh && rm -r _build/ && bash build.sh
+# TODO fix this absurd monstrosity
+rm -rf _build/
+bash build.sh || true
+_build/sanitize.sh
+bash build.sh

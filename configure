@@ -11,7 +11,6 @@ source ./coqproject.sh
 
 # TODO fix this
 # Note: must be -R, -Q doesn't work (don't know why)
-
 if [ "$(uname)" = "Darwin" ]; then
   gsed -i -e '/-Q compcert/a-R compcert/ia32 compcert.ia32' _CoqProject
 else
