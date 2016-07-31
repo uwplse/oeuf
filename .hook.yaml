@@ -1,1 +1,1 @@
-deploy: make all; bash run_tests.sh
+deploy: bash .hook.sh

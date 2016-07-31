@@ -26,12 +26,9 @@ FAIL="${RD}FAIL${NC}"
 
 if ! [ -f "$COMP" ]; then
   cat <<EOF
-ERROR: "$COMP" does not exist.
+ERROR: $COMP does not exist.
 
-Please build "$COMP" by running:
-  make compcert
-  make proof
-  make driver
+Please run 'make' to build $COMP.
 EOF
   exit 1
 fi
