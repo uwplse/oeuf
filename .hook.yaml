@@ -1,4 +1,1 @@
-deploy: bash build_repo.sh; bash run_tests.sh
-
-
-
+deploy: make all; bash run_tests.sh

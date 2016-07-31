@@ -1,26 +1,30 @@
-COQPROJECT_EXISTS=$(wildcard _CoqProject)
-
-ifeq "$(COQPROJECT_EXISTS)" ""
-$(error "Run ./configure before running make")
-endif
-
 NPAR=$(shell \
 	hash gnproc &> /dev/null && \
 		expr $$(gnproc) - 1 || \
 		expr $$(nproc)  - 1 )
 
+COMPCERTCONFIG=$(shell \
+	[ "$$(uname)" = "Darwin" ] && \
+		echo "ia32-macosx" || \
+		echo "ia32-linux"  )
+
+all: compcert proof driver
+
+compcert:
+	cd compcert && ./configure $(COMPCERTCONFIG)
+	$(MAKE) -j $(NPAR) -C compcert proof
+	$(MAKE) -j $(NPAR) -C compcert driver/Version.ml
+	$(MAKE) -j $(NPAR) -C compcert -f Makefile.extr \
+		cparser/pre_parser_messages.ml
+
 proof: Makefile.coq
-	$(MAKE) -f Makefile.coq
+	$(MAKE) -j $(NPAR) -f Makefile.coq
 
 Makefile.coq: _CoqProject
 	coq_makefile -f _CoqProject -o Makefile.coq
 
-compcert:
-	bash build_compcert.sh
-
-compcert.ini: compcert/Makefile.config
-	$(MAKE) -C compcert compcert.ini
-	ln -sf compcert/compcert.ini compcert.ini
+_CoqProject:
+	./configure
 
 driver: compcert.ini
 	ocamlbuild \
@@ -41,9 +45,16 @@ driver: compcert.ini
 		-I compcert/backend \
 		OeufDriver.native
 
+compcert.ini: compcert/Makefile.config
+	$(MAKE) -C compcert compcert.ini
+	ln -sf compcert/compcert.ini compcert.ini
+
 clean: Makefile.coq
 	$(MAKE) -f Makefile.coq clean
 	rm -rf Makefile.coq _build/
 	rm -f extraction/*.ml extraction/*.mli
 
-.PHONY: proof driver compcert clean
+cleaner: clean
+	$(MAKE) -C compcert clean
+
+.PHONY: all compcert proof driver clean cleaner
