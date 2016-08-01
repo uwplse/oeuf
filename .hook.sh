@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 
+WEBHOST="uwplse.org"
 WEBDIR="/var/www/oeuf"
-
-LOG=$(printf "%s/log-%s-%s.txt" \
-             "$WEBDIR" \
+LOG=$(printf "log-%s-%s.txt" \
              $(TZ="America/Los_Angeles" date "+%y%m%d") \
              $(TZ="America/Los_Angeles" date "+%H%M%S") \
              )
@@ -25,6 +24,6 @@ function main {
   bash run_tests.sh
 }
 
-if [ -w "$WEBDIR" ]; then
-  main &> "$LOG"
-fi
+(time main) &> "$LOG"
+scp "$LOG" "$WEBHOST:$WEBDIR/$LOG"
+rm -f "$LOG"
