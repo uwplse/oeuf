@@ -2,9 +2,10 @@
 
 WEBHOST="uwplse.org"
 WEBDIR="/var/www/oeuf"
-LOG=$(printf "log-%s-%s.txt" \
-             $(TZ="America/Los_Angeles" date "+%y%m%d") \
-             $(TZ="America/Los_Angeles" date "+%H%M%S") \
+LOG=$(printf "oeuf-log-%s-%s-%s.txt" \
+             "$(hostname -s)" \
+             "$(TZ="America/Los_Angeles" date "+%y%m%d")" \
+             "$(TZ="America/Los_Angeles" date "+%H%M%S")" \
              )
 
 function main {
