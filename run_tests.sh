@@ -21,8 +21,12 @@ CY=$'\033[1;36m' # cyan
 WT=$'\033[1;37m' # white
 NC=$'\033[0m'    # no color
 
-PASS="${GR}PASS${NC}"
-FAIL="${RD}FAIL${NC}"
+PASS="PASS"
+FAIL="FAIL"
+if [ -t 1 ]; then
+  PASS="${GR}PASS${NC}"
+  FAIL="${RD}FAIL${NC}"
+fi
 
 if ! [ -f "$COMP" ]; then
   cat <<EOF
