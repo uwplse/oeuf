@@ -23,6 +23,8 @@ NC=$'\033[0m'    # no color
 
 PASS="PASS"
 FAIL="FAIL"
+
+# only output color for ttys
 if [ -t 1 ]; then
   PASS="${GR}PASS${NC}"
   FAIL="${RD}FAIL${NC}"
