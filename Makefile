@@ -1,5 +1,5 @@
 NPAR=$(shell \
-	hash gnproc &> /dev/null && \
+	hash gnproc > /dev/null 2>&1 && \
 		expr $$(gnproc) - 1 || \
 		expr $$(nproc)  - 1 )
 
@@ -44,10 +44,12 @@ driver: compcert.ini
 		-I compcert/debug \
 		-I compcert/backend \
 		OeufDriver.native
+	rm -f OeufDriver.native
+	cp _build/src/OeufDriver.native OeufDriver.native
 
 compcert.ini: compcert/Makefile.config
 	$(MAKE) -C compcert compcert.ini
-	ln -sf compcert/compcert.ini compcert.ini
+	cp -f compcert/compcert.ini compcert.ini
 
 clean: Makefile.coq
 	$(MAKE) -f Makefile.coq clean
