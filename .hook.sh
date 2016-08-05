@@ -2,25 +2,25 @@
 
 WEBHOST="uwplse.org"
 WEBDIR="/var/www/oeuf"
-LOG=$(printf "oeuf-log-%s-%s-%s.txt" \
-             "$(hostname -s)" \
+LOG=$(printf "%s-%s-%s-oeuf-hook.txt" \
              "$(TZ="America/Los_Angeles" date "+%y%m%d")" \
              "$(TZ="America/Los_Angeles" date "+%H%M%S")" \
+             "$(hostname -s)" \
              )
 
 function main {
   echo
-  echo HOOKNOOK OEUF CLEANER
+  echo OEUF HOOK CLEANER
   echo
   make cleaner
 
   echo
-  echo HOOKNOOK OEUF BUILD
+  echo OEUF HOOK BUILD
   echo
   make all
 
   echo
-  echo HOOKNOOK OEUF TEST
+  echo OEUF HOOK TEST
   echo
   bash run_tests.sh
 }
