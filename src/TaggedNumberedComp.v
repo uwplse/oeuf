@@ -1,4 +1,4 @@
-Require Import Common Monads.
+Require Import Common Monads ListLemmas.
 Require Tagged TaggedNumbered.
 
 Module T := Tagged.
@@ -358,4 +358,225 @@ intros0 Hcomp; simpl in Hcomp; refold_compile; break_bind_state.
   + eauto.
 
 Qed.
+
+
+Definition strip : N.expr -> T.expr :=
+    let fix go e :=
+        let fix go_list es :=
+            match es with
+            | [] => []
+            | e :: es => go e :: go_list es
+            end in
+        let fix go_pair p :=
+            let '(e, r) := p in
+            (go e, r) in
+        let fix go_list_pair ps :=
+            match ps with
+            | [] => []
+            | p :: ps => go_pair p :: go_list_pair ps
+            end in
+        match e with
+        | N.Arg => T.Arg
+        | N.UpVar n => T.UpVar n
+        | N.Call f a => T.Call (go f) (go a)
+        | N.Constr tag args => T.Constr tag (go_list args)
+        | N.ElimN _ cases target => T.Elim (go_list_pair cases) (go target)
+        | N.Close fname free => T.Close fname (go_list free)
+        end in go.
+
+Definition strip_list :=
+    let go := strip in
+    let fix go_list es :=
+        match es with
+        | [] => []
+        | e :: es => go e :: go_list es
+        end in go_list.
+
+Definition strip_pair :=
+    let go := strip in
+    let fix go_pair (p : N.expr * N.rec_info) :=
+        let '(e, r) := p in
+        (go e, r) in go_pair.
+
+Definition strip_list_pair :=
+    let go_pair := strip_pair in
+    let fix go_list_pair ps :=
+        match ps with
+        | [] => []
+        | p :: ps => go_pair p :: go_list_pair ps
+        end in go_list_pair.
+
+Ltac refold_strip :=
+    fold strip_list in *;
+    fold strip_pair in *;
+    fold strip_list_pair in *.
+
+Lemma strip_list_Forall : forall nes tes,
+    strip_list nes = tes <-> Forall2 (fun ne te => strip ne = te) nes tes.
+induction nes; intros; split; intro HH;
+simpl in *; refold_strip; subst.
+- constructor.
+- invc HH. reflexivity.
+- constructor; firstorder eauto.
+- invc HH. f_equal. firstorder eauto.
+Qed.
+
+
+Definition I te ne := strip ne = te.
+
+Theorem compile_I : forall te elims ne elims',
+    compile te elims = (ne, elims') ->
+    I te ne.
+unfold I.
+induction te using T.expr_rect_mut with
+    (Pl := fun tes => forall elims nes elims',
+        compile_list tes elims = (nes, elims') ->
+        strip_list nes = tes)
+    (Pp := fun tp => forall elims np elims',
+        compile_pair tp elims = (np, elims') ->
+        strip_pair np = tp)
+    (Plp := fun tps => forall elims nps elims',
+        compile_list_pair tps elims = (nps, elims') ->
+        strip_list_pair nps = tps);
+intros0 Hcomp;
+simpl in Hcomp; refold_compile; break_bind_state;
+simpl; refold_strip.
+
+(* expr *)
+
+- reflexivity.
+- reflexivity.
+- erewrite IHte1; eauto.
+  erewrite IHte2; eauto.
+- erewrite IHte; eauto.
+- erewrite IHte; eauto.
+  erewrite IHte0; eauto.
+- erewrite IHte; eauto.
+
+(* list *)
+
+- reflexivity.
+- erewrite IHte; eauto.
+  erewrite IHte0; eauto.
+
+(* pair *)
+
+- erewrite IHte; eauto.
+
+(* list pair *)
+
+- reflexivity.
+- erewrite IHte; eauto.
+  erewrite IHte0; eauto.
+
+Qed.
+
+Lemma I_value : forall t n,
+    I t n ->
+    T.value t ->
+    N.value n.
+unfold I.
+induction t using T.expr_rect_mut with
+    (Pl := fun ts => forall ns,
+        strip_list ns = ts ->
+        Forall T.value ts ->
+        Forall N.value ns)
+    (Pp := fun tp => forall np,
+        strip_pair np = tp ->
+        T.value (fst tp) ->
+        N.value (fst np))
+    (Plp := fun tps => forall nps,
+        strip_list_pair nps = tps ->
+        Forall (fun p => T.value (fst p)) tps ->
+        Forall (fun p => N.value (fst p)) nps);
+intros0 II Tval.
+
+- invc Tval.
+- invc Tval.
+- invc Tval.
+- invc Tval. destruct n; invc II. refold_strip. constructor. eauto.
+- invc Tval.
+- invc Tval. destruct n; invc II. refold_strip. constructor. eauto.
+
+- destruct ns; invc II. constructor.
+- invc Tval. destruct ns; invc II. constructor; eauto.
+
+- destruct np; invc II. simpl in *. eauto.
+
+- destruct nps; invc II. constructor.
+- invc Tval. destruct nps; invc II. constructor; eauto.
+Qed.
+
+Theorem I_sim : forall TE NE t t' n,
+    Forall2 I TE NE ->
+    I t n ->
+    T.step TE t t' ->
+    exists n',
+        N.step NE n n' /\
+        I t' n'.
+unfold I.
+induction t using T.expr_ind''; intros0 Henv II Tstep;
+invc Tstep; simpl in *; refold_strip;
+destruct n; inversion II; clear II; refold_strip.
+
+- admit.
+
+- destruct (IHt1 ?? ?? ** ** **) as (n1' & ? & ?).
+  eexists. split. eapply N.CallL; eauto.
+  + simpl. f_equal. assumption.
+
+- destruct (IHt2 ?? ?? ** ** **) as (n2' & ? & ?).
+  eexists. split. eapply N.CallR; eauto.
+  + eauto using I_value.
+  + simpl. f_equal. assumption.
+
+- subst c.
+
+  (* split up args into 3 parts *)
+  rewrite strip_list_Forall in *.
+  destruct (Forall2_app_inv_r _ _ **) as (nvs & ne_nes & ? & ? & ?).
+  invc H1. rename l into nes. rename x into ne.
+  clear H3.
+
+  (* split up induction hyp *)
+  inversion H using Forall_3part_inv. clear H. intros.
+  destruct (H1 ?? ?? ** *** **) as (ne' & ? & ?). clear H1.
+
+  eexists. split. eapply N.ConstrStep; eauto.
+  + list_magic_on (nvs, (vs, tt)). eauto using I_value.
+  + simpl. refold_strip. f_equal. rewrite strip_list_Forall.
+    eapply Forall2_app; eauto.
+
+- destruct (IHt ?? ?? ** *** **) as (n' & ? & ?).
+  eexists. split. eapply N.ElimStep; eauto.
+  + simpl. f_equal. assumption.
+
+- destruct n0; inversion H4. refold_strip. subst tag0.
+  eexists. split. eapply N.Eliminate; eauto.
+  + admit.
+  + admit.
+  + admit.
+  + admit.
+
+- subst f0.
+
+  (* split up args into 3 parts *)
+  rewrite strip_list_Forall in *.
+  destruct (Forall2_app_inv_r _ _ **) as (nvs & ne_nes & ? & ? & ?).
+  invc H1. rename l into nes. rename x into ne.
+  clear H3.
+
+  (* split up induction hyp *)
+  inversion H using Forall_3part_inv. clear H. intros.
+  destruct (H1 ?? ?? ** *** **) as (ne' & ? & ?). clear H1.
+
+  eexists. split. eapply N.CloseStep; eauto.
+  + list_magic_on (nvs, (vs, tt)). eauto using I_value.
+  + simpl. refold_strip. f_equal. rewrite strip_list_Forall.
+    eapply Forall2_app; eauto.
+
+Admitted.
+
+
+  
 
