@@ -421,6 +421,16 @@ simpl in *; refold_strip; subst.
 - invc HH. f_equal. firstorder eauto.
 Qed.
 
+Lemma strip_list_pair_Forall : forall nps tps,
+    strip_list_pair nps = tps <-> Forall2 (fun np tp => strip_pair np = tp) nps tps.
+induction nps; intros; split; intro HH;
+simpl in *; refold_strip; subst.
+- constructor.
+- invc HH. reflexivity.
+- constructor; firstorder eauto.
+- invc HH. f_equal. firstorder eauto.
+Qed.
+
 
 Definition I te ne := strip ne = te.
 
@@ -507,6 +517,152 @@ intros0 II Tval.
 - invc Tval. destruct nps; invc II. constructor; eauto.
 Qed.
 
+Lemma I_value' : forall n,
+    T.value (strip n) ->
+    N.value n.
+intros. eapply I_value. 2:eassumption. constructor.
+Qed.
+
+Lemma I_value'_Forall : forall ns,
+    Forall T.value (strip_list ns) ->
+    Forall N.value ns.
+intros.
+remember (strip_list ns) as ts eqn:Heq.
+symmetry in Heq. rewrite strip_list_Forall in Heq.
+list_magic_on (ns, (ts, tt)). eauto using I_value.
+Qed.
+
+Lemma strip_list_3part : forall xs ys1 y2 ys3,
+    strip_list xs = ys1 ++ y2 :: ys3 ->
+    exists xs1 x2 xs3,
+        xs = xs1 ++ x2 :: xs3 /\
+        strip_list xs1 = ys1 /\
+        strip x2 = y2 /\
+        strip_list xs3 = ys3.
+intros0 Hstrip.
+rewrite strip_list_Forall in *.
+destruct (Forall2_app_inv_r _ _ **) as (xs1 & x2_xs3 & ? & ? & ?).
+invc H0. rename x into x2. rename l into xs3.
+
+exists xs1, x2, xs3.
+do 2 rewrite strip_list_Forall.
+eauto.
+Qed.
+
+Lemma nth_error_strip_list : forall ns i t,
+    nth_error (strip_list ns) i = Some t ->
+    exists n,
+        nth_error ns i = Some n /\
+        strip n = t.
+intros0 Hnth.
+assert (strip_list ns = strip_list ns) by eauto.
+rewrite strip_list_Forall in *.
+fwd eapply Forall2_length as Hlen; eauto. symmetry in Hlen.
+fwd eapply length_nth_error_Some as HH; eauto. destruct HH.
+fwd eapply Forall2_nth_error; eauto.
+Qed.
+
+Lemma nth_error_strip_list_pair : forall ns i t,
+    nth_error (strip_list_pair ns) i = Some t ->
+    exists n,
+        nth_error ns i = Some n /\
+        strip_pair n = t.
+intros0 Hnth.
+assert (strip_list_pair ns = strip_list_pair ns) by eauto.
+rewrite strip_list_pair_Forall in *.
+fwd eapply Forall2_length as Hlen; eauto. symmetry in Hlen.
+fwd eapply length_nth_error_Some as HH; eauto. destruct HH.
+fwd eapply Forall2_nth_error; eauto.
+Qed.
+
+Lemma subst_strip : forall arg free ne te',
+    T.subst (strip arg) (strip_list free) (strip ne) = Some te' ->
+    exists ne',
+        te' = strip ne' /\
+        N.subst arg free ne = Some ne'.
+intros arg free.
+induction ne using N.expr_rect_mut with
+    (Pl := fun nes => forall tes',
+        T.subst_list (strip arg) (strip_list free) (strip_list nes) = Some tes' ->
+        exists nes',
+            tes' = strip_list nes' /\
+            N.subst_list arg free nes = Some nes')
+    (Pp := fun np => forall tp',
+        T.subst_pair (strip arg) (strip_list free) (strip_pair np) = Some tp' ->
+        exists np',
+            tp' = strip_pair np' /\
+            N.subst_pair arg free np = Some np')
+    (Plp := fun nps => forall tps',
+        T.subst_list_pair (strip arg) (strip_list free) (strip_list_pair nps) = Some tps' ->
+        exists nps',
+            tps' = strip_list_pair nps' /\
+            N.subst_list_pair arg free nps = Some nps');
+intros0 Hsub; simpl in *;
+T.refold_subst (strip arg) (strip_list free);
+N.refold_subst arg free;
+refold_strip;
+break_bind_option; inject_some.
+
+- eauto.
+
+- destruct (nth_error_strip_list _ _ _ **) as (? & ? & ?). eauto.
+
+- destruct (IHne1 ?? ***) as (? & ? & Heq1). rewrite Heq1.
+  destruct (IHne2 ?? ***) as (? & ? & Heq2). rewrite Heq2.
+  subst. eexists. simpl. split; cycle 1; reflexivity.
+
+- destruct (IHne ?? ***) as (? & ? & Heq). rewrite Heq.
+  subst. eexists. simpl. split; cycle 1; reflexivity.
+
+- destruct (IHne ?? ***) as (? & ? & Heq). rewrite Heq.
+  destruct (IHne0 ?? ***) as (? & ? & Heq0). rewrite Heq0.
+  subst. eexists. simpl. split; cycle 1; reflexivity.
+
+- destruct (IHne ?? ***) as (? & ? & Heq). rewrite Heq.
+  subst. eexists. simpl. split; cycle 1; reflexivity.
+
+
+- exists []. eauto.
+
+- destruct (IHne ?? ***) as (? & ? & Heq). rewrite Heq.
+  destruct (IHne0 ?? ***) as (? & ? & Heq0). rewrite Heq0.
+  subst. eexists. simpl. split; cycle 1; reflexivity.
+
+
+- destruct (IHne ?? ***) as (? & ? & Heq). rewrite Heq.
+  subst. eexists. simpl. split; cycle 1; reflexivity.
+
+
+- exists []. eauto.
+
+- destruct (IHne ?? ***) as (? & ? & Heq). rewrite Heq.
+  destruct (IHne0 ?? ***) as (? & ? & Heq0). rewrite Heq0.
+  subst. eexists. simpl. split; cycle 1; reflexivity.
+
+Qed.
+
+Lemma roll_strip_Call : forall f a,
+    T.Call (strip f) (strip a) = strip (N.Call f a).
+intros. reflexivity.
+Qed.
+
+Lemma unroll_elim_strip : forall case args rec t_mk_rec n_mk_rec te,
+    T.unroll_elim (strip case) (strip_list args) rec t_mk_rec = Some te ->
+    (forall n, t_mk_rec (strip n) = strip (n_mk_rec n)) ->
+    exists ne,
+        N.unroll_elim case args rec n_mk_rec = Some ne /\
+        strip ne = te.
+first_induction args; intros0 Hunr Hmk; destruct rec; try discriminate Hunr;
+simpl in *; refold_strip.
+
+- inject_some. eauto.
+
+- rewrite Hmk in Hunr. do 2 rewrite roll_strip_Call in Hunr.
+  destruct b;
+  destruct (IHargs ?? ?? ?? ?? ?? ** **) as (? & ? & ?);
+  eauto.
+Qed.
+
 Theorem I_sim : forall TE NE t t' n,
     Forall2 I TE NE ->
     I t n ->
@@ -519,7 +675,17 @@ induction t using T.expr_ind''; intros0 Henv II Tstep;
 invc Tstep; simpl in *; refold_strip;
 destruct n; inversion II; clear II; refold_strip.
 
-- admit.
+- on (strip n1 = _), fun H => (destruct n1; simpl in *; refold_strip; invc H).
+  rename free0 into free.
+  assert (N.value n2) by (eauto using I_value').
+  assert (Forall N.value free) by (eauto using I_value'_Forall).
+  fwd eapply Forall2_length; eauto.
+  fwd eapply length_nth_error_Some as HH; eauto.  destruct HH as [ne ?].
+  replace e with (strip ne) in * by (fwd eapply Forall2_nth_error; eauto).
+
+  fwd eapply subst_strip as HH; eauto.  destruct HH as (? & ? & ?). subst.
+  eexists. split. eapply N.MakeCall; eauto.
+  + reflexivity.
 
 - destruct (IHt1 ?? ?? ** ** **) as (n1' & ? & ?).
   eexists. split. eapply N.CallL; eauto.
@@ -531,52 +697,42 @@ destruct n; inversion II; clear II; refold_strip.
   + simpl. f_equal. assumption.
 
 - subst c.
+  destruct (strip_list_3part _ _ _ _ **) as (nvs & ne & nes & ? & ? & ? & ?).
+  subst args.  rewrite strip_list_Forall in *.
 
-  (* split up args into 3 parts *)
-  rewrite strip_list_Forall in *.
-  destruct (Forall2_app_inv_r _ _ **) as (nvs & ne_nes & ? & ? & ?).
-  invc H1. rename l into nes. rename x into ne.
-  clear H3.
-
-  (* split up induction hyp *)
   inversion H using Forall_3part_inv. clear H. intros.
-  destruct (H1 ?? ?? ** *** **) as (ne' & ? & ?). clear H1.
+  on _, fun H => (destruct (H ?? ?? ** *** **) as (ne' & ? & ?); clear H).
 
   eexists. split. eapply N.ConstrStep; eauto.
-  + list_magic_on (nvs, (vs, tt)). eauto using I_value.
-  + simpl. refold_strip. f_equal. rewrite strip_list_Forall.
-    eapply Forall2_app; eauto.
+  + list_magic_on (nvs, (vs, tt)). firstorder eauto using I_value.
+  + simpl. refold_strip. f_equal.
+    rewrite strip_list_Forall. eapply Forall2_app; eauto.
 
 - destruct (IHt ?? ?? ** *** **) as (n' & ? & ?).
   eexists. split. eapply N.ElimStep; eauto.
   + simpl. f_equal. assumption.
 
-- destruct n0; inversion H4. refold_strip. subst tag0.
+- destruct n0; inversion H4. refold_strip. subst tag0. clear H4.
+  rename cases0 into ncases.  rename args0 into nargs. rename n into num.
+  subst cases. subst args.
+  fwd eapply nth_error_strip_list_pair as HH; eauto.
+    destruct HH as ([ncase nrec] & ? & HH). simpl in HH. inject_pair.
+  fwd eapply unroll_elim_strip with (n_mk_rec := fun x => N.ElimN num ncases x) as HH; eauto.
+    destruct HH as (? & ? & ?).
+
   eexists. split. eapply N.Eliminate; eauto.
-  + admit.
-  + admit.
-  + admit.
-  + admit.
+  + eauto using I_value'_Forall.
+  + assumption.
 
 - subst f0.
+  destruct (strip_list_3part _ _ _ _ **) as (nvs & ne & nes & ? & ? & ? & ?).
+  subst free.  rewrite strip_list_Forall in *.
 
-  (* split up args into 3 parts *)
-  rewrite strip_list_Forall in *.
-  destruct (Forall2_app_inv_r _ _ **) as (nvs & ne_nes & ? & ? & ?).
-  invc H1. rename l into nes. rename x into ne.
-  clear H3.
-
-  (* split up induction hyp *)
   inversion H using Forall_3part_inv. clear H. intros.
-  destruct (H1 ?? ?? ** *** **) as (ne' & ? & ?). clear H1.
+  on _, fun H => (destruct (H ?? ?? ** *** **) as (ne' & ? & ?); clear H).
 
   eexists. split. eapply N.CloseStep; eauto.
-  + list_magic_on (nvs, (vs, tt)). eauto using I_value.
-  + simpl. refold_strip. f_equal. rewrite strip_list_Forall.
-    eapply Forall2_app; eauto.
-
-Admitted.
-
-
-  
-
+  + list_magic_on (nvs, (vs, tt)). firstorder eauto using I_value.
+  + simpl. refold_strip. f_equal.
+    rewrite strip_list_Forall. eapply Forall2_app; eauto.
+Qed.
