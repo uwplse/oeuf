@@ -275,6 +275,14 @@ let atom_of_string = (Hashtbl.create 17 : (string, atom) Hashtbl.t)
 let string_of_atom = (Hashtbl.create 17 : (atom, string) Hashtbl.t)
 let next_atom = ref Coq_xH
 
+(* This function allows Oeuf to choose which identifier malloc corresponds to.
+   It is idempotent and thus safe to call from Coq. *)
+let register_ident_as_malloc p =
+  let s = "malloc" in
+  Hashtbl.add atom_of_string s p;
+  Hashtbl.add string_of_atom p s;
+  p
+
 let intern_string s =
   try
     Hashtbl.find atom_of_string s

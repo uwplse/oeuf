@@ -3,10 +3,6 @@
 
 extern void* _$5(void*, void*);
 
-void* _$6(int size) {
-    return malloc(size);
-}
-
 int main() {
     union nat* n = make_nat(3);
 

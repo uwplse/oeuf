@@ -25,6 +25,15 @@ open Echo
 
 let stdlib_path = ref Configuration.stdlib_path
 
+(* Whether we have reached any .oeuf files on the cmdline yet.
+   Oeuf needs full control over the global environment of identifiers,
+   so we clear it before processing a .oeuf file. But the rest of
+   CompCert has different expectations, so no further .c files may be
+   processed after any .oeuf file has been processed.
+*)
+let oeuf_files_started = ref false
+
+
 (* Optional sdump suffix *)
 let sdump_suffix = ref ".json"
 
@@ -125,6 +134,10 @@ let preprocess ifile ofile =
 (* From preprocessed C to Csyntax *)
 
 let parse_c_file sourcename ifile =
+  if !oeuf_files_started then begin
+    eprintf "Error: C file %s must appear before all .oeuf files on command line\n" sourcename;
+    exit 2
+  end else begin
   Debug.init_compile_unit sourcename;
   Sections.initialize();
   (* Simplification options *)
@@ -160,6 +173,7 @@ let parse_c_file sourcename ifile =
     close_out oc
   end;
   csyntax,None
+  end
 
 (* Dump Asm code in asm format for the validator *)
 
@@ -442,7 +456,9 @@ let process_oeuf sourcename =
             eprintf "no such extracted term: \"%s\"\n" s;
             exit 1
     in
-
+  Hashtbl.clear Camlcoq.atom_of_string;
+  Hashtbl.clear Camlcoq.string_of_atom;
+  oeuf_files_started := true;
   PrintCminor.destination := Some (output_filename sourcename ".oeuf" ".minor.c");
 
   if !option_S then begin

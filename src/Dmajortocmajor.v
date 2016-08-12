@@ -89,9 +89,12 @@ Fixpoint largest_id (x : ident) (l : list ident) : ident :=
 Definition largest_id_prog (prog : Dmajor.program) : ident :=
   largest_id (1%positive) (map fst (prog_defs prog)).
 
+Axiom register_ident_as_malloc : positive -> positive.
+Axiom register_ident_as_malloc_is_id : forall p, register_ident_as_malloc p = p.
+Extract Inlined Constant register_ident_as_malloc => "Camlcoq.register_ident_as_malloc".
 
 Definition transf_prog (prog : Dmajor.program) : res Cmajor.program :=
-  let malloc_id := Pos.succ (largest_id_prog prog) in
+  let malloc_id := register_ident_as_malloc (Pos.succ (largest_id_prog prog)) in
   let bump := Pos.succ malloc_id in
   transform_partial_augment_program (transf_fundef malloc_id) (fun x => OK x)
                                     (new_globs bump malloc_id) (prog_main prog) prog.
@@ -105,24 +108,21 @@ Let ge := Genv.globalenv prog.
 Let tge := Genv.globalenv tprog.
 Hypothesis TRANSF : transf_prog prog = OK tprog.
 Hypothesis NOREP : list_norepet (prog_defs_names prog).
+Definition malloc_id := register_ident_as_malloc (Pos.succ (largest_id_prog prog)).
 Hypothesis NEW_GLOBS_NOT_PUBLIC :
   forall id,
-    In id
-       (map fst
-            (new_globs (Pos.succ (Pos.succ (largest_id_prog prog)))
-                       (Pos.succ (largest_id_prog prog)))) ->
+    In id (map fst (new_globs (Pos.succ malloc_id) malloc_id)) ->
    ~ In id (Genv.genv_public tge).
 
 
-Definition malloc_id := Pos.succ (largest_id_prog prog).
+
 
 Lemma match_prog :
   match_program
              (fun (fd : fundef) (tfd : Cmajor.fundef) =>
-              transf_fundef (Pos.succ (largest_id_prog prog)) fd = OK tfd)
+              transf_fundef malloc_id fd = OK tfd)
              (fun info tinfo : unit => OK info = OK tinfo)
-             (new_globs (Pos.succ (Pos.succ (largest_id_prog prog)))
-                (Pos.succ (largest_id_prog prog))) (prog_main prog) prog tprog.  
+             (new_globs (Pos.succ malloc_id) malloc_id) (prog_main prog) prog tprog.
 Proof.
   intros.
   unfold transf_prog in TRANSF.
@@ -316,6 +316,8 @@ Proof.
   app new_globs_id (In id).
   unfold Pos.le in H1.
   app Pos.compare_ngt_iff Pos.compare. apply H1.
+  unfold malloc_id in *.
+  rewrite register_ident_as_malloc_is_id in *.
   rewrite Pos.lt_succ_r. assumption.
 Qed.  
 
@@ -458,8 +460,7 @@ Proof.
   name match_prog MP.
   intros.
 
-  destruct (in_dec ident_eq id (map fst ((new_globs (Pos.succ (Pos.succ (largest_id_prog prog)))
-            (Pos.succ (largest_id_prog prog)))))).
+  destruct (in_dec ident_eq id (map fst ((new_globs (Pos.succ malloc_id) malloc_id)))).
 
   Focus 2.
   unfold ge in H. unfold tge in H0.
@@ -775,7 +776,7 @@ End PRESERVATION.
 Theorem transf_program_correct:
   forall prog tprog,
     list_norepet (prog_defs_names prog) ->
-    (forall id : ident, In id (map fst (new_globs (Pos.succ (Pos.succ (largest_id_prog prog))) (Pos.succ (largest_id_prog prog)))) ->
+    (forall id : ident, In id (map fst (new_globs (Pos.succ (malloc_id prog)) (malloc_id prog))) ->
                         ~ In id (Genv.genv_public (Genv.globalenv tprog))) ->
     transf_prog prog = OK tprog ->
     forward_simulation (Dmajor.semantics prog) (Cmajor.semantics tprog).
