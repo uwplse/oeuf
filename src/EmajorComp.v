@@ -14,7 +14,7 @@ Fixpoint compile_expr (e : F.expr) : E.expr :=
     match e with
     | F.Arg => E.Var 1%positive
     | F.Self => E.Var 2%positive
-    | F.Temp n => E.Var (Pos.of_nat (3 + n))
+    | F.Temp n => E.Var (Pos.of_nat (4 + n))
     | F.Deref e off => E.Deref (compile_expr e) off
     end.
 
@@ -22,7 +22,7 @@ Fixpoint compile_expr_list (es : list F.expr) : list E.expr :=
     map compile_expr es.
 
 Definition conv_dest (n : nat) : ident :=
-    Pos.of_nat (3 + n).
+    Pos.of_nat (4 + n).
 
 Definition conv_tag (n : nat) : option int :=
     let z := Z_of_nat n in
@@ -66,7 +66,7 @@ Fixpoint compile_stmt (s : F.stmt) : option E.stmt :=
         Some (E.SmakeConstr (conv_dest dst) tag' (compile_expr_list args))
     | F.Switch cases target =>
         go_list cases >>= fun cases' =>
-        Some (E.Sswitch 1%positive (numbered 0 cases') (compile_expr target))
+        Some (E.Sswitch 3%positive (numbered 0 cases') (compile_expr target))
     | F.MakeClose dst fn free =>
         Some (E.SmakeClose (conv_dest dst) (conv_fn fn) (compile_expr_list free))
     | F.Seq s1 s2 =>
