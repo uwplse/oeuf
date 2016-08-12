@@ -331,7 +331,10 @@ Section tests.
 
   Definition id_nat (n : nat) : nat := n.
 
-  Definition id_nat_reflect {l} : expr l _ :=
+  Definition id_nat_reflect_ty : type :=
+    ltac:(type_reflect (nat -> nat)).
+
+  Definition id_nat_reflect {l} : expr l id_nat_reflect_ty :=
     ltac:(let x := eval unfold id_nat in id_nat in reflect x).
 
   Example id_nat_reflect_correct : forall l h, expr_denote(l := l) id_nat_reflect h = id_nat.
@@ -344,6 +347,21 @@ Section tests.
   Eval compute in @map nat nat.
 
   Example map_reflect_correct : forall l h, expr_denote(l := l) map_reflect h = @map nat nat.
+  Proof. reflexivity. Qed.
+
+  Definition long_id n :=
+    @nat_rect (fun _ => nat)
+              (O)
+              (fun a IHa => S IHa)
+              n.
+
+  Definition long_id_reflect_ty : type :=
+    ltac:(type_reflect (nat -> nat)).
+
+  Definition long_id_reflect {l} : expr l long_id_reflect_ty :=
+    ltac:(let x := eval unfold long_id in long_id in reflect x).
+
+  Example long_id_reflect_correct : forall l h, expr_denote(l := l) long_id_reflect h = long_id.
   Proof. reflexivity. Qed.
 
   Definition add a b :=

@@ -425,6 +425,8 @@ let compile_oeuf the_program its_type sourcename asmname =
 
 let process_oeuf sourcename =
   let (the_program, its_type) = match Filename.chop_suffix sourcename ".oeuf" with
+    | "id_nat" -> (SourceLang.id_nat_reflect [], SourceLang.id_nat_reflect_ty)
+    | "long_id" -> (SourceLang.long_id_reflect [], SourceLang.long_id_reflect_ty)
     | "fib" -> (SourceLang.fib_reflect [], SourceLang.fib_reflect_ty)
     | "add" -> (SourceLang.add_reflect [], SourceLang.add_reflect_ty)
     | "echo_initial_state" ->
