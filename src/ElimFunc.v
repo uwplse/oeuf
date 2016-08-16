@@ -190,6 +190,120 @@ Eval compute in proj1_sig add_1_2.
 
 
 
+(*
+ * Mutual recursion/induction schemes for expr
+ *)
+
+Definition expr_rect_mut
+        (P : expr -> Type)
+        (Pl : list expr -> Type)
+        (Pp : expr * rec_info -> Type)
+        (Plp : list (expr * rec_info) -> Type)
+    (HArg :     P Arg)
+    (HUpVar :   forall n, P (UpVar n))
+    (HCall :    forall f a, P f -> P a -> P (Call f a))
+    (HConstr :  forall tag args, Pl args -> P (Constr tag args))
+    (HElimBody : forall rec cases target,
+        P rec -> Plp cases -> P target -> P (ElimBody rec cases target))
+    (HClose :   forall f free, Pl free -> P (Close f free))
+    (Hnil :     Pl [])
+    (Hcons :    forall e es, P e -> Pl es -> Pl (e :: es))
+    (Hpair :    forall e r, P e -> Pp (e, r))
+    (Hnil_p :   Plp [])
+    (Hcons_p :  forall p ps, Pp p -> Plp ps -> Plp (p :: ps))
+    (e : expr) : P e :=
+    let fix go e :=
+        let fix go_list es :=
+            match es as es_ return Pl es_ with
+            | [] => Hnil
+            | e :: es => Hcons e es (go e) (go_list es)
+            end in
+        let go_pair p :=
+            let '(e, r) := p in
+            Hpair e r (go e) in
+        let fix go_pair_list ps :=
+            match ps as ps_ return Plp ps_ with
+            | [] => Hnil_p
+            | p :: ps => Hcons_p p ps (go_pair p) (go_pair_list ps)
+            end in
+        match e as e_ return P e_ with
+        | Arg => HArg
+        | UpVar n => HUpVar n
+        | Call f a => HCall f a (go f) (go a)
+        | Constr tag args => HConstr tag args (go_list args)
+        | ElimBody rec cases target =>
+                HElimBody rec cases target (go rec) (go_pair_list cases) (go target)
+        | Close f free => HClose f free (go_list free)
+        end in go e.
+
+(* Useful wrapper for `expr_rect_mut with (Pl := Forall P)` *)
+Definition expr_ind' (P : expr -> Prop) (Pp : (expr * rec_info) -> Prop)
+    (HArg :     P Arg)
+    (HUpVar :   forall n, P (UpVar n))
+    (HCall :    forall f a, P f -> P a -> P (Call f a))
+    (HConstr :  forall c args, Forall P args -> P (Constr c args))
+    (HElimBody : forall rec cases target,
+        P rec -> Forall Pp cases -> P target -> P (ElimBody rec cases target))
+    (HClose :   forall f free, Forall P free -> P (Close f free))
+    (Hpair :    forall e r, P e -> Pp (e, r))
+    (e : expr) : P e :=
+    ltac:(refine (@expr_rect_mut P (Forall P) Pp (Forall Pp)
+        HArg HUpVar HCall HConstr HElimBody HClose _ _ Hpair _ _ e); eauto).
+
+(* Useful wrapper for `expr_rect_mut with (Pl := Forall P)` *)
+Definition expr_ind'' (P : expr -> Prop)
+    (HArg :     P Arg)
+    (HUpVar :   forall n, P (UpVar n))
+    (HCall :    forall f a, P f -> P a -> P (Call f a))
+    (HConstr :  forall c args, Forall P args -> P (Constr c args))
+    (HElimBody : forall rec cases target,
+        P rec ->
+        Forall (fun c => P (fst c)) cases ->
+        P target ->
+        P (ElimBody rec cases target))
+    (HClose :   forall f free, Forall P free -> P (Close f free))
+    (e : expr) : P e :=
+    ltac:(refine (@expr_rect_mut P (Forall P) (fun c => P (fst c)) (Forall (fun c => P (fst c)))
+        HArg HUpVar HCall HConstr HElimBody HClose _ _ _ _ _ e); eauto).
+
+
+(*
+ * Nested fixpoint aliases for subst
+ *)
+
+Section subst_alias.
+Open Scope option_monad.
+
+Definition subst_list arg vals :=
+    let go := subst arg vals in
+    let fix go_list es : option (list expr) :=
+        match es with
+        | [] => Some []
+        | e :: es => cons <$> go e <*> go_list es
+        end in go_list.
+
+Definition subst_pair arg vals :=
+    let go := subst arg vals in
+    let fix go_pair p : option (expr * rec_info) :=
+        let '(e, r) := p in
+        go e >>= fun e' => Some (e', r) in go_pair.
+
+Definition subst_list_pair arg vals :=
+    let go_pair := subst_pair arg vals in
+    let fix go_list_pair ps : option (list (expr * rec_info)) :=
+        match ps with
+        | [] => Some []
+        | p :: ps => cons <$> go_pair p <*> go_list_pair ps
+        end in go_list_pair.
+
+End subst_alias.
+
+Ltac refold_subst arg vals :=
+    fold (subst_list arg vals) in *;
+    fold (subst_pair arg vals) in *;
+    fold (subst_list_pair arg vals) in *.
+
+
 
 Definition num_upvars :=
     let fix go e :=
@@ -300,3 +414,100 @@ Ltac refold_renumber f :=
     fold renumber_list in *;
     fold renumber_pair in *;
     fold renumber_list_pair in *.
+
+
+(* closed terms *)
+
+Inductive closed : expr -> Prop :=
+| CCall : forall f a, closed f -> closed a -> closed (Call f a)
+| CConstr : forall tag args, Forall closed args -> closed (Constr tag args)
+| CElimBody : forall rec cases target,
+        closed rec ->
+        Forall (fun p => closed (fst p)) cases ->
+        closed target ->
+        closed (ElimBody rec cases target)
+| CClose : forall fname free, Forall closed free -> closed (Close fname free)
+.
+
+Lemma subst_closed : forall arg upvars,
+    closed arg ->
+    Forall closed upvars ->
+    forall e e',
+    subst arg upvars e = Some e' ->
+    closed e'.
+intros0 Harg Hupvars.
+induction e using expr_rect_mut with
+    (Pl := fun es => forall es',
+        subst_list arg upvars es = Some es' ->
+        Forall closed es')
+    (Pp := fun p => forall p',
+        subst_pair arg upvars p = Some p' ->
+        closed (fst p'))
+    (Plp := fun ps => forall ps',
+        subst_list_pair arg upvars ps = Some ps' ->
+        Forall (fun p => closed (fst p)) ps');
+intros0 Hsubst; simpl in Hsubst; refold_subst arg upvars;
+break_bind_option; inject_some; inject_pair.
+
+- assumption.
+- eapply Forall_nth_error; eauto.
+- constructor; eauto.
+- constructor. eauto.
+- constructor; eauto.
+- constructor. eauto.
+
+- constructor.
+- constructor; eauto.
+
+- simpl. eauto.
+
+- constructor.
+- constructor; eauto.
+Qed.
+
+Lemma value_closed : forall e,
+    value e ->
+    closed e.
+induction e using expr_ind''; intros0 Hval; invc Hval.
+- constructor. list_magic_on (args, tt).
+- constructor. list_magic_on (free, tt).
+Qed.
+
+Lemma unroll_elim_closed : forall rec case args info e',
+    closed rec ->
+    closed case ->
+    Forall closed args ->
+    unroll_elim rec case args info = Some e' ->
+    closed e'.
+first_induction args; destruct info; simpl; intros0 Hrec Hcase Hargs Helim; try discriminate.
+- inject_some. assumption.
+- invc Hargs.
+  eapply IHargs; [ .. | eassumption ]; try eassumption.
+  destruct b.
+  + constructor; constructor; eauto.
+  + constructor; eauto.
+Qed.
+
+Lemma closed_step : forall E e e',
+    closed e ->
+    step E e e' ->
+    closed e'.
+induction e using expr_ind''; intros0 Hcl Hstep; invc Hcl; invc Hstep.
+
+- eapply subst_closed; [ .. | eassumption ].
+  + eauto using value_closed.
+  + list_magic_on (free, tt). eauto using value_closed.
+- constructor; eauto.
+- constructor; eauto.
+- on _, invc_using Forall_3part_inv.
+  on _, invc_using Forall_3part_inv.
+  constructor. eapply Forall_app; [ | constructor ]; eauto.
+- constructor; eauto.
+- constructor; eauto.
+- eapply unroll_elim_closed; [ .. | eassumption ]; eauto.
+  + fwd eapply Forall_nth_error; [ | eassumption | ]; eauto.
+  + list_magic_on (args, tt). eauto using value_closed.
+- on _, invc_using Forall_3part_inv.
+  on _, invc_using Forall_3part_inv.
+  constructor. eapply Forall_app; [ | constructor ]; eauto.
+Qed.
