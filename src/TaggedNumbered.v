@@ -503,3 +503,99 @@ first_induction args; destruct rec; intros0 Hlen; simpl in Hlen; try discriminat
 - inv Hlen.
   fwd eapply IHargs; try eassumption.
 Qed.
+
+
+(* closed terms *)
+
+Inductive closed : expr -> Prop :=
+| CCall : forall f a, closed f -> closed a -> closed (Call f a)
+| CConstr : forall tag args, Forall closed args -> closed (Constr tag args)
+| CElimN : forall num cases target,
+        Forall (fun p => closed (fst p)) cases ->
+        closed target ->
+        closed (ElimN num cases target)
+| CClose : forall fname free, Forall closed free -> closed (Close fname free)
+.
+
+Lemma subst_closed : forall arg upvars,
+    closed arg ->
+    Forall closed upvars ->
+    forall e e',
+    subst arg upvars e = Some e' ->
+    closed e'.
+intros0 Harg Hupvars.
+induction e using expr_rect_mut with
+    (Pl := fun es => forall es',
+        subst_list arg upvars es = Some es' ->
+        Forall closed es')
+    (Pp := fun p => forall p',
+        subst_pair arg upvars p = Some p' ->
+        closed (fst p'))
+    (Plp := fun ps => forall ps',
+        subst_list_pair arg upvars ps = Some ps' ->
+        Forall (fun p => closed (fst p)) ps');
+intros0 Hsubst; simpl in Hsubst; refold_subst arg upvars;
+break_bind_option; inject_some; inject_pair.
+
+- assumption.
+- eapply Forall_nth_error; eauto.
+- constructor; eauto.
+- constructor. eauto.
+- constructor; eauto.
+- constructor. eauto.
+
+- constructor.
+- constructor; eauto.
+
+- simpl. eauto.
+
+- constructor.
+- constructor; eauto.
+Qed.
+
+Lemma value_closed : forall e,
+    value e ->
+    closed e.
+induction e using expr_ind''; intros0 Hval; invc Hval.
+- constructor. list_magic_on (args, tt).
+- constructor. list_magic_on (free, tt).
+Qed.
+
+Lemma unroll_elim_closed : forall case args rec mk_rec e',
+    closed case ->
+    Forall closed args ->
+    (forall e, closed e -> closed (mk_rec e)) ->
+    unroll_elim case args rec mk_rec = Some e' ->
+    closed e'.
+first_induction args; destruct rec; simpl; intros0 Hcase Hargs Hmk_rec Helim; try discriminate.
+- inject_some. assumption.
+- invc Hargs.
+  eapply IHargs; [ .. | eassumption ]; try eassumption.
+  destruct b.
+  + constructor; [ constructor | ]; eauto.
+  + constructor; eauto.
+Qed.
+
+Lemma closed_step : forall E e e',
+    closed e ->
+    step E e e' ->
+    closed e'.
+induction e using expr_ind''; intros0 Hcl Hstep; invc Hcl; invc Hstep.
+
+- eapply subst_closed; [ .. | eassumption ].
+  + eauto using value_closed.
+  + list_magic_on (free, tt). eauto using value_closed.
+- constructor; eauto.
+- constructor; eauto.
+- on _, invc_using Forall_3part_inv.
+  on _, invc_using Forall_3part_inv.
+  constructor. eapply Forall_app; [ | constructor ]; eauto.
+- constructor; eauto.
+- eapply unroll_elim_closed; [ .. | eassumption ].
+  + fwd eapply Forall_nth_error; [ | eassumption | ]; eauto.
+  + list_magic_on (args, tt). eauto using value_closed.
+  + cbv beta. intros. constructor; eauto.
+- on _, invc_using Forall_3part_inv.
+  on _, invc_using Forall_3part_inv.
+  constructor. eapply Forall_app; [ | constructor ]; eauto.
+Qed.

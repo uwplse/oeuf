@@ -221,6 +221,15 @@ on (Forall _ (_ :: _)), invc.
 eauto.
 Qed.
 
+Lemma Forall_app : forall A (P : A -> Prop) xs ys,
+    Forall P xs ->
+    Forall P ys ->
+    Forall P (xs ++ ys).
+induction xs; intros0 Hx Hy; simpl.
+- assumption.
+- invc Hx. constructor; eauto.
+Qed.
+
 
 (* misc *)
 
