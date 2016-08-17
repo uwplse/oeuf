@@ -368,7 +368,6 @@ Proof.
   econstructor; eauto.
 Qed.
   
-(* parameterize this by the memory *)
 Inductive match_cont: Emajor.cont -> Dmajor.cont -> mem -> Prop :=
 | match_cont_stop: forall m,
     match_cont Emajor.Kstop Dmajor.Kstop m
@@ -380,21 +379,25 @@ Inductive match_cont: Emajor.cont -> Dmajor.cont -> mem -> Prop :=
     transf_stmt s = s' ->
     match_cont k k' m ->
     match_cont (Emajor.Kseq s k) (Dmajor.Kseq s' k') m
-| match_cont_call: forall id f sp e k f' e' k' m,
+| match_cont_call: forall id f b e k f' e' k' m,
     match_cont k k' m ->
     env_inject e e' tge m ->
     transf_function f = f' ->
-    match_cont (Emajor.Kcall id f e k) (Dmajor.Kcall (Some id) f' sp e' k') m.
+    match_cont (Emajor.Kcall id f e k) (Dmajor.Kcall (Some id) f' (Vptr b Int.zero) e' k') m.
 
 
+(* TODO: need a few things *)
+(* 1. sp is in fact a pointer *)
+(* 2. sp points to a stack block of the right size *)
+(* probably need those facts to go in match_cont too, about Kcalls *)
 Inductive match_states: Emajor.state -> Dmajor.state -> Prop :=
 | match_state :
-    forall f f' s s' k k' e e' sp m,
+    forall f f' s s' k k' e e' b m,
       transf_function f = f' ->
       transf_stmt s = s' ->
       match_cont k k' m ->
       env_inject e e' tge m ->
-      match_states (Emajor.State f s k e) (Dmajor.State f' s' k' sp e' m)
+      match_states (Emajor.State f s k e) (Dmajor.State f' s' k' (Vptr b Int.zero) e' m)
 | match_callstate :
     forall fd fd' vals vals' m k k',
       transf_fundef fd = fd' ->
@@ -1251,7 +1254,7 @@ Proof.
 Qed.
 
 Lemma SmakeConstr_sim :
-  forall k k' m e e' l vargs id tag sp f,
+  forall k k' m e e' l vargs id tag b f,
     match_cont k k' m ->
     env_inject e e' tge m ->
     e ! id = None ->
@@ -1260,7 +1263,7 @@ Lemma SmakeConstr_sim :
         0 <= x <= Z.of_nat (length l) -> Int.unsigned (Int.repr (4 + 4 * x)) = (4 + 4 * x)%Z) ->
     exists st0',
       plus step tge
-           (State (transf_function f) (transf_stmt (SmakeConstr id tag l)) k' sp e' m)
+           (State (transf_function f) (transf_stmt (SmakeConstr id tag l)) k' (Vptr b Int.zero) e' m)
            E0 st0' /\
       match_states
         (Emajor.State f Emajor.Sskip k (PTree.set id (Constr tag vargs) e)) st0'.
@@ -1273,7 +1276,7 @@ Proof.
   eapply plus_left; nil_trace. eassumption.
   repeat (eapply star_left; nil_trace; [eassumption | idtac]).
   eassumption.
-
+  
   econstructor; eauto.
   eapply mem_locked_match_cont. eassumption.
   assumption.
@@ -1297,7 +1300,7 @@ Proof.
 Qed.
 
 Lemma SmakeClose_sim :
-  forall k k' m e e' l vargs fname id sp f bcode fn,
+  forall k k' m e e' l vargs fname id b f bcode fn,
     match_cont k k' m ->
     env_inject e e' tge m ->
     e ! id = None ->
@@ -1308,7 +1311,7 @@ Lemma SmakeClose_sim :
         0 <= x <= Z.of_nat (length l) -> Int.unsigned (Int.repr (4 + 4 * x)) = (4 + 4 * x)%Z) ->
     exists st0',
       plus step tge
-           (State (transf_function f) (transf_stmt (SmakeClose id fname l)) k' sp e' m)
+           (State (transf_function f) (transf_stmt (SmakeClose id fname l)) k' (Vptr b Int.zero) e' m)
            E0 st0' /\
       match_states
         (Emajor.State f Emajor.Sskip k (PTree.set id (Close fname vargs) e)) st0'.
@@ -1394,17 +1397,23 @@ Proof.
 
   (* return *)
   + destruct k; simpl in H8; try solve [inv H8]; invp match_cont.
+    app transf_expr_inject Emajor.eval_expr.
     eexists; split.
     eapply plus_one.
-    simpl.
-  (* need facts about stack pointer built into match_states *)
-    admit. admit.
+    econstructor; eauto.
+    unfold transf_function. simpl.
+    admit. (* here is where we need stack heap separation *)
 
+    econstructor; eauto.
+
+    app transf_expr_inject Emajor.eval_expr.
     eexists; split.
     eapply plus_one.
     simpl.
-  (* need facts about stack pointer built into match_states *)
-    admit. admit.
+    econstructor; eauto.
+    admit. (* here we need stack heap separation *)
+
+    econstructor; eauto.
     
   (* seq *)
   + eexists. split.
