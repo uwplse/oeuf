@@ -20,3 +20,5 @@ src/*.o
 
 OeufDriver.native
 _build/
+
+shim.c
