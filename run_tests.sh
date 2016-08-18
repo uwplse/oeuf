@@ -3,11 +3,13 @@
 COMP="./OeufDriver.native"
 
 TESTS="
-  fib.oeuf
-  add.oeuf
-  echo_initial_state.oeuf
-  echo_handleInput.oeuf
-  echo_handleMsg.oeuf
+  id_nat
+  long_id
+  fib
+  add
+  echo_initial_state
+  echo_handleInput
+  echo_handleMsg
   "
 
 # ANSI color codes
@@ -39,10 +41,11 @@ EOF
   exit 1
 fi
 
+echo ">> Object files produced:"
 for t in $TESTS; do
   printf "%-25s" "$t"
-  out="$(basename "$t" .oeuf).o"
-  "$COMP" -c "$t"
+  out="${t}.o"
+  "$COMP" -c "${t}.oeuf"
   if [ -f "$out" ]; then
     echo "$PASS"
     rm "$out"
@@ -50,3 +53,27 @@ for t in $TESTS; do
     echo "$FAIL"
   fi
 done
+echo
+
+echo ">> Compiles with shim:"
+for t in $TESTS; do
+  printf "%-25s" "$t"
+  if ./occ.sh "$t" > /dev/null 2>&1 ; then
+    echo "$PASS"
+    rm a.out shim.o "${t}.o"
+  else
+    echo "$FAIL"
+  fi
+done
+echo
+
+echo ">> Shim output (if compiles):"
+for t in $TESTS; do
+  if ./occ.sh "$t" > /dev/null 2>&1 ; then
+    echo "$t"
+    ./a.out
+    rm a.out shim.o "${t}.o"
+    echo
+  fi
+done
+echo
