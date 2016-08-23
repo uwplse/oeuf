@@ -599,3 +599,257 @@ induction e using expr_ind''; intros0 Hcl Hstep; invc Hcl; invc Hstep.
   on _, invc_using Forall_3part_inv.
   constructor. eapply Forall_app; [ | constructor ]; eauto.
 Qed.
+
+
+
+Inductive state :=
+| Run (e : expr) (l : list expr) (k : expr -> state)
+| Stop (e : expr).
+
+Inductive sstep (E : env) : state -> state -> Prop :=
+| SArg : forall l k v,
+        nth_error l 0 = Some v ->
+        sstep E (Run Arg l k) (k v)
+| SUpVar : forall n l k v,
+        nth_error l (S n) = Some v ->
+        sstep E (Run (UpVar n) l k) (k v)
+
+| SCloseStep : forall tag vs e es l k,
+        Forall value vs ->
+        ~ value e ->
+        sstep E (Run (Close tag (vs ++ [e] ++ es)) l k)
+                (Run e l (fun v => Run (Close tag (vs ++ [v] ++ es)) l k))
+| SCloseDone : forall tag vs l k,
+        Forall value vs ->
+        sstep E (Run (Close tag vs) l k) (k (Close tag vs))
+
+| SConstrStep : forall fname vs e es l k,
+        Forall value vs ->
+        ~ value e ->
+        sstep E (Run (Constr fname (vs ++ [e] ++ es)) l k)
+                (Run e l (fun v => Run (Constr fname (vs ++ [v] ++ es)) l k))
+| SConstrDone : forall fname vs l k,
+        Forall value vs ->
+        sstep E (Run (Constr fname vs) l k) (k (Constr fname vs))
+
+| SCallL : forall e1 e2 l k,
+        ~ value e1 ->
+        sstep E (Run (Call e1 e2) l k)
+                (Run e1 l (fun v => Run (Call v e2) l k))
+| SCallR : forall e1 e2 l k,
+        value e1 ->
+        ~ value e2 ->
+        sstep E (Run (Call e1 e2) l k)
+                (Run e2 l (fun v => Run (Call e1 v) l k))
+| SMakeCall : forall fname free arg l k body,
+        Forall value free ->
+        value arg ->
+        nth_error E fname = Some body ->
+        sstep E (Run (Call (Close fname free) arg) l k)
+                (Run body (arg :: free) k)
+
+| SElimNStep : forall num cases target l k,
+        ~ value target ->
+        sstep E (Run (ElimN num cases target) l k)
+                (Run target l (fun v => Run (ElimN num cases v) l k))
+| SEliminate : forall num cases tag args l k case rec e',
+        Forall value args ->
+        nth_error cases tag = Some (case, rec) ->
+        unroll_elim case args rec (fun x => ElimN num cases x) = Some e' ->
+        sstep E (Run (ElimN num cases (Constr tag args)) l k)
+                (Run e' l k)
+.
+
+Inductive sstar (E : env) : state -> state -> Prop :=
+| SStarNil : forall e, sstar E e e
+| SStarCons : forall e e' e'',
+        sstep E e e' ->
+        sstar E e' e'' ->
+        sstar E e e''.
+
+Inductive splus (E : env) : state -> state -> Prop :=
+| SPlusOne : forall s s',
+        sstep E s s' ->
+        splus E s s'
+| SPlusCons : forall s s' s'',
+        sstep E s s' ->
+        splus E s' s'' ->
+        splus E s s''.
+
+Theorem add_1_2_s : { x | sstar add_env
+        (Run (Call (Call add_reflect (nat_reflect 1)) (nat_reflect 2)) [] Stop)
+        x }.
+eexists.
+
+unfold add_reflect.
+eright. eapply SCallL.
+  inversion 1.
+eright. eapply SMakeCall.
+  constructor.
+  repeat constructor.
+  reflexivity.
+eright. change [Arg] with ([] ++ [Arg] ++ []). eapply SCloseStep.
+  constructor.
+  inversion 1.
+eright. eapply SArg.
+  reflexivity.
+eright. eapply SCloseDone.
+  repeat constructor.
+eright. eapply SMakeCall.
+  repeat constructor.
+  repeat constructor.
+  reflexivity.
+eright. eapply SCallL.
+  inversion 1.
+eright. eapply SElimNStep.
+  inversion 1.
+eright. eapply SUpVar.
+  reflexivity.
+eright. eapply SEliminate.
+  repeat constructor.
+  reflexivity.
+  reflexivity.
+eright. eapply SCallL.
+  inversion 1.
+eright. eapply SCallL.
+  intros HH. invc HH. invc H0. invc H2.
+eright. change [Arg; UpVar 0] with ([] ++ [Arg] ++ [UpVar 0]). eapply SCloseStep.
+  constructor.
+  inversion 1.
+eright. eapply SArg.
+  reflexivity.
+eright. change ([] ++ [nat_reflect 2] ++ [UpVar 0]) with
+        ([nat_reflect 2] ++ [UpVar 0] ++ []). eapply SCloseStep.
+  repeat constructor.
+  inversion 1.
+eright. eapply SUpVar.
+  reflexivity.
+eright. eapply SCloseDone.
+  repeat constructor.
+eright. eapply SMakeCall.
+  repeat constructor.
+  repeat constructor.
+  reflexivity.
+Abort.
+
+Inductive flatten : state -> expr -> Prop :=
+| FRun : forall e a f k e' e'',
+        subst a f e = Some e' ->
+        flatten (k e') e''->
+        flatten (Run e (a :: f) k) e''
+| FStop : forall e,
+        flatten (Stop e) e.
+
+Inductive svalid : state -> Prop :=
+| VRun : forall e l k,
+        Forall value l ->
+        (forall v, value v -> svalid (k v)) ->
+        svalid (Run e l k)
+| VStop : forall v,
+        value v ->
+        svalid (Stop v).
+
+Lemma step_not_value : forall E e e',
+    step E e e' ->
+    ~ value e.
+induction e using expr_ind''; intros0 Hstep; invc Hstep;
+try solve [inversion 1].
+
+- inversion 1. subst.
+  invc_using Forall_3part_inv H.
+  invc_using Forall_3part_inv H3.
+  eapply H5; eauto.
+
+- inversion 1. subst.
+  invc_using Forall_3part_inv H.
+  invc_using Forall_3part_inv H3.
+  eapply H5; eauto.
+Qed.
+
+Inductive I : expr -> state -> Prop :=
+| IArg : forall l v k,
+        value v ->
+        nth_error l 0 = Some v ->
+        I v (Run Arg l k)
+| IUpVar : forall n l v k,
+        value v ->
+        nth_error l (S n) = Some v ->
+        I v (Run (UpVar n) l k)
+| ICall : forall f a f' a' l k,
+        I f (Run f' l k) ->
+        I a (Run a' l k) ->
+        I (Call f a) (Run (Call f' a') l k)
+| IConstr : forall tag args args' l k,
+        Forall2 (fun a a' => I a (Run a' l k)) args args' ->
+        I (Constr tag args) (Run (Constr tag args') l k)
+| IElimN : forall num cases target cases' target' l k,
+        Forall2 (fun c c' => I (fst c) (Run (fst c') l k)) cases cases' ->
+        I target (Run target' l k) ->
+        I (ElimN num cases target) (Run (ElimN num cases' target') l k)
+| IClose : forall fname free free' l k,
+        Forall2 (fun a a' => I a (Run a' l k)) free free' ->
+        I (Close fname free) (Run (Close fname free') l k)
+| IStop : forall v,
+        value v ->
+        I v (Stop v)
+.
+
+Lemma I_any_k : forall e e' l k k',
+    I e (Run e' l k) ->
+    I e (Run e' l k').
+induction e using expr_ind''; intros0 II.
+
+(* impossible - the first arg to `I` must always be a closed term *)
+- invc II; on (value _), invc.
+- invc II; on (value _), invc.
+
+- invc II; try on (value _), invc.
+  constructor; eauto.
+
+- invc II; constructor; eauto.
+  list_magic_on (args, (args', tt)).
+
+- invc II; try on (value _), invc.
+  constructor; eauto.
+  list_magic_on (cases, (cases', tt)).
+
+- invc II; constructor; eauto.
+  list_magic_on (free, (free', tt)).
+Qed.
+
+(*
+Theorem step_sstep : forall E e e' s,
+    step E e e' ->
+    I e s ->
+    exists s',
+        splus E s s' /\
+        I e' s'.
+induction e using expr_ind''; intros0 Hstep II;
+match type of Hstep with | step _ ?e _ =>
+        assert (Hnval : ~ value e) by (eauto using step_not_value)
+end; invc Hstep.
+
+- admit.
+
+- admit.
+
+- admit.
+
+- invc II; try solve [ contradict Hnval; eauto ].
+
+    { on (value _), invc. on (Forall value _), invc_using Forall_3part_inv.
+      exfalso. eapply step_not_value; eauto. }
+  eexists. split. eapply SPlusOne.
+  eapply SConstrStep.
+
+  eexists. split. .
+  Focus 2.
+
+- admit.
+
+- admit.
+
+- admit.
+
+Admitted.
+*)
