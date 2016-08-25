@@ -527,14 +527,14 @@ Inductive sstep (E : env) : state -> state -> Prop :=
         nth_error l (S n) = Some v ->
         sstep E (Run (UpVar n) l k) (k v)
 
-| SCloseStep : forall tag vs e es l k,
+| SCloseStep : forall fname vs e es l k,
         Forall value vs ->
         ~ value e ->
-        sstep E (Run (Close tag (vs ++ [e] ++ es)) l k)
-                (Run e l (fun v => Run (Close tag (vs ++ [v] ++ es)) l k))
-| SCloseDone : forall tag vs l k,
+        sstep E (Run (Close fname (vs ++ [e] ++ es)) l k)
+                (Run e l (fun v => Run (Close fname (vs ++ [v] ++ es)) l k))
+| SCloseDone : forall fname vs l k,
         Forall value vs ->
-        sstep E (Run (Close tag vs) l k) (k (Close tag vs))
+        sstep E (Run (Close fname vs) l k) (k (Close fname vs))
 
 | SConstrStep : forall fname vs e es l k,
         Forall value vs ->
