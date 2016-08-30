@@ -474,6 +474,15 @@ induction 1; intros.
 - econstructor; eauto.
 Qed.
 
+Lemma E_sstar_then_sstar : forall E s s' s'',
+    E.sstar E s s' ->
+    E.sstar E s' s'' ->
+    E.sstar E s s''.
+induction 1; intros.
+- assumption.
+- econstructor; solve [eauto].
+Qed.
+
 Lemma E_sstar_then_splus : forall E s s' s'',
     E.sstar E s s' ->
     E.splus E s' s'' ->
@@ -497,6 +506,13 @@ Lemma E_splus_then_sstar : forall E s s' s'',
     E.sstar E s' s'' ->
     E.splus E s s''.
 intros. eauto using E_splus_then_sstar'.
+Qed.
+
+Lemma E_splus_then_splus : forall E s s' s'',
+    E.splus E s s' ->
+    E.splus E s' s'' ->
+    E.splus E s s''.
+induction 1; intros; eauto using E.SPlusCons.
 Qed.
 
 Lemma upvar_list'_snoc : forall acc x n,
@@ -787,6 +803,77 @@ intros0 Hne Hstar. invc Hstar.
   + assumption.
 Qed.
 
+Ltac E_start HS :=
+    match goal with
+    | [ |- context [ ?pred ?E ?s _ ] ] =>
+            lazymatch pred with
+            | E.sstep => idtac
+            | E.sstar => idtac
+            | E.splus => idtac
+            | _ => fail "unrecognized predicate:" pred
+            end;
+            let S_ := fresh "S" in
+            let S0 := fresh "S" in
+            set (S0 := s);
+            change s with S0;
+            assert (HS : E.sstar E S0 S0) by (eapply E.SStarNil)
+    end.
+
+Ltac E_step HS :=
+    let S_ := fresh "S" in
+    let S2 := fresh "S" in
+    let HS' := fresh HS "'" in
+    let H := fresh "Hex" in
+    let go E s0 s1 Erel solver :=
+        rename HS into HS';
+        evar (S2 : E.state);
+        assert (HS : Erel E s0 S2);
+        [ solver; unfold S2
+        | clear HS' ] in
+    match type of HS with
+    | E.sstar ?E ?s0 ?s1 => go E s0 s1 E.splus
+            ltac:(eapply E_sstar_then_splus with (1 := HS');
+                  eapply E.SPlusOne)
+    | E.splus ?E ?s0 ?s1 => go E s0 s1 E.splus
+            ltac:(eapply E_splus_snoc with (1 := HS'))
+    end.
+
+Ltac E_star HS :=
+    let S_ := fresh "S" in
+    let S2 := fresh "S" in
+    let HS' := fresh HS "'" in
+    let H := fresh "Hex" in
+    let go E s0 s1 Erel solver :=
+        rename HS into HS';
+        evar (S2 : E.state);
+        assert (HS : Erel E s0 S2);
+        [ solver; unfold S2
+        | clear HS' ] in
+    match type of HS with
+    | E.sstar ?E ?s0 ?s1 => go E s0 s1 E.sstar
+            ltac:(eapply E_sstar_then_sstar with (1 := HS'))
+    | E.splus ?E ?s0 ?s1 => go E s0 s1 E.splus
+            ltac:(eapply E_splus_then_sstar with (1 := HS'))
+    end.
+
+Ltac E_plus HS :=
+    let S_ := fresh "S" in
+    let S2 := fresh "S" in
+    let HS' := fresh HS "'" in
+    let H := fresh "Hex" in
+    let go E s0 s1 Erel solver :=
+        rename HS into HS';
+        evar (S2 : E.state);
+        assert (HS : Erel E s0 S2);
+        [ solver; unfold S2
+        | clear HS' ] in
+    match type of HS with
+    | E.sstar ?E ?s0 ?s1 => go E s0 s1 E.sstar
+            ltac:(eapply E_sstar_then_splus with (1 := HS'))
+    | E.splus ?E ?s0 ?s1 => go E s0 s1 E.splus
+            ltac:(eapply E_splus_then_splus with (1 := HS'))
+    end.
+
 Theorem I_sim : forall TE EE ELIMS t t' e,
     env_ok TE EE ELIMS ->
     I TE EE t e ->
@@ -835,42 +922,51 @@ simpl in *; refold_compile (length TE).
 
 - admit.
 
-- assert (Hrun1' : forall fname arg l k, exists efree',
-        E.sstar EE (E.Run (E.Call (E.Close fname efree) arg) l k)
-                   (E.Run (E.Call (E.Close fname efree') arg) l k) /\
-        Forall E.value efree'). {
-    intros.
-    destruct H12 as [[Hlist Hlen] | Hval].
-    - fwd eapply E_close_eval_free as HH. destruct HH as [free' [Hfree' Hval]].
-      exists free'. split; eauto.
-      eapply E.SStarCons. eapply E.SCallL.
-        { inversion 1. subst free. contradict H2.
-          assert (Forall (fun e => ~E.value e) efree)
-            by (rewrite Hlist; eapply upvar_list_not_value).
-          inversion 1; subst efree. { clear -Hlen. simpl in Hlen. lia. }
-          do 2 on (Forall _ (_ :: _)), invc. eauto. }
-      eapply E_sstar_snoc.
-        { rewrite Hlist. eassumption. }
-        { eapply E.SCloseDone. assumption. }
+- destruct H12.
 
-    - exists efree. split; [ constructor | assumption ].
-  }
+  + on (_ /\ _), fun H => destruct H as [Hefree Hlen].
+    
+    E_start HS.
+    E_step HS.
+      { eapply E.SCallL. inversion 1.
+        fwd eapply upvar_list_not_value as HH. rewrite <- Hefree in HH.
+        cut (Forall (fun _ => False) efree).
+          { destruct efree; simpl in Hlen; try solve [exfalso; lia].
+            inversion 1. assumption. }
+        list_magic_on (efree, tt).
+      }
+    fwd eapply E_close_eval_free as HH. destruct HH as [efree' [Hefree' Hval']].
+    E_star HS.
+      { unfold S1. rewrite Hefree. eapply Hefree'. }
+    clear Hefree'.
+    E_step HS.
+      { eapply E.SCloseDone. assumption. }
+    E_step HS.
+      { eapply E.SCallR.
+        - constructor. assumption.
+        - eapply I_expr_not_value; eauto. }
 
-  destruct (Hrun1' (length TE + n) etarget el ek) as [efree' [Hrun1 Hval]].
-  fwd eapply E.SCallR with (e1 := E.Close (length TE + n) efree') (e2 := etarget).
-    { constructor. assumption. }
-    { eapply I_expr_not_value; eauto. }
+    eexists. split.
+    * eassumption.
+    * constructor; eauto.
+      intros0 IE'.
+      constructor; eauto.
+      econstructor; eauto.
+      replace (length efree') with (length efree) by admit.
+      reflexivity.
 
-  eexists. split.
-  + eapply E_sstar_then_splus.
-    { eassumption. }
-    eapply E.SPlusOne. eassumption.
-  + constructor; eauto.
-    intros0 IE'.
-    constructor; eauto.
-    econstructor; eauto.
-    replace (length efree') with (length efree) by admit.
-    reflexivity.
+  + E_start HS.
+    E_step HS.
+      { eapply E.SCallR.
+        - constructor. assumption.
+        - eapply I_expr_not_value; eauto. }
+
+    eexists. split.
+    * eassumption.
+    * constructor; eauto.
+      intros0 IE'.
+      constructor; eauto.
+      econstructor; eauto.
 
 - admit.
 
