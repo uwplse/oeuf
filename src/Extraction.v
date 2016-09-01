@@ -35,6 +35,7 @@ Require Int31.
 Require Oeuf.
 Require SourceLang.
 Require Echo.
+Require Pretty.
 
 (* Standard lib *)
 Require Import ExtrOcamlBasic.
@@ -185,6 +186,7 @@ Separate Extraction
    Echo.initial_state_reflect_ty
    Echo.handleInput_reflect_ty
    Echo.handleMsg_reflect_ty
+   Pretty.expr.parse
 .
 
 Cd "..".
