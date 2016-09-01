@@ -20,3 +20,6 @@ val preprocessed_file: string -> string -> string -> C.program option
 (* first arg: desired transformations
    second arg: source file name before preprocessing
    third arg: file after preprocessing *)
+
+(* Read the contents of the given filename into a string. *)
+val read_file: string -> string
