@@ -423,25 +423,15 @@ let compile_oeuf the_program its_type sourcename asmname =
   PrintAsm.print_program oc asm (*debug=*)None;
   close_out oc
 
+let parse_oeuf sourcename =
+  let text = Parse.read_file sourcename in
+  match Pretty.Coq_expr.parse (Camlcoq.coqstring_of_camlstring text) [] with
+  | Some (Specif.Coq_existT (ty, e)) -> (e, ty)
+  | None -> eprintf "Oeuf parse error on file %s\n" sourcename; exit 1
+
+
 let process_oeuf sourcename =
-  let (the_program, its_type) = match Filename.chop_suffix sourcename ".oeuf" with
-    | "id_nat" -> (SourceLang.id_nat_reflect [], SourceLang.id_nat_reflect_ty)
-    | "long_id" -> (SourceLang.long_id_reflect [], SourceLang.long_id_reflect_ty)
-    | "fib" -> (SourceLang.fib_reflect [], SourceLang.fib_reflect_ty)
-    | "add" -> (SourceLang.add_reflect [], SourceLang.add_reflect_ty)
-    | "echo_initial_state" ->
-            (Echo.initial_state_reflect,
-             Echo.initial_state_reflect_ty)
-    | "echo_handleInput" ->
-            (Echo.handleInput_reflect,
-             Echo.handleInput_reflect_ty)
-    | "echo_handleMsg" ->
-            (Echo.handleMsg_reflect,
-             Echo.handleMsg_reflect_ty)
-    | s ->
-            eprintf "no such extracted term: \"%s\"\n" s;
-            exit 1
-    in
+  let (the_program, its_type) = parse_oeuf sourcename in
   Hashtbl.clear Camlcoq.atom_of_string;
   Hashtbl.clear Camlcoq.string_of_atom;
   PrintCminor.destination := Some (output_filename sourcename ".oeuf" ".minor.c");
