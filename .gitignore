@@ -2,21 +2,20 @@
 *.vo
 *.glob
 *.aux
-*.v.d
-_CoqProject
+*.d
+/_CoqProject
 Makefile.coq
 /.depend.extr
 /compcert.ini
 
-src/*.cmi
-src/*.cmo
-src/*.cmx
-src/*.o
+*.cmi
+*.cmo
+*.cmx
+*.cmxs
+*.o
 /ccomp
 /extraction/*.ml
 /extraction/*.mli
-/extraction/*.cm*
-/extraction/*.o
 
 OeufDriver.native
 _build/

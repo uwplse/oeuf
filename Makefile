@@ -10,7 +10,7 @@ COMPCERTCONFIG=$(shell \
 
 DRIVER=OeufDriver.native
 
-all: compcert proof driver
+all: compcert proof driver plugin
 
 compcert:
 	cd compcert && ./configure $(COMPCERTCONFIG)
@@ -27,6 +27,9 @@ Makefile.coq: _CoqProject
 
 _CoqProject:
 	./configure
+
+plugin:
+	make -C plugin
 
 driver: compcert.ini
 	ocamlbuild \
@@ -63,4 +66,4 @@ clean: Makefile.coq
 cleaner: clean
 	$(MAKE) -C compcert clean
 
-.PHONY: all compcert proof driver clean cleaner
+.PHONY: all compcert proof driver clean cleaner plugin

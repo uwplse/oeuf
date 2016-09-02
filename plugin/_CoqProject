@@ -1,0 +1,5 @@
+-I src
+-Q theories OeufPlugin
+
+src/oeuf_plugin.ml4
+theories/OeufPlugin.v
