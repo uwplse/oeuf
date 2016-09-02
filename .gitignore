@@ -21,3 +21,5 @@ OeufDriver.native
 _build/
 
 shim.c
+
+/test/*.actual
