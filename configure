@@ -3,8 +3,10 @@
 DIRS=(src demos/verdi/echo)
 NAMESPACE_compcert=compcert
 LOCALDEPS=(compcert)
-DEPS=(StructTact)
-CANARIES=("compcert.backend.RTL" "Oeuf requires compcert to be built first.")
+DEPS=(StructTact PrettyParsing)
+CANARIES=("compcert.backend.RTL" "Oeuf requires compcert to be built first."
+          "StructTact.StructTactics" "Build StructTact first."
+          "PrettyParsing.PrettyParsing" "Build PrettyParsing first.")
 EXTRA=()
 
 source ./coqproject.sh
