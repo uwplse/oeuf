@@ -1,4 +1,4 @@
-Require Import Program SourceLang Utopia List Monads HList.
+Require Import Program SourceLang Utopia List Monads HList CompilationUnit.
 Import ListNotations.
 
 From StructTact Require Import StructTactics.
@@ -572,3 +572,55 @@ Eval lazy in expr.pretty 80 (@map_reflect []).
 Eval lazy in expr.pretty 80 (@add_reflect []).
 Eval lazy in expr.pretty 80 (@fib_reflect []).
 Eval lazy in expr.pretty 80 add_1_2.
+
+Module compilation_unit.
+  Definition to_tree (j : compilation_unit) : tree symbol.t :=
+    node (expr.to_tree_hlist (exprs j)).
+
+  Definition from_tree (t : tree symbol.t) : option compilation_unit :=
+    match t with
+    | node ts =>
+      match expr.from_tree_list ts [] with None => None
+      | Some (tys, es) => Some (CompilationUnit tys es)
+      end
+    | _ => None
+    end.
+
+  Lemma to_from_tree_id :
+    forall j, from_tree (to_tree j) = Some j.
+  Proof.
+    unfold from_tree, to_tree.
+    intros.
+    rewrite expr.to_from_tree_list_id.
+    destruct j; auto.
+  Qed.
+
+  Lemma to_tree_wf : forall j, Tree.Forall symbol.wf (to_tree j).
+  Proof. unfold to_tree. auto. Qed.
+  Hint Resolve to_tree_wf.
+
+  Definition print (j : compilation_unit) : String.string :=
+    print_tree (to_tree j).
+
+  Definition pretty w j : String.string :=
+    pretty_tree w (to_tree j).
+
+  Definition parse (s : String.string) : option compilation_unit :=
+    parse s >>= from_tree.
+
+  Lemma parse_print_id : forall j, parse (print j) = Some j.
+  Proof.
+    unfold parse, print.
+    intros.
+    unfold_option.
+    now rewrite parse_print_tree, to_from_tree_id by auto.
+  Qed.
+
+  Lemma parse_pretty_id : forall w j, parse (pretty w j) = Some j.
+  Proof.
+    unfold parse, pretty.
+    intros.
+    unfold_option.
+    now rewrite parse_pretty_tree, to_from_tree_id by auto.
+  Qed.
+End compilation_unit.
