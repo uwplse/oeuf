@@ -1,18 +1,28 @@
-# Oeuf
+# Œuf
 Gallina frontend for CompCert
 
 
 ## Layout
 
-The Oeuf compiler is in `src/`.  For each IR "Foo" listed in the report, the
+The Œuf compiler is in `src/`.  For each IR "Foo" listed in the report, the
 semantics are defined in `Foo.v`, and the compiler to Foo from the previous IR
 is in either `FooComp.v` (for IRs up to Flattened) or `Bartofoo.v` (for the
 rest).
+
+There is a Coq plugin in `plugin/src/oeuf_plugin.ml4` exposed to Coq via 
+`plugin/theories/OeufPlugin.v`. The plugin adds a vernacular command 
+`Eval <reduce-cmd> Then Write To File <filename> <gallina-expr-of-type-string>`
+which evaluates a Gallina expression to a Coq string, converts it to an OCaml 
+string, and writes to the given file. This plugin is **installed** during 
+normal compilation of Œuf.
 
 See `oeuf-fib.s` for an example of the compiler's output.  This is compiled
 from the definition of `fib` in `src/SourceLang.v`.  To run it, first compile
 with `gcc -m32 oeuf-fib.s shim.c`.
 
+There is a test suite in `test/`. Each test has a corresponding shim template in
+`shim_templates/`. The test suite is executed by the script `test.sh`. This 
+script is called at the end of the normal compilation process.
 
 ## Build Instructions
 
@@ -23,10 +33,11 @@ From the top level just run:
 ```
 
 This will build the CompCert dependencies (`make compcert`), configure and
-build the Oeuf proof (`make proof`), and then build the extracted OCaml
-into a driver (`make driver`).
+build the Œuf proof (`make proof`), build the extracted OCaml
+into a driver (`make driver`), build the plugin (`make plugin`), and 
+run the test suite (`make test`).
 
-Note that the middle step (`make proof`), will try to configure your repo
+Note that the second step (`make proof`), will try to configure your repo
 and ensure all necessary dependencies are present.  If they are not, you
 may want to try just running the `./configure` script directly so you can
 see what its unhappy about.  You should fix your setup and install the
@@ -58,17 +69,16 @@ is also recommended that you create a `_CoqProject` file there as well:
 
 Any files you open in emacs from the `compcert` subdirectory should now work.
 
-## Oeuf Workflow
+## Œuf Workflow
 
-* Write a Gallina program
+* Write a Gallina program `foo`
 * Use the reflection tactics of `SourceLang.v` to construct a deeply embedded 
-  representation of this program. (Currently the reflection only works if the 
+  representation of this program `foo_reflect`. (Currently the reflection only works if the 
   program is first fully inlined (delta reduced).) 
 * Check that the reflection is correct by proving it denotes to the original 
   program with `reflexivity`.
-* Compute the serialization of the program by doing 
-  `Eval compute (Pretty.expr.print prog).` after `Require`ing `Pretty`. 
-* Copy and paste the serialized program to a file `foo.oeuf`
+* Extract the reflection by importing the plugin and the pretty printer and
+  running `Eval compute Then Write To File "foo.oeuf" (Pretty.expr.print foo_reflect).`
 * Ensure that there is a shim template for foo at `shim_templates/foo_shim.c`
 * Run `./occ.sh foo` to compile foo with its shim.
 * The resulting executable is placed in `./a.out` and is ready to run!
