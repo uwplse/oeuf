@@ -130,6 +130,42 @@ Definition expr_mut_rect
       end
   in go l ty e.
 
+Definition expr_mut_rect_hlist
+           (P : forall l ty, expr l ty -> Type)
+           (Ph : forall l tys, hlist (expr l) tys -> Type)
+           (Hvar : forall l ty m, P l ty (Var m))
+           (Hlam : forall l ty1 ty2 b, P (ty1 :: l) ty2 b -> P l (Arrow ty1 ty2) (Lam b))
+           (Happ : forall l ty1 ty2 e1 e2, P l (Arrow ty1 ty2) e1 -> P _ _ e2 -> P _ _ (App e1 e2))
+           (Hconstr : forall l ty arg_tys c (ct : constr_type c _ _) args,
+               Ph l arg_tys args -> P l (ADT ty) (Constr ct args))
+           (Helim : forall l ty case_tys target_ty e cases target,
+               Ph l case_tys cases -> P l (ADT target_ty) target -> P _ ty (Elim e cases target))
+           (Hnil : forall l, Ph l _ hnil)
+           (Hcons : forall l ty e tys h, P l ty e -> Ph l tys h -> Ph l (ty :: tys) (hcons e h)) :
+  forall l tys h, Ph l tys h
+       :=
+  fix go_hlist l tys (h : hlist (expr l) tys) : Ph l tys h :=
+    match h as h0 return Ph _ _ h0 with
+    | hnil => Hnil _
+    | hcons x h'' => Hcons _ _ x _ h'' (expr_mut_rect P Ph Hvar Hlam Happ Hconstr Helim Hnil Hcons _ _ _) (go_hlist _ _ _)
+    end.
+
+Definition expr_mut_rect_and
+           (P : forall l ty, expr l ty -> Type)
+           (Ph : forall l tys, hlist (expr l) tys -> Type)
+           (Hvar : forall l ty m, P l ty (Var m))
+           (Hlam : forall l ty1 ty2 b, P (ty1 :: l) ty2 b -> P l (Arrow ty1 ty2) (Lam b))
+           (Happ : forall l ty1 ty2 e1 e2, P l (Arrow ty1 ty2) e1 -> P _ _ e2 -> P _ _ (App e1 e2))
+           (Hconstr : forall l ty arg_tys c (ct : constr_type c _ _) args,
+               Ph l arg_tys args -> P l (ADT ty) (Constr ct args))
+           (Helim : forall l ty case_tys target_ty e cases target,
+               Ph l case_tys cases -> P l (ADT target_ty) target -> P _ ty (Elim e cases target))
+           (Hnil : forall l, Ph l _ hnil)
+           (Hcons : forall l ty e tys h, P l ty e -> Ph l tys h -> Ph l (ty :: tys) (hcons e h)) :
+           (forall l ty e, P l ty e) * (forall l tys h, Ph l tys h) :=
+  (expr_mut_rect P Ph Hvar Hlam Happ Hconstr Helim Hnil Hcons,
+   expr_mut_rect_hlist P Ph Hvar Hlam Happ Hconstr Helim Hnil Hcons).
+
 Definition expr_mut_ind'
            (P : forall l ty, expr l ty -> Prop)
            (Hvar : forall l ty m, P l ty (Var m))

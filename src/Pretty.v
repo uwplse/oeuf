@@ -489,34 +489,49 @@ Module expr.
         end
       end.
 
-  Lemma to_from_tree_id : forall G ty (e : expr G ty), from_tree (to_tree e) = Some ((ty, e)).
+  Lemma to_from_tree_id_and :
+    (forall G ty (e : expr G ty), from_tree (to_tree e) = Some (ty,e)) *
+    (forall G args h, from_tree_list (to_tree_hlist h) G = Some (args, h)).
   Proof.
-    induction e using expr_mut_rect
-    with (Ph := fun G args h => from_tree_list (to_tree_hlist h) G = Some ((args, h)) ); simpl.
+    apply expr_mut_rect_and; simpl; intros.
     - now rewrite nat_to_from_symbol, member_to_from_nat_id.
-    - now rewrite type.to_from_tree_id, IHe.
-    - rewrite IHe1, IHe2.
+    - now rewrite type.to_from_tree_id, H.
+    - rewrite H, H0.
       break_match; try congruence.
       now dependent destruction e.
     - fold @from_tree_list.
       fold @to_tree_hlist.
-      rewrite IHe, type_name.to_from_tree_id, constr_name.to_from_symbol_id.
+      rewrite H, type_name.to_from_tree_id, constr_name.to_from_symbol_id.
       now rewrite constr_type.check_constr_type_correct with (ct := ct).
     - fold @from_tree_list.
       fold @to_tree_hlist.
-      rewrite type.to_from_tree_id, IHe, IHe0.
+      rewrite type.to_from_tree_id, H, H0.
       now rewrite elim.check_elim_correct with (e := e).
     - auto.
-    - now rewrite IHe, IHe0.
+    - now rewrite H, H0.
+  Qed.
+
+  Lemma to_from_tree_id : forall G ty (e : expr G ty), from_tree (to_tree e) = Some (ty, e).
+  Proof. apply to_from_tree_id_and. Qed.
+
+  Lemma to_from_tree_list_id : forall G args h, from_tree_list (to_tree_hlist h) G = Some (args, h).
+  Proof. apply to_from_tree_id_and. Qed.
+
+  Lemma to_tree_wf_and :
+    (forall G ty (e : expr G ty), Tree.Forall symbol.wf (to_tree e)) *
+    (forall G l (h : hlist (expr G) l), List.Forall (Tree.Forall symbol.wf) (to_tree_hlist h)).
+  Proof.
+    apply expr_mut_rect_and; simpl; auto 10 using nat_to_symbol_wf.
   Qed.
 
   Lemma to_tree_wf : forall G ty (e : expr G ty), Tree.Forall symbol.wf (to_tree e).
-  Proof.
-    induction e using expr_mut_rect
-    with (Ph := fun G l h => List.Forall (Tree.Forall symbol.wf) (to_tree_hlist h));
-    simpl; auto 10 using nat_to_symbol_wf.
-  Qed.
+  Proof. apply to_tree_wf_and. Qed.
   Hint Resolve to_tree_wf.
+
+  Lemma to_tree_hlist_wf :
+    forall G l (h : hlist (expr G) l), List.Forall (Tree.Forall symbol.wf) (to_tree_hlist h).
+  Proof. apply to_tree_wf_and. Qed.
+  Hint Resolve to_tree_hlist_wf.
 
   Definition print {G ty} (e : expr G ty) : String.string :=
     print_tree (to_tree e).
