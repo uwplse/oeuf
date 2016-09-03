@@ -19,7 +19,6 @@ open Timing
 open Oeuf
 open SourceLang
 open Utopia
-open Echo
 
 (* Location of the compatibility library *)
 
@@ -390,7 +389,7 @@ let process_h_file sourcename =
 
 (* Processing of .oeuf "files" *)
 
-let compile_oeuf the_program its_type sourcename asmname =
+let compile_oeuf cu sourcename asmname =
   (* Prepare to dump Clight, RTL, etc, if requested *)
   let set_dest dst opt ext =
     dst := if !opt then Some (output_filename sourcename ".oeuf" ext)
@@ -405,7 +404,7 @@ let compile_oeuf the_program its_type sourcename asmname =
   (* Convert to Asm *)
   let asm =
     match Compiler.apply_partial
-               (Oeuf.transf_to_asm its_type the_program)
+               (Oeuf.transf_to_asm cu)
                Asmexpand.expand_program with
     | Errors.OK asm ->
         asm
@@ -425,19 +424,19 @@ let compile_oeuf the_program its_type sourcename asmname =
 
 let parse_oeuf sourcename =
   let text = Parse.read_file sourcename in
-  match Pretty.Coq_expr.parse (Camlcoq.coqstring_of_camlstring text) [] with
-  | Some (Specif.Coq_existT (ty, e)) -> (e, ty)
+  match Pretty.Coq_compilation_unit.parse (Camlcoq.coqstring_of_camlstring text) with
+  | Some cu -> cu
   | None -> eprintf "Oeuf parse error on file %s\n" sourcename; exit 1
 
 
 let process_oeuf sourcename =
-  let (the_program, its_type) = parse_oeuf sourcename in
+  let cu = parse_oeuf sourcename in
   Hashtbl.clear Camlcoq.atom_of_string;
   Hashtbl.clear Camlcoq.string_of_atom;
   PrintCminor.destination := Some (output_filename sourcename ".oeuf" ".minor.c");
 
   let s = if !option_S then begin
-              compile_oeuf the_program its_type sourcename
+              compile_oeuf cu sourcename
                            (output_filename ~final:true sourcename ".oeuf" ".s");
               ""
             end else begin
@@ -445,7 +444,7 @@ let process_oeuf sourcename =
                 if !option_dasm
                 then output_filename sourcename ".oeuf" ".s"
                 else Filename.temp_file "compcert" ".s" in
-              compile_oeuf the_program its_type sourcename asmname;
+              compile_oeuf cu sourcename asmname;
               let objname = output_filename ~final: !option_c sourcename ".oeuf" ".o" in
               assemble asmname objname;
               if not !option_dasm then safe_remove asmname;

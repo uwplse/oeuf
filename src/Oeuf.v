@@ -2,6 +2,7 @@ Require Import compcert.driver.Compiler compcert.common.Errors.
 Require Import Common Monads.
 Require UntypedComp TaggedComp LiftedComp SwitchedComp FlattenedComp EmajorComp.
 Require Fmajortoemajor Emajortodmajor Dmajortocmajor Cmajortominor.
+Require CompilationUnit.
 
 Require Import compcert.common.AST.
 Require compcert.backend.SelectLong.
@@ -15,13 +16,13 @@ Definition option_to_res {A} (o : option A) : res A :=
 Coercion option_to_res : option >-> res.
 
 
-Definition transf_to_cminor {ty} (e : SourceLang.expr [] ty) : res Cminor.program :=
-  OK e
-  @@ UntypedComp.compile
-  @@ LiftedComp.compile
- @@@ TaggedComp.compile_program
-  @@ SwitchedComp.compile_prog
-  @@ FlattenedComp.compile_prog
+Definition transf_to_cminor (j : CompilationUnit.compilation_unit) : res Cminor.program :=
+  OK (CompilationUnit.exprs j)
+  @@ UntypedComp.compile_hlist
+  @@ LiftedComp.compile_list
+ @@@ TaggedComp.compile_programs
+  @@ SwitchedComp.compile_progs
+  @@ FlattenedComp.compile_progs
   @@@ EmajorComp.compile_prog
   @@ Fmajortoemajor.transf_program
   @@ Emajortodmajor.transf_prog
@@ -30,8 +31,8 @@ Definition transf_to_cminor {ty} (e : SourceLang.expr [] ty) : res Cminor.progra
   @@ print print_Cminor
 .
 
-Definition transf_to_asm {ty} (e : SourceLang.expr [] ty) : res Asm.program :=
-  OK e
+Definition transf_to_asm (j : CompilationUnit.compilation_unit) : res Asm.program :=
+  OK j
  @@@ transf_to_cminor
  @@@ transf_cminor_program
 .
