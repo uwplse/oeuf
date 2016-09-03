@@ -574,15 +574,31 @@ Eval lazy in expr.pretty 80 (@fib_reflect []).
 Eval lazy in expr.pretty 80 add_1_2.
 
 Module compilation_unit.
+  Definition current_major_version : symbol.t := symbol.of_string "0".
+  Definition current_minor_version : symbol.t := symbol.of_string "1".
+  Definition current_version_vector : list (tree symbol.t) :=
+    [atom current_major_version;
+     atom current_minor_version].
+
+  Lemma current_version_vector_wf :
+    List.Forall (Forall symbol.wf) current_version_vector.
+  Proof. unfold current_version_vector. auto. Qed.
+  Hint Resolve current_version_vector_wf.
+
   Definition to_tree (j : compilation_unit) : tree symbol.t :=
-    node (expr.to_tree_hlist (exprs j)).
+    node [node [atom (symbol.of_string "version"); node current_version_vector];
+          node (expr.to_tree_hlist (exprs j))].
 
   Definition from_tree (t : tree symbol.t) : option compilation_unit :=
     match t with
-    | node ts =>
-      match expr.from_tree_list ts [] with None => None
-      | Some (tys, es) => Some (CompilationUnit tys es)
-      end
+    | node [node [atom tag; node vs]; node ts] =>
+      if symbol.eq_dec tag (symbol.of_string "version")
+      then if list_eq_dec (tree_eq_dec symbol.eq_dec) vs current_version_vector
+      then match expr.from_tree_list ts [] with None => None
+           | Some (tys, es) => Some (CompilationUnit tys es)
+           end
+      else None
+      else None
     | _ => None
     end.
 
@@ -591,12 +607,13 @@ Module compilation_unit.
   Proof.
     unfold from_tree, to_tree.
     intros.
+    repeat break_if; try congruence.
     rewrite expr.to_from_tree_list_id.
     destruct j; auto.
   Qed.
 
   Lemma to_tree_wf : forall j, Tree.Forall symbol.wf (to_tree j).
-  Proof. unfold to_tree. auto. Qed.
+  Proof. unfold to_tree. auto 10. Qed.
   Hint Resolve to_tree_wf.
 
   Definition print (j : compilation_unit) : String.string :=
