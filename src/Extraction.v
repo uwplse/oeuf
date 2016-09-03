@@ -176,16 +176,6 @@ Separate Extraction
 
    Oeuf.transf_to_cminor
    Oeuf.transf_to_asm
-   SourceLang.id_nat_reflect
-   SourceLang.long_id_reflect
-   SourceLang.add_reflect
-   SourceLang.fib_reflect
-   Echo.initial_state_reflect
-   Echo.handleInput_reflect
-   Echo.handleMsg_reflect
-   Echo.initial_state_reflect_ty
-   Echo.handleInput_reflect_ty
-   Echo.handleMsg_reflect_ty
    Pretty.expr.parse
 .
 
