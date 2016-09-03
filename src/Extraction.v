@@ -176,7 +176,7 @@ Separate Extraction
 
    Oeuf.transf_to_cminor
    Oeuf.transf_to_asm
-   Pretty.expr.parse
+   Pretty.compilation_unit.parse
 .
 
 Cd "..".
