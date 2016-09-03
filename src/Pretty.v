@@ -12,8 +12,7 @@ Notation "( a , b )" := (existT _ a b) (at level 50).
 Section member_from_nat.
   Local Open Scope option_monad.
 
-  Fixpoint member_from_nat {A} (A_eq_dec : forall x y : A, {x = y} + {x <> y})
-           {l} (n : nat) : option {a : type & member a l} :=
+  Fixpoint member_from_nat {A} {l : list A} (n : nat) : option {a : A & member a l} :=
     match n with
     | 0 => match l with
           | [] => None
@@ -21,7 +20,7 @@ Section member_from_nat.
           end
     | S n => match l with
             | [] => None
-            | _ :: l => match member_from_nat A_eq_dec n with
+            | _ :: l => match member_from_nat n with
                        | Some ((a, m)) => Some ((a, There m))
                        | None => None
                        end
@@ -29,8 +28,8 @@ Section member_from_nat.
     end.
 
   Lemma member_to_from_nat_id :
-    forall A (A_eq_dec : forall x y : A, {x = y} + {x <> y}) a l (m : member a l),
-      member_from_nat A_eq_dec (member_to_nat m) = Some ((a, m)).
+    forall A (a : A) l (m : member a l),
+      member_from_nat (member_to_nat m) = Some ((a, m)).
   Proof.
     induction m; intros; simpl.
     - auto.
@@ -407,7 +406,7 @@ Module expr.
            | node (atom tag :: l) =>
              if symbol.eq_dec tag (symbol.of_string "var")
              then match l with
-                  | [atom n] => match member_from_nat type_eq_dec (nat_from_symbol n) with
+                  | [atom n] => match member_from_nat (nat_from_symbol n) with
                           | Some ((ty, m)) => Some ((ty, Var m))
                           | _ => None
                           end
