@@ -11,10 +11,10 @@ for f in test/*.v
 do
 # unfortunately this does not correctly handle quoting from _CoqProject,
 # so those rules that are necessary are repeated here
-    $COQC -Q src "" "$f" >/dev/null 2>&1
+    $COQC -Q src "" "$f" >/dev/null 2>&1 || { echo "coqc failed on $f"; exit 1; }
     TESTNAME=$(basename "$f" ".v" | tr '[:upper:]' '[:lower:]')
-    ./occ.sh "$TESTNAME" >/dev/null 2>&1
-    ./a.out > "test/${TESTNAME}.actual"
+    ./occ.sh "$TESTNAME" >/dev/null 2>&1 || { echo "occ.sh failed on $TESTNAME"; exit 1; }
+    ./a.out > "test/${TESTNAME}.actual" || { echo "./a.out failed on $TESTNAME"; exit 1; }
     if ! diff -q "test/${TESTNAME}.expected" "test/${TESTNAME}.actual"
     then echo "Test $TESTNAME failed!"
          diff -u "test/${TESTNAME}.expected" "test/${TESTNAME}.actual" || true
