@@ -78,8 +78,8 @@ Any files you open in emacs from the `compcert` subdirectory should now work.
 * Check that each reflection is correct by proving it denotes to the original 
   program with `reflexivity`.
 * Extract the reflections by importing the plugin and the pretty printer and
-  running `Eval compute Then Write To File "foo.oeuf" (Pretty.compilation_unit.print (CompilationUnit.Compilation_unit _ (hcons foo_reflect (hcons bar_reflect hnil)))).`
-* Ensure that there is a shim template for foo at `shim_templates/foobar_shim.c` (Note: template elaboration is currently broken whenever you extract more than one expression with Œuf; you'll need to explicitly resolve symbol names manually.)
-* Run `./occ.sh foo` to compile foo with its shim.
+  running `Eval compute Then Write To File "foobar.oeuf" (Pretty.compilation_unit.print (CompilationUnit.Compilation_unit _ (hcons foo_reflect (hcons bar_reflect hnil)) ["foo"; "bar"])).` Note that the list of strings given at the end of the command specifies the assembly-level symbol names corresponding to each expression.
+* Ensure that there is a shim for foo at `shims/foobar_shim.c`. This shim may refer to extracted expressions by the symbol names chosen above.
+* Run `./occ.sh foobar` to compile foo and bar together with their shim.
 * The resulting executable is placed in `./a.out` and is ready to run!
 
