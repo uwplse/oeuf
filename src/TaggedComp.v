@@ -3,7 +3,7 @@ Require Import Common.
 Require Import Monads.
 Require Import StuartTact.
 Require Import ListLemmas.
-Require Utopia.
+Require Utopia String.
 
 Require Lifted.
 Require Tagged.
@@ -67,6 +67,15 @@ Definition compile_program (lp : L.expr * list L.expr) : option (T.expr * list T
 Definition compile_programs (lp : list L.expr * list L.expr) : option (list T.expr * list T.expr) :=
   pair <$> (compile_list (fst lp)) <*> compile_list (snd lp).
 
+Definition compile_cu (lp : list (L.expr * String.string) *
+                            list (L.expr * String.string)) :
+  option (list (T.expr * String.string) *
+          list (T.expr * String.string)) :=
+  let (pubs, privs) := lp in
+  compile_list (map fst pubs) >>= fun pubs' =>
+  compile_list (map fst privs) >>= fun privs' =>
+  pair <$> zip_error pubs' (map snd pubs)
+       <*> zip_error privs' (map snd privs).
 
 End compile.
 
