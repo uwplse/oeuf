@@ -174,12 +174,24 @@ Qed.
 
 (* Forall / Forall2 *)
 
+(* This formulation is suitable for use by auto *)
+Lemma Forall_forall_intro :
+  forall A (P : A -> Prop) l,
+    (forall x, In x l -> P x) ->
+    List.Forall P l.
+Proof. intros. now rewrite Forall_forall. Qed.
+
 Lemma Forall_map : forall A B (P : B -> Prop) (f : A -> B) xs,
     Forall (fun x => P (f x)) xs <-> Forall P (map f xs).
 induction xs; intros; split; inversion 1; subst; simpl in *; eauto.
 - constructor; eauto. rewrite <- IHxs. assumption.
 - constructor; eauto. rewrite -> IHxs. assumption.
 Qed.
+
+(* This formulation is suitable for use by auto *)
+Lemma Forall_map_intro : forall A B (P : B -> Prop) (f : A -> B) xs,
+    Forall (fun x => P (f x)) xs -> Forall P (map f xs).
+Proof. intros. now rewrite <- Forall_map. Qed.
 
 Lemma Forall2_map : forall A A' B B' (P : A' -> B' -> Prop) (fx : A -> A') (fy : B -> B') xs ys,
     Forall2 (fun x y => P (fx x) (fy y)) xs ys <-> Forall2 P (map fx xs) (map fy ys).

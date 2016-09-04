@@ -1,8 +1,8 @@
-Require Import Program SourceLang Utopia List Monads HList CompilationUnit.
+Require Import Program SourceLang Utopia List Monads HList CompilationUnit ListLemmas.
 Import ListNotations.
 
 From StructTact Require Import StructTactics.
-From PrettyParsing Require Import PrettyParsing OptionUtils.
+From PrettyParsing Require Import PrettyParsing.
 Import OptionNotations.
 
 Set Implicit Arguments.
@@ -40,32 +40,32 @@ End member_from_nat.
 Module type_name.
   Fixpoint to_tree (tyn : type_name) : tree symbol.t :=
     match tyn with
-    | Tnat            => atom (symbol.of_string "nat")
-    | Tbool           => atom (symbol.of_string "bool")
-    | Tlist tyn       => node [atom (symbol.of_string "list"); to_tree tyn]
-    | Tunit           => atom (symbol.of_string "unit")
-    | Tpair tyn1 tyn2 => node [atom (symbol.of_string "pair"); to_tree tyn1; to_tree tyn2]
-    | Toption tyn     => node [atom (symbol.of_string "option"); to_tree tyn]
-    | Tpositive       => atom (symbol.of_string "positive")
+    | Tnat            => atom (symbol.of_string_unsafe "nat")
+    | Tbool           => atom (symbol.of_string_unsafe "bool")
+    | Tlist tyn       => node [atom (symbol.of_string_unsafe "list"); to_tree tyn]
+    | Tunit           => atom (symbol.of_string_unsafe "unit")
+    | Tpair tyn1 tyn2 => node [atom (symbol.of_string_unsafe "pair"); to_tree tyn1; to_tree tyn2]
+    | Toption tyn     => node [atom (symbol.of_string_unsafe "option"); to_tree tyn]
+    | Tpositive       => atom (symbol.of_string_unsafe "positive")
     end.
 
   Fixpoint from_tree (t : tree symbol.t) : option type_name :=
     match t with
     | atom s =>
-      if symbol.eq_dec s (symbol.of_string "nat") then Some Tnat
-      else if symbol.eq_dec s (symbol.of_string "bool") then Some Tbool
-      else if symbol.eq_dec s (symbol.of_string "unit") then Some Tunit
-      else if symbol.eq_dec s (symbol.of_string "positive") then Some Tpositive
+      if symbol.eq_dec s (symbol.of_string_unsafe "nat") then Some Tnat
+      else if symbol.eq_dec s (symbol.of_string_unsafe "bool") then Some Tbool
+      else if symbol.eq_dec s (symbol.of_string_unsafe "unit") then Some Tunit
+      else if symbol.eq_dec s (symbol.of_string_unsafe "positive") then Some Tpositive
       else None
     | node (atom s :: l) =>
-      if symbol.eq_dec s (symbol.of_string "list")
+      if symbol.eq_dec s (symbol.of_string_unsafe "list")
       then match l with
            | [t] => match from_tree t with None => None
                    | Some tyn => Some (Tlist tyn)
                    end
            | _ => None
            end
-      else if symbol.eq_dec s (symbol.of_string "pair")
+      else if symbol.eq_dec s (symbol.of_string_unsafe "pair")
       then match l with
            | [t1; t2] =>
              match from_tree t1 with None => None
@@ -75,7 +75,7 @@ Module type_name.
              end end
            | _ => None
            end
-      else if symbol.eq_dec s (symbol.of_string "option")
+      else if symbol.eq_dec s (symbol.of_string_unsafe "option")
       then match l with
            | [t] => match from_tree t with None => None
                    | Some tyn => Some (Toption tyn)
@@ -103,19 +103,19 @@ End type_name.
 Module type.
   Fixpoint to_tree (ty : type) : tree symbol.t :=
     match ty with
-    | ADT tyn => node [atom (symbol.of_string "ADT"); type_name.to_tree tyn]
-    | Arrow ty1 ty2 => node [atom (symbol.of_string "Arrow"); to_tree ty1; to_tree ty2]
+    | ADT tyn => node [atom (symbol.of_string_unsafe "ADT"); type_name.to_tree tyn]
+    | Arrow ty1 ty2 => node [atom (symbol.of_string_unsafe "Arrow"); to_tree ty1; to_tree ty2]
     end.
 
   Fixpoint from_tree (t : tree symbol.t) : option type :=
     match t with
     | node (atom s :: l) =>
-      if symbol.eq_dec s (symbol.of_string "ADT")
+      if symbol.eq_dec s (symbol.of_string_unsafe "ADT")
       then match l with
            | [t] => ADT <$> type_name.from_tree t
            | _ => None
            end
-      else if symbol.eq_dec s (symbol.of_string "Arrow")
+      else if symbol.eq_dec s (symbol.of_string_unsafe "Arrow")
       then match l with
            | [t1; t2] => Arrow <$> from_tree t1 <*> from_tree t2
            | _ => None
@@ -140,34 +140,34 @@ End type.
 Module constr_name.
   Definition to_symbol (cn : constr_name) : symbol.t :=
     match cn with
-    | CS     => symbol.of_string "CS"
-    | CO     => symbol.of_string "CO"
-    | Ctrue  => symbol.of_string "Ctrue"
-    | Cfalse => symbol.of_string "Cfalse"
-    | Cnil   => symbol.of_string "Cnil"
-    | Ccons  => symbol.of_string "Ccons"
-    | Ctt    => symbol.of_string "Ctt"
-    | Cpair  => symbol.of_string "Cpair"
-    | Csome  => symbol.of_string "Csome"
-    | Cnone  => symbol.of_string "Cnone"
-    | CxI    => symbol.of_string "CxI"
-    | CxO    => symbol.of_string "CxO"
-    | CxH    => symbol.of_string "CxH"
+    | CS     => symbol.of_string_unsafe "CS"
+    | CO     => symbol.of_string_unsafe "CO"
+    | Ctrue  => symbol.of_string_unsafe "Ctrue"
+    | Cfalse => symbol.of_string_unsafe "Cfalse"
+    | Cnil   => symbol.of_string_unsafe "Cnil"
+    | Ccons  => symbol.of_string_unsafe "Ccons"
+    | Ctt    => symbol.of_string_unsafe "Ctt"
+    | Cpair  => symbol.of_string_unsafe "Cpair"
+    | Csome  => symbol.of_string_unsafe "Csome"
+    | Cnone  => symbol.of_string_unsafe "Cnone"
+    | CxI    => symbol.of_string_unsafe "CxI"
+    | CxO    => symbol.of_string_unsafe "CxO"
+    | CxH    => symbol.of_string_unsafe "CxH"
     end.
   Definition from_symbol (s : symbol.t) : option constr_name :=
-    if      symbol.eq_dec s (symbol.of_string "CS")     then Some CS
-    else if symbol.eq_dec s (symbol.of_string "CO")     then Some CO
-    else if symbol.eq_dec s (symbol.of_string "Ctrue")  then Some Ctrue
-    else if symbol.eq_dec s (symbol.of_string "Cfalse") then Some Cfalse
-    else if symbol.eq_dec s (symbol.of_string "Cnil")   then Some Cnil
-    else if symbol.eq_dec s (symbol.of_string "Ccons")  then Some Ccons
-    else if symbol.eq_dec s (symbol.of_string "Ctt")    then Some Ctt
-    else if symbol.eq_dec s (symbol.of_string "Cpair")  then Some Cpair
-    else if symbol.eq_dec s (symbol.of_string "Csome")  then Some Csome
-    else if symbol.eq_dec s (symbol.of_string "Cnone")  then Some Cnone
-    else if symbol.eq_dec s (symbol.of_string "CxI")    then Some CxI
-    else if symbol.eq_dec s (symbol.of_string "CxO")    then Some CxO
-    else if symbol.eq_dec s (symbol.of_string "CxH")    then Some CxH
+    if      symbol.eq_dec s (symbol.of_string_unsafe "CS")     then Some CS
+    else if symbol.eq_dec s (symbol.of_string_unsafe "CO")     then Some CO
+    else if symbol.eq_dec s (symbol.of_string_unsafe "Ctrue")  then Some Ctrue
+    else if symbol.eq_dec s (symbol.of_string_unsafe "Cfalse") then Some Cfalse
+    else if symbol.eq_dec s (symbol.of_string_unsafe "Cnil")   then Some Cnil
+    else if symbol.eq_dec s (symbol.of_string_unsafe "Ccons")  then Some Ccons
+    else if symbol.eq_dec s (symbol.of_string_unsafe "Ctt")    then Some Ctt
+    else if symbol.eq_dec s (symbol.of_string_unsafe "Cpair")  then Some Cpair
+    else if symbol.eq_dec s (symbol.of_string_unsafe "Csome")  then Some Csome
+    else if symbol.eq_dec s (symbol.of_string_unsafe "Cnone")  then Some Cnone
+    else if symbol.eq_dec s (symbol.of_string_unsafe "CxI")    then Some CxI
+    else if symbol.eq_dec s (symbol.of_string_unsafe "CxO")    then Some CxO
+    else if symbol.eq_dec s (symbol.of_string_unsafe "CxH")    then Some CxH
     else None.
 
   Lemma to_from_symbol_id : forall cn, from_symbol (to_symbol cn) = Some cn.
@@ -361,18 +361,18 @@ Module expr.
                 end
             in _).
     refine match e with
-           | Var m => node [atom (symbol.of_string "var"); atom (nat_to_symbol (member_to_nat m))]
+           | Var m => node [atom (symbol.of_string_unsafe "var"); atom (nat_to_symbol (member_to_nat m))]
            | @Lam ty1 _ _ e' =>
-             node [atom (symbol.of_string "lambda"); type.to_tree ty1; to_tree _ _ e']
+             node [atom (symbol.of_string_unsafe "lambda"); type.to_tree ty1; to_tree _ _ e']
            | App e1 e2 =>
-             node [atom (symbol.of_string "app"); to_tree _ _ e1; to_tree _ _ e2]
+             node [atom (symbol.of_string_unsafe "app"); to_tree _ _ e1; to_tree _ _ e2]
            | @Constr tyn _ _ cn c args =>
-             node [atom (symbol.of_string "constr");
+             node [atom (symbol.of_string_unsafe "constr");
                    type_name.to_tree tyn;
                    atom (constr_name.to_symbol cn);
                    node (go_hlist _ _ args)]
            | @Elim case_tys target_tyn ty l e cases target =>
-             node [atom (symbol.of_string "elim");
+             node [atom (symbol.of_string_unsafe "elim");
                    type.to_tree ty;
                    node (go_hlist _ _ cases);
                    to_tree _ _ target]
@@ -404,7 +404,7 @@ Module expr.
             in _).
     refine match t with
            | node (atom tag :: l) =>
-             if symbol.eq_dec tag (symbol.of_string "var")
+             if symbol.eq_dec tag (symbol.of_string_unsafe "var")
              then match l with
                   | [atom n] => match member_from_nat (nat_from_symbol n) with
                           | Some (ty, m) => Some (ty, Var m)
@@ -412,7 +412,7 @@ Module expr.
                           end
                   | _ => None
                   end
-             else if symbol.eq_dec tag (symbol.of_string "lambda")
+             else if symbol.eq_dec tag (symbol.of_string_unsafe "lambda")
              then match l with
                   | [t_ty; t_e] =>
                     match type.from_tree t_ty with None => None
@@ -422,7 +422,7 @@ Module expr.
                     end end
                   | _ => None
                   end
-             else if symbol.eq_dec tag (symbol.of_string "app")
+             else if symbol.eq_dec tag (symbol.of_string_unsafe "app")
              then match l with
                   | [t_e1; t_e2] =>
                     match from_tree t_e1 G with None => None
@@ -438,7 +438,7 @@ Module expr.
                     end e1 end end
                   | _ => None
                   end
-             else if symbol.eq_dec tag (symbol.of_string "constr")
+             else if symbol.eq_dec tag (symbol.of_string_unsafe "constr")
              then match l with
                   | [t_tyn; atom s_cn; node t_args] =>
                   match go_list t_args G with None => None
@@ -452,7 +452,7 @@ Module expr.
                   end end end end
                   | _ => None
                   end
-             else if symbol.eq_dec tag (symbol.of_string "elim")
+             else if symbol.eq_dec tag (symbol.of_string_unsafe "elim")
              then match l with
                   | [t_ty; node ts_cases; t_target] =>
                   match type.from_tree t_ty with None => None
@@ -574,8 +574,8 @@ Eval lazy in expr.pretty 80 (@fib_reflect []).
 Eval lazy in expr.pretty 80 add_1_2.
 
 Module compilation_unit.
-  Definition current_major_version : symbol.t := symbol.of_string "0".
-  Definition current_minor_version : symbol.t := symbol.of_string "1".
+  Definition current_major_version : symbol.t := symbol.of_string_unsafe "0".
+  Definition current_minor_version : symbol.t := symbol.of_string_unsafe "2".
   Definition current_version_vector : list (tree symbol.t) :=
     [atom current_major_version;
      atom current_minor_version].
@@ -586,16 +586,21 @@ Module compilation_unit.
   Hint Resolve current_version_vector_wf.
 
   Definition to_tree (j : compilation_unit) : tree symbol.t :=
-    node [node [atom (symbol.of_string "version"); node current_version_vector];
+    node [node [atom (symbol.of_string_unsafe "version"); node current_version_vector];
+          node (List.map (fun s => atom (symbol.of_string_safe s)) (names j));
           node (expr.to_tree_hlist (exprs j))].
 
   Definition from_tree (t : tree symbol.t) : option compilation_unit :=
     match t with
-    | node [node [atom tag; node vs]; node ts] =>
-      if symbol.eq_dec tag (symbol.of_string "version")
+    | node [node [atom tag; node vs]; node names; node ts] =>
+      if symbol.eq_dec tag (symbol.of_string_unsafe "version")
       then if list_eq_dec (tree_eq_dec symbol.eq_dec) vs current_version_vector
       then match expr.from_tree_list ts [] with None => None
-           | Some (tys, es) => Some (CompilationUnit tys es)
+           | Some (tys, es) =>
+           match sequence (List.map (fun t => get_atom t >>= symbol.to_string) names) with
+           | None => None
+           | Some names => Some (CompilationUnit tys es names)
+           end
            end
       else None
       else None
@@ -609,11 +614,18 @@ Module compilation_unit.
     intros.
     repeat break_if; try congruence.
     rewrite expr.to_from_tree_list_id.
-    destruct j; auto.
+    rewrite map_map.
+    rewrite map_ext with (g := Some).
+    - rewrite sequence_map_Some.
+      destruct j; auto.
+    - intros s. simpl. now rewrite symbol.to_string_of_string_safe_id.
   Qed.
 
   Lemma to_tree_wf : forall j, Tree.Forall symbol.wf (to_tree j).
-  Proof. unfold to_tree. auto 10. Qed.
+  Proof.
+    unfold to_tree.
+    auto 10 using Forall_map_intro, Forall_forall_intro, symbol.of_string_safe_wf.
+  Qed.
   Hint Resolve to_tree_wf.
 
   Definition print (j : compilation_unit) : String.string :=
