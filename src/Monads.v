@@ -73,3 +73,13 @@ Ltac break_bind_option :=
             destruct x eqn:?; [ simpl in H | discriminate H ]
     end.
 
+Section zip_error.
+  Local Open Scope option_monad.
+
+  Fixpoint zip_error {A B} (xs : list A) (ys : list B) : option (list (A * B)) :=
+    match xs, ys with
+    | [], [] => Some []
+    | x :: xs, y :: ys => cons (x, y) <$> zip_error xs ys
+    | _, _ => None
+    end.
+End zip_error.

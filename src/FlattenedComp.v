@@ -79,6 +79,12 @@ Section compile.
     list (F.stmt * F.expr) * nat :=
     let (es, env) := p in (compile_env (env ++ es), length env).
 
+  Local Open Scope option_monad.
+  Definition compile_cu (p : list (S.expr * String.string) * list (S.expr * String.string)) :
+    option (list (F.stmt * F.expr * String.string) * nat) :=
+    let (es, env) := p in
+    let env' := compile_env (map fst (env ++ es)) in
+    (fun x => (x, length env)) <$> zip_error env' (map snd (env ++ es)).
 
 End compile.
 

@@ -15,15 +15,17 @@ Definition option_to_res {A} (o : option A) : res A :=
 
 Coercion option_to_res : option >-> res.
 
+Local Open Scope option_monad.
 
 Definition transf_to_cminor (j : CompilationUnit.compilation_unit) : res Cminor.program :=
   OK (CompilationUnit.exprs j)
   @@ UntypedComp.compile_hlist
-  @@ LiftedComp.compile_list
- @@@ TaggedComp.compile_programs
-  @@ SwitchedComp.compile_progs
-  @@ FlattenedComp.compile_progs
-  @@@ EmajorComp.compile_prog
+ @@@ (fun l => zip_error l (CompilationUnit.names j))
+  @@ LiftedComp.compile_cu
+ @@@ TaggedComp.compile_cu
+  @@ SwitchedComp.compile_cu
+ @@@ FlattenedComp.compile_cu
+  @@@ EmajorComp.compile_cu
   @@ Fmajortoemajor.transf_program
   @@ Emajortodmajor.transf_prog
   @@@ Dmajortocmajor.transf_prog
