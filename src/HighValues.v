@@ -86,32 +86,34 @@ Fixpoint load_all (l : list (value * val)) (m : mem) : option (list (value * val
 
 (* mapping of high level values to low level values *)
 (* everything is one pointer *)
-Inductive value_inject {A B} (ge : Genv.t A B) (m : mem) : value -> val -> Prop :=
+Inductive value_inject {A B} (ge : Genv.t A B) (m : mem) (heap : block -> Prop) : value -> val -> Prop :=
 | inj_constr :
     (* a constructor is a pointer to the correct tag *)
     (* and every value following that in memory is a value for that constructor *)
     (* *(b,ofs) = tag *)
     (* *(b,ofs+4) = pointer to first field *)
     forall b ofs n values l',
+      heap b ->
       Mem.loadv Mint32 m (Vptr b ofs) = Some (Vint n) -> (* correct tag *)
       load_all (arg_addrs b (Int.add ofs (Int.repr 4)) values) m = Some l' -> (* one more deref for args *)
-      (forall a b, In (a,b) l' -> value_inject ge m a b) -> (* all args inject *)
-      value_inject ge m (Constr n values) (Vptr b ofs)
+      (forall a b, In (a,b) l' -> value_inject ge m heap a b) -> (* all args inject *)
+      value_inject ge m heap (Constr n values) (Vptr b ofs)
 | inj_closure :
     forall b ofs bcode f fname values l',
+      heap b ->
       Mem.loadv Mint32 m (Vptr b ofs) = Some (Vptr bcode Int.zero) ->
       Genv.find_funct_ptr ge bcode = Some f -> (* legit pointer to some code *)
       Genv.find_symbol ge fname = Some bcode -> (* name we have points to same code *)
       load_all (arg_addrs b (Int.add ofs (Int.repr 4)) values) m = Some l' -> (* one more deref for args *)
-      (forall a b, In (a,b) l' -> value_inject ge m a b) -> (* all args inject *)
-      value_inject ge m (Close fname values) (Vptr b ofs).
+      (forall a b, In (a,b) l' -> value_inject ge m heap a b) -> (* all args inject *)
+      value_inject ge m heap (Close fname values) (Vptr b ofs).
 
 
-Definition env_inject {A B} (hlenv : PTree.t value) (llenv : PTree.t val) (ge : Genv.t A B)(m : mem) : Prop :=
+Definition env_inject {A B} (hlenv : PTree.t value) (llenv : PTree.t val) (ge : Genv.t A B)(m : mem) (heap : block -> Prop) : Prop :=
   forall id v,
     PTree.get id hlenv = Some v ->
     exists v',
-      PTree.get id llenv = Some v' /\ value_inject ge m v v'.
+      PTree.get id llenv = Some v' /\ value_inject ge m heap v v'.
   
 
 Lemma load_all_val :
@@ -229,8 +231,8 @@ Fixpoint zip {A B} (a : list A) (b : list B) : list (A * B) :=
 Lemma store_list_load_all :
   forall {A B} b ofs ll m m',
     store_list b ofs ll m = Some m' ->
-    forall hl (ge : Genv.t A B),
-      list_forall2 (value_inject ge m') hl ll ->
+    forall hl (ge : Genv.t A B) heap,
+      list_forall2 (value_inject ge m' heap) hl ll ->
       load_all (arg_addrs b (Int.repr ofs) hl) m' = Some (zip hl ll).
 Proof.
 Admitted.    
@@ -238,27 +240,27 @@ Admitted.
 Lemma store_list_value_inject :
   forall {A B} b ofs ll m m',
     store_list b ofs ll m = Some m' ->
-    forall hl (ge : Genv.t A B),
-      list_forall2 (value_inject ge m) hl ll ->
-      list_forall2 (value_inject ge m') hl ll.
+    forall hl (ge : Genv.t A B) heap,
+      list_forall2 (value_inject ge m heap) hl ll ->
+      list_forall2 (value_inject ge m' heap) hl ll.
 Proof.
 Admitted.
 
 Lemma storev_list_value_inject :
   forall {A B} m m' v v',
     Mem.storev Mint32 m v v' = Some m' ->
-    forall ll hl (ge : Genv.t A B),
-      list_forall2 (value_inject ge m) hl ll ->
-      list_forall2 (value_inject ge m') hl ll.
+    forall ll hl (ge : Genv.t A B) heap,
+      list_forall2 (value_inject ge m heap) hl ll ->
+      list_forall2 (value_inject ge m' heap) hl ll.
 Proof.
 Admitted.
 
 Lemma alloc_list_value_inject :
   forall {A B} m lo hi b m',
     Mem.alloc m lo hi = (m',b) ->
-    forall ll hl (ge : Genv.t A B),
-      list_forall2 (value_inject ge m) hl ll ->
-      list_forall2 (value_inject ge m') hl ll.
+    forall ll hl (ge : Genv.t A B) heap,
+      list_forall2 (value_inject ge m heap) hl ll ->
+      list_forall2 (value_inject ge m' heap) hl ll.
 Proof.
 Admitted.
 
@@ -274,10 +276,10 @@ Proof.
 Qed.
 
 Lemma store_value_inject' :
-  forall {A B} (ge : Genv.t A B) v m l v' m',
-    list_forall2 (value_inject ge m') (rest v) l ->
+  forall {A B} (ge : Genv.t A B) v m l v' m' heap,
+    list_forall2 (value_inject ge m' heap) (rest v) l ->
     store_value ge v m l = Some (v',m') ->
-    value_inject ge m' v v'.
+    value_inject ge m' heap v v'.
 Proof.
   intros.
   destruct v eqn:?;

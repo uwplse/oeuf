@@ -24,6 +24,7 @@ Require Import EricTact.
 Require Import Emajor.
 Require Import Dmajor.
 Require Import HighValues.
+Require Import MemPred.
 
 Fixpoint transf_expr (e : Emajor.expr) : Dmajor.expr :=
   match e with
@@ -181,14 +182,14 @@ Let tge := Genv.globalenv tprog.
 Hypothesis TRANSF : transf_prog prog = tprog.
 
 Lemma transf_expr_inject_id :
-  forall Ee De m sp id,
-    env_inject Ee De tge m ->
+  forall Ee De m sp id heap,
+    env_inject Ee De tge m heap ->
     Ee ! id = None ->
     forall (exp : Emajor.expr) v,
       Emajor.eval_expr Ee exp v ->
       forall x,
       exists v',
-        Dmajor.eval_expr tge (PTree.set id x De) m sp (transf_expr exp) v' /\ value_inject tge m v v'.
+        Dmajor.eval_expr tge (PTree.set id x De) m sp (transf_expr exp) v' /\ value_inject tge m heap v v'.
 Proof.
   induction exp; intros.
   * inv H1. unfold env_inject in H.
@@ -210,9 +211,9 @@ Proof.
       (* value is a pointer *)
       (* we want nth field of that *)
       (* we want *(b,ofs + 4*(1+n) *)
-      eapply load_all_val in H11; eauto.
+      eapply load_all_val in H12; eauto.
       break_exists. exists x0.
-      break_and. apply H13 in H7.
+      break_and. apply H14 in H7.
       split; auto.
       unfold transf_expr. fold transf_expr.
       repeat (econstructor; eauto).
@@ -234,10 +235,9 @@ Proof.
       specialize (IH x).
       break_exists. break_and.
       inv H3.
-  
-      eapply load_all_val in H9; eauto.
+      app load_all_val load_all; eauto.
       break_exists. exists x0.
-      break_and. apply H11 in H7.
+      break_and. apply H12 in H10.
       split; auto.
       unfold transf_expr. fold transf_expr.
       repeat (econstructor; eauto).
@@ -257,12 +257,12 @@ Qed.
 
 
 Lemma transf_expr_inject :
-  forall Ee De m sp,
-    env_inject Ee De tge m ->
+  forall Ee De m sp heap,
+    env_inject Ee De tge m heap ->
     forall (exp : Emajor.expr) v,
       Emajor.eval_expr Ee exp v ->
       exists v',
-        Dmajor.eval_expr tge De m sp (transf_expr exp) v' /\ value_inject tge m v v'.
+        Dmajor.eval_expr tge De m sp (transf_expr exp) v' /\ value_inject tge m heap v v'.
 Proof.
   induction exp; intros.
   * inv H0. unfold env_inject in H.
@@ -279,9 +279,9 @@ Proof.
       (* value is a pointer *)
       (* we want nth field of that *)
       (* we want *(b,ofs + 4*(1+n) *)
-      eapply load_all_val in H10; eauto.
+      app load_all_val load_all.
       break_exists. exists x.
-      break_and. apply H12 in H6.
+      break_and. apply H13 in H11.
       split; auto.
       unfold transf_expr. fold transf_expr.
       repeat (econstructor; eauto).
@@ -303,10 +303,9 @@ Proof.
       clear HeqIH.
       break_exists. break_and.
       inv H2.
-  
-      eapply load_all_val in H8; eauto.
+      app load_all_val load_all.
       break_exists. exists x.
-      break_and. apply H10 in H6.
+      break_and. apply H11 in H9.
       split; auto.
       unfold transf_expr. fold transf_expr.
       repeat (econstructor; eauto).
@@ -327,14 +326,14 @@ Qed.
 
 
 Lemma transf_exprlist_inject_id :
-  forall Ee De m sp id,
-    env_inject Ee De tge m ->
+  forall Ee De m sp id heap,
+    env_inject Ee De tge m heap ->
     Ee ! id = None ->
     forall (expl : list Emajor.expr) vlist,
       Emajor.eval_exprlist Ee expl vlist ->
       forall x, 
       exists vlist',
-        Dmajor.eval_exprlist tge (PTree.set id x De) m sp (map transf_expr expl) vlist' /\ list_forall2 (value_inject tge m) vlist vlist'.
+        Dmajor.eval_exprlist tge (PTree.set id x De) m sp (map transf_expr expl) vlist' /\ list_forall2 (value_inject tge m heap) vlist vlist'.
 Proof.
   induction expl; intros.
   inversion H1. exists nil. simpl.
@@ -350,12 +349,12 @@ Qed.
 
 
 Lemma transf_exprlist_inject :
-  forall Ee De m sp,
-    env_inject Ee De tge m ->
+  forall Ee De m sp heap,
+    env_inject Ee De tge m heap ->
     forall (expl : list Emajor.expr) vlist,
       Emajor.eval_exprlist Ee expl vlist ->
       exists vlist',
-        Dmajor.eval_exprlist tge De m sp (map transf_expr expl) vlist' /\ list_forall2 (value_inject tge m) vlist vlist'.
+        Dmajor.eval_exprlist tge De m sp (map transf_expr expl) vlist' /\ list_forall2 (value_inject tge m heap) vlist vlist'.
 Proof.
   induction expl; intros.
   inversion H0. exists nil. simpl. split; econstructor; eauto.
@@ -367,24 +366,29 @@ Proof.
   split. econstructor; eauto.
   econstructor; eauto.
 Qed.
-  
-Inductive match_cont: Emajor.cont -> Dmajor.cont -> mem -> Prop :=
-| match_cont_stop: forall m,
-    match_cont Emajor.Kstop Dmajor.Kstop m
-| match_cont_block :
-    forall k k' m,
-      match_cont k k' m ->
-      match_cont (Emajor.Kblock k) (Dmajor.Kblock k') m
-| match_cont_seq: forall s s' k k' m,
-    transf_stmt s = s' ->
-    match_cont k k' m ->
-    match_cont (Emajor.Kseq s k) (Dmajor.Kseq s' k') m
-| match_cont_call: forall id f b e k f' e' k' m,
-    match_cont k k' m ->
-    env_inject e e' tge m ->
-    transf_function f = f' ->
-    match_cont (Emajor.Kcall id f e k) (Dmajor.Kcall (Some id) f' (Vptr b Int.zero) e' k') m.
 
+Definition heap_env (heap : block -> Prop) (e : env) :=
+  forall id v,
+    e ! id = Some v ->
+    heap_val heap v.
+
+
+Inductive match_cont: Emajor.cont -> Dmajor.cont -> mem -> (block -> Prop) ->  Prop :=
+| match_cont_stop: forall m,
+    match_cont Emajor.Kstop Dmajor.Kstop m (fun b => False)
+| match_cont_block :
+    forall k k' m heap,
+      match_cont k k' m heap ->
+      match_cont (Emajor.Kblock k) (Dmajor.Kblock k') m heap
+| match_cont_seq: forall s s' k k' m heap,
+    transf_stmt s = s' ->
+    match_cont k k' m heap ->
+    match_cont (Emajor.Kseq s k) (Dmajor.Kseq s' k') m heap
+| match_cont_call: forall id f b e k f' e' k' m heap,
+    match_cont k k' m heap ->
+    env_inject e e' tge m heap ->
+    transf_function f = f' ->
+    match_cont (Emajor.Kcall id f e k) (Dmajor.Kcall (Some id) f' (Vptr b Int.zero) e' k') m heap.
 
 (* TODO: need a few things *)
 (* 1. sp is in fact a pointer *)
@@ -392,34 +396,34 @@ Inductive match_cont: Emajor.cont -> Dmajor.cont -> mem -> Prop :=
 (* probably need those facts to go in match_cont too, about Kcalls *)
 Inductive match_states: Emajor.state -> Dmajor.state -> Prop :=
 | match_state :
-    forall f f' s s' k k' e e' b m,
+    forall f f' s s' k k' e e' b m heap,
       transf_function f = f' ->
       transf_stmt s = s' ->
-      match_cont k k' m ->
-      env_inject e e' tge m ->
+      match_cont k k' m heap ->
+      env_inject e e' tge m heap ->
       match_states (Emajor.State f s k e) (Dmajor.State f' s' k' (Vptr b Int.zero) e' m)
 | match_callstate :
-    forall fd fd' vals vals' m k k',
+    forall fd fd' vals vals' m k k' heap,
       transf_fundef fd = fd' ->
-      list_forall2 (value_inject tge m) vals vals' ->
-      match_cont k k' m ->
+      list_forall2 (value_inject tge m heap) vals vals' ->
+      match_cont k k' m heap ->
       match_states (Emajor.Callstate fd vals k) (Dmajor.Callstate fd' vals' k' m)
 | match_returnstate :
-    forall v v' k k' m,
-      value_inject tge m v v' ->
-      match_cont k k' m ->
+    forall v v' k k' m heap,
+      value_inject tge m heap v v' ->
+      match_cont k k' m heap ->
       match_states (Emajor.Returnstate v k) (Dmajor.Returnstate v' k' m).
 
 Remark call_cont_commut:
-  forall k k' m, match_cont k k' m -> match_cont (Emajor.call_cont k) (Dmajor.call_cont k') m.
+  forall k k' m heap, match_cont k k' m heap -> match_cont (Emajor.call_cont k) (Dmajor.call_cont k') m heap.
 Proof.
   induction 1; simpl; auto. constructor. econstructor; eauto.
 Qed.
 
 Lemma is_call_cont_transf :
-  forall k k' m,
+  forall k k' m heap,
     Emajor.is_call_cont k ->
-    match_cont k k' m ->
+    match_cont k k' m heap ->
     Dmajor.is_call_cont k'.
 Proof.
   intros. destruct k; simpl in *; try solve [inv H]; inv H0; eauto.
@@ -435,12 +439,12 @@ Proof.
 Qed.
 
 Lemma env_inject_update :
-  forall {A B : Type} e e' (ge : Genv.t A B) m,
-    env_inject e e' ge m ->
+  forall {A B : Type} e e' (ge : Genv.t A B) m heap,
+    env_inject e e' ge m heap ->
     forall v x,
-      value_inject ge m v x ->
+      value_inject ge m heap v x ->
       forall id,
-        env_inject (PTree.set id v e) (PTree.set id x e') ge m.
+        env_inject (PTree.set id v e) (PTree.set id x e') ge m heap.
 Proof.
   intros. unfold env_inject.
   intros. destruct (peq id id0) eqn:?; subst.
@@ -451,8 +455,8 @@ Proof.
 Qed.
 
 Lemma match_call_cont :
-  forall k k' m,
-    match_cont k k' m ->
+  forall k k' m heap,
+    match_cont k k' m heap ->
     Emajor.is_call_cont k ->
     is_call_cont k'.
 Proof.
@@ -485,10 +489,10 @@ Proof.
 Qed.
 
 Lemma value_inject_ptr :
-  forall m v x,
-  value_inject tge m v x ->
+  forall m v x heap,
+  value_inject tge m heap v x ->
   exists b ofs,
-    x = Vptr b ofs.
+    x = Vptr b ofs /\ heap b.
 Proof.
   intros.
   inv H; eauto.
@@ -511,8 +515,8 @@ Proof.
 Qed.
 
 Lemma value_inject_load :
-  forall m x tag args,
-    value_inject tge m (Constr tag args) x ->
+  forall m x tag args heap,
+    value_inject tge m heap (Constr tag args) x ->
     Mem.loadv Mint32 m x = Some (Vint tag).
 Proof.
   intros.
@@ -520,10 +524,10 @@ Proof.
 Qed.
 
 Lemma env_inject_set_params_locals :
-  forall parms m vals vals',
-    list_forall2 (value_inject tge m) vals vals' ->
+  forall parms m vals vals' heap,
+    list_forall2 (value_inject tge m heap) vals vals' ->
     env_inject (Emajor.set_params vals parms)
-               (set_params vals' parms) tge m.
+               (set_params vals' parms) tge m heap.
 Proof.
   induction parms; intros.
   unfold env_inject.
@@ -543,120 +547,130 @@ Proof.
   eauto.
 Qed.
 
-Definition mem_locked' (m m' : mem) (b : block) : Prop :=
-  forall b',
-    (b' < b)%positive ->
-    forall ofs c v,
-      Mem.load c m b' ofs = Some v ->
-      Mem.load c m' b' ofs = Some v.
-
-Definition mem_locked (m m' : mem) : Prop :=
-  mem_locked' m m' (Mem.nextblock m).
 
 
-Lemma load_lt_nextblock :
-  forall c m b ofs v,
-    Mem.load c m b ofs = Some v ->
-    (b < Mem.nextblock m)%positive.
+(* Lemma mem_locked_match_cont : *)
+(*   forall k k' m m', *)
+(*     match_cont k k' m -> *)
+(*     mem_locked m m' -> *)
+(*     match_cont k k' m'. *)
+(* Proof. *)
+(*   induction 1; intros; *)
+(*     econstructor; eauto. *)
+(*   eapply mem_locked_env_inject; eauto. *)
+(* Qed. *)
+
+
+
+Lemma eval_expr_heap_val :
+  forall  env m sp exp v,
+    eval_expr tge env m sp (transf_expr exp) v ->
+    forall heap,
+      heap_env heap env ->
+      closed_heap m heap ->
+      heap_val heap v.
 Proof.
-  intros.
-  remember (Mem.nextblock_noaccess m) as H2.
-  clear HeqH2.
-  destruct (plt b (Mem.nextblock m)). assumption.
-  app Mem.load_valid_access Mem.load.
-  unfold Mem.valid_access in *.
-  break_and. unfold Mem.range_perm in *.
-  specialize (H ofs).
-  assert (ofs <= ofs < ofs + size_chunk c).
-  destruct c; simpl; omega.
-  specialize (H H3).
-  unfold Mem.perm in *.
-  unfold Mem.perm_order' in H.
-  rewrite H2 in H; eauto. inversion H.
-Qed.
+  induction exp; intros.
 
-Lemma alloc_mem_locked :
-  forall m lo hi m' b,
-    Mem.alloc m lo hi = (m',b) ->
-    mem_locked m m'.
-Proof.
-  unfold mem_locked.
-  unfold mem_locked'.
-  intros.
-  app Mem.alloc_result Mem.alloc. subst b.
-  app load_lt_nextblock Mem.load.
-  erewrite Mem.load_alloc_unchanged; eauto.
+  simpl in *.
+  inv H. eapply H0; eauto.
+  
+  unfold transf_expr in H.
+  fold transf_expr in H.
+  remember ((4 + 4 * Z.of_nat n)%Z) as k.
+  inversion H. subst v0 addr chunk.
+  inversion H4. subst vaddr a1 a2.
+  app IHexp (eval_expr tge env m sp (transf_expr exp) v1).
+  inversion H8. subst v0 cst.
+  simpl in H7. inversion H7. subst v2.
+  destruct v1; simpl in H6; try congruence.
+  simpl in H5.
+  eapply H1 in H6; eauto.
 Qed.
 
 
-Lemma load_all_mem_locked :
-  forall m m',
-    mem_locked m m' ->
-    forall b,
-      (b < Mem.nextblock m)%positive ->
-      forall l ofs l',
-        load_all (arg_addrs b ofs l) m = Some l' ->
-        load_all (arg_addrs b ofs l) m' = Some l'.
+(* THIS IS THE PROBLEM *)
+Lemma eval_expr_mem_immut :
+  forall  env m sp exp v,
+    eval_expr tge env m sp (transf_expr exp) v ->
+    forall m' heap x ,
+      value_inject tge m heap x v ->
+      mem_immut m m' heap ->
+      heap_env heap env ->
+      closed_heap m heap ->
+      eval_expr tge env m' sp (transf_expr exp) v.
 Proof.
-  induction l; intros.
-  simpl in H1. inv H1. simpl. reflexivity.
-  simpl in H1. repeat break_match_hyp; try congruence.
-  invc H1.
-  eapply IHl in Heqo0.
-  simpl. rewrite Heqo0.
-  unfold mem_locked in H.
-  unfold mem_locked' in H.
-  apply H in Heqo; auto. find_rewrite. reflexivity.
-Qed.  
+  induction exp; intros.
+  simpl in *.
+  inv H. econstructor; eauto.
 
-Lemma mem_locked_value_inject :
-  forall m m',
-    mem_locked m m' ->
-    forall {A B} (ge : Genv.t A B) v v',
-      value_inject ge m v v' ->
-      value_inject ge m' v v'.
-Proof.
-  induction 2; intros;
-    simpl in H0;
-    app load_lt_nextblock Mem.load;
-  app load_all_mem_locked load_all;
+  destruct v; try solve [inv H0].
+  assert (heap b) by (inv H0; assumption).
+  unfold transf_expr in *. fold transf_expr in *.
+  remember ((4 + 4 * Z.of_nat n)%Z) as k.
+  inversion H. subst v addr chunk.
+  inversion H7.
+  subst vaddr a1 a2.
   econstructor; eauto.
-Qed.
+  econstructor; eauto.
+
+  Focus 2. econstructor; eauto. simpl. reflexivity.
+
+  eapply IHexp; eauto.
+
+  (* HERE *)
+  Focus 2.
+  
+  inv H10.
+  remember ((4 + 4 * Z.of_nat n)%Z) as k.
+  simpl in H5. inversion H5.
+  subst v2.
+  unfold Mem.loadv in *. break_match_hyp; try congruence.
+  eapply H1; eauto.
+
+  admit.
+
+  
+  
+  
+  (* we need this *)
+Admitted.
+
+(* Lemma eval_expr_mem_locked : *)
+(*   forall m m', *)
+(*     mem_locked m m' -> *)
+(*     forall env sp exp v, *)
+(*       eval_expr tge env m sp exp v -> *)
+(*       eval_expr tge env m' sp exp v. *)
+(* Proof. *)
+(*   induction 2; intros; *)
+(*     econstructor; eauto. *)
+(*   unfold Mem.loadv in *. *)
+(*   break_match_hyp; try congruence. *)
+(*   subst vaddr. *)
+(*   eapply mem_locked_load; eauto. *)
+(* Qed. *)
 
 
-Lemma mem_locked_env_inject :
-  forall m m',
-    mem_locked m m' ->
-    forall {A B} e e' (ge : Genv.t A B),
-      env_inject e e' ge m ->
-      env_inject e e' ge m'.
-Proof.
-  intros.
-  unfold env_inject in *.
-  intros. eapply H0 in H1.
-  break_exists.
-  break_and.
-  exists x.
-  split; eauto.
-  eapply mem_locked_value_inject; eauto.
-Qed.
+(* Lemma eval_exprlist_mem_locked : *)
+(*   forall m m', *)
+(*     mem_locked m m' -> *)
+(*     forall env sp expl vals, *)
+(*       eval_exprlist tge env m sp expl vals -> *)
+(*       eval_exprlist tge env m' sp expl vals. *)
+(* Proof. *)
+(*   induction 2; intros. *)
+(*   econstructor; eauto. *)
+(*   econstructor; eauto. *)
+(*   eapply eval_expr_mem_locked; eauto. *)
+(* Qed. *)
 
-Lemma mem_locked_match_cont :
-  forall k k' m m',
-    match_cont k k' m ->
-    mem_locked m m' ->
-    match_cont k k' m'.
-Proof.
-  induction 1; intros;
-    econstructor; eauto.
-  eapply mem_locked_env_inject; eauto.
-Qed.
 
 Lemma disjoint_set_locals :
-  forall l e e' m,
-    env_inject e e' tge m ->
+  forall l e e' m heap,
+    env_inject e e' tge m heap ->
     (forall x, In x l -> e ! x = None) ->
-    env_inject e (set_locals l e') tge m.
+    env_inject e (set_locals l e') tge m heap.
 Proof.
   induction l; intros.
   simpl. auto.
@@ -669,189 +683,30 @@ Proof.
   intros. eapply H0. simpl. right. auto.
 Qed.
 
-Definition writable (m : mem) (b : block) (lo hi : Z) : Prop :=
-  forall ofs k,
-    lo <= ofs < hi ->
-    Mem.perm m b ofs k Freeable.
-
-Lemma alloc_writable :
-  forall m lo hi m' b,
-    Mem.alloc m lo hi = (m',b) ->
-    writable m' b lo hi.
-Proof.
-  intros.
-  unfold writable.
-  intros.
-  eapply Mem.perm_alloc_2; eauto.
-Qed.  
-
-Lemma pos_lt_neq :
-  forall p q,
-    (p < q)%positive ->
-    p <> q.
-Proof.
-  intros.
-  unfold Pos.lt in H.
-  intro. rewrite <- Pos.compare_eq_iff in H0.
-  congruence.
-Qed.
-  
-
-Lemma mem_locked_store_nextblock :
-  forall m m',
-    mem_locked m m' ->
-    forall c ofs v m'',
-      Mem.store c m' (Mem.nextblock m) ofs v = Some m'' ->
-      mem_locked m m''.
-Proof.
-  intros.
-  unfold mem_locked in *.
-  unfold mem_locked' in *.
-  intros.
-  app Mem.load_store_other Mem.store.
-  rewrite H0.
-  eapply H; eauto.
-  left.
-  eapply pos_lt_neq; eauto.
-Qed.
-
-Lemma writable_storeable :
-  forall m b lo hi,
-    writable m b lo hi ->
-    forall c v ofs,
-      lo <= ofs < hi ->
-      (align_chunk c | ofs) ->
-      hi >= ofs + size_chunk c ->
-      {m' : mem | Mem.store c m b ofs v = Some m' /\ writable m' b lo hi }.
-Proof.
-  intros.
-  assert (Mem.valid_access m c b ofs Writable).
-  unfold Mem.valid_access. split; auto.
-  unfold Mem.range_perm. intros.
-  unfold writable in H.
-  eapply Mem.perm_implies; try apply H; eauto; try solve [econstructor].
-  omega.
-  app Mem.valid_access_store Mem.valid_access.
-  destruct H3.
-  exists x. split. apply e.
-  unfold writable. intros.
-  eapply Mem.perm_store_1; eauto.
-Qed.
-
-Lemma writable_storevable :
-  forall m b lo hi,
-    writable m b lo hi ->
-    forall c v ofs,
-      lo <= Int.unsigned ofs < hi ->
-      (align_chunk c | Int.unsigned ofs) ->
-      hi >= (Int.unsigned ofs) + size_chunk c ->
-      {m' : mem | Mem.storev c m (Vptr b ofs) v = Some m' /\ writable m' b lo hi }.
-Proof.
-  intros.
-  app writable_storeable writable.
-Qed.
-
-Lemma mem_locked_load :
-  forall m m',
-    mem_locked m m' ->
-    forall c b ofs v,
-      Mem.load c m b ofs = Some v ->
-      Mem.load c m' b ofs = Some v.
-Proof.
-  intros.
-  unfold mem_locked in *.
-  unfold mem_locked' in *.
-  eapply H; eauto.
-  eapply load_lt_nextblock; eauto.
-Qed.
-      
-Lemma eval_expr_mem_locked :
-  forall m m',
-    mem_locked m m' ->
-    forall env sp exp v,
-      eval_expr tge env m sp exp v ->
-      eval_expr tge env m' sp exp v.
-Proof.
-  induction 2; intros;
-    econstructor; eauto.
-  unfold Mem.loadv in *.
-  break_match_hyp; try congruence.
-  subst vaddr.
-  eapply mem_locked_load; eauto.
-Qed.
-
-Lemma eval_exprlist_mem_locked :
-  forall m m',
-    mem_locked m m' ->
-    forall env sp expl vals,
-      eval_exprlist tge env m sp expl vals ->
-      eval_exprlist tge env m' sp expl vals.
-Proof.
-  induction 2; intros.
-  econstructor; eauto.
-  econstructor; eauto.
-  eapply eval_expr_mem_locked; eauto.
-Qed.
-
-Ltac st :=
-  match goal with
-  | [ H : writable _ _ _ _ |- _ ] =>
-    eapply writable_storeable in H
-  end.
-
-Ltac ore :=
-  match goal with
-  | [ H : { _ | _ } |- _ ] => destruct H; repeat break_and
-  end.
-
-
-
-Lemma writable_head :
-  forall m b lo hi,
-    writable m b lo hi ->
-    forall ofs,
-      lo <= ofs <= hi ->
-      writable m b ofs hi.
-Proof.
-  intros.
-  unfold writable in *.
-  intros. eapply H. omega.
-Qed.
-
-Lemma int_unsigned_add_zero :
-  forall i,
-    Int.unsigned (Int.add Int.zero i) = Int.unsigned i.
-Proof.
-  intros.
-  unfold Int.add.
-  rewrite Int.unsigned_zero.
-  simpl.
-  rewrite Int.repr_unsigned; eauto.
-Qed.
 
 (* key store_args lemma *)  
 Lemma step_store_args :
-  forall l ofs m f id k env m0 sp vs hvs,
+  forall l ofs m f id k env m0 sp vs hvs heap,
     env ! id = Some (Vptr (Mem.nextblock m0) Int.zero) ->
     writable m (Mem.nextblock m0) ofs (ofs + 4 * Z.of_nat (length l)) ->
     eval_exprlist tge env m0 sp (map transf_expr l) vs -> 
-    mem_locked m0 m ->
+    mem_immut m0 m heap ->
     (forall x,
         0 <= x <= Z.of_nat (length l) ->
         Int.unsigned (Int.repr (ofs + 4 * x)) = (ofs + 4 * x)%Z) ->
     (align_chunk Mint32 | ofs) ->
-    list_forall2 (value_inject tge m0) hvs vs ->    
+    list_forall2 (value_inject tge m0 heap) hvs vs ->    
     exists m',
     star step tge (State f (store_args id l ofs) k sp env m) E0
          (State f Dmajor.Sskip k sp env m') /\
-    mem_locked m0 m' /\
+    mem_immut m0 m' heap /\
     (forall o v,
         o + 4 <= ofs ->
         Mem.load Mint32 m (Mem.nextblock m0) o = Some v ->
         Mem.load Mint32 m' (Mem.nextblock m0) o = Some v) /\
     exists l',
       load_all (arg_addrs (Mem.nextblock m0) (Int.repr ofs) hvs) m' = Some l' /\
-      (forall a b, In (a,b) l' -> value_inject tge m' a b).
+      (forall a b, In (a,b) l' -> value_inject tge m' heap a b).
 Proof.
   induction l; intros.
   * eexists; simpl. split. eapply star_refl.
@@ -894,7 +749,7 @@ Proof.
 
   remember H2 as Hmem_locked0.
   clear HeqHmem_locked0.
-  eapply mem_locked_store_nextblock in H2; try solve [unfold Mem.storev in *; simpl in *; eauto].
+  eapply mem_immut_store_nextblock in H2; try solve [unfold Mem.storev in *; simpl in *; eauto].
 
   subst vs. inversion H5.
   subst hvs. inversion H1.
@@ -916,6 +771,7 @@ Proof.
   omega.
   split; omega.
 
+  
 
   intros. specialize (H3 (1 + x0)%Z).
   rewrite <- Z.add_assoc.
@@ -940,7 +796,9 @@ Proof.
   econstructor; eauto.
   econstructor; eauto.
   econstructor; eauto.
-  eapply eval_expr_mem_locked; eauto.  
+  (* HERE *)
+  
+  solve [eapply eval_expr_mem_immut; eauto].
   eapply star_left; nil_trace.
   econstructor; eauto.
   eauto.
