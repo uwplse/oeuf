@@ -14,6 +14,7 @@ Require compcert.backend.SelectLong.
 
 Require Import Cmajor.
 Require Import Dmajor.
+Require Import Dflatmajor.
 
 Require Import StructTact.StructTactics.
 Require Import StructTact.Util.
@@ -150,30 +151,30 @@ Inductive match_cont: Dmajor.cont -> Cmajor.cont -> Prop :=
       env_lessdef e e' ->
       match_cont (Dmajor.Kcall id f sp e k) (Cmajor.Kcall id f' sp e' k').
 
-Inductive match_states : Dmajor.state -> Cmajor.state -> Prop :=
-  | match_state: forall f f' s k s' k' sp e m e' m'
+Inductive match_states : Dflatmajor.state -> Cmajor.state -> Prop :=
+  | match_state: forall f f' s k s' k' sp e m e' m' z
         (TF: transf_function malloc_id f = f')
         (TS: transf_stmt malloc_id s = s')
         (MC: match_cont k k')
         (LD: env_lessdef e e')
         (ME: Mem.extends m m'),
       match_states
-        (Dmajor.State f s k sp e m)
+        (Dflatmajor.State f s k sp e m z)
         (Cmajor.State f' s' k' sp e' m')
-  | match_callstate: forall f f' args args' k k' m m'
+  | match_callstate: forall f f' args args' k k' m m' z
         (TF: transf_fundef malloc_id f = OK f')
         (MC: match_cont k k')
         (LD: Val.lessdef_list args args')
         (ME: Mem.extends m m'),
       match_states
-        (Dmajor.Callstate f args k m)
+        (Dflatmajor.Callstate f args k m z)
         (Cmajor.Callstate f' args' k' m')
-  | match_returnstate: forall v v' k k' m m'
+  | match_returnstate: forall v v' k k' m m' z
         (MC: match_cont k k')
         (LD: Val.lessdef v v')
         (ME: Mem.extends m m'),
       match_states
-        (Dmajor.Returnstate v k m)
+        (Dflatmajor.Returnstate v k m z)
         (Cmajor.Returnstate v' k' m').
 
 Remark call_cont_commut:
@@ -338,7 +339,7 @@ Qed.
 
 Lemma eval_expr_transf :
   forall sp a e m v,
-    Dmajor.eval_expr ge e m sp a v ->
+    Dflatmajor.eval_expr ge e m sp a v ->
     forall e' m',
       env_lessdef e e' ->
       Mem.extends m m' ->
@@ -377,7 +378,7 @@ Qed.
 
 Lemma eval_exprlist_transf :
   forall a sp e m v,
-    Dmajor.eval_exprlist ge e m sp a v ->
+    Dflatmajor.eval_exprlist ge e m sp a v ->
     forall e' m',
       env_lessdef e e' ->
       Mem.extends m m' ->
@@ -577,7 +578,7 @@ Proof.
 Qed.
 
 Lemma single_step_correct:
-  forall S1 t S2, Dmajor.step ge S1 t S2 ->
+  forall S1 t S2, Dflatmajor.step ge S1 t S2 ->
   forall T1, match_states S1 T1 ->
    (exists T2, plus Cmajor.step tge T1 t T2 /\ match_states S2 T2).
 Proof.
@@ -651,14 +652,17 @@ Proof.
     simpl.
     eapply Mem.free_parallel_extends in H; eauto.
     break_exists; break_and.
-    eexists; split; try eapply plus_one; try econstructor; eauto; simpl; eauto.
-    eapply match_call_cont; eauto.
+    eexists; split; try eapply plus_one; try econstructor;
+    eauto;
+    try eapply match_call_cont; eauto.
+    
   * (* return *)
     eapply eval_expr_transf in H; eauto.
     eapply Mem.free_parallel_extends in H0; eauto.
     repeat (break_exists; break_and).
     eexists; split; try eapply plus_one; try econstructor; eauto; simpl; eauto.
     eapply match_call_cont; eauto.
+    
   * (* call internal *)
     unfold transf_fundef in TF. inv TF.
     eapply Mem.alloc_extends in H; eauto.
@@ -675,7 +679,8 @@ Proof.
     destruct optid. simpl.
     eapply env_lessdef_set; eauto.
     simpl. assumption.
-Qed.    
+Admitted.
+
 
 Lemma alloc_drop_perm :
   forall m lo hi m' b,
@@ -736,10 +741,10 @@ Proof.
 Admitted.
 
 Lemma match_final_state :
- forall (s1 : Smallstep.state (semantics prog))
+ forall (s1 : Smallstep.state (Dflatmajor.semantics prog))
         (s2 : Smallstep.state (Cmajor.semantics tprog)) (r : int),
    match_states s1 s2 ->
-   Smallstep.final_state (semantics prog) s1 r ->
+   Smallstep.final_state (Dflatmajor.semantics prog) s1 r ->
    Smallstep.final_state (Cmajor.semantics tprog) s2 r.
 Proof.
   intros.
@@ -750,8 +755,8 @@ Proof.
 Qed.
 
 Lemma initial_states_match :
-  forall s1 : Smallstep.state (semantics prog),
-    Smallstep.initial_state (semantics prog) s1 ->
+  forall s1 : Smallstep.state (Dflatmajor.semantics prog),
+    Smallstep.initial_state (Dflatmajor.semantics prog) s1 ->
     exists s2 : Smallstep.state (Cmajor.semantics tprog),
       Smallstep.initial_state (Cmajor.semantics tprog) s2 /\ match_states s1 s2.
 Proof.
@@ -779,7 +784,7 @@ Theorem transf_program_correct:
     (forall id : ident, In id (map fst (new_globs (Pos.succ (malloc_id prog)) (malloc_id prog))) ->
                         ~ In id (Genv.genv_public (Genv.globalenv tprog))) ->
     transf_prog prog = OK tprog ->
-    forward_simulation (Dmajor.semantics prog) (Cmajor.semantics tprog).
+    forward_simulation (Dflatmajor.semantics prog) (Cmajor.semantics tprog).
 Proof.
   intros.
   eapply forward_simulation_plus.
