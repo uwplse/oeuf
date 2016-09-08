@@ -267,6 +267,20 @@ let camlint64_of_coqint : Integers.Int64.int -> int64 = Z.to_int64
 let coqint_of_camlint64 : int64 -> Integers.Int64.int = Z.of_uint64
    (* interpret the int64 as unsigned so that result Z is in range for int *)
 
+(* Strings *)
+
+let camlstring_of_coqstring (s: char list) =
+  let r = String.create (List.length s) in
+  let rec fill pos = function
+  | [] -> r
+  | c :: s -> r.[pos] <- c; fill (pos + 1) s
+  in fill 0 s
+
+let coqstring_of_camlstring s =
+  let rec cstring accu pos =
+    if pos < 0 then accu else cstring (s.[pos] :: accu) (pos - 1)
+  in cstring [] (String.length s - 1)
+
 (* Atoms (positive integers representing strings) *)
 
 type atom = positive
@@ -275,13 +289,18 @@ let atom_of_string = (Hashtbl.create 17 : (string, atom) Hashtbl.t)
 let string_of_atom = (Hashtbl.create 17 : (atom, string) Hashtbl.t)
 let next_atom = ref Coq_xH
 
-(* This function allows Oeuf to choose which identifier malloc corresponds to.
-   It is idempotent and thus safe to call from Coq. *)
-let register_ident_as_malloc p =
-  let s = "malloc" in
+let register_ident p s =
   Hashtbl.add atom_of_string s p;
   Hashtbl.add string_of_atom p s;
   p
+
+let register_ident_coq p s =
+  register_ident p (camlstring_of_coqstring s)
+
+(* This function allows Oeuf to choose which identifier malloc corresponds to.
+   It is idempotent and thus safe to call from Coq. *)
+let register_ident_as_malloc p =
+  register_ident p "malloc"
 
 let intern_string s =
   try
@@ -299,20 +318,6 @@ let extern_atom a =
     if P.to_int a == 5013 then "malloc" else Printf.sprintf "_$%d" (P.to_int a)
 
 let first_unused_ident () = !next_atom
-
-(* Strings *)
-
-let camlstring_of_coqstring (s: char list) =
-  let r = String.create (List.length s) in
-  let rec fill pos = function
-  | [] -> r
-  | c :: s -> r.[pos] <- c; fill (pos + 1) s
-  in fill 0 s
-
-let coqstring_of_camlstring s =
-  let rec cstring accu pos =
-    if pos < 0 then accu else cstring (s.[pos] :: accu) (pos - 1)
-  in cstring [] (String.length s - 1)
 
 (* Floats *)
 
