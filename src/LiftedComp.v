@@ -66,7 +66,16 @@ Fixpoint compile' (n : nat) (e : U.expr) {struct e} : compiler_monad L.expr :=
     | U.Elim ty cases target => L.Elim ty <$> go_list n cases <*> compile' n target
     end.
 
-Definition compile e := compile' 0 e [].
+Definition compile_list' :=
+  fix go_list n es :=
+        match es with
+        | [] => ret_state []
+        | e :: es => cons <$> compile' n e <*> go_list n es
+        end.
+
+Definition compile (e : U.expr) : L.expr * list L.expr := compile' 0 e [].
+
+Definition compile_list (l : list U.expr) : list L.expr * list L.expr := compile_list' 0 l [].
 
 
 (*

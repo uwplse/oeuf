@@ -74,6 +74,12 @@ Section compile.
     list (F.stmt * F.expr) * nat :=
     let (e, env) := p in (compile_env (env ++ [e]), length env).
 
+
+  Definition compile_progs (p : list S.expr * list S.expr) :
+    list (F.stmt * F.expr) * nat :=
+    let (es, env) := p in (compile_env (env ++ es), length env).
+
+
 End compile.
 
 Eval compute in compile_prog Switched.add_prog2.
