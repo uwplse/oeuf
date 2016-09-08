@@ -124,6 +124,13 @@ Definition compile (e : T.expr) : compiler_monad S.expr :=
       end
   in go e.
 
+Definition compile_list :=
+  fix go_list (l : list T.expr) : compiler_monad (list S.expr) :=
+    match l with
+    | [] => ret_state []
+    | e :: l' => cons <$> compile e <*> go_list l'
+    end.
+
 Fixpoint update_all (n : nat) (l : list S.expr) : compiler_monad unit :=
   match l with
   | [] => ret_state tt
@@ -137,3 +144,9 @@ Definition compile_prog (tp : T.expr * list T.expr) : S.expr * list S.expr :=
   update_all 0 env' >>= fun _ => ret_state e') (map (fun _ => S.Arg) env).
 
 Eval compute in compile_prog T.add_prog.
+
+Definition compile_progs (tp : list T.expr * list T.expr) : list S.expr * list S.expr :=
+  let (es, env) := tp in
+  (compile_list es >>= fun e' =>
+  sequence (@bind_state _) (@ret_state _) (map compile env) >>= fun env' =>
+  update_all 0 env' >>= fun _ => ret_state e') (map (fun _ => S.Arg) env).

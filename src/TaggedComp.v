@@ -64,6 +64,10 @@ Definition compile_list :=
 Definition compile_program (lp : L.expr * list L.expr) : option (T.expr * list T.expr) :=
   pair <$> (compile (fst lp)) <*> compile_list (snd lp).
 
+Definition compile_programs (lp : list L.expr * list L.expr) : option (list T.expr * list T.expr) :=
+  pair <$> (compile_list (fst lp)) <*> compile_list (snd lp).
+
+
 End compile.
 
 Ltac refold_compile := fold compile_list in *.
@@ -231,6 +235,23 @@ Lemma compile_program_R : forall LE TE l t,
 intros0 Lval Hcomp.
 unfold compile_program in Hcomp. break_bind_option. inject_some. inject_pair. simpl in *.
 eapply value_I_R; eauto using compile_value_ok.
+Qed.
+
+Lemma compile_programs_R : forall LE TE l t,
+    Forall (L.value_ok LE) l ->
+    compile_programs (l, LE) = Some (t, TE) ->
+    Forall2 (R LE TE) l t.
+intros0 Lvals Hcomp.
+unfold compile_programs in Hcomp.
+break_bind_option. inject_some. inject_pair. simpl in *.
+generalize dependent t.
+induction l; simpl in *; intros.
+- inject_some. auto.
+- on (Forall _ _), invc.
+  break_bind_option. inject_some.
+  constructor.
+  eapply value_I_R; eauto using compile_value_ok.
+  auto.
 Qed.
 
 
@@ -682,6 +703,30 @@ fwd eapply I_sim_star; eauto. break_exists. break_and.
 fwd eapply compile_value_ok; eauto.
 rewrite value_I_R_iff in * by eauto.
 eexists; eauto.
+Qed.
+
+Theorem R_compile_programs : forall LE TE l t,
+    compile_programs (l, LE) = Some (t, TE) ->
+    List.Forall2 (fun l t => forall l',
+      L.value_ok LE l' ->
+      L.star LE l l' ->
+      exists t',
+        T.star TE t t' /\
+        T.value_ok TE t' /\
+        R LE TE l' t') l t.
+unfold compile_programs.
+intros0 Hcomp.
+break_bind_option. inject_some. inject_pair. simpl in *.
+generalize dependent t.
+induction l; intros0 Hcomp; simpl in *.
+- inject_some. auto.
+- break_bind_option. inject_some.
+  constructor; auto.
+  intros0 Lval Lstar.
+  fwd eapply I_sim_star; eauto. break_exists. break_and.
+  fwd eapply compile_value_ok with (LE := LE); eauto.
+  rewrite value_I_R_iff in * by eauto.
+  eexists; eauto.
 Qed.
 
 Theorem R_call : forall LE TE lf la lr tf ta,

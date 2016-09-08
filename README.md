@@ -71,15 +71,15 @@ Any files you open in emacs from the `compcert` subdirectory should now work.
 
 ## Œuf Workflow
 
-* Write a Gallina program `foo`
+* Write a Gallina expressions `foo` and `bar`
 * Use the reflection tactics of `SourceLang.v` to construct a deeply embedded 
-  representation of this program `foo_reflect`. (Currently the reflection only works if the 
-  program is first fully inlined (delta reduced).) 
-* Check that the reflection is correct by proving it denotes to the original 
+  representation of these expressions `foo_reflect` and `bar_reflect`. (Currently 
+  the reflection only works if the program is first fully inlined (delta reduced).) 
+* Check that each reflection is correct by proving it denotes to the original 
   program with `reflexivity`.
-* Extract the reflection by importing the plugin and the pretty printer and
-  running `Eval compute Then Write To File "foo.oeuf" (Pretty.expr.print foo_reflect).`
-* Ensure that there is a shim template for foo at `shim_templates/foo_shim.c`
+* Extract the reflections by importing the plugin and the pretty printer and
+  running `Eval compute Then Write To File "foo.oeuf" (Pretty.compilation_unit.print (CompilationUnit.Compilation_unit _ (hcons foo_reflect (hcons bar_reflect hnil)))).`
+* Ensure that there is a shim template for foo at `shim_templates/foobar_shim.c` (Note: template elaboration is currently broken whenever you extract more than one expression with Œuf; you'll need to explicitly resolve symbol names manually.)
 * Run `./occ.sh foo` to compile foo with its shim.
 * The resulting executable is placed in `./a.out` and is ready to run!
 
