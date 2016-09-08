@@ -26,10 +26,14 @@ script is called at the end of the normal compilation process.
 
 ## Build Instructions
 
-From the top level just run:
+From the top level:
 
 ```
-  $ make
+  $ make compcert
+  $ ./configure
+  $ make # this will fail!
+  $ _build/sanitize.sh
+  $ make # this should work
 ```
 
 This will build the CompCert dependencies (`make compcert`), configure and

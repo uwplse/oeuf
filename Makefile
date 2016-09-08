@@ -1,32 +1,12 @@
-NPAR=$(shell \
-	hash gnproc > /dev/null 2>&1 && \
-		expr $$(gnproc) - 1 || \
-		expr $$(nproc)  - 1 )
-
-COMPCERTCONFIG=$(shell \
-	[ "$$(uname)" = "Darwin" ] && \
-		echo "ia32-macosx" || \
-		echo "ia32-linux"  )
-
 DRIVER=OeufDriver.native
 
-all: compcert proof driver plugin test
-
-compcert:
-	cd compcert && ./configure $(COMPCERTCONFIG)
-	$(MAKE) -j $(NPAR) -C compcert proof
-	$(MAKE) -j $(NPAR) -C compcert driver/Version.ml
-	$(MAKE) -j $(NPAR) -C compcert -f Makefile.extr \
-		cparser/pre_parser_messages.ml
+all: proof driver plugin test
 
 proof: Makefile.coq
 	$(MAKE) -j $(NPAR) -f Makefile.coq
 
 Makefile.coq: _CoqProject
 	coq_makefile -f _CoqProject -o Makefile.coq
-
-_CoqProject:
-	./configure
 
 plugin:
 	make -C plugin
@@ -35,7 +15,6 @@ driver: compcert.ini
 	ocamlbuild \
 		-use-menhir -pkg menhirLib \
 		-yaccflag --table \
-		-j $(NPAR) \
 		-lib str \
 		-lib unix \
 		-I src \
@@ -66,7 +45,16 @@ clean: Makefile.coq
 	rm -f compcert.ini $(DRIVER)
 	rm -f extraction/*.ml extraction/*.mli
 
+COMPCERTCONFIG=$(shell \
+	[ "$$(uname)" = "Darwin" ] && \
+		echo "ia32-macosx" || \
+		echo "ia32-linux"  )
+
+compcert:
+	cd compcert && ./configure $(COMPCERTCONFIG)
+	$(MAKE) -C compcert
+
 cleaner: clean
 	$(MAKE) -C compcert clean
 
-.PHONY: all compcert proof driver clean cleaner plugin test
+.PHONY: all proof driver plugin test clean compcert cleaner

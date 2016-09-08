@@ -9,6 +9,8 @@ lia.cache
 Makefile.coq
 /.depend.extr
 /compcert.ini
+# should plugin/Makefile.coq be ignored?
+plugin/Makefile.coq.bak
 
 *.cmi
 *.cmo
