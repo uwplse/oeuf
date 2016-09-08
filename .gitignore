@@ -3,6 +3,8 @@
 *.glob
 *.aux
 *.d
+lia.cache
+
 /_CoqProject
 Makefile.coq
 /.depend.extr
@@ -21,5 +23,6 @@ OeufDriver.native
 _build/
 
 shim.c
+a.out
 
 /test/*.actual
