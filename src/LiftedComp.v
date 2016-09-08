@@ -5,9 +5,13 @@ Require Import ListLemmas.
 Require Untyped.
 Require Lifted.
 Require Utopia.
+Require String.
 
 Module U := Untyped.
 Module L := Lifted.
+
+Delimit Scope string_scope with string.
+Bind Scope string_scope with String.string.
 
 
 Definition U_add_1_2 := U.App (U.App U.add_reflect (U.nat_reflect 1)) (U.nat_reflect 2).
@@ -27,12 +31,16 @@ Eval compute in L_add_next.
 
 
 Section compile.
+Local Open Scope string_scope.
+
 Open Scope state_monad.
 
-Definition compiler_monad A := state (list L.expr) A.
+Definition compiler_monad A := state (list (L.expr * String.string)) A.
+
+Definition next_idx : compiler_monad nat := length <$> get.
 
 Definition record x : compiler_monad nat :=
-    (length <$> get) >>= fun idx =>
+    next_idx >>= fun idx =>
     modify (fun env => env ++ [x]) >>= fun _ =>
     ret_state idx.
 
@@ -48,35 +56,48 @@ Definition close_vars n :=
     | S n => close_vars' n
     end.
 
-Fixpoint compile' (n : nat) (e : U.expr) {struct e} : compiler_monad L.expr :=
+Local Notation "x ++ y" := (String.append x y) (right associativity, at level 60) : string_scope.
+
+Fixpoint compile' (n : nat) (e : U.expr) (name : String.string) {struct e} : compiler_monad L.expr :=
     let fix go_list n es :=
         match es with
         | [] => ret_state []
-        | e :: es => cons <$> compile' n e <*> go_list n es
+        | e :: es => cons <$> compile' n e name <*> go_list n es
         end in
     match e with
     | U.Var 0 => ret_state L.Arg
     | U.Var (S n) => ret_state (L.UpVar n)
     | U.Lam body =>
-        compile' (S n) body >>= fun body' =>
-        record body' >>= fun fname =>
+        next_idx >>= fun idx =>
+        let name :=  name ++ "_lambda_" ++ nat_to_string idx in
+        compile' (S n) body name >>= fun body' =>
+        record (body', name) >>= fun fname =>
         ret_state (L.Close fname (close_vars n))
-    | U.App f a => L.Call <$> compile' n f <*> compile' n a
+    | U.App f a => L.Call <$> compile' n f name <*> compile' n a name
     | U.Constr c args => L.Constr c <$> go_list n args
-    | U.Elim ty cases target => L.Elim ty <$> go_list n cases <*> compile' n target
+    | U.Elim ty cases target => L.Elim ty <$> go_list n cases <*> compile' n target name
     end.
 
-Definition compile_list' :=
-  fix go_list n es :=
+Definition compile_list' n l name :=
+  let fix go_list n es :=
         match es with
         | [] => ret_state []
-        | e :: es => cons <$> compile' n e <*> go_list n es
-        end.
+        | e :: es => cons <$> compile' n e name <*> go_list n es
+        end
+  in go_list n l.
 
-Definition compile (e : U.expr) : L.expr * list L.expr := compile' 0 e [].
+Definition compile (e : U.expr) name : L.expr * list (L.expr * String.string) := compile' 0 e name [].
 
-Definition compile_list (l : list U.expr) : list L.expr * list L.expr := compile_list' 0 l [].
+Fixpoint compile_cu' (l : list (U.expr * String.string)) :
+  compiler_monad (list (L.expr * String.string)) :=
+  match l with
+  | [] => ret_state []
+  | (e,nm) :: es => (fun e l => cons (e,nm) l) <$> compile' 0 e nm  <*> compile_cu' es
+  end.
 
+Definition compile_cu (l : list (U.expr * String.string)) :
+  list (L.expr * String.string) * list (L.expr * String.string) :=
+  compile_cu' l [].
 
 (*
 Definition compile (e : U.expr) : option L.expr :=
@@ -105,11 +126,11 @@ End compile.
 
 Eval compute in compile U.add_reflect.
 
-Definition add_prog_comp := compile U.add_reflect.
+Definition add_prog_comp := compile U.add_reflect "add"%string.
 
 Definition add_exp_comp := fst add_prog_comp.
 
-Definition add_env_comp := snd add_prog_comp.
+Definition add_env_comp := map fst (snd add_prog_comp).
 
 
 

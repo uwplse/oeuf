@@ -9,3 +9,8 @@ Global Arguments length {_} _.
 Global Arguments cons {_} _ _.
 Global Arguments Some {_} _.
 Global Arguments app {_} _ _.
+
+Require PrettyParsing.NatToSymbol.
+
+Definition nat_to_string (n : nat) :=
+  LexicalConsiderations.symbol.print (NatToSymbol.nat_to_symbol n).

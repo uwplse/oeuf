@@ -5,6 +5,9 @@ Require Import Common Monads.
 Require Import StuartTact.
 Require Import HighValues.
 Require Import ListLemmas.
+Require PrettyParsing.NatToSymbol String.
+Delimit Scope string_scope with string.
+Local Notation "s1 ++ s2" := (String.append s1 s2) : string_scope.
 Require Flattened Fmajor.
 
 Module F := Flattened.
@@ -102,14 +105,21 @@ Fixpoint numbered_pos {A} n (xs : list A) :=
     | x :: xs => (n, x) :: numbered_pos (Pos.succ n) xs
     end.
 
-Definition compile_prog (p : F.program) : option E.program :=
-  let (g, main_id) := p in
-    compile_gdefs g >>= fun g' =>
-    let g'' := numbered_pos 1%positive g' in
-    Some (AST.mkprogram g'' (map fst g'') (conv_fn main_id)).
+Axiom register_ident : positive -> String.string -> positive.
 
+Fixpoint intern_names (l : list (positive * String.string)) : positive :=
+  match l with
+  | [] => 1
+  | (p,s) :: l => register_ident p s + intern_names l
+  end.
+
+Definition compile_cu (p : list (F.stmt * F.expr * String.string) * nat) : option E.program :=
+  let (g, main_id) := p in
+    compile_gdefs (map fst g) >>= fun g' =>
+    let g'' := numbered_pos 1%positive g' in
+    zip_error (map fst g'') (map snd g) >>= fun pos_to_string_map =>
+    let p := intern_names pos_to_string_map in
+    Some (AST.mkprogram g'' (map fst g'') (conv_fn (main_id + Pos.to_nat (Pos.sub p p)))).
 
 End compile.
-
-
-Eval compute in compile_prog F.compiled_add_prog.
+Extract Inlined Constant register_ident => "Camlcoq.register_ident_coq".

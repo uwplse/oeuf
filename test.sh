@@ -19,5 +19,7 @@ do
     then echo "Test $TESTNAME failed!"
          diff -u "test/${TESTNAME}.expected" "test/${TESTNAME}.actual" || true
     else echo "Test $TESTNAME passed!"
+         rm "$TESTNAME.oeuf" "$TESTNAME.o"
+         rm "shim.c" "shim.o"
     fi
 done
