@@ -1402,7 +1402,6 @@ Proof.
     eapply plus_one.
     econstructor; eauto.
     unfold transf_function. simpl.
-    admit. (* here is where we need stack heap separation *)
 
     econstructor; eauto.
 
@@ -1411,7 +1410,6 @@ Proof.
     eapply plus_one.
     simpl.
     econstructor; eauto.
-    admit. (* here we need stack heap separation *)
 
     econstructor; eauto.
     

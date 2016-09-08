@@ -240,15 +240,15 @@ Inductive step: state -> trace -> state -> Prop :=
       switch_argument islong v n ->
       step (State f (Sswitch islong a cases default) k sp e m)
         E0 (State f (Sexit (switch_target n default cases)) k sp e m)
-  | step_return_0: forall f k sp e m m',
-      Mem.free m sp 0 f.(fn_stackspace) = Some m' ->
+  | step_return_0: forall f k sp e m,
+      (* Mem.free m sp 0 f.(fn_stackspace) = Some m' -> *)
       step (State f (Sreturn None) k (Vptr sp Int.zero) e m)
-        E0 (Returnstate Vundef (call_cont k) m')
-  | step_return_1: forall f a k sp e m v m',
+        E0 (Returnstate Vundef (call_cont k) m)
+  | step_return_1: forall f a k sp e m v,
       eval_expr e m (Vptr sp Int.zero) a v ->
-      Mem.free m sp 0 f.(fn_stackspace) = Some m' ->
+      (* Mem.free m sp 0 f.(fn_stackspace) = Some m' -> *)
       step (State f (Sreturn (Some a)) k (Vptr sp Int.zero) e m)
-        E0 (Returnstate v (call_cont k) m')
+        E0 (Returnstate v (call_cont k) m)
   | step_internal_function: forall f vargs k m m' sp e,
       Mem.alloc m 0 f.(fn_stackspace) = (m', sp) ->
       set_locals f.(fn_vars) (set_params vargs f.(fn_params)) = e ->
