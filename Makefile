@@ -1,6 +1,6 @@
 DRIVER=OeufDriver.native
 
-all: proof driver plugin test
+all: proof driver test
 
 proof: Makefile.coq
 	$(MAKE) -j $(NPAR) -f Makefile.coq

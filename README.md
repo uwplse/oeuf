@@ -36,6 +36,9 @@ From the top level:
   $ make # this should work
 ```
 
+If you're installing fresh, make sure to also ```make plugin``` now,
+then ```make``` again.
+
 This will build the CompCert dependencies (`make compcert`), configure and
 build the Œuf proof (`make proof`), build the extracted OCaml
 into a driver (`make driver`), build the plugin (`make plugin`), and 
