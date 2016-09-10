@@ -189,11 +189,11 @@ Inductive step: state -> trace -> state -> Prop :=
   | step_skip_seq: forall f s k sp e m,
       step (State f Sskip (Kseq s k) sp e m)
         E0 (State f s k sp e m)
-  | step_skip_call: forall f k sp e m m',
+  | step_skip_call: forall f k sp e m,
       is_call_cont k ->
-      Mem.free m sp 0 f.(fn_stackspace) = Some m' ->
+      (* Mem.free m sp 0 f.(fn_stackspace) = Some m' -> *)
       step (State f Sskip k (Vptr sp Int.zero) e m)
-        E0 (Returnstate Vundef k m')
+        E0 (Returnstate Vundef k m)
   | step_assign: forall f id a k sp e m v,
       eval_expr e m sp a v ->
       step (State f (Sassign id a) k sp e m)
@@ -249,11 +249,11 @@ Inductive step: state -> trace -> state -> Prop :=
       (* Mem.free m sp 0 f.(fn_stackspace) = Some m' -> *)
       step (State f (Sreturn (Some a)) k (Vptr sp Int.zero) e m)
         E0 (Returnstate v (call_cont k) m)
-  | step_internal_function: forall f vargs k m m' sp e,
-      Mem.alloc m 0 f.(fn_stackspace) = (m', sp) ->
+  | step_internal_function: forall f vargs k m sp e,
+      (* Mem.alloc m 0 f.(fn_stackspace) = (m', sp) -> *)
       set_locals f.(fn_vars) (set_params vargs f.(fn_params)) = e ->
       step (Callstate f vargs k m)
-        E0 (State f f.(fn_body) k (Vptr sp Int.zero) e m')
+        E0 (State f f.(fn_body) k (Vptr sp Int.zero) e m)
   | step_return: forall v optid f sp e k m,
       step (Returnstate v (Kcall optid f sp e k) m)
         E0 (State f Sskip k sp (set_optvar optid v e) m).
