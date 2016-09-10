@@ -1492,19 +1492,20 @@ Proof.
   simpl.
   econstructor; eauto.
   econstructor; eauto.
-  eapply mem_locked_match_cont; eauto.
-  eapply alloc_mem_locked; eauto.
-  app env_inject_set_params_locals list_forall2.
-  unfold transf_fundef. simpl.
-  instantiate (1 := Emajor.fn_params fd) in H2.
-  app alloc_mem_locked Mem.alloc.
-  eapply mem_locked_env_inject in H2; eauto.
+  (* TODO HERE *)
+  (* eapply mem_locked_match_cont; eauto. *)
+  (* eapply alloc_mem_locked; eauto. *)
+  (* app env_inject_set_params_locals list_forall2. *)
+  (* unfold transf_fundef. simpl. *)
+  (* instantiate (1 := Emajor.fn_params fd) in H2. *)
+  (* app alloc_mem_locked Mem.alloc. *)
+  (* eapply mem_locked_env_inject in H2; eauto. *)
 
-  eapply disjoint_set_locals; eauto.
+  (* eapply disjoint_set_locals; eauto. *)
   admit. (* params are not locals *)
   (* this will need to be a global program property, ensured by something *)
   (* shouldn't be that hard *)
-  
+
   (* returnstate *)
   + invp match_cont.
   eexists. split.
