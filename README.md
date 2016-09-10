@@ -11,7 +11,7 @@ rest).
 
 There is a Coq plugin in `plugin/src/oeuf_plugin.ml4` exposed to Coq via 
 `plugin/theories/OeufPlugin.v`. The plugin adds a vernacular command 
-`Eval <reduce-cmd> Then Write To File <filename> <gallina-expr-of-type-string>`
+`Oeuf Eval <reduce-cmd> Then Write To File <filename> <gallina-expr-of-type-string>`
 which evaluates a Gallina expression to a Coq string, converts it to an OCaml 
 string, and writes to the given file. This plugin is **installed** during 
 normal compilation of Œuf.
@@ -85,7 +85,7 @@ Any files you open in emacs from the `compcert` subdirectory should now work.
 * Check that each reflection is correct by proving it denotes to the original 
   program with `reflexivity`.
 * Extract the reflections by importing the plugin and the pretty printer and
-  running `Eval compute Then Write To File "foobar.oeuf" (Pretty.compilation_unit.print (CompilationUnit.Compilation_unit _ (hcons foo_reflect (hcons bar_reflect hnil)) ["foo"; "bar"])).` Note that the list of strings given at the end of the command specifies the assembly-level symbol names corresponding to each expression.
+  running `Oeuf Eval compute Then Write To File "foobar.oeuf" (Pretty.compilation_unit.print (CompilationUnit.Compilation_unit _ (hcons foo_reflect (hcons bar_reflect hnil)) ["foo"; "bar"])).` Note that the list of strings given at the end of the command specifies the assembly-level symbol names corresponding to each expression.
 * Ensure that there is a shim for foo at `shims/foobar_shim.c`. This shim may refer to extracted expressions by the symbol names chosen above.
 * Run `./occ.sh foobar` to compile foo and bar together with their shim.
 * The resulting executable is placed in `./a.out` and is ready to run!

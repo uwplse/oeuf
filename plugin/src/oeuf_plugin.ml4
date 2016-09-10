@@ -65,7 +65,7 @@ let rec of_string s : string =
 exception Success of string 
 
 VERNAC COMMAND EXTEND Write_to_file
-| [ "Eval" red_expr(red) "Then" "Write" "To" "File" string(f) constr(c) ] -> [ 
+| [ "Oeuf" "Eval" red_expr(red) "Then" "Write" "To" "File" string(f) constr(c) ] -> [
     let (evm,env) = Lemmas.get_current_context () in
     let (c, _) = Constrintern.interp_constr env evm c in
     let (evm2,red) = Tacinterp.interp_redexp env evm red in
