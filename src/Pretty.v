@@ -9,34 +9,6 @@ Set Implicit Arguments.
 
 Notation "( x , y , .. , z )" := (existT _ .. (existT _ x y) .. z).
 
-Section member_from_nat.
-  Local Open Scope option_monad.
-
-  Fixpoint member_from_nat {A} {l : list A} (n : nat) : option {a : A & member a l} :=
-    match n with
-    | 0 => match l with
-          | [] => None
-          | x :: _ => Some (x, Here)
-          end
-    | S n => match l with
-            | [] => None
-            | _ :: l => match member_from_nat n with
-                       | Some (a, m) => Some (a, There m)
-                       | None => None
-                       end
-            end
-    end.
-
-  Lemma member_to_from_nat_id :
-    forall A (a : A) l (m : member a l),
-      member_from_nat (member_to_nat m) = Some (a, m).
-  Proof.
-    induction m; intros; simpl.
-    - auto.
-    - now rewrite IHm.
-  Qed.
-End member_from_nat.
-
 Module type_name.
   Fixpoint to_tree (tyn : type_name) : tree symbol.t :=
     match tyn with
