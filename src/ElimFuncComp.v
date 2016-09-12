@@ -151,7 +151,7 @@ Definition elimfunc :=
     let '(main, env, elims) := numbered in
     (compile (length env) main, compile_env elims env).
 
-Eval compute in elimfunc.
+(* Eval compute in elimfunc. *)
 
 Lemma elimfunc_ok : elimfunc = (E.add_reflect, E.add_env).
 reflexivity.
@@ -186,7 +186,7 @@ eright. eapply T.MakeCall; try solve [repeat econstructor].
 eright. eapply T.MakeCall; try solve [repeat econstructor].
 eleft.
 Defined.
-Eval compute in proj1_sig T_add_2_3.
+(* Eval compute in proj1_sig T_add_2_3. *)
 
 Theorem E_add_2_3 : { x | E.star E.add_env
         (E.Call (E.Call E.add_reflect (E.nat_reflect 2)) (E.nat_reflect 3)) x }.
@@ -220,7 +220,7 @@ eright. eapply E.MakeCall; try solve [repeat econstructor].
 eright. eapply E.MakeCall; try solve [repeat econstructor].
 eleft.
 Defined.
-Eval compute in proj1_sig E_add_2_3.
+(* Eval compute in proj1_sig E_add_2_3. *)
 
 End test.
 

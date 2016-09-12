@@ -166,7 +166,7 @@ eright. eapply MakeCall; try solve [repeat econstructor].
 eright. eapply MakeCall; try solve [repeat econstructor].
 eleft.
 Defined.
-Eval compute in proj1_sig add_1_2.
+(* Eval compute in proj1_sig add_1_2. *)
 
 
 (* Proofs *)

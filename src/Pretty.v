@@ -532,7 +532,7 @@ Module expr.
 End expr.
 
 Require Import String.
-Eval compute in expr.print (@id_nat_reflect []).
+(* Eval compute in expr.print (@id_nat_reflect []).
 Eval compute in expr.print (@map_reflect []).
 Eval compute in expr.print (@add_reflect []).
 Eval compute in expr.print (@fib_reflect []).
@@ -543,7 +543,7 @@ Eval lazy in expr.pretty 80 (@id_nat_reflect []).
 Eval lazy in expr.pretty 80 (@map_reflect []).
 Eval lazy in expr.pretty 80 (@add_reflect []).
 Eval lazy in expr.pretty 80 (@fib_reflect []).
-Eval lazy in expr.pretty 80 add_1_2.
+Eval lazy in expr.pretty 80 add_1_2. *)
 
 Module compilation_unit.
   Definition current_major_version : symbol.t := symbol.of_string_unsafe "0".
