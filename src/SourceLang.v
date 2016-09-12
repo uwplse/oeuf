@@ -220,10 +220,11 @@ Ltac typename_reflect' x :=
 
   end.
 Ltac typename_reflect x := let r := typename_reflect' x in exact r.
-
+(* 
 Check ltac:(typename_reflect (list (list (list unit)))).
 Check ltac:(typename_reflect (unit * bool * unit * nat * list bool)%type).
 Check ltac:(typename_reflect (option (positive * bool * unit * nat * list bool))%type).
+*)
 Ltac type_reflect' x :=
   match x with
   | ?X -> ?Y => let rX := type_reflect' X in
@@ -236,12 +237,14 @@ Ltac type_reflect' x :=
 (* fill in a context with the reflection of the given gallina term *)
 Ltac type_reflect x := let r := type_reflect' x in exact r.
 
+(* 
 Check ltac:(type_reflect nat).
 Check ltac:(type_reflect bool).
 Check ltac:(type_reflect (list nat)).
 Check ltac:(type_reflect ((bool -> nat) -> (list nat -> bool) -> nat)).
 Check ltac:(type_reflect unit).
 Check ltac:(type_reflect (list bool)).
+ *)
 
 Ltac build_member P :=
   let rec go P :=
