@@ -152,7 +152,7 @@ eleft.
 Defined.
 
 
-Eval compute in proj1_sig add_1_2.
+(* Eval compute in proj1_sig add_1_2. *)
 
 
 Theorem add2_1_2 : { x | star add_env2 add_expr x }.
@@ -174,4 +174,4 @@ eright. solve [repeat econstructor].
 eleft.
 Defined.
 
-Eval compute in proj1_sig add2_1_2.
+(* Eval compute in proj1_sig add2_1_2.*) 

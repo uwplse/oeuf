@@ -88,4 +88,4 @@ Section compile.
 
 End compile.
 
-Eval compute in compile_prog Switched.add_prog2.
+(* Eval compute in compile_prog Switched.add_prog2. *)

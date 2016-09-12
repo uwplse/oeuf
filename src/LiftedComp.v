@@ -21,13 +21,13 @@ Definition U_add_next' : { x | U.step U_add_1_2 x }.
 eexists.  solve [ repeat econstructor ].
 Defined.
 Definition U_add_next := proj1_sig U_add_next'.
-Eval compute in U_add_next.
+(* Eval compute in U_add_next. *)
 
 Definition L_add_next' : { x | L.step L.add_env L_add_1_2 x }.
 eexists.  solve [ repeat econstructor ].
 Defined.
 Definition L_add_next := proj1_sig L_add_next'.
-Eval compute in L_add_next.
+(* Eval compute in L_add_next. *)
 
 
 Section compile.
@@ -124,7 +124,7 @@ End compile.
 
 (* Test compiler *)
 
-Eval compute in compile U.add_reflect.
+(* Eval compute in compile U.add_reflect. *)
 
 Definition add_prog_comp := compile U.add_reflect "add"%string.
 
@@ -153,7 +153,7 @@ eright. eapply L.MakeCall; try solve [repeat econstructor].
 eright. eapply L.MakeCall; try solve [repeat econstructor].
 eleft.
 Defined.
-Eval compute in proj1_sig add_1_2.
+(* Eval compute in proj1_sig add_1_2. *)
 
 (* end of test *)
 

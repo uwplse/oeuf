@@ -206,15 +206,15 @@ Ltac mash' :=
 Theorem fib_0 : { x | star (App fib_reflect (nat_reflect 0)) x }.
 eexists.  repeat mash'.  eleft.
 Defined.
-Eval compute in proj1_sig fib_0.
+(* Eval compute in proj1_sig fib_0. *)
 
 Ltac evaluate x :=
     cut ({ x' | star x x' });
             [ intro x'; exact (proj1_sig x')
             | eexists; repeat mash'; eleft ].
 
-Eval compute in ltac:(evaluate (App fib_reflect (nat_reflect 0))).
-Eval compute in ltac:(evaluate (App fib_reflect (nat_reflect 1))).
+(* Eval compute in ltac:(evaluate (App fib_reflect (nat_reflect 0))). *)
+(* Eval compute in ltac:(evaluate (App fib_reflect (nat_reflect 1))). *)
 (* gets kind of slow for larger `n`, so leave these commented *)
 (*
 Eval compute in ltac:(evaluate (App fib_reflect (nat_reflect 2))).

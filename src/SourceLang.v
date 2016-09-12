@@ -201,9 +201,9 @@ Definition expr_denote {l ty} (e : expr l ty) (h : hlist type_denote l) : type_d
   in go e h.
 
 
-Eval compute in expr_denote (Constr CTtrue hnil) hnil.
+(* Eval compute in expr_denote (Constr CTtrue hnil) hnil. *)
 
-Eval compute in expr_denote (Lam(ty1 := ADT Tbool) (Var Here)) hnil.
+(* Eval compute in expr_denote (Lam(ty1 := ADT Tbool) (Var Here)) hnil. *)
 
 (* given a gallina term, try to find something that type_denote will map to it. *)
 Ltac typename_reflect' x :=
@@ -332,7 +332,7 @@ Ltac reflect' x :=
 
 (* fill in the context with the expression reflection of the given term *)
 Ltac reflect x := let r := reflect' (fun _ : unit => x) in exact r.
-
+(* 
 Check ltac:(reflect true) : expr [] _ .
 Check ltac:(reflect O)  : expr [] _ .
 Check ltac:(reflect S)  : expr [] _ .
@@ -355,14 +355,14 @@ Check ltac:(reflect (fun _ : nat => S))  : expr [] _ .
 Check ltac:(reflect (nat_rect (fun _ => nat) 4 (fun _ => S) 17))  : expr [] _ .
 Check ltac:(reflect (fun x : nat => x))  : expr [] _ .
 Check ltac:(reflect (fun x => @list_rect nat (fun _ => list nat) [] (fun h _ t => cons 3 (cons h t)) x)) : expr [] _ .
-Eval compute in expr_denote ltac:(reflect  (@list_rect nat (fun _ => list nat) [] (fun h _ t => cons 3 (cons h t)) [0; 0; 0])) hnil.
+Eval compute in expr_denote ltac:(reflect  (@list_rect nat (fun _ => list nat) [] (fun h _ t => cons 3 (cons h t)) [0; 0; 0])) hnil. 
 Check ltac:(reflect (@list_rect bool (fun _ => list bool) [] (fun h _ t => cons false (cons h t)) [true; true; true])) : expr [] _ .
 Eval compute in expr_denote (ltac:(reflect (@list_rect bool (fun _ => list bool) [] (fun h _ t => cons false (cons h t)) [true; true; true]))) hnil.
 Check ltac:(reflect (fun (x _ _ _ _ _ _ _ _ _ _ : nat) => x))  : expr [] _ .
 Check ltac:(reflect (fun x => @prod_rect nat nat (fun _ => nat) (fun a b => a) x))  : expr [] _ .
 Check ltac:(reflect (fun x => @positive_rect (fun _ => positive) (fun _ r => xI r) (fun _ r => xO r) xH x))  : expr [] _ .
 Check ltac:(reflect (fun x => @option_rect nat (fun _ => option nat) (fun a => Some a) None x))  : expr [] _ .
-
+*)
 Section tests.
 
   Definition id_nat (n : nat) : nat := n.
@@ -379,9 +379,9 @@ Section tests.
   Definition map_reflect {l} : expr l _ :=
     ltac:(reflect (fun (f : nat -> nat) (l : list nat) => list_rect (fun _ => list nat) [] (fun x _ t => f x :: t) l)).
 
-  Eval compute in expr_denote map_reflect hnil.
+(*   Eval compute in expr_denote map_reflect hnil.
   Eval compute in @map nat nat.
-
+*)
   Example map_reflect_correct : forall l h, expr_denote(l := l) map_reflect h = @map nat nat.
   Proof. reflexivity. Qed.
 
@@ -433,7 +433,7 @@ Section tests.
                     a b))
         n 0 1.
 
-  Eval compute in map fib [0;1;2;3;4;5;6;7;8;9].
+(*   Eval compute in map fib [0;1;2;3;4;5;6;7;8;9]. *)
 
   Definition fib_reflect_ty : type :=
     ltac:(type_reflect (nat -> nat)).
