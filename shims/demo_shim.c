@@ -61,15 +61,6 @@ int main() {
     printf("max of list given is: %d\n", read_nat(max));
     
 
-    /* union nat* n = make_nat(5); */
-    /* union nat* nil = make_nat(0); */
-    /* union nat** l = (union nat**)malloc(8); */
-    /* (*l) = n; */
-    /* (*(l+4)) = nil; */
-
-    /* void* max_list_closure = max_list(NULL,NULL); */
-    /* void* max = VCALL(max_list_closure, l); */
-
     return 0;
 }
 
