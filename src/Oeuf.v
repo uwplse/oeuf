@@ -1,7 +1,7 @@
 Require Import compcert.driver.Compiler compcert.common.Errors.
 Require Import Common Monads.
 Require UntypedComp TaggedComp LiftedComp SwitchedComp FlattenedComp EmajorComp.
-Require Fmajortoemajor Emajortodmajor Dmajortocmajor Cmajortominor.
+Require Fmajortoemajor Emajortodmajor Dflatmajortocmajor Cmajortominor.
 Require CompilationUnit.
 
 Require Import compcert.common.AST.
@@ -28,7 +28,7 @@ Definition transf_to_cminor (j : CompilationUnit.compilation_unit) : res Cminor.
   @@@ EmajorComp.compile_cu
   @@ Fmajortoemajor.transf_program
   @@ Emajortodmajor.transf_prog
-  @@@ Dmajortocmajor.transf_prog
+  @@@ Dflatmajortocmajor.transf_prog
   @@ Cmajortominor.transf_prog
   @@ print print_Cminor
 .

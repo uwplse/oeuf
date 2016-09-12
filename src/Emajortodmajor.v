@@ -181,14 +181,14 @@ Let tge := Genv.globalenv tprog.
 Hypothesis TRANSF : transf_prog prog = tprog.
 
 Lemma transf_expr_inject_id :
-  forall Ee De m sp id,
+  forall Ee De m id,
     env_inject Ee De tge m ->
     Ee ! id = None ->
     forall (exp : Emajor.expr) v,
       Emajor.eval_expr Ee exp v ->
       forall x,
       exists v',
-        Dmajor.eval_expr tge (PTree.set id x De) m sp (transf_expr exp) v' /\ value_inject tge m v v'.
+        Dmajor.eval_expr tge (PTree.set id x De) m (transf_expr exp) v' /\ value_inject tge m v v'.
 Proof.
   induction exp; intros.
   * inv H1. unfold env_inject in H.
@@ -257,12 +257,12 @@ Qed.
 
 
 Lemma transf_expr_inject :
-  forall Ee De m sp,
+  forall Ee De m,
     env_inject Ee De tge m ->
     forall (exp : Emajor.expr) v,
       Emajor.eval_expr Ee exp v ->
       exists v',
-        Dmajor.eval_expr tge De m sp (transf_expr exp) v' /\ value_inject tge m v v'.
+        Dmajor.eval_expr tge De m (transf_expr exp) v' /\ value_inject tge m v v'.
 Proof.
   induction exp; intros.
   * inv H0. unfold env_inject in H.
@@ -327,14 +327,14 @@ Qed.
 
 
 Lemma transf_exprlist_inject_id :
-  forall Ee De m sp id,
+  forall Ee De m id,
     env_inject Ee De tge m ->
     Ee ! id = None ->
     forall (expl : list Emajor.expr) vlist,
       Emajor.eval_exprlist Ee expl vlist ->
       forall x, 
       exists vlist',
-        Dmajor.eval_exprlist tge (PTree.set id x De) m sp (map transf_expr expl) vlist' /\ list_forall2 (value_inject tge m) vlist vlist'.
+        Dmajor.eval_exprlist tge (PTree.set id x De) m (map transf_expr expl) vlist' /\ list_forall2 (value_inject tge m) vlist vlist'.
 Proof.
   induction expl; intros.
   inversion H1. exists nil. simpl.
@@ -350,12 +350,12 @@ Qed.
 
 
 Lemma transf_exprlist_inject :
-  forall Ee De m sp,
+  forall Ee De m,
     env_inject Ee De tge m ->
     forall (expl : list Emajor.expr) vlist,
       Emajor.eval_exprlist Ee expl vlist ->
       exists vlist',
-        Dmajor.eval_exprlist tge De m sp (map transf_expr expl) vlist' /\ list_forall2 (value_inject tge m) vlist vlist'.
+        Dmajor.eval_exprlist tge De m (map transf_expr expl) vlist' /\ list_forall2 (value_inject tge m) vlist vlist'.
 Proof.
   induction expl; intros.
   inversion H0. exists nil. simpl. split; econstructor; eauto.
@@ -379,25 +379,21 @@ Inductive match_cont: Emajor.cont -> Dmajor.cont -> mem -> Prop :=
     transf_stmt s = s' ->
     match_cont k k' m ->
     match_cont (Emajor.Kseq s k) (Dmajor.Kseq s' k') m
-| match_cont_call: forall id f b e k f' e' k' m,
+| match_cont_call: forall id f e k f' e' k' m,
     match_cont k k' m ->
     env_inject e e' tge m ->
     transf_function f = f' ->
-    match_cont (Emajor.Kcall id f e k) (Dmajor.Kcall (Some id) f' (Vptr b Int.zero) e' k') m.
+    match_cont (Emajor.Kcall id f e k) (Dmajor.Kcall (Some id) f' e' k') m.
 
 
-(* TODO: need a few things *)
-(* 1. sp is in fact a pointer *)
-(* 2. sp points to a stack block of the right size *)
-(* probably need those facts to go in match_cont too, about Kcalls *)
 Inductive match_states: Emajor.state -> Dmajor.state -> Prop :=
 | match_state :
-    forall f f' s s' k k' e e' b m,
+    forall f f' s s' k k' e e' m,
       transf_function f = f' ->
       transf_stmt s = s' ->
       match_cont k k' m ->
       env_inject e e' tge m ->
-      match_states (Emajor.State f s k e) (Dmajor.State f' s' k' (Vptr b Int.zero) e' m)
+      match_states (Emajor.State f s k e) (Dmajor.State f' s' k' e' m)
 | match_callstate :
     forall fd fd' vals vals' m k k',
       transf_fundef fd = fd' ->
@@ -768,9 +764,9 @@ Qed.
 Lemma eval_expr_mem_locked :
   forall m m',
     mem_locked m m' ->
-    forall env sp exp v,
-      eval_expr tge env m sp exp v ->
-      eval_expr tge env m' sp exp v.
+    forall env exp v,
+      eval_expr tge env m exp v ->
+      eval_expr tge env m' exp v.
 Proof.
   induction 2; intros;
     econstructor; eauto.
@@ -783,9 +779,9 @@ Qed.
 Lemma eval_exprlist_mem_locked :
   forall m m',
     mem_locked m m' ->
-    forall env sp expl vals,
-      eval_exprlist tge env m sp expl vals ->
-      eval_exprlist tge env m' sp expl vals.
+    forall env expl vals,
+      eval_exprlist tge env m expl vals ->
+      eval_exprlist tge env m' expl vals.
 Proof.
   induction 2; intros.
   econstructor; eauto.
@@ -803,8 +799,6 @@ Ltac ore :=
   match goal with
   | [ H : { _ | _ } |- _ ] => destruct H; repeat break_and
   end.
-
-
 
 Lemma writable_head :
   forall m b lo hi,
@@ -831,10 +825,10 @@ Qed.
 
 (* key store_args lemma *)  
 Lemma step_store_args :
-  forall l ofs m f id k env m0 sp vs hvs,
+  forall l ofs m f id k env m0 vs hvs,
     env ! id = Some (Vptr (Mem.nextblock m0) Int.zero) ->
     writable m (Mem.nextblock m0) ofs (ofs + 4 * Z.of_nat (length l)) ->
-    eval_exprlist tge env m0 sp (map transf_expr l) vs -> 
+    eval_exprlist tge env m0 (map transf_expr l) vs -> 
     mem_locked m0 m ->
     (forall x,
         0 <= x <= Z.of_nat (length l) ->
@@ -842,8 +836,8 @@ Lemma step_store_args :
     (align_chunk Mint32 | ofs) ->
     list_forall2 (value_inject tge m0) hvs vs ->    
     exists m',
-    star step tge (State f (store_args id l ofs) k sp env m) E0
-         (State f Dmajor.Sskip k sp env m') /\
+    star step tge (State f (store_args id l ofs) k env m) E0
+         (State f Dmajor.Sskip k env m') /\
     mem_locked m0 m' /\
     (forall o v,
         o + 4 <= ofs ->
@@ -1000,7 +994,7 @@ Proof.
 Qed.  
 
 Lemma SmakeClose_name :
-  forall k k' m e e' l vargs id fname sp f bcode fn,
+  forall k k' m e e' l vargs id fname f bcode fn,
     let sz := (4 + 4 * Z.of_nat (length l))%Z in
     match_cont k k' m ->
     env_inject e e' tge m ->
@@ -1012,16 +1006,16 @@ Lemma SmakeClose_name :
         0 <= x <= Z.of_nat (length l) ->
         Int.unsigned (Int.repr (4 + 4 * x)) = (4 + 4 * x)%Z) ->
     exists st st' st'' st''' m' m'' m''' m'''',
-      step tge ((State f ((alloc id sz; store (var id) (Econst (Oaddrsymbol fname Int.zero))); store_args id l 4) k' sp e' m)) E0 st /\
+      step tge ((State f ((alloc id sz; store (var id) (Econst (Oaddrsymbol fname Int.zero))); store_args id l 4) k' e' m)) E0 st /\
       step tge st E0 st' /\
       step tge st' E0 st'' /\
-      step tge st'' E0 (State f (store (var id) (Econst (Oaddrsymbol fname Int.zero))) (Kseq (store_args id l 4) k') sp (PTree.set id (Vptr (Mem.nextblock m) Int.zero) e') m'') /\
+      step tge st'' E0 (State f (store (var id) (Econst (Oaddrsymbol fname Int.zero))) (Kseq (store_args id l 4) k') (PTree.set id (Vptr (Mem.nextblock m) Int.zero) e') m'') /\
       Mem.alloc m (-4) (4 + 4 * Z.of_nat (length l)) = (m',Mem.nextblock m) /\
       Mem.store Mint32 m' (Mem.nextblock m) (-4) (Vint (Int.repr sz)) = Some m'' /\
-      step tge (State f (store (var id) (Econst (Oaddrsymbol fname Int.zero))) (Kseq (store_args id l 4) k') sp (PTree.set id (Vptr (Mem.nextblock m) Int.zero) e') m'') E0 st''' /\
-      step tge st''' E0 (State f (store_args id l 4) k' sp (PTree.set id (Vptr (Mem.nextblock m) Int.zero) e') m''') /\
+      step tge (State f (store (var id) (Econst (Oaddrsymbol fname Int.zero))) (Kseq (store_args id l 4) k') (PTree.set id (Vptr (Mem.nextblock m) Int.zero) e') m'') E0 st''' /\
+      step tge st''' E0 (State f (store_args id l 4) k' (PTree.set id (Vptr (Mem.nextblock m) Int.zero) e') m''') /\
       Mem.store Mint32 m'' (Mem.nextblock m) 0 (Vptr bcode Int.zero) = Some m''' /\ 
-      star step tge (State f (store_args id l 4) k' sp (PTree.set id (Vptr (Mem.nextblock m) Int.zero) e') m''') E0 (State f Sskip k' sp (PTree.set id (Vptr (Mem.nextblock m) Int.zero) e') m'''') /\
+      star step tge (State f (store_args id l 4) k' (PTree.set id (Vptr (Mem.nextblock m) Int.zero) e') m''') E0 (State f Sskip k' (PTree.set id (Vptr (Mem.nextblock m) Int.zero) e') m'''') /\
       mem_locked m m'''' /\
       Mem.loadv Mint32 m'''' (Vptr (Mem.nextblock m) Int.zero) = Some (Vptr bcode Int.zero) /\
       exists l',
@@ -1128,7 +1122,7 @@ Proof.
 Qed.
 
 Lemma SmakeConstr_name :
-  forall k k' m e e' l vargs id tag sp f,
+  forall k k' m e e' l vargs id tag f,
     let sz := (4 + 4 * Z.of_nat (length l))%Z in
     match_cont k k' m ->
     env_inject e e' tge m ->
@@ -1138,16 +1132,16 @@ Lemma SmakeConstr_name :
         0 <= x <= Z.of_nat (length l) ->
         Int.unsigned (Int.repr (4 + 4 * x)) = (4 + 4 * x)%Z) ->
     exists st st' st'' st''' m' m'' m''' m'''',
-      step tge ((State f ((alloc id sz; store (var id) (Econst (Ointconst tag))); store_args id l 4) k' sp e' m)) E0 st /\
+      step tge ((State f ((alloc id sz; store (var id) (Econst (Ointconst tag))); store_args id l 4) k' e' m)) E0 st /\
       step tge st E0 st' /\
       step tge st' E0 st'' /\
-      step tge st'' E0 (State f (store (var id) (Econst (Ointconst tag))) (Kseq (store_args id l 4) k') sp (PTree.set id (Vptr (Mem.nextblock m) Int.zero) e') m'') /\
+      step tge st'' E0 (State f (store (var id) (Econst (Ointconst tag))) (Kseq (store_args id l 4) k') (PTree.set id (Vptr (Mem.nextblock m) Int.zero) e') m'') /\
       Mem.alloc m (-4) (4 + 4 * Z.of_nat (length l)) = (m',Mem.nextblock m) /\
       Mem.store Mint32 m' (Mem.nextblock m) (-4) (Vint (Int.repr sz)) = Some m'' /\
-      step tge (State f (store (var id) (Econst (Ointconst tag))) (Kseq (store_args id l 4) k') sp (PTree.set id (Vptr (Mem.nextblock m) Int.zero) e') m'') E0 st''' /\
-      step tge st''' E0 (State f (store_args id l 4) k' sp (PTree.set id (Vptr (Mem.nextblock m) Int.zero) e') m''') /\
+      step tge (State f (store (var id) (Econst (Ointconst tag))) (Kseq (store_args id l 4) k') (PTree.set id (Vptr (Mem.nextblock m) Int.zero) e') m'') E0 st''' /\
+      step tge st''' E0 (State f (store_args id l 4) k' (PTree.set id (Vptr (Mem.nextblock m) Int.zero) e') m''') /\
       Mem.store Mint32 m'' (Mem.nextblock m) 0 (Vint tag) = Some m''' /\
-      star step tge (State f (store_args id l 4) k' sp (PTree.set id (Vptr (Mem.nextblock m) Int.zero) e') m''') E0 (State f Sskip k' sp (PTree.set id (Vptr (Mem.nextblock m) Int.zero) e') m'''') /\
+      star step tge (State f (store_args id l 4) k' (PTree.set id (Vptr (Mem.nextblock m) Int.zero) e') m''') E0 (State f Sskip k' (PTree.set id (Vptr (Mem.nextblock m) Int.zero) e') m'''') /\
       mem_locked m m'''' /\
       Mem.loadv Mint32 m'''' (Vptr (Mem.nextblock m) Int.zero) = Some (Vint tag) /\
       exists l',
@@ -1254,7 +1248,7 @@ Proof.
 Qed.
 
 Lemma SmakeConstr_sim :
-  forall k k' m e e' l vargs id tag b f,
+  forall k k' m e e' l vargs id tag f,
     match_cont k k' m ->
     env_inject e e' tge m ->
     e ! id = None ->
@@ -1263,7 +1257,7 @@ Lemma SmakeConstr_sim :
         0 <= x <= Z.of_nat (length l) -> Int.unsigned (Int.repr (4 + 4 * x)) = (4 + 4 * x)%Z) ->
     exists st0',
       plus step tge
-           (State (transf_function f) (transf_stmt (SmakeConstr id tag l)) k' (Vptr b Int.zero) e' m)
+           (State (transf_function f) (transf_stmt (SmakeConstr id tag l)) k' e' m)
            E0 st0' /\
       match_states
         (Emajor.State f Emajor.Sskip k (PTree.set id (Constr tag vargs) e)) st0'.
@@ -1300,7 +1294,7 @@ Proof.
 Qed.
 
 Lemma SmakeClose_sim :
-  forall k k' m e e' l vargs fname id b f bcode fn,
+  forall k k' m e e' l vargs fname id f bcode fn,
     match_cont k k' m ->
     env_inject e e' tge m ->
     e ! id = None ->
@@ -1311,7 +1305,7 @@ Lemma SmakeClose_sim :
         0 <= x <= Z.of_nat (length l) -> Int.unsigned (Int.repr (4 + 4 * x)) = (4 + 4 * x)%Z) ->
     exists st0',
       plus step tge
-           (State (transf_function f) (transf_stmt (SmakeClose id fname l)) k' (Vptr b Int.zero) e' m)
+           (State (transf_function f) (transf_stmt (SmakeClose id fname l)) k' e' m)
            E0 st0' /\
       match_states
         (Emajor.State f Emajor.Sskip k (PTree.set id (Close fname vargs) e)) st0'.

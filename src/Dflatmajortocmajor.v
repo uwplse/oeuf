@@ -25,7 +25,6 @@ Definition transf_const (c : Dmajor.constant) : Cmajor.constant :=
   match c with
   | Ointconst i => Cmajor.Ointconst i
   | Oaddrsymbol id i => Cmajor.Oaddrsymbol id i
-  | Oaddrstack i => Cmajor.Oaddrstack i
   end.
 
 Fixpoint transf_expr (e : Dmajor.expr) : Cmajor.expr :=
@@ -134,22 +133,22 @@ Qed.
 Definition env_lessdef (e1 e2: env) : Prop :=
   forall id v1, e1!id = Some v1 -> exists v2, e2!id = Some v2 /\ Val.lessdef v1 v2.
 
-Inductive match_cont: Dmajor.cont -> Cmajor.cont -> Prop :=
+Inductive match_cont: Dflatmajor.cont -> Cmajor.cont -> Prop :=
   | match_cont_stop:
-      match_cont Dmajor.Kstop Cmajor.Kstop
+      match_cont Dflatmajor.Kstop Cmajor.Kstop
   | match_cont_block :
       forall k k',
         match_cont k k' ->
-        match_cont (Dmajor.Kblock k) (Cmajor.Kblock k')
+        match_cont (Dflatmajor.Kblock k) (Cmajor.Kblock k')
   | match_cont_seq: forall s s' k k',
       transf_stmt malloc_id s = s' ->
       match_cont k k' ->
-      match_cont (Dmajor.Kseq s k) (Cmajor.Kseq s' k')
+      match_cont (Dflatmajor.Kseq s k) (Cmajor.Kseq s' k')
   | match_cont_call: forall id f sp e k f' e' k',
       transf_function malloc_id f = f' ->
       match_cont k k' ->
       env_lessdef e e' ->
-      match_cont (Dmajor.Kcall id f sp e k) (Cmajor.Kcall id f' sp e' k').
+      match_cont (Dflatmajor.Kcall id f sp e k) (Cmajor.Kcall id f' sp e' k').
 
 Inductive match_states : Dflatmajor.state -> Cmajor.state -> Prop :=
   | match_state: forall f f' s k s' k' sp e m e' m' z
@@ -178,7 +177,7 @@ Inductive match_states : Dflatmajor.state -> Cmajor.state -> Prop :=
         (Cmajor.Returnstate v' k' m').
 
 Remark call_cont_commut:
-  forall k k', match_cont k k' -> match_cont (Dmajor.call_cont k) (Cmajor.call_cont k').
+  forall k k', match_cont k k' -> match_cont (Dflatmajor.call_cont k) (Cmajor.call_cont k').
 Proof.
   induction 1; simpl; auto. constructor.
   econstructor; eauto.
@@ -186,7 +185,7 @@ Qed.
 
 Lemma is_call_cont_transf :
   forall k k',
-    Dmajor.is_call_cont k ->
+    Dflatmajor.is_call_cont k ->
     match_cont k k' ->
     Cmajor.is_call_cont k'.
 Proof.
@@ -325,7 +324,7 @@ Qed.
 
 Lemma eval_const_transf_lessdef :
   forall sp c v,
-    Dmajor.eval_constant ge sp c = Some v ->
+    Dflatmajor.eval_constant ge sp c = Some v ->
     exists v',
       Cmajor.eval_constant tge sp (transf_const c) = Some v' /\ Val.lessdef v v'.
 Proof.
