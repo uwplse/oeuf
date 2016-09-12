@@ -18,4 +18,4 @@ if ! [ -f "$SHIM" ]; then
 fi
 
 cp "$SHIM" shim.c
-$DRIVER $DRIVER_OPTS "${1}.oeuf" shim.c || { echo "Driver failed during compilation." >&2; exit 1; }
+$DRIVER $DRIVER_OPTS "${1}.oeuf" shim.c -o "${1}" || { echo "Driver failed during compilation." >&2; exit 1; }
