@@ -539,3 +539,16 @@ Proof.
   - auto.
   - now rewrite IHm.
 Qed.
+
+Definition member_eq_dec {A} (A_eq_dec : forall x y : A, {x = y} + {x <> y})
+           {a : A} {l} (m1 m2 : member a l) : {m1 = m2} + {m1 <> m2}.
+  refine match Nat.eq_dec (member_to_nat m1) (member_to_nat m2) with
+  | left _ => left _
+  | right _ => right _
+  end.
+  - apply f_equal with (f := member_from_nat(l := l)) in e.
+    rewrite !member_to_from_nat_id in e.
+    invc e.
+    apply Eqdep_dec.inj_pair2_eq_dec in H0; auto.
+  - congruence.
+Defined.
