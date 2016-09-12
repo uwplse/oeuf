@@ -93,12 +93,12 @@ Require Import Dmajor.
 (*   | Some id => PTree.set id v e *)
 (*   end. *)
 
-(* Inductive cont: Type := *)
-(*   | Kstop: cont                         (**r stop program execution *) *)
-(*   | Kseq: stmt -> cont -> cont          (**r execute stmt, then cont *) *)
-(*   | Kblock: cont -> cont                (**r exit a block, then do cont *) *)
-(*   | Kcall: option ident -> function -> val -> env -> cont -> cont. *)
-(*                                         (**r return to caller *) *)
+Inductive cont: Type :=
+  | Kstop: cont                         (**r stop program execution *)
+  | Kseq: stmt -> cont -> cont          (**r execute stmt, then cont *)
+  | Kblock: cont -> cont                (**r exit a block, then do cont *)
+  | Kcall: option ident -> function -> val -> env -> cont -> cont.
+                                        (**r return to caller *)
 
 Inductive state: Type :=
   | State:                      (**r Execution within a function *)
@@ -144,7 +144,6 @@ Definition eval_constant (sp: val) (cst: constant) : option val :=
       Some(match Genv.find_symbol ge s with
            | None => Vundef
            | Some b => Vptr b ofs end)
-  | Oaddrstack ofs => Some (Val.add sp (Vint ofs))
   end.
 
 Inductive eval_expr(sp : val) : expr -> val -> Prop :=

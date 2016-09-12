@@ -71,9 +71,9 @@ Definition env_inj (mi : meminj) (e e' : env) : Prop :=
 (* we need a fact about the injection *)
 (* that we'll never grab something not in the injection *)
 Lemma eval_expr_mem_inj :
-  forall ge e m sp exp v,
-    Dmajor.eval_expr ge e m sp exp v ->
-    forall m' mi e',
+  forall ge e m exp v,
+    Dmajor.eval_expr ge e m exp v ->
+    forall m' mi e' sp,
       Mem.mem_inj mi m m' ->
       total_inj mi m ->
       env_inj mi e e' ->
@@ -108,23 +108,28 @@ Proof.
   (* SearchAbout Mem.mem_inj. *)
 Admitted.
 
+Inductive match_cont : Dmajor.cont -> Dflatmajor.cont -> Prop := .
+
 Inductive match_states : Dmajor.state -> Dflatmajor.state -> Prop :=
-| match_state : forall f s k b e m m' z mi,
+| match_state : forall f s k k' b e m m' z mi,
     Mem.mem_inj mi m m' ->
     stack_frame_wf b (fn_stackspace f) mi m' ->
+    match_cont k k' ->
     match_states
-      (Dmajor.State f s k (Vptr b Int.zero) e m)
-      (Dflatmajor.State f s k (Vptr b Int.zero) e m' z)
-| match_callstate : forall f args k m m' z mi,
+      (Dmajor.State f s k e m)
+      (Dflatmajor.State f s k' (Vptr b Int.zero) e m' z)
+| match_callstate : forall f args k k' m m' z mi,
     Mem.mem_inj mi m m' ->
+    match_cont k k' ->
     match_states
       (Dmajor.Callstate f args k m)
-      (Dflatmajor.Callstate f args k m' z)
-| match_returnstate : forall v k m m' z mi,
+      (Dflatmajor.Callstate f args k' m' z)
+| match_returnstate : forall v k k' m m' z mi,
     Mem.mem_inj mi m m' ->
+    match_cont k k' ->
     match_states
       (Dmajor.Returnstate v k m)
-      (Dflatmajor.Returnstate v k m' z).
+      (Dflatmajor.Returnstate v k' m' z).
 
 
 Lemma single_step_correct:
@@ -137,22 +142,7 @@ Proof.
   inv H0; inv H;
     try solve [eexists; split; try eapply plus_one; econstructor; eauto].
 
-  (* return from function *)
-  *
-    app free_stack_frame stack_frame_wf.
-    eexists. split. eapply plus_one.
-    econstructor; eauto.
-    econstructor; eauto.
-
-  (*  *)
-  * 
-    eexists. split. eapply plus_one.
-    econstructor; eauto.
-
     
 Admitted.
 
 End PRESERVATION.
-
-
-    

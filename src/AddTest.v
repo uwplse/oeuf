@@ -23,7 +23,7 @@ Require Import StructTact.Util.
 
 Require Import Fmajortoemajor.
 Require Import Emajortodmajor.
-Require Import Dmajortocmajor.
+Require Import Dflatmajortocmajor.
 Require Import Cmajortominor.
 
 
