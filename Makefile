@@ -39,6 +39,9 @@ compcert.ini: compcert/Makefile.config
 test:
 	./test.sh
 
+demo :
+	./compile_demo.sh
+
 clean: Makefile.coq
 	$(MAKE) -f Makefile.coq clean
 	rm -rf Makefile.coq _build/
