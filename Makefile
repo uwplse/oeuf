@@ -12,7 +12,7 @@ plugin:
 	make -C plugin
 
 sanitize :
-	_build/sanitize.sh
+	_build/sanitize.sh || true
 
 driver: compcert.ini sanitize
 	ocamlbuild \
