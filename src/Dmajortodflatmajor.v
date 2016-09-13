@@ -66,7 +66,6 @@ Definition env_inj (mi : meminj) (e e' : env) : Prop :=
 (* HERE *)
 (* TODO do these next *)
 (* We need fact that all globals inject to same *)
-(* We need to remove stack pointer from Dmajor *)
 
 (* we need a fact about the injection *)
 (* that we'll never grab something not in the injection *)
@@ -108,7 +107,20 @@ Proof.
   (* SearchAbout Mem.mem_inj. *)
 Admitted.
 
-Inductive match_cont : Dmajor.cont -> Dflatmajor.cont -> Prop := .
+Inductive match_cont : Dmajor.cont -> Dflatmajor.cont -> Prop :=
+| match_stop :
+    match_cont Dmajor.Kstop Dflatmajor.Kstop
+| match_seq : forall s k k',
+    match_cont k k' ->
+    match_cont (Dmajor.Kseq s k) (Dflatmajor.Kseq s k')
+| match_block : forall k k',
+    match_cont k k' ->
+    match_cont (Dmajor.Kblock k) (Dflatmajor.Kblock k')
+| match_call : forall oid f e sp k k',
+    match_cont k k' ->
+    (* TODO: need similar but not same envs *)
+    match_cont (Dmajor.Kcall oid f e k) (Dflatmajor.Kcall oid f sp e k').
+
 
 Inductive match_states : Dmajor.state -> Dflatmajor.state -> Prop :=
 | match_state : forall f s k k' b e m m' z mi,
@@ -139,10 +151,11 @@ Lemma single_step_correct:
 Proof.
   intros.
   
-  inv H0; inv H;
-    try solve [eexists; split; try eapply plus_one; econstructor; eauto].
-
+  inv H0; inv H; try inv H3;
     
+    try solve [eexists; split; try eapply plus_one; econstructor; eauto].
+  eexists; split; try eapply plus_one; econstructor; eauto.
+  
 Admitted.
 
 End PRESERVATION.
