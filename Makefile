@@ -11,7 +11,10 @@ Makefile.coq: _CoqProject
 plugin:
 	make -C plugin
 
-driver: compcert.ini
+sanitize :
+	_build/sanitize.sh
+
+driver: compcert.ini sanitize
 	ocamlbuild \
 		-use-menhir -pkg menhirLib \
 		-yaccflag --table \
