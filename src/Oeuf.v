@@ -2,6 +2,7 @@ Require Import compcert.driver.Compiler compcert.common.Errors.
 Require Import Common Monads.
 Require UntypedComp TaggedComp LiftedComp SwitchedComp FlattenedComp FmajorComp.
 Require Fmajortoemajor Emajortodmajor Dflatmajortocmajor Cmajortominor.
+Require ElimFuncComp.
 Require CompilationUnit.
 
 Require Import compcert.common.AST.
@@ -23,6 +24,7 @@ Definition transf_to_cminor (j : CompilationUnit.compilation_unit) : res Cminor.
  @@@ (fun l => zip_error l (CompilationUnit.names j))
   @@ LiftedComp.compile_cu
  @@@ TaggedComp.compile_cu
+  @@ ElimFuncComp.compile_cu
   @@ SwitchedComp.compile_cu
  @@@ FlattenedComp.compile_cu
   @@@ FmajorComp.compile_cu

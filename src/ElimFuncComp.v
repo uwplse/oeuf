@@ -138,6 +138,57 @@ Definition compile_env elims es :=
     compile_eliminator_list (length es) elims.
 
 
+Fixpoint compile_globals base gs : list (E.expr * String.string):=
+    match gs with
+    | [] => []
+    | (e,n) :: gs => (compile base e, n) :: compile_globals base gs
+    end.
+
+Fixpoint compile_named_eliminator_list' base name n elims :=
+    match elims with
+    | [] => []
+    | elim :: elims =>
+            (compile_eliminator base n elim,
+             String.append name (String.append "_elim_" (nat_to_string n))) ::
+            compile_named_eliminator_list' base name (S n) elims
+    end.
+
+Definition compile_named_eliminator_list base name elims :=
+    compile_named_eliminator_list' base name 0 elims.
+
+Section cu.
+
+Require String.
+Require Tagged TaggedNumberedComp.
+
+Open Scope string_scope.
+
+Open Scope state_monad.
+
+Definition first_name (xs : list (Tagged.expr * String.string)) :=
+    match xs with
+    | [] => "dummy"
+    | (_, n) :: _ => n
+    end.
+
+Definition compile_cu (lp : list (Tagged.expr * String.string) *
+                            list (Tagged.expr * String.string)) :=
+    let (pubs, privs) := lp in
+    let '(pubs', privs', elims') :=
+        (TaggedNumberedComp.compile_globals pubs >>= fun pubs' =>
+         TaggedNumberedComp.compile_globals privs >>= fun privs' =>
+         ret_state (pubs', privs')) [] in
+    let name := first_name pubs in
+    let base := length pubs + length privs in
+    let pubs'' := compile_globals base pubs' in
+    let privs'' := compile_globals base privs' in
+    let elims'' := compile_named_eliminator_list base name elims' in
+    (pubs'', privs'' ++ elims'').
+
+End cu.
+
+
+
 Section test.
 
 Open Scope state_monad.
