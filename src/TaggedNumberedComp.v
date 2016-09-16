@@ -1,5 +1,6 @@
 Require Import Common Monads ListLemmas.
 Require Tagged TaggedNumbered.
+Require String.
 
 Module T := Tagged.
 Module N := TaggedNumbered.
@@ -64,6 +65,30 @@ Definition compile_list_pair :=
         | [] => ret_state []
         | p :: ps => cons <$> go_pair p <*> go_list_pair ps
         end in go_list_pair.
+
+Fixpoint compile_globals gs : compiler_monad (list (N.expr * String.string)):=
+    match gs with
+    | [] => ret_state []
+    | (e,n) :: gs =>
+            compile e >>= fun e' =>
+            compile_globals gs >>= fun gs' =>
+            ret_state ((e', n) :: gs')
+    end.
+
+Definition compile_cu' (lp : list (T.expr * String.string) *
+                             list (T.expr * String.string)) :
+  compiler_monad (list (N.expr * String.string) *
+                  list (N.expr * String.string)) :=
+  let (pubs, privs) := lp in
+  compile_globals pubs >>= fun pubs' =>
+  compile_globals privs >>= fun privs' =>
+  ret_state (pubs', privs').
+
+Definition compile_cu (lp : list (T.expr * String.string) *
+                            list (T.expr * String.string)) :
+      list (N.expr * String.string) *
+      list (N.expr * String.string) :=
+    fst (compile_cu' lp []).
 
 End compile.
 
