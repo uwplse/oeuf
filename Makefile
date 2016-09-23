@@ -56,9 +56,14 @@ COMPCERTCONFIG=$(shell \
 		echo "ia32-macosx" || \
 		echo "ia32-linux"  )
 
+COMPCERTPAR=$(shell \
+	[ "$$(hostname -s)" = "warfa" ] && \
+		echo "-j6" || \
+		echo ""  )
+
 compcert:
 	cd compcert && ./configure $(COMPCERTCONFIG)
-	$(MAKE) -C compcert
+	$(MAKE) $(COMPCERTPAR) -C compcert
 
 cleaner: clean
 	$(MAKE) -C compcert clean
