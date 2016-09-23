@@ -1,4 +1,5 @@
 Require Import Common Monads.
+Require Import Metadata.
 Require Switched Flattened.
 
 Module S := Switched.
@@ -70,21 +71,10 @@ Section compile.
 
   Definition compile_env (l : list S.expr) : list (F.stmt * F.expr) := fst (compile_env' l 0).
 
-  Definition compile_prog (p : S.expr * list S.expr) :
-    list (F.stmt * F.expr) * nat :=
-    let (e, env) := p in (compile_env (env ++ [e]), length env).
-
-
-  Definition compile_progs (p : list S.expr * list S.expr) :
-    list (F.stmt * F.expr) * nat :=
-    let (es, env) := p in (compile_env (env ++ es), length env).
-
-  Local Open Scope option_monad.
-  Definition compile_cu (p : list (S.expr * String.string) * list (S.expr * String.string)) :
-    option (list (F.stmt * F.expr * String.string) * nat) :=
-    let (es, env) := p in
-    let env' := compile_env (map fst (env ++ es)) in
-    (fun x => (x, length env)) <$> zip_error env' (map snd (env ++ es)).
+  Definition compile_cu (cu : list S.expr * list metadata) : list (F.stmt * F.expr) * list metadata :=
+    let '(exprs, metas) := cu in
+    let exprs' := compile_env exprs in
+    (exprs', metas).
 
 End compile.
 
