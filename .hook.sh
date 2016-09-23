@@ -16,17 +16,19 @@ function main {
   echo ---------------------
   echo OEUF HOOK DEPS
   echo ---------------------
-  cd ../StructTact/ \
+  pushd ../StructTact/ \
     && git pull \
     && make clean \
     && ./configure \
     && make
+  popd
 
-  cd ../PrettyParsing/ \
+  pushd ../PrettyParsing/ \
     && git pull \
     && make clean \
     && ./configure \
     && make
+  popd
 
   echo ---------------------
   echo OEUF HOOK COMPCERT
