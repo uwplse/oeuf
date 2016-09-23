@@ -2,8 +2,8 @@ Require Import compcert.driver.Compiler compcert.common.Errors.
 Require Import Common Monads.
 Require UntypedComp TaggedComp LiftedComp SwitchedComp FlattenedComp FmajorComp.
 Require Fmajortoemajor Emajortodmajor Dflatmajortocmajor Cmajortominor.
-Require ElimFuncComp.
-Require CompilationUnit.
+Require TaggedNumberedComp ElimFuncComp.
+Require CompilationUnit Metadata.
 
 Require Import compcert.common.AST.
 Require compcert.backend.SelectLong.
@@ -19,18 +19,21 @@ Coercion option_to_res : option >-> res.
 Local Open Scope option_monad.
 
 Definition transf_to_cminor (j : CompilationUnit.compilation_unit) : res Cminor.program :=
-  OK (CompilationUnit.exprs j)
-  @@ UntypedComp.compile_hlist
- @@@ (fun l => zip_error l (CompilationUnit.names j))
+  OK (Metadata.init_metadata j)
+  @@ UntypedComp.compile_cu
+(* Delay check_length because prior to UntypedComp, the list of functions is an
+ * `hlist`, not a `list`. *)
+ @@@ Metadata.check_length
   @@ LiftedComp.compile_cu
  @@@ TaggedComp.compile_cu
+  @@ TaggedNumberedComp.compile_cu
   @@ ElimFuncComp.compile_cu
   @@ SwitchedComp.compile_cu
- @@@ FlattenedComp.compile_cu
-  @@@ FmajorComp.compile_cu
+  @@ FlattenedComp.compile_cu
+ @@@ FmajorComp.compile_cu
   @@ Fmajortoemajor.transf_program
   @@ Emajortodmajor.transf_prog
-  @@@ Dflatmajortocmajor.transf_prog
+ @@@ Dflatmajortocmajor.transf_prog
   @@ Cmajortominor.transf_prog
   @@ print print_Cminor
 .
@@ -40,3 +43,31 @@ Definition transf_to_asm (j : CompilationUnit.compilation_unit) : res Asm.progra
  @@@ transf_to_cminor
  @@@ transf_cminor_program
 .
+
+
+Require SourceLang.
+Require String.
+Require Import HList.
+
+Delimit Scope string_scope with string.
+Bind Scope string_scope with String.string.
+
+Definition add_cu :=
+    CompilationUnit.CompilationUnit
+        [SourceLang.add_reflect_ty]
+        (hcons SourceLang.add_reflect hnil)
+        ["add"%string].
+
+Definition add_cu' :=
+     OK (Metadata.init_metadata add_cu)
+     @@ UntypedComp.compile_cu
+    @@@ Metadata.check_length
+     @@ LiftedComp.compile_cu
+    @@@ TaggedComp.compile_cu
+     @@ TaggedNumberedComp.compile_cu
+     @@ ElimFuncComp.compile_cu.
+(*
+Eval compute in add_cu'.
+Eval compute in match add_cu' with | OK (a, b) => length b | _ => 999 end.
+*)
+

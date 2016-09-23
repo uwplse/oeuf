@@ -1,9 +1,13 @@
 Require Import Common Monads ListLemmas.
+Require Import Metadata.
 Require Tagged TaggedNumbered.
 Require String.
 
 Module T := Tagged.
 Module N := TaggedNumbered.
+
+Delimit Scope string_scope with string.
+Bind Scope string_scope with String.string.
 
 Definition compiler_monad A := state (list (list (N.expr * N.rec_info))) A.
 
@@ -66,29 +70,65 @@ Definition compile_list_pair :=
         | p :: ps => cons <$> go_pair p <*> go_list_pair ps
         end in go_list_pair.
 
-Fixpoint compile_globals gs : compiler_monad (list (N.expr * String.string)):=
-    match gs with
-    | [] => ret_state []
-    | (e,n) :: gs =>
-            compile e >>= fun e' =>
-            compile_globals gs >>= fun gs' =>
-            ret_state ((e', n) :: gs')
+
+Definition next_idx : state (nat * list String.string) nat :=
+    fun s =>
+    let '(idx, names) := s in
+    (idx, (S idx, names)).
+
+Definition record_name name : state (nat * list String.string) unit :=
+    fun s =>
+    let '(idx, names) := s in
+    (tt, (idx, names ++ [name])).
+
+Definition gen_elim_names : String.string -> T.expr -> state (nat * list String.string) unit :=
+    let fix go name e :=
+        let fix go_list name es :=
+            match es with
+            | [] => ret_state tt
+            | e :: es => go name e >> go_list name es
+            end in
+        let fix go_pair name p :=
+            let '(e, r) := p in go name e in
+        let fix go_list_pair name ps :=
+            match ps with
+            | [] => ret_state tt
+            | p :: ps => go_pair name p >> go_list_pair name ps
+            end in
+        match e with
+        | T.Arg => ret_state tt
+        | T.UpVar n => ret_state tt
+        | T.Call f a => go name f >> go name a
+        | T.Constr tag args => go_list name args
+        | T.Elim cases target =>
+                next_idx >>= fun idx =>
+                let name' := String.append (String.append name "_elim") (nat_to_string idx) in
+                go_list_pair name' cases >>
+                go name' target >>
+                record_name name'
+        | T.Close fname free => go_list name free
+        end in go.
+
+Fixpoint gen_elim_names_list (exprs : list T.expr) (metas : list metadata) :
+        state (nat * list String.string) unit :=
+    match exprs, metas with
+    | [], _ => ret_state tt
+    | e :: es, [] =>
+            gen_elim_names "anon" e >>= fun _ =>
+            gen_elim_names_list es []
+    | e :: es, m :: ms =>
+            gen_elim_names (m_name m) e >>= fun _ =>
+            gen_elim_names_list es ms
     end.
 
-Definition compile_cu' (lp : list (T.expr * String.string) *
-                             list (T.expr * String.string)) :
-  compiler_monad (list (N.expr * String.string) *
-                  list (N.expr * String.string)) :=
-  let (pubs, privs) := lp in
-  compile_globals pubs >>= fun pubs' =>
-  compile_globals privs >>= fun privs' =>
-  ret_state (pubs', privs').
 
-Definition compile_cu (lp : list (T.expr * String.string) *
-                            list (T.expr * String.string)) :
-      list (N.expr * String.string) *
-      list (N.expr * String.string) :=
-    fst (compile_cu' lp []).
+Definition compile_cu (cu : list T.expr * list metadata) :
+        list N.expr * list metadata *
+        list (list (N.expr * N.rec_info)) * list String.string :=
+    let '(exprs, metas) := cu in
+    let '(exprs', elims) := compile_list exprs [] in
+    let '(tt, (_, elim_names)) := gen_elim_names_list exprs metas (0, []) in
+    (exprs', metas, elims, elim_names).
 
 End compile.
 

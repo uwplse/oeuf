@@ -5,6 +5,7 @@ Require Import Common Monads.
 Require Import StuartTact.
 Require Import HighValues.
 Require Import ListLemmas.
+Require Import Metadata.
 Require PrettyParsing.NatToSymbol String.
 Delimit Scope string_scope with string.
 Local Notation "s1 ++ s2" := (String.append s1 s2) : string_scope.
@@ -113,13 +114,14 @@ Fixpoint intern_names (l : list (positive * String.string)) : positive :=
   | (p,s) :: l => register_ident p s + intern_names l
   end.
 
-Definition compile_cu (p : list (F.stmt * F.expr * String.string) * nat) : option E.program :=
-  let (g, main_id) := p in
-    compile_gdefs (map fst g) >>= fun g' =>
-    let g'' := numbered_pos 1%positive g' in
-    zip_error (map fst g'') (map snd g) >>= fun pos_to_string_map =>
-    let p := intern_names pos_to_string_map in
-    Some (AST.mkprogram g'' (map fst g'') (conv_fn (main_id + Pos.to_nat (Pos.sub p p)))).
+Definition compile_cu (cu : list (F.stmt * F.expr) * list metadata) : option E.program :=
+    let '(funcs, metas) := cu in
+    compile_gdefs funcs >>= fun funcs' =>
+    let n_funcs' := numbered_pos 1%positive funcs' in
+    let n_metas := numbered_pos 1%positive metas in
+    let pub_idents := map fst (filter (fun n_m => m_is_public (snd n_m)) n_metas) in
+    let dummy := intern_names (map (fun n_m => (fst n_m, m_name (snd n_m))) n_metas) in
+    Some (AST.mkprogram n_funcs' pub_idents (Pos.sub dummy dummy)).
 
 End compile.
 Extract Inlined Constant register_ident => "Camlcoq.register_ident_coq".
