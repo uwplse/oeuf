@@ -39,6 +39,16 @@ Definition compiler_monad A := state (list (L.expr * String.string)) A.
 
 Definition next_idx : compiler_monad nat := length <$> get.
 
+Definition fresh : compiler_monad nat :=
+    (length <$> get) >>= fun idx =>
+    modify (fun env => env ++ [(L.Arg, ""%string) (* bogus *) ]) >>= fun _ =>
+    ret_state idx.
+
+Definition update (f : L.function_name) x : compiler_monad unit :=
+  modify (fun env => match nth_set env f x with None => env
+                  | Some env' => env'
+                  end).
+
 Definition record x : compiler_monad nat :=
     next_idx >>= fun idx =>
     modify (fun env => env ++ [x]) >>= fun _ =>
@@ -68,11 +78,11 @@ Fixpoint compile' (n : nat) (e : U.expr) (name : String.string) {struct e} : com
     | U.Var 0 => ret_state L.Arg
     | U.Var (S n) => ret_state (L.UpVar n)
     | U.Lam body =>
-        next_idx >>= fun idx =>
+        fresh >>= fun idx =>
         let name :=  name ++ "_lambda_" ++ nat_to_string idx in
         compile' (S n) body name >>= fun body' =>
-        record (body', name) >>= fun fname =>
-        ret_state (L.Close fname (close_vars n))
+        update idx (body', name) >>= fun _ =>
+        ret_state (L.Close idx (close_vars n))
     | U.App f a => L.Call <$> compile' n f name <*> compile' n a name
     | U.Constr c args => L.Constr c <$> go_list n args
     | U.Elim ty cases target => L.Elim ty <$> go_list n cases <*> compile' n target name
