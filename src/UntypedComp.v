@@ -1,6 +1,7 @@
 Require Import Common.
 
 Require Import Utopia.
+Require Import Metadata.
 Require Import Program.
 
 Require Import HList.
@@ -55,6 +56,11 @@ Fixpoint compile_hlist {l tys} (h : hlist (S.expr l) tys) : list U.expr :=
   | hnil => []
   | hcons x h' => cons (compile x) (compile_hlist h')
   end.
+
+Definition compile_cu {l tys} (cu : hlist (S.expr l) tys * list metadata) :
+        list U.expr * list metadata :=
+    let '(exprs, metas) := cu in
+    (compile_hlist exprs, metas).
 
 Lemma compile_hlist_hmap_simple :
   forall l tys (h : hlist (S.expr l) tys),

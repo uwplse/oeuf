@@ -1,4 +1,5 @@
 Require Import Common Monads.
+Require Import Metadata.
 Require ElimFunc Switched String.
 Delimit Scope string_scope with string.
 
@@ -50,13 +51,7 @@ Definition compile_list :=
         | e :: es => go e :: go_list es
         end in go_list.
 
-Fixpoint compile_globals gs : list (S.expr * String.string):=
-    match gs with
-    | [] => []
-    | (e,n) :: gs => (compile e, n) :: compile_globals gs
-    end.
-
-Definition compile_cu (lp : list (E.expr * String.string) *
-                            list (E.expr * String.string)) :=
-    let (pubs, privs) := lp in
-    (compile_globals pubs, compile_globals privs).
+Definition compile_cu (cu : list E.expr * list metadata) : list S.expr * list metadata :=
+    let '(exprs, metas) := cu in
+    let exprs' := compile_list exprs in
+    (exprs', metas).
