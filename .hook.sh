@@ -14,6 +14,11 @@ function main {
   make cleaner
 
   echo
+  echo OEUF HOOK CLEANER
+  echo
+  make compcert
+
+  echo
   echo OEUF HOOK CONFIGURE
   echo
   ./configure
