@@ -31,9 +31,7 @@ From the top level:
 ```
   $ make compcert
   $ ./configure
-  $ make # this will fail!
-  $ _build/sanitize.sh
-  $ make # this should work
+  $ make
 ```
 
 If you're installing fresh, make sure to also ```make plugin``` now,

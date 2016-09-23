@@ -11,7 +11,7 @@ Makefile.coq: _CoqProject
 plugin:
 	make -C plugin
 
-sanitize :
+sanitize:
 	_build/sanitize.sh || true
 
 driver: compcert.ini sanitize
@@ -63,4 +63,4 @@ compcert:
 cleaner: clean
 	$(MAKE) -C compcert clean
 
-.PHONY: all proof driver plugin test clean compcert cleaner
+.PHONY: all proof driver plugin sanitize test clean compcert cleaner
