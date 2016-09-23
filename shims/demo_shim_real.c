@@ -25,8 +25,7 @@ int main() {
     while (1) {
 	
 	//read a number from input
-	end = EOF;
-
+	end = scanf("%d", &n);
 	//stop at end of file
 	if (end == EOF) {
 	    break;
