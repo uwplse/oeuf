@@ -8,29 +8,44 @@ LOG=$(printf "%s-%s-%s-oeuf-hook.txt" \
              "$(hostname -s)")
 
 function main {
-  echo
+  echo ---------------------
   echo OEUF HOOK CLEANER
-  echo
+  echo ---------------------
   make cleaner
 
-  echo
-  echo OEUF HOOK CLEANER
-  echo
+  echo ---------------------
+  echo OEUF HOOK DEPS
+  echo ---------------------
+  cd ../StructTact/ \
+    && git pull \
+    && make clean \
+    && ./configure \
+    && make
+
+  cd ../PrettyParsing/ \
+    && git pull \
+    && make clean \
+    && ./configure \
+    && make
+
+  echo ---------------------
+  echo OEUF HOOK COMPCERT
+  echo ---------------------
   make compcert
 
-  echo
+  echo ---------------------
   echo OEUF HOOK CONFIGURE
-  echo
+  echo ---------------------
   ./configure
 
-  echo
+  echo ---------------------
   echo OEUF HOOK BUILD
-  echo
+  echo ---------------------
   make
 
-  echo
+  echo ---------------------
   echo OEUF HOOK TEST
-  echo
+  echo ---------------------
   make test
 }
 
