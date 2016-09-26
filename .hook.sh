@@ -43,6 +43,8 @@ function main {
   echo ---------------------
   echo OEUF HOOK BUILD
   echo ---------------------
+  make #will fail
+  make sanitize #cleanup
   make
 
   echo ---------------------
