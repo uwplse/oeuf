@@ -317,7 +317,7 @@ Lemma stack_frame_wf_store :
       stack_frame_wf b sz mi m ->
       stack_frame_wf b sz mi m'.
 Proof.
-  intros.
+  intros. inv H0.
 Admitted.
 
 Lemma total_inj_store :
