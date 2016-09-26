@@ -318,7 +318,11 @@ Lemma stack_frame_wf_store :
       stack_frame_wf b sz mi m'.
 Proof.
   intros. inv H0.
-Admitted.
+  econstructor; eauto.
+  unfold Mem.range_perm in *.
+  intros.
+  eapply Mem.perm_store_1; eauto.
+Qed.
 
 Lemma total_inj_store :
   forall c m b ofs v m',
@@ -327,7 +331,13 @@ Lemma total_inj_store :
       total_inj mi m ->
       total_inj mi m'.
 Proof.
-Admitted.
+  intros. unfold total_inj in *.
+  intros.
+  app Mem.load_valid_access (Mem.load c0).
+  app Mem.store_valid_access_2 Mem.valid_access.
+  clear H3. app Mem.valid_access_load Mem.valid_access.
+  clear H2. app H0 (Mem.load c0).
+Qed.
 
 Lemma no_overlap_store :
   forall c m b ofs v m',
@@ -336,6 +346,7 @@ Lemma no_overlap_store :
       Mem.meminj_no_overlap mi m ->
       Mem.meminj_no_overlap mi m'.
 Proof.
+  intros.
 Admitted.
 
 
