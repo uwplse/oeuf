@@ -41,6 +41,11 @@ function main {
   ./configure
 
   echo ---------------------
+  echo OEUF COQ PLUGIN
+  echo ---------------------
+  make plugin
+  
+  echo ---------------------
   echo OEUF HOOK BUILD
   echo ---------------------
   make #will fail
