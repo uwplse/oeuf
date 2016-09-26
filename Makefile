@@ -45,7 +45,7 @@ test:
 demo :
 	./compile_demo.sh
 
-clean: Makefile.coq
+clean: Makefile.coq sanitize
 	$(MAKE) -f Makefile.coq clean
 	rm -rf Makefile.coq _build/
 	rm -f compcert.ini $(DRIVER)
