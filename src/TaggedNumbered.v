@@ -505,6 +505,193 @@ first_induction args; destruct rec; intros0 Hlen; simpl in Hlen; try discriminat
 Qed.
 
 
+(*
+ * Validity of elim numbering
+ *)
+
+Definition max_elim :=
+    let fix go e :=
+        let fix go_list es :=
+            match es with
+            | [] => 0
+            | e :: es => max (go e) (go_list es)
+            end in
+        let fix go_pair p :=
+            match p with
+            | (e, _) => go e
+            end in
+        let fix go_list_pair ps :=
+            match ps with
+            | [] => 0
+            | p :: ps => max (go_pair p) (go_list_pair ps)
+            end in
+        match e with
+        | Arg => 0
+        | UpVar _ => 0
+        | Call f a => max (go f) (go a)
+        | Constr _ args => go_list args
+        | ElimN n cases target => max n (max (go_list_pair cases) (go target))
+        | Close _ free => go_list free
+        end in go.
+
+(* Nested fixpoint aliases *)
+Definition max_elim_list :=
+    let go := max_elim in
+    let fix go_list es :=
+        match es with
+        | [] => 0
+        | e :: es => max (go e) (go_list es)
+        end in go_list.
+
+Definition max_elim_pair :=
+    let go := max_elim in
+    let fix go_pair (p : expr * rec_info) :=
+        match p with
+        | (e, _) => go e
+        end in go_pair.
+
+Definition max_elim_list_pair :=
+    let go_pair := max_elim_pair in
+    let fix go_list_pair ps :=
+        match ps with
+        | [] => 0
+        | p :: ps => max (go_pair p) (go_list_pair ps)
+        end in go_list_pair.
+
+Ltac refold_max_elim :=
+    fold max_elim_list in *;
+    fold max_elim_pair in *;
+    fold max_elim_list_pair in *.
+
+Lemma max_elim_list_is_maximum : forall es,
+    max_elim_list es = maximum (map max_elim es).
+induction es; simpl in *; eauto.
+Qed.
+
+Lemma max_elim_list_pair_is_maximum : forall ps,
+    max_elim_list_pair ps = maximum (map max_elim_pair ps).
+induction ps; simpl in *; eauto.
+Qed.
+
+
+(* Stricter validity of elim numbering *)
+
+Definition elims_match elims : expr -> Prop :=
+    let fix go e :=
+        let fix go_list es :=
+            match es with
+            | [] => True
+            | e :: es => go e /\ go_list es
+            end in
+        let fix go_pair p :=
+            let '(e, _) := p in
+            go e in
+        let fix go_list_pair ps :=
+            match ps with
+            | [] => True
+            | p :: ps => go_pair p /\ go_list_pair ps
+            end in
+        match e with
+        | Arg => True
+        | UpVar _ => True
+        | Call f a => go f /\ go a
+        | Constr _ args => go_list args
+        | ElimN n cases target =>
+                nth_error elims n = Some cases /\
+                go_list_pair cases /\
+                go target
+        | Close _ free => go_list free
+        end in go.
+
+Definition elims_match_list elims :=
+    let go := elims_match elims in
+    let fix go_list es :=
+        match es with
+        | [] => True
+        | e :: es => go e /\ go_list es
+        end in go_list.
+
+Definition elims_match_pair elims : (expr * rec_info) -> Prop :=
+    let go := elims_match elims in
+    let fix go_pair p :=
+        let '(e, r) := p in
+        go e in go_pair.
+
+Definition elims_match_list_pair elims :=
+    let go_pair := elims_match_pair elims in
+    let fix go_list_pair ps :=
+        match ps with
+        | [] => True
+        | p :: ps => go_pair p /\ go_list_pair ps
+        end in go_list_pair.
+
+Ltac refold_elims_match elims :=
+    fold (elims_match_list elims) in *;
+    fold (elims_match_pair elims) in *;
+    fold (elims_match_list_pair elims) in *.
+
+
+Lemma elims_match_list_Forall : forall elims es,
+    elims_match_list elims es <-> Forall (elims_match elims) es.
+induction es; split; intro HH; invc HH; econstructor; firstorder eauto.
+Qed.
+
+Lemma elims_match_list_pair_Forall : forall elims ps,
+    elims_match_list_pair elims ps <-> Forall (elims_match_pair elims) ps.
+induction ps; split; intro HH; invc HH; econstructor; firstorder eauto.
+Qed.
+
+Lemma elims_match_list_pair_Forall' : forall elims ps,
+    elims_match_list_pair elims ps <-> Forall (fun p => elims_match elims (fst p)) ps.
+intros; split; intro HH.
+- rewrite elims_match_list_pair_Forall in HH.
+  list_magic_on (ps, tt). destruct ps_i. simpl in *. assumption.
+- rewrite elims_match_list_pair_Forall.
+  list_magic_on (ps, tt). destruct ps_i. simpl in *. assumption.
+Qed.
+
+Lemma elims_match_extend : forall elims elims' e,
+    elims_match elims e ->
+    elims_match (elims ++ elims') e.
+induction e using expr_ind''; intros0 Helim;
+simpl in *; refold_elims_match elims; refold_elims_match (elims ++ elims').
+- constructor.
+- constructor.
+- firstorder eauto.
+- rewrite elims_match_list_Forall in *. list_magic_on (args, tt).
+- destruct Helim as (? & ? & ?).  split; [|split].
+  + rewrite nth_error_app1; [ eassumption | ].
+    eapply nth_error_Some. congruence.
+  + rewrite elims_match_list_pair_Forall in *. list_magic_on (cases, tt).
+    destruct cases_i; simpl in *. eauto.
+  + eauto.
+- rewrite elims_match_list_Forall in *. list_magic_on (free, tt).
+Qed.
+
+Lemma elims_match_list_extend : forall elims elims' es,
+    elims_match_list elims es ->
+    elims_match_list (elims ++ elims') es.
+intros0 Helim. rewrite elims_match_list_Forall in *.
+list_magic_on (es, tt). eauto using elims_match_extend.
+Qed.
+
+Lemma elims_match_pair_extend : forall elims elims' p,
+    elims_match_pair elims p ->
+    elims_match_pair (elims ++ elims') p.
+intros0 Helim. destruct p. simpl in *.
+eauto using elims_match_extend.
+Qed.
+
+Lemma elims_match_list_pair_extend : forall elims elims' es,
+    elims_match_list_pair elims es ->
+    elims_match_list_pair (elims ++ elims') es.
+intros0 Helim. rewrite elims_match_list_pair_Forall in *.
+list_magic_on (es, tt). eauto using elims_match_pair_extend.
+Qed.
+
+
+
+
 (* closed terms *)
 
 Inductive closed : expr -> Prop :=

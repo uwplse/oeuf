@@ -2,6 +2,7 @@ Require Import Common Monads.
 Require Import Metadata.
 Require String.
 Require TaggedNumbered ElimFunc.
+Require Import ListLemmas.
 
 Require Import Psatz.
 
@@ -244,16 +245,16 @@ Definition env_ok TE EE ELIMS :=
 Inductive I_expr (TE : T.env) (EE : E.env) : T.expr -> E.expr -> Prop :=
 | IArg : I_expr TE EE T.Arg E.Arg
 | IUpVar : forall n, I_expr TE EE (T.UpVar n) (E.UpVar n)
+| IClose : forall fname tfree efree,
+        Forall2 (I_expr TE EE) tfree efree ->
+        I_expr TE EE (T.Close fname tfree) (E.Close fname efree)
+| IConstr : forall tag targs eargs,
+        Forall2 (I_expr TE EE) targs eargs ->
+        I_expr TE EE (T.Constr tag targs) (E.Constr tag eargs)
 | ICall : forall tf ta ef ea,
         I_expr TE EE tf ef ->
         I_expr TE EE ta ea ->
         I_expr TE EE (T.Call tf ta) (E.Call ef ea)
-| IConstr : forall tag targs eargs,
-        Forall2 (I_expr TE EE) targs eargs ->
-        I_expr TE EE (T.Constr tag targs) (E.Constr tag eargs)
-| IClose : forall fname tfree efree,
-        Forall2 (I_expr TE EE) tfree efree ->
-        I_expr TE EE (T.Close fname tfree) (E.Close fname efree)
 | IElimN : forall tnum tcases ttarget fname efree etarget erec ecases,
         fname = length TE + tnum ->
         nth_error EE fname = Some (E.ElimBody erec ecases E.Arg) ->
@@ -332,7 +333,49 @@ intros. eapply compile_eliminator_list'_length.
 Qed.
 
 
+(*
+
 Lemma env_ok_nth_error : forall TE EE ELIMS i x,
+    env_ok TE EE ELIMS ->
+    nth_error TE i = Some x ->
+    exists cases,
+        nth_error ELIMS i = Some cases /\
+        x = compile_eliminator (length TE) i cases.
+*)
+
+Lemma env_ok_length : forall TE EE ELIMS,
+    env_ok TE EE ELIMS ->
+    length EE = length TE + length ELIMS.
+intros0 Henv. unfold env_ok in Henv. subst.
+unfold compile_env. rewrite app_length.
+rewrite compile_list_length.
+rewrite compile_eliminator_list_length.
+reflexivity.
+Qed.
+
+Lemma env_ok_nth_error : forall TE EE ELIMS i t,
+    env_ok TE EE ELIMS ->
+    nth_error TE i = Some t ->
+    exists e,
+        nth_error EE i = Some e /\
+        e = compile (length TE) t.
+unfold env_ok, compile_env.
+intros0 Henv Hnth.
+
+remember (length TE) as base. clear Heqbase.
+assert (firstn (length TE) EE = compile_list base TE). {
+  clear Hnth.  generalize dependent EE.
+  induction TE; intros0 Heq.
+  - simpl. reflexivity.
+  - destruct EE; try discriminate. simpl in *. f_equal.
+    + congruence.
+    + eapply IHTE. congruence.
+}
+
+(* TODO *)
+Admitted.
+
+Lemma env_ok_nth_error_elim : forall TE EE ELIMS i x,
     env_ok TE EE ELIMS ->
     nth_error EE (length TE + i) = Some x ->
     exists cases,
@@ -367,6 +410,104 @@ replace (length TE) with (length EE1) in * by (subst EE1; eauto using compile_li
 erewrite nth_error_app2 in Hnth by omega.
 replace (_ + i - _) with i in * by omega.
 congruence.
+Qed.
+
+
+Lemma upvar_list'_snoc : forall acc x n,
+    upvar_list' (acc ++ [x]) n = upvar_list' acc n ++ [x].
+first_induction n; intros; simpl in *.
+- reflexivity.
+- rewrite <- IHn. f_equal.
+Qed.
+
+Lemma upvar_list_snoc : forall n,
+    upvar_list (S (S n)) = upvar_list (S n) ++ [E.UpVar n].
+intros. simpl.
+rewrite <- upvar_list'_snoc. simpl. reflexivity.
+Qed.
+
+Lemma upvar_list'_length : forall acc n,
+    length (upvar_list' acc n) = S n + length acc.
+first_induction n; simpl; intros.
+- reflexivity.
+- rewrite IHn. simpl. lia.
+Qed.
+
+Lemma upvar_list_length : forall n,
+    length (upvar_list n) = n.
+destruct n; simpl.
+- reflexivity.
+- rewrite upvar_list'_length. simpl. lia.
+Qed.
+
+Lemma compile_I_expr : forall TE EE ELIMS,
+    env_ok TE EE ELIMS ->
+    forall t e,
+    T.elims_match ELIMS t ->
+    compile (length TE) t = e ->
+    I_expr TE EE t e.
+intros0 Henv.
+induction t using T.expr_rect_mut with
+    (Pl := fun ts => forall es,
+        T.elims_match_list ELIMS ts ->
+        compile_list (length TE) ts = es ->
+        Forall2 (I_expr TE EE) ts es)
+    (Pp := fun tp => forall ep,
+        T.elims_match_pair ELIMS tp ->
+        compile_pair (length TE) tp = ep ->
+        I_expr TE EE (fst tp) (fst ep))
+    (Plp := fun tps => forall eps,
+        T.elims_match_list_pair ELIMS tps ->
+        compile_list_pair (length TE) tps = eps ->
+        Forall2 (fun tp ep => I_expr TE EE (fst tp) (fst ep)) tps eps);
+intros0 Helims Hcomp; simpl in Hcomp; refold_compile (length TE);
+subst.
+
+- (* Arg *) constructor.
+- (* UpVar *) constructor.
+
+- (* Call *) simpl in Helims. break_and. constructor; eauto.
+
+- (* Constr *) constructor; eauto.
+
+- (* ElimN *)
+  econstructor; eauto.
+
+  + simpl in Helims. T.refold_elims_match ELIMS. do 2 break_and.
+    assert (n < length ELIMS) by (rewrite <- nth_error_Some; congruence).
+
+    fwd eapply env_ok_length; eauto.
+    assert (Hnth : length TE + n < length EE) by lia.
+    rewrite <- nth_error_Some in Hnth.
+    destruct (nth_error EE _) eqn:?; try congruence.
+
+    fwd eapply env_ok_nth_error_elim; eauto. break_exists. break_and.
+    replace x with cases in * by congruence.
+
+    subst e. rewrite upvar_list'_length, Nat.add_0_r.
+    unfold compile_eliminator.  reflexivity.
+
+  + left. rewrite upvar_list'_length. rewrite Nat.add_comm. simpl.
+    split; [ reflexivity | lia ].
+
+  + simpl in Helims. T.refold_elims_match ELIMS. do 2 break_and.
+    eauto.
+
+- (* Close *) constructor; eauto.
+
+
+- (* nil *) constructor.
+- (* cons *)
+  simpl in Helims. break_and.
+  constructor; eauto.
+
+- (* pair *) simpl in *. eauto.
+
+- (* nil *) constructor.
+- (* cons *)
+  simpl in Helims. break_and.
+  constructor; eauto.
+
 Qed.
 
 Lemma I_expr_value : forall TE EE t e,
@@ -526,33 +667,6 @@ Lemma E_splus_then_splus : forall E s s' s'',
     E.splus E s' s'' ->
     E.splus E s s''.
 induction 1; intros; eauto using E.SPlusCons.
-Qed.
-
-Lemma upvar_list'_snoc : forall acc x n,
-    upvar_list' (acc ++ [x]) n = upvar_list' acc n ++ [x].
-first_induction n; intros; simpl in *.
-- reflexivity.
-- rewrite <- IHn. f_equal.
-Qed.
-
-Lemma upvar_list_snoc : forall n,
-    upvar_list (S (S n)) = upvar_list (S n) ++ [E.UpVar n].
-intros. simpl.
-rewrite <- upvar_list'_snoc. simpl. reflexivity.
-Qed.
-
-Lemma upvar_list'_length : forall acc n,
-    length (upvar_list' acc n) = S n + length acc.
-first_induction n; simpl; intros.
-- reflexivity.
-- rewrite IHn. simpl. lia.
-Qed.
-
-Lemma upvar_list_length : forall n,
-    length (upvar_list n) = n.
-destruct n; simpl.
-- reflexivity.
-- rewrite upvar_list'_length. simpl. lia.
 Qed.
 
 Lemma E_call_sstar_inner : forall E e v arg l k,
@@ -919,17 +1033,29 @@ simpl in *; refold_compile (length TE).
   + simpl. eassumption.
   + fwd eapply Forall2_nth_error; try eassumption. eauto.
 
-- admit.
+- eexists. split. eapply E.SPlusOne, E.SCallL.
+  + eauto using I_expr_value'.
+  + constructor; eauto.
+    intros. constructor; eauto.
+    constructor; eauto.
 
-- admit.
+- eexists. split. eapply E.SPlusOne, E.SCallR.
+  + eauto using I_expr_value.
+  + eauto using I_expr_value'.
+  + constructor; eauto.
+    intros. constructor; eauto.
+    constructor; eauto.
 
-- on (I_expr _ _ (T.Close _ _) _), invc.
+- fwd eapply env_ok_nth_error; eauto. break_exists. break_and.
+
+  on (I_expr _ _ (T.Close _ _) _), invc.
   eexists. split. eapply E.SPlusOne, E.SMakeCall.
   + list_magic_on (free, (efree, tt)). eauto using I_expr_value.
   + eauto using I_expr_value.
-  + admit. (* fname valid in TE -> fname valid in EE *)
+  + eassumption.
   + constructor; eauto.
-    admit. (* I_expr body ebody *)
+    eapply compile_I_expr; eauto.
+    admit. (* elims_match *)
 
 - admit.
 
