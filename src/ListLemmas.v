@@ -29,6 +29,28 @@ intros0 Hle1 Hle2. destruct (Max.max_spec n1 n2) as [[? ?] | [? ?]]; omega.
 Qed.
 
 
+Lemma nat_max_lt : forall n1 n2 m,
+    max n1 n2 < m ->
+    n1 < m /\ n2 < m.
+intros0 Hlt. destruct (Max.max_spec n1 n2) as [[? ?] | [? ?]]; split; omega.
+Qed.
+
+Lemma nat_max_lt1 : forall n1 n2 m, max n1 n2 < m -> n1 < m.
+intros. destruct (nat_max_lt ?? ?? ?? **). assumption.
+Qed.
+
+Lemma nat_max_lt2 : forall n1 n2 m, max n1 n2 < m -> n2 < m.
+intros. destruct (nat_max_lt ?? ?? ?? **). assumption.
+Qed.
+
+Lemma nat_lt_max : forall n1 n2 m,
+    n1 < m ->
+    n2 < m ->
+    max n1 n2 < m.
+intros0 Hlt1 Hlt2. destruct (Max.max_spec n1 n2) as [[? ?] | [? ?]]; omega.
+Qed.
+
+
 (* maximum *)
 
 Fixpoint maximum ns :=

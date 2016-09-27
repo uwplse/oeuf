@@ -138,120 +138,6 @@ Ltac refold_compile :=
     fold compile_list_pair in *.
 
 
-Definition elims_match elims : N.expr -> Prop :=
-    let fix go e :=
-        let fix go_list es :=
-            match es with
-            | [] => True
-            | e :: es => go e /\ go_list es
-            end in
-        let fix go_pair p :=
-            let '(e, _) := p in
-            go e in
-        let fix go_list_pair ps :=
-            match ps with
-            | [] => True
-            | p :: ps => go_pair p /\ go_list_pair ps
-            end in
-        match e with
-        | N.Arg => True
-        | N.UpVar _ => True
-        | N.Call f a => go f /\ go a
-        | N.Constr _ args => go_list args
-        | N.ElimN n cases target =>
-                nth_error elims n = Some cases /\
-                go_list_pair cases /\
-                go target
-        | N.Close _ free => go_list free
-        end in go.
-
-Definition elims_match_list elims :=
-    let go := elims_match elims in
-    let fix go_list es :=
-        match es with
-        | [] => True
-        | e :: es => go e /\ go_list es
-        end in go_list.
-
-Definition elims_match_pair elims : (N.expr * N.rec_info) -> Prop :=
-    let go := elims_match elims in
-    let fix go_pair p :=
-        let '(e, r) := p in
-        go e in go_pair.
-
-Definition elims_match_list_pair elims :=
-    let go_pair := elims_match_pair elims in
-    let fix go_list_pair ps :=
-        match ps with
-        | [] => True
-        | p :: ps => go_pair p /\ go_list_pair ps
-        end in go_list_pair.
-
-Ltac refold_elims_match elims :=
-    fold (elims_match_list elims) in *;
-    fold (elims_match_pair elims) in *;
-    fold (elims_match_list_pair elims) in *.
-
-
-Lemma elims_match_list_Forall : forall elims es,
-    elims_match_list elims es <-> Forall (elims_match elims) es.
-induction es; split; intro HH; invc HH; econstructor; firstorder eauto.
-Qed.
-
-Lemma elims_match_list_pair_Forall : forall elims ps,
-    elims_match_list_pair elims ps <-> Forall (elims_match_pair elims) ps.
-induction ps; split; intro HH; invc HH; econstructor; firstorder eauto.
-Qed.
-
-Lemma elims_match_list_pair_Forall' : forall elims ps,
-    elims_match_list_pair elims ps <-> Forall (fun p => elims_match elims (fst p)) ps.
-intros; split; intro HH.
-- rewrite elims_match_list_pair_Forall in HH.
-  list_magic_on (ps, tt). destruct ps_i. simpl in *. assumption.
-- rewrite elims_match_list_pair_Forall.
-  list_magic_on (ps, tt). destruct ps_i. simpl in *. assumption.
-Qed.
-
-Lemma elims_match_extend : forall elims elims' e,
-    elims_match elims e ->
-    elims_match (elims ++ elims') e.
-induction e using N.expr_ind''; intros0 Helim;
-simpl in *; refold_elims_match elims; refold_elims_match (elims ++ elims').
-- constructor.
-- constructor.
-- firstorder eauto.
-- rewrite elims_match_list_Forall in *. list_magic_on (args, tt).
-- destruct Helim as (? & ? & ?).  split; [|split].
-  + rewrite nth_error_app1; [ eassumption | ].
-    eapply nth_error_Some. congruence.
-  + rewrite elims_match_list_pair_Forall in *. list_magic_on (cases, tt).
-    destruct cases_i; simpl in *. eauto.
-  + eauto.
-- rewrite elims_match_list_Forall in *. list_magic_on (free, tt).
-Qed.
-
-Lemma elims_match_list_extend : forall elims elims' es,
-    elims_match_list elims es ->
-    elims_match_list (elims ++ elims') es.
-intros0 Helim. rewrite elims_match_list_Forall in *.
-list_magic_on (es, tt). eauto using elims_match_extend.
-Qed.
-
-Lemma elims_match_pair_extend : forall elims elims' p,
-    elims_match_pair elims p ->
-    elims_match_pair (elims ++ elims') p.
-intros0 Helim. destruct p. simpl in *.
-eauto using elims_match_extend.
-Qed.
-
-Lemma elims_match_list_pair_extend : forall elims elims' es,
-    elims_match_list_pair elims es ->
-    elims_match_list_pair (elims ++ elims') es.
-intros0 Helim. rewrite elims_match_list_pair_Forall in *.
-list_magic_on (es, tt). eauto using elims_match_pair_extend.
-Qed.
-
-
 Ltac break_bind_state :=
     unfold seq, fmap in *;
     repeat match goal with
@@ -356,17 +242,17 @@ Qed.
 
 Theorem compile_elims_match : forall te ne elims elims',
     compile te elims = (ne, elims') ->
-    elims_match elims' ne.
+    N.elims_match elims' ne.
 induction te using T.expr_rect_mut with
     (Pl := fun tes => forall nes elims elims',
         compile_list tes elims = (nes, elims') ->
-        Forall (elims_match elims') nes)
+        Forall (N.elims_match elims') nes)
     (Pp := fun tp => forall np elims elims',
         compile_pair tp elims = (np, elims') ->
-        elims_match elims' (fst np))
+        N.elims_match elims' (fst np))
     (Plp := fun tps => forall nps elims elims',
         compile_list_pair tps elims = (nps, elims') ->
-        Forall (fun p => elims_match elims' (fst p)) nps);
+        Forall (fun p => N.elims_match elims' (fst p)) nps);
 intros0 Hcomp; simpl in Hcomp; refold_compile; break_bind_state.
 
 (* compile *)
@@ -377,13 +263,13 @@ intros0 Hcomp; simpl in Hcomp; refold_compile; break_bind_state.
 - simpl.
   fwd eapply compile_extend with (te := te2) as HH; eauto.  destruct HH.
   subst. split.
-  + eapply elims_match_extend. eauto.
+  + eapply N.elims_match_extend. eauto.
   + eauto.
 
-- simpl. refold_elims_match elims'.
-  rewrite elims_match_list_Forall. eauto.
+- simpl. N.refold_elims_match elims'.
+  rewrite N.elims_match_list_Forall. eauto.
 
-- simpl. refold_elims_match elims'.
+- simpl. N.refold_elims_match elims'.
   on (emit _ _ = _), invc.
   on (get_next _ = _), invc.
   fwd eapply compile_extend as HH; eauto.  destruct HH.
@@ -391,14 +277,14 @@ intros0 Hcomp; simpl in Hcomp; refold_compile; break_bind_state.
   + rewrite nth_error_app2 by eauto.
     replace (length _ - length _) with 0 by omega.
     reflexivity.
-  + rewrite elims_match_list_pair_Forall'.
+  + rewrite N.elims_match_list_pair_Forall'.
     specialize (IHte ?? ?? ?? **).
-    list_magic_on (x, tt).  eauto using elims_match_extend.
+    list_magic_on (x, tt).  eauto using N.elims_match_extend.
   + specialize (IHte0 ?? ?? ?? **).
-    eauto using elims_match_extend.
+    eauto using N.elims_match_extend.
 
-- simpl. refold_elims_match elims'.
-  rewrite elims_match_list_Forall. eauto.
+- simpl. N.refold_elims_match elims'.
+  rewrite N.elims_match_list_Forall. eauto.
 
 (* compile_list *)
 
@@ -406,7 +292,7 @@ intros0 Hcomp; simpl in Hcomp; refold_compile; break_bind_state.
 
 - fwd eapply compile_list_extend with (tes := es) as HH; eauto.  destruct HH.
   subst. constructor.
-  + eapply elims_match_extend. eauto.
+  + eapply N.elims_match_extend. eauto.
   + eauto.
 
 (* compile_pair *)
@@ -419,7 +305,7 @@ intros0 Hcomp; simpl in Hcomp; refold_compile; break_bind_state.
 
 - fwd eapply compile_list_pair_extend with (tps := ps) as HH; eauto.  destruct HH.
   subst. constructor.
-  + eapply elims_match_extend. eauto.
+  + eapply N.elims_match_extend. eauto.
   + eauto.
 
 Qed.
