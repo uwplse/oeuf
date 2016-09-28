@@ -1,10 +1,9 @@
 echo "sending notifications about broken build"
 
 #Send us email
-#I don't think this works on warfa, so I'm leaving it disabled
-# cat $1 | mail -s "[OEUF BUILD BOT] Build is Broken" emullen@cs.washington.edu
-# cat $1 | mail -s "[OEUF BUILD BOT] Build is Broken" jrw12@cs.washington.edu
-# cat $1 | mail -s "[OEUF BUILD BOT] Build is Broken" spernste@cs.washington.edu
+cat $1 | mail -s "[OEUF BUILD BOT] Build is Broken" emullen@cs.washington.edu
+cat $1 | mail -s "[OEUF BUILD BOT] Build is Broken" jrw12@cs.washington.edu
+cat $1 | mail -s "[OEUF BUILD BOT] Build is Broken" spernste@cs.washington.edu
 
 #Post in slack
 curl -sf -XPOST \
