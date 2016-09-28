@@ -1,6 +1,15 @@
 echo "sending notifications about broken build"
 
 #Send us email
+echo $1
+
+md5sum $1
+
+env
+
+
+cat $1 | mail -s "[OEUF BUILD BOT] Build is Broken" emullen
+
 cat $1 | mail -s "[OEUF BUILD BOT] Build is Broken" emullen@cs.washington.edu
 # cat $1 | mail -s "[OEUF BUILD BOT] Build is Broken" jrw12@cs.washington.edu
 # cat $1 | mail -s "[OEUF BUILD BOT] Build is Broken" spernste@cs.washington.edu
