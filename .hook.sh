@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 WEBHOST="uwplse.org"
-WEBDIR="/var/www/oeuf"
+WEBDIR="/var/www/oeuf/logs"
 LOG=$(printf "%s-%s-%s-oeuf-hook.txt" \
              "$(TZ="America/Los_Angeles" date "+%y%m%d")" \
              "$(TZ="America/Los_Angeles" date "+%H%M%S")" \
@@ -61,9 +61,6 @@ function main {
 (time main) &> "$LOG"
 scp "$LOG" "$WEBHOST:$WEBDIR/$LOG"
 
-bash .notify.sh "$LOG" &> notify.log
-scp notify.log "$WEBHOST:$WEBDIR/notify.log"
-
 ALL_PASS="ALL TESTS PASSED"
 PASSED=`grep "$ALL_PASS" "$LOG" | wc -l`
 ZERO="0"
@@ -75,4 +72,3 @@ else
 fi
 
 rm -f "$LOG"
-rm -f notify.log
