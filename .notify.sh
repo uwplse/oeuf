@@ -4,8 +4,8 @@ echo "sending notifications about broken build"
 BODY="Oeuf build is broken. See log at: http://oeuf.uwplse.org/logs/$1"
 
 echo $BODY | mail -s "[OEUF BUILD BOT] Build is Broken" emullen@cs.washington.edu
-# echo $BODY | mail -s "[OEUF BUILD BOT] Build is Broken" jrw12@cs.washington.edu
-# cat $1 | mail -s "[OEUF BUILD BOT] Build is Broken" spernste@cs.washington.edu
+echo $BODY | mail -s "[OEUF BUILD BOT] Build is Broken" jrw12@cs.washington.edu
+echo $BODY | mail -s "[OEUF BUILD BOT] Build is Broken" spernste@cs.washington.edu
 
 
 #Post in slack
