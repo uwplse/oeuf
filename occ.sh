@@ -4,7 +4,7 @@ set -e
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DRIVER="${ROOT}/OeufDriver.native"
-DRIVER_OPTS=""
+DRIVER_OPTS="-stdlib ${ROOT}/compcert/runtime"
 SHIM="${ROOT}/shims/${1}_shim.c"
 
 if ! [ -f "$DRIVER" ]; then
