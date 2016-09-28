@@ -3,6 +3,7 @@ Require Import Common.
 Require Import Utopia.
 Require Import Monads.
 Require Import ListLemmas.
+Require Import Psatz.
 
 
 Definition function_name := nat.
@@ -361,6 +362,62 @@ Ltac refold_num_upvars :=
 
 
 
+Definition num_locals :=
+    let fix go e :=
+        let fix go_list es :=
+            match es with
+            | [] => 0
+            | e :: es => max (go e) (go_list es)
+            end in
+        let fix go_pair p :=
+            match p with
+            | (e, _) => go e
+            end in
+        let fix go_list_pair ps :=
+            match ps with
+            | [] => 0
+            | p :: ps => max (go_pair p) (go_list_pair ps)
+            end in
+        match e with
+        | Arg => 1
+        | UpVar i => S (S i)
+        | Call f a => max (go f) (go a)
+        | Constr _ args => go_list args
+        | ElimBody rec cases target => max (go rec) (max (go_list_pair cases) (go target))
+        | Close _ free => go_list free
+        end in go.
+
+(* Nested fixpoint aliases *)
+Definition num_locals_list :=
+    let go := num_locals in
+    let fix go_list es :=
+        match es with
+        | [] => 0
+        | e :: es => max (go e) (go_list es)
+        end in go_list.
+
+Definition num_locals_pair :=
+    let go := num_locals in
+    let fix go_pair (p : expr * rec_info) :=
+        match p with
+        | (e, _) => go e
+        end in go_pair.
+
+Definition num_locals_list_pair :=
+    let go_pair := num_locals_pair in
+    let fix go_list_pair ps :=
+        match ps with
+        | [] => 0
+        | p :: ps => max (go_pair p) (go_list_pair ps)
+        end in go_list_pair.
+
+Ltac refold_num_locals :=
+    fold num_locals_list in *;
+    fold num_locals_pair in *;
+    fold num_locals_list_pair in *.
+
+
+
 Definition renumber (f : function_name -> function_name) : expr -> expr :=
     let fix go e :=
         let fix go_list es :=
@@ -414,6 +471,111 @@ Ltac refold_renumber f :=
     fold renumber_list in *;
     fold renumber_pair in *;
     fold renumber_list_pair in *.
+
+
+
+(* Well-formedness *)
+
+Definition wf E : expr -> Prop :=
+    let fix go e :=
+        let fix go_list es :=
+            match es with
+            | [] => True
+            | e :: es => go e /\ go_list es
+            end in
+        let fix go_pair p :=
+            let '(e, _) := p in
+            go e in
+        let fix go_list_pair ps :=
+            match ps with
+            | [] => True
+            | p :: ps => go_pair p /\ go_list_pair ps
+            end in
+        match e with
+        | Arg => True
+        | UpVar _ => True
+        | Call f a => go f /\ go a
+        | Constr _ args => go_list args
+        | ElimBody rec cases target => go rec /\ go_list_pair cases /\ go target
+        | Close fname free =>
+                (exists body,
+                    nth_error E fname = Some body /\
+                    num_upvars body <= length free) /\
+                go_list free
+        end in go.
+
+Definition wf_list E :=
+    let go := wf E in
+    let fix go_list es :=
+        match es with
+        | [] => True
+        | e :: es => go e /\ go_list es
+        end in go_list.
+
+Definition wf_pair E : (expr * rec_info) -> Prop :=
+    let go := wf E in
+    let fix go_pair p :=
+        let '(e, r) := p in
+        go e in go_pair.
+
+Definition wf_list_pair E :=
+    let go_pair := wf_pair E in
+    let fix go_list_pair ps :=
+        match ps with
+        | [] => True
+        | p :: ps => go_pair p /\ go_list_pair ps
+        end in go_list_pair.
+
+Ltac refold_wf E :=
+    fold (wf_list E) in *;
+    fold (wf_pair E) in *;
+    fold (wf_list_pair E) in *.
+
+Definition wf_dec E e : { wf E e } + { ~ wf E e }.
+induction e using expr_rect_mut with
+    (Pl := fun es => { wf_list E es } + { ~ wf_list E es })
+    (Pp := fun p => { wf_pair E p } + { ~ wf_pair E p })
+    (Plp := fun ps => { wf_list_pair E ps } + { ~ wf_list_pair E ps }).
+
+- left. constructor.
+- left. constructor.
+- destruct IHe1; [ | right; inversion 1; contradiction ].
+  destruct IHe2; [ | right; inversion 1; contradiction ].
+  left. constructor; assumption.
+- destruct IHe; [ | right; assumption ].
+  left. assumption.
+- destruct IHe1; [ | right; inversion 1; contradiction ].
+  destruct IHe2; [ | right; inversion 1; break_and; contradiction ].
+  destruct IHe3; [ | right; inversion 1; break_and; contradiction ].
+  left. simpl; refold_wf E. auto.
+- destruct IHe; [ | right; inversion 1; contradiction ].
+  destruct (nth_error E f) as [ body | ] eqn:Hf;
+      [ | right; inversion 1; firstorder congruence ].
+  destruct (le_dec (num_upvars body) (length free));
+      [ | right; inversion 1; firstorder congruence ].
+  left. simpl; refold_wf E. eauto.
+
+- left. constructor.
+- destruct IHe; [ | right; inversion 1; contradiction ].
+  destruct IHe0; [ | right; inversion 1; contradiction ].
+  left. simpl; refold_wf E. eauto.
+
+- simpl. assumption.
+
+- left. constructor.
+- destruct IHe; [ | right; inversion 1; contradiction ].
+  destruct IHe0; [ | right; inversion 1; contradiction ].
+  left. simpl; refold_wf E. eauto.
+Defined.
+
+Definition wf_list_dec E es : { wf_list E es } + { ~ wf_list E es }.
+induction es.
+
+- left. constructor.
+- destruct (wf_dec E a); [ | right; inversion 1; contradiction ].
+  destruct IHes; [ | right; inversion 1; contradiction ].
+  left. simpl; refold_wf E. eauto.
+Qed.
 
 
 (* closed terms *)
@@ -595,3 +757,168 @@ Inductive splus (E : env) : state -> state -> Prop :=
         splus E s' s'' ->
         splus E s s''.
 
+
+
+Inductive state_wf E : state -> Prop :=
+| WfRun : forall e l k,
+        wf E e ->
+        num_locals e <= length l ->
+        Forall value l ->
+        Forall (wf E) l ->
+        (forall v, value v -> wf E v -> state_wf E (k v)) ->
+        state_wf E (Run e l k)
+| WfStop : forall v,
+        wf E v ->
+        state_wf E (Stop v).
+
+Lemma closed_num_locals : forall e, closed e -> num_locals e = 0.
+induction e using expr_ind''; intros0 Hcls; invc Hcls; simpl; refold_num_locals.
+
+- rewrite (IHe1 **).
+  rewrite (IHe2 **).
+  reflexivity.
+
+- generalize dependent args. induction args; intros.
+  + simpl. reflexivity.
+  + do 2 on (Forall _ (_ :: _)), invc.
+    simpl. rewrite (IHargs ** **). on (_ -> _ = _), fun H => rewrite H by eauto.
+    reflexivity.
+
+- rewrite (IHe1 **), (IHe2 **).
+  generalize dependent cases. induction cases; intros.
+  + simpl. reflexivity.
+  + do 2 on (Forall _ (_ :: _)), invc.
+    simpl. destruct a. simpl in *. rewrite (H4 **).
+    simpl. eapply (IHcases ** **).
+
+- generalize dependent free. induction free; intros.
+  + simpl. reflexivity.
+  + do 2 on (Forall _ (_ :: _)), invc.
+    simpl. rewrite (IHfree ** **). on (_ -> _ = _), fun H => rewrite H by eauto.
+    reflexivity.
+Qed.
+
+Lemma value_num_locals : forall e, value e -> num_locals e = 0.
+intros. eauto using value_closed, closed_num_locals.
+Qed.
+
+Theorem state_wf_init : forall E e,
+    wf E e ->
+    closed e ->
+    state_wf E (Run e [] Stop).
+intros0 Hwf Hcls.
+constructor; eauto.
+- rewrite (closed_num_locals ?? **). simpl. eauto.
+- intros. eapply WfStop. assumption.
+Qed.
+
+Lemma wf_list_is_Forall : forall E es,
+    wf_list E es <->
+    Forall (wf E) es.
+induction es; split; intros0 Hwf; invc Hwf; constructor; firstorder.
+Qed.
+
+Lemma num_locals_list_is_maximum : forall es,
+    num_locals_list es = maximum (map num_locals es).
+induction es; simpl in *; eauto.
+Qed.
+
+Lemma num_locals_num_upvars : forall e,
+    num_locals e <= S (num_upvars e).
+induction e using expr_rect_mut with
+    (Pl := fun es => num_locals_list es <= S (num_upvars_list es))
+    (Pp := fun p => num_locals_pair p <= S (num_upvars_pair p))
+    (Plp := fun ps => num_locals_list_pair ps <= S (num_upvars_list_pair ps));
+simpl; refold_num_locals; refold_num_upvars;
+lia.
+Qed.
+
+Theorem preservation : forall E s s',
+    wf_list E E ->
+    sstep E s s' ->
+    state_wf E s ->
+    state_wf E s'.
+intros0 Henv; induction 1; intros Hwf; invc Hwf.
+
+- eapply **; eapply Forall_nth_error; eauto.
+- eapply **; eapply Forall_nth_error; eauto.
+
+- on (wf _ _), invc. refold_wf E.
+  rewrite wf_list_is_Forall in *.
+  on (Forall _ (_ ++ _ :: _)), invc_using Forall_3part_inv.
+
+  simpl in *; refold_num_locals.
+  rewrite num_locals_list_is_maximum, maximum_le_Forall, <- Forall_map in *.
+  on (Forall _ (_ ++ _ :: _)), invc_using Forall_3part_inv.
+
+  constructor; eauto.
+  intros. constructor; eauto.
+  + simpl; refold_wf E.
+    break_exists. break_and.
+    rewrite app_length in *. simpl in *. firstorder eauto.
+    rewrite wf_list_is_Forall. eapply Forall_app; eauto.
+  + simpl; refold_num_locals.
+    rewrite num_locals_list_is_maximum, maximum_le_Forall, <- Forall_map.
+    eapply Forall_app; eauto.
+    constructor; eauto.
+    rewrite value_num_locals by assumption. lia.
+
+- eapply **; eauto. constructor. assumption.
+
+- simpl in *; refold_wf E; refold_num_locals.
+  rewrite wf_list_is_Forall in *.
+  on (Forall _ (_ ++ _ :: _)), invc_using Forall_3part_inv.
+  rewrite num_locals_list_is_maximum, maximum_le_Forall, <- Forall_map in *.
+  on (Forall _ (_ ++ _ :: _)), invc_using Forall_3part_inv.
+
+  constructor; eauto.
+  intros. constructor; eauto.
+  + simpl; refold_wf E.  rewrite wf_list_is_Forall.  eauto using Forall_app.
+  + simpl; refold_num_locals.
+    rewrite num_locals_list_is_maximum, maximum_le_Forall, <- Forall_map.
+    eapply Forall_app; eauto.
+    constructor; eauto.
+    rewrite value_num_locals by assumption. lia.
+
+- eapply **; eauto. constructor. assumption.
+
+- on (wf _ _), invc.
+  simpl in *. destruct (nat_max_le _ _ _ **).
+  constructor; eauto.
+  intros. constructor; eauto.
+  + simpl. eauto.
+  + simpl. rewrite value_num_locals by assumption. simpl. assumption.
+
+- on (wf _ _), invc.
+  simpl in *. destruct (nat_max_le _ _ _ **).
+  constructor; eauto.
+  intros. constructor; eauto.
+  + simpl. eauto.
+  + simpl. do 2 rewrite value_num_locals by assumption. simpl. lia.
+
+- simpl in *; refold_wf E; refold_num_locals.
+  break_and. break_exists. break_and.
+  replace x with body in * by congruence. clear x.
+  rewrite wf_list_is_Forall in *.
+
+  constructor; eauto.
+  + eapply Forall_nth_error with (xs := E); eauto.
+  + fwd eapply num_locals_num_upvars with (e := body).
+    simpl. lia.
+
+- simpl in *; refold_wf E; refold_num_locals.
+  do 2 break_and.
+  constructor; eauto.
+  + lia.
+  + intros. constructor; firstorder eauto.
+    simpl. refold_num_locals. rewrite value_num_locals by eassumption. lia.
+
+- simpl in *; refold_wf E; refold_num_locals.
+  do 2 break_and.
+  constructor; eauto.
+  + lia.
+  + intros. constructor; firstorder eauto.
+    simpl. refold_num_locals. do 2 rewrite value_num_locals by eassumption. lia.
+
+- admit. (* needs facts about unroll_elim *)
+Admitted.

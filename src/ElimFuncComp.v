@@ -353,27 +353,74 @@ rewrite compile_eliminator_list_length.
 reflexivity.
 Qed.
 
+Lemma firstn_nth_error_lt : forall A (xs : list A) n i,
+    i < n ->
+    nth_error (firstn n xs) i = nth_error xs i.
+first_induction n; intros0 Hlt.
+{ lia. }
+
+destruct xs, i; simpl.
+- reflexivity.
+- reflexivity.
+- reflexivity.
+- eapply IHn. lia.
+Qed.
+
+Lemma firstn_nth_error_ge : forall A (xs : list A) n i,
+    i >= n ->
+    nth_error (firstn n xs) i = None.
+first_induction n; intros0 Hlt.
+
+- simpl. destruct i; reflexivity.
+- destruct xs, i; simpl; try reflexivity. 
+  + lia.
+  + eapply IHn. lia.
+Qed.
+
+
+Lemma app_inv_length : forall A (xs ys zs : list A),
+    xs = ys ++ zs ->
+    firstn (length ys) xs = ys /\
+    skipn (length ys) xs = zs.
+first_induction ys; intros0 Heq; destruct xs; try discriminate; simpl in *.
+- eauto.
+- eauto.
+- specialize (IHys xs zs ltac:(congruence)). break_and.
+  split; congruence.
+Qed.
+
 Lemma env_ok_nth_error : forall TE EE ELIMS i t,
     env_ok TE EE ELIMS ->
     nth_error TE i = Some t ->
     exists e,
         nth_error EE i = Some e /\
         e = compile (length TE) t.
-unfold env_ok, compile_env.
 intros0 Henv Hnth.
+fwd eapply env_ok_length; eauto.
+unfold env_ok, compile_env in *.
 
-remember (length TE) as base. clear Heqbase.
-assert (firstn (length TE) EE = compile_list base TE). {
-  clear Hnth.  generalize dependent EE.
-  induction TE; intros0 Heq.
-  - simpl. reflexivity.
-  - destruct EE; try discriminate. simpl in *. f_equal.
-    + congruence.
-    + eapply IHTE. congruence.
+assert (Hlt : i < length TE). {
+  assert (HH : nth_error TE i <> None) by congruence.
+  rewrite <- nth_error_Some. assumption.
 }
 
-(* TODO *)
-Admitted.
+assert (Hlt' : i < length EE) by lia.
+
+pose proof Hlt' as HH.
+rewrite <- nth_error_Some in HH.
+destruct (nth_error EE i) eqn:Hnth'; try congruence.
+clear HH.
+
+rewrite <- firstn_nth_error_lt with (n := length TE) in Hnth' by assumption.
+
+fwd eapply app_inv_length as HH; eauto.
+rewrite compile_list_length in HH. destruct HH as [Hfirst _].
+symmetry in Hfirst.  rewrite compile_list_Forall in Hfirst.
+
+eexists. split; [ reflexivity | ].
+symmetry.
+eapply Forall2_nth_error with (P := fun t e => compile _ t = e); eauto.
+Qed.
 
 Lemma env_ok_nth_error_elim : forall TE EE ELIMS i x,
     env_ok TE EE ELIMS ->
@@ -542,64 +589,6 @@ Lemma I_expr_not_value' : forall TE EE t e,
     ~T.value t.
 intros. intro. fwd eapply I_expr_value; eauto.
 Qed.
-
-(*
-Lemma I_num_upvars : forall TE EE t e,
-    I TE EE t e ->
-    E.num_upvars e <= T.num_upvars t.
-intros TE EE.
-induction t using T.expr_rect_mut with
-    (Pl := fun ts => forall es,
-        Forall2 (I TE EE) ts es ->
-        E.num_upvars_list es <= T.num_upvars_list ts)
-    (Pp := fun tp => forall ep,
-        I TE EE (fst tp) (fst ep) ->
-        E.num_upvars_pair ep <= T.num_upvars_pair tp)
-    (Plp := fun tps => forall eps,
-        Forall2 (fun tp ep => I TE EE (fst tp) (fst ep)) tps eps ->
-        E.num_upvars_list_pair eps <= T.num_upvars_list_pair tps);
-intros0 II;
-try match goal with | [ |- E.num_upvars _ <= _ ] => invc II end;
-simpl; T.refold_num_upvars; E.refold_num_upvars.
-
-- lia.
-- lia.
-- specialize (IHt1 ?? ** ).
-  specialize (IHt2 ?? ** ).
-  lia.
-- specialize (IHt ?? ** ).
-  assumption.
-- admit.
-- specialize (IHt ?? ** ).
-  assumption.
-
-- invc II. simpl. lia.
-- invc II. simpl.
-  specialize (IHt ?? ** ).
-  specialize (IHt0 ?? ** ).
-  lia.
-
-- destruct ep. simpl. eauto.
-
-- invc II. simpl. lia.
-- invc II. simpl.
-  specialize (IHt ?? ** ).
-  specialize (IHt0 ?? ** ).
-  lia.
-Admitted.
-*)
-
-(*
-
-Lemma I_closed : forall TE EE t e,
-    I TE EE t e ->
-    T.closed t ->
-    E.closed e.
-induction t using T.expr_ind''; intros0 II Tcls; invc II; invc Tcls.
-- constructor; eauto.
-- constructor. list_magic_on (args, (eargs, tt)).
-- constructor; eauto. constructor.
-*)
 
 Lemma E_sstar_snoc : forall E s s' s'',
     E.sstar E s s' ->
