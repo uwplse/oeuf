@@ -691,6 +691,65 @@ Qed.
 
 
 
+(* Well-formedness *)
+
+Definition wf E : expr -> Prop :=
+    let fix go e :=
+        let fix go_list es :=
+            match es with
+            | [] => True
+            | e :: es => go e /\ go_list es
+            end in
+        let fix go_pair p :=
+            let '(e, _) := p in
+            go e in
+        let fix go_list_pair ps :=
+            match ps with
+            | [] => True
+            | p :: ps => go_pair p /\ go_list_pair ps
+            end in
+        match e with
+        | Arg => True
+        | UpVar _ => True
+        | Call f a => go f /\ go a
+        | Constr _ args => go_list args
+        | ElimN _ cases target => go_list_pair cases /\ go target
+        | Close fname free =>
+                (exists body,
+                    nth_error E fname = Some body /\
+                    num_upvars body <= length free) /\
+                go_list free
+        end in go.
+
+Definition wf_list E :=
+    let go := wf E in
+    let fix go_list es :=
+        match es with
+        | [] => True
+        | e :: es => go e /\ go_list es
+        end in go_list.
+
+Definition wf_pair E : (expr * rec_info) -> Prop :=
+    let go := wf E in
+    let fix go_pair p :=
+        let '(e, r) := p in
+        go e in go_pair.
+
+Definition wf_list_pair E :=
+    let go_pair := wf_pair E in
+    let fix go_list_pair ps :=
+        match ps with
+        | [] => True
+        | p :: ps => go_pair p /\ go_list_pair ps
+        end in go_list_pair.
+
+Ltac refold_wf E :=
+    fold (wf_list E) in *;
+    fold (wf_pair E) in *;
+    fold (wf_list_pair E) in *.
+
+
+
 
 (* closed terms *)
 
