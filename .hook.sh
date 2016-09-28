@@ -8,49 +8,49 @@ LOG=$(printf "%s-%s-%s-oeuf-hook.txt" \
              "$(hostname -s)")
 
 function main {
-  # echo ---------------------
-  # echo OEUF HOOK CLEANER
-  # echo ---------------------
-  # make cleaner
+  echo ---------------------
+  echo OEUF HOOK CLEANER
+  echo ---------------------
+  make cleaner
 
-  # echo ---------------------
-  # echo OEUF HOOK DEPS
-  # echo ---------------------
-  # pushd ../StructTact/ \
-  #   && git pull \
-  #   && make clean \
-  #   && ./configure \
-  #   && make
-  # popd
+  echo ---------------------
+  echo OEUF HOOK DEPS
+  echo ---------------------
+  pushd ../StructTact/ \
+    && git pull \
+    && make clean \
+    && ./configure \
+    && make
+  popd
 
-  # pushd ../PrettyParsing/ \
-  #   && git pull \
-  #   && make clean \
-  #   && ./configure \
-  #   && make
-  # popd
+  pushd ../PrettyParsing/ \
+    && git pull \
+    && make clean \
+    && ./configure \
+    && make
+  popd
 
-  # echo ---------------------
-  # echo OEUF HOOK COMPCERT
-  # echo ---------------------
-  # make compcert
+  echo ---------------------
+  echo OEUF HOOK COMPCERT
+  echo ---------------------
+  make compcert
 
-  # echo ---------------------
-  # echo OEUF HOOK CONFIGURE
-  # echo ---------------------
-  # ./configure
+  echo ---------------------
+  echo OEUF HOOK CONFIGURE
+  echo ---------------------
+  ./configure
 
-  # echo ---------------------
-  # echo OEUF COQ PLUGIN
-  # echo ---------------------
-  # make plugin
+  echo ---------------------
+  echo OEUF COQ PLUGIN
+  echo ---------------------
+  make plugin
   
-  # echo ---------------------
-  # echo OEUF HOOK BUILD
-  # echo ---------------------
-  # make #will fail
-  # make sanitize #cleanup
-  # make
+  echo ---------------------
+  echo OEUF HOOK BUILD
+  echo ---------------------
+  make #will fail
+  make sanitize #cleanup
+  make
 
   echo ---------------------
   echo OEUF HOOK TEST
