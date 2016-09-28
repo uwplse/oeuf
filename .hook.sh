@@ -60,13 +60,15 @@ function main {
 
 (time main) &> "$LOG"
 scp "$LOG" "$WEBHOST:$WEBDIR/$LOG"
+
 ALL_PASS="ALL TESTS PASSED"
 PASSED=`grep "$ALL_PASS" "$LOG" | wc -l`
 ZERO="0"
-if (($PASSED -gt $ZERO)) ; then
+if [[ $PASSED -gt $ZERO ]] ; then
     echo "Successful normal build"
 else
     echo "Problematic build"
     bash .notify.sh "$LOG"
 fi
+
 rm -f "$LOG"
