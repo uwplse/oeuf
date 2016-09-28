@@ -322,3 +322,22 @@ Ltac eapply_ lem H := eapply lem in H.
 
 Ltac rewrite_fwd lem H := rewrite -> lem in H.
 Ltac rewrite_rev lem H := rewrite <- lem in H.
+
+
+
+(* `remvar` ("remember as evar") - replaces a chunk of your goal with an evar,
+   This may make it easier to apply some lemmas.  After solving the main goal,
+   you must also prove that the evar's instantiation is compatible with the
+   original value. *)
+
+Tactic Notation "remvar" uconstr(u) "as" ident(x) :=
+    let x' := fresh x "'" in
+    let Heq := fresh "Heq" x in
+    remember u as x' eqn:Heq in |- *;
+    let T := type of x' in
+    evar (x : T);
+    let H := fresh "H" in
+    assert (H : x' = x); cycle 1;
+    unfold x in *; clear x;
+    [ rewrite H in Heq |- *; clear H
+    | rewrite Heq; clear Heq; clear x' ].

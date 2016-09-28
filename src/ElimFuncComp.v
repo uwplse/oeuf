@@ -834,6 +834,23 @@ destruct n; intros; try lia.
 unfold upvar_list. eapply upvar_list'_nth_error_succ. lia.
 Qed.
 
+Lemma upvar_list_nth_error_not_value : forall n i e,
+    nth_error (upvar_list n) i = Some e ->
+    ~ E.value e.
+intros0 Hnth.
+assert (i < n). {
+  assert (HH : nth_error (upvar_list n) i <> None) by congruence.
+  rewrite nth_error_Some in HH. rewrite upvar_list_length in HH.
+  assumption.
+}
+destruct i.
+
+- rewrite upvar_list_nth_error_zero in Hnth by assumption.
+  inject_some. inversion 1.
+- rewrite upvar_list_nth_error_succ in Hnth by assumption.
+  inject_some. inversion 1.
+Qed.
+
 Lemma E_close_eval_free' : forall E fname free l k i n,
     n = length free ->
     i <= n ->
@@ -939,7 +956,6 @@ Ltac E_step HS :=
     let S_ := fresh "S" in
     let S2 := fresh "S" in
     let HS' := fresh HS "'" in
-    let H := fresh "Hex" in
     let go E s0 s1 Erel solver :=
         rename HS into HS';
         evar (S2 : E.state);
@@ -958,7 +974,6 @@ Ltac E_star HS :=
     let S_ := fresh "S" in
     let S2 := fresh "S" in
     let HS' := fresh HS "'" in
-    let H := fresh "Hex" in
     let go E s0 s1 Erel solver :=
         rename HS into HS';
         evar (S2 : E.state);
@@ -976,7 +991,6 @@ Ltac E_plus HS :=
     let S_ := fresh "S" in
     let S2 := fresh "S" in
     let HS' := fresh HS "'" in
-    let H := fresh "Hex" in
     let go E s0 s1 Erel solver :=
         rename HS into HS';
         evar (S2 : E.state);
@@ -990,6 +1004,168 @@ Ltac E_plus HS :=
             ltac:(eapply E_splus_then_splus with (1 := HS'))
     end.
 
+Ltac E_step_ex HS P :=
+    let S_ := fresh "S" in
+    let S2 := fresh "S" in
+    let HS' := fresh HS "'" in
+    let H := fresh "Hex" in
+    let H_S2 := fresh "H_" S2 in
+    let go E s0 s1 Erel solver :=
+        assert (H : exists S2 : E.state, E.sstep E s1 S2 /\ P S2); [ | 
+            destruct H as [S2 [H H_S2] ];
+            rename HS into HS';
+            assert (HS : Erel E s0 S2);
+            [ solver; exact H
+            | clear H; clear HS' ]
+        ] in
+    match type of HS with
+    | E.sstar ?E ?s0 ?s1 => go E s0 s1 E.splus
+            ltac:(eapply E_sstar_then_splus with (1 := HS');
+                  eapply E.SPlusOne)
+    | E.splus ?E ?s0 ?s1 => go E s0 s1 E.splus
+            ltac:(eapply E_splus_snoc with (1 := HS'))
+    end.
+
+
+Definition upvar_tail i es :=
+    Forall E.value (firstn i es) /\
+    skipn i es = skipn i (upvar_list (length es)).
+
+Definition E_state_expr s :=
+    match s with
+    | E.Run e _ _ => e
+    | E.Stop e => e
+    end.
+
+Lemma E_close_eval_one : forall E i fname free l k,
+    i < length free ->
+    E.num_locals_list free <= length l ->
+    Forall E.value l ->
+    upvar_tail i free ->
+    exists free',
+        E.sstar E (E.Run (E.Close fname free)  l k)
+                  (E.Run (E.Close fname free') l k) /\
+        upvar_tail (S i) free' /\
+        length free' = length free.
+intros0 Hlt Hl Hlval Htail.
+
+destruct (nth_error free i) as [e |] eqn:He; cycle 1.
+  { exfalso. rewrite <- nth_error_Some in Hlt. congruence. }
+
+assert (Hfree : free = firstn i free ++ [e] ++ skipn (S i) free). {
+  rewrite <- firstn_skipn with (n := i) at 1. f_equal.
+  destruct (skipn i free) eqn:Hskip.
+  - replace i with (i + 0) in He by lia. rewrite <- skipn_nth_error in He.
+    find_rewrite. discriminate.
+  - compute [app]. f_equal.
+    + fwd eapply skipn_nth_error with (j := 0); eauto. rewrite Hskip in *.
+      replace (i + 0) with i in * by lia. simpl in *. congruence.
+    + symmetry. eapply skipn_more. eassumption.
+}
+
+assert (nth_error (upvar_list (length free)) i = Some e). {
+  destruct Htail as [_ Hskip].
+  replace i with (i + 0) in He |- * by lia.
+  rewrite <- skipn_nth_error in He |- *.
+  rewrite <- Hskip. assumption.
+}
+
+rewrite Hfree.
+
+E_start HS.
+
+E_step HS.
+  { eapply E.SCloseStep.
+    - destruct Htail. assumption.
+    - eauto using upvar_list_nth_error_not_value.
+  }
+
+assert (exists free',
+    E.sstep E S1 (E.Run (E.Close fname free') l k) /\
+    upvar_tail (S i) free' /\
+    length free' = length free). {
+  destruct i.
+
+  - rewrite upvar_list_nth_error_zero in * by assumption. inject_some.
+    destruct (nth_error l 0) as [v |] eqn:Hv; [ | exfalso; admit ].
+    match type of Hfree with _ = ?a ++ [_] ++ ?b => exists (a ++ [v] ++ b) end.
+    split; [|split].  remvar (E.Run _ l k) as s.  eapply E.SArg.
+    + eassumption.
+    + reflexivity.
+    + admit.
+    + rewrite Hfree at 3. repeat rewrite app_length. simpl. lia.
+
+  - rewrite upvar_list_nth_error_succ in * by assumption. inject_some.
+    destruct (nth_error l (S i)) as [v |] eqn:Hv; [ | exfalso; admit ].
+    match type of Hfree with _ = ?a ++ [_] ++ ?b => exists (a ++ [v] ++ b) end.
+    split; [|split].  remvar (E.Run _ l k) as s.  eapply E.SUpVar.
+    + eassumption.
+    + reflexivity.
+    + admit.
+    + rewrite Hfree at 3. repeat rewrite app_length. simpl. lia.
+}
+destruct ** as (free' & Hstep & Htail' & Hlen).
+E_step HS.
+  { exact Hstep. }
+
+eapply E_splus_sstar in HS.
+rewrite <- Hfree. eauto.
+Admitted.
+
+Lemma E_close_eval' : forall E fname l k  j i free,
+    i + j = length free ->
+    i < length free ->
+    E.num_locals_list free <= length l ->
+    Forall E.value l ->
+    upvar_tail i free ->
+    exists free',
+        E.sstar E (E.Run (E.Close fname free)  l k)
+                  (E.Run (E.Close fname free') l k) /\
+        Forall E.value free'.
+induction j; intros0 Hi Hlt Hl Hlval Htail.
+{ lia. }
+
+(* Give explicit instantiations, otherwise lia breaks with "abstract cannot
+   handle existentials" *)
+fwd eapply E_close_eval_one with (E := E) (fname := fname) (k := k); eauto.
+  destruct ** as (free' & Hstep' & Htail' & Hlen').
+
+destruct (eq_nat_dec (S i) (length free)).
+{ (* easy case: that was the last free variable, nothing more to eval *)
+  unfold upvar_tail in Htail'. rewrite firstn_all in Htail' by congruence.
+  break_and. eauto.
+}
+
+(* easy but annoying.  upvar_tail gets us from free' to upvar_list, then we can
+   compute num_locals precisely *)
+assert (E.num_locals_list free' <= length l) by admit.
+specialize (IHj (S i) free' ltac:(lia) ltac:(lia) ** ** **).
+destruct IHj as (free'' & Hstep'' & Hval'').
+
+exists free''. split.
+- eapply E_sstar_then_sstar; eassumption.
+- eassumption.
+Admitted.
+
+Lemma E_close_eval : forall E fname n l k,
+    n > 0 ->
+    Forall E.value l ->
+    exists free',
+        E.sstar E (E.Run (E.Close fname (upvar_list n))  l k)
+                  (E.Run (E.Close fname free') l k) /\
+        Forall E.value free'.
+intros0 Hn Hlval.
+eapply E_close_eval' with (i := 0) (j := n).
+- rewrite upvar_list_length. lia.
+- rewrite upvar_list_length. lia.
+- admit. (* need that lemma about `num_locals_list (upvar_list _)` *)
+- assumption.
+- unfold upvar_tail.
+  simpl. split; eauto.
+  rewrite upvar_list_length. reflexivity.
+Admitted.
+
+(* TODO - use E_close_eval instead of whatever's in there right now *)
 Theorem I_sim : forall TE EE ELIMS t t' e,
     env_ok TE EE ELIMS ->
     I TE EE t e ->
@@ -1103,6 +1279,11 @@ simpl in *; refold_compile (length TE).
 - admit.
 
 Admitted.
+
+
+
+
+
 
 (*
 
