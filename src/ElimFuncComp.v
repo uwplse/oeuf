@@ -1268,31 +1268,31 @@ destruct (eq_nat_dec (S i) (length free)).
   break_and. eauto.
 }
 
-(* easy but annoying.  upvar_tail gets us from free' to upvar_list, then we can
-   compute num_locals precisely *)
-assert (E.num_locals_list free' <= length l) by admit.
-specialize (IHj (S i) free' ltac:(lia) ltac:(lia) ** ** **).
+fwd eapply upvar_tail_num_locals with (es := free); eauto.
+fwd eapply upvar_tail_num_locals with (es := free'); eauto. { lia. }
+specialize (IHj (S i) free' ltac:(lia) ltac:(lia) ltac:(lia) ** **).
 destruct IHj as (free'' & Hstep'' & Hval'' & Hlen'').
 
 exists free''. split; [|split].
 - eapply E_sstar_then_sstar; eassumption.
 - eassumption.
 - congruence.
-Admitted.
+Qed.
 
 Lemma E_close_eval : forall E fname n l k,
     n > 0 ->
+    n <= length l ->
     Forall E.value l ->
     exists free',
         E.sstar E (E.Run (E.Close fname (upvar_list n))  l k)
                   (E.Run (E.Close fname free') l k) /\
         Forall E.value free' /\
         length free' = n.
-intros0 Hn Hlval.
+intros0 Hn Hlen Hlval.
 fwd eapply E_close_eval' with (i := 0) (j := n) (free := upvar_list n).
 - rewrite upvar_list_length. lia.
 - rewrite upvar_list_length. lia.
-- admit. (* need that lemma about `num_locals_list (upvar_list _)` *)
+- rewrite upvar_list_num_locals. eassumption.
 - eassumption.
 - unfold upvar_tail.
   simpl. split; eauto.
@@ -1300,7 +1300,7 @@ fwd eapply E_close_eval' with (i := 0) (j := n) (free := upvar_list n).
 - break_exists. break_and. break_and.
   rewrite upvar_list_length in *.
   eauto.
-Admitted.
+Qed.
 
 (* TODO - use E_close_eval instead of whatever's in there right now *)
 Theorem I_sim : forall TE EE ELIMS t t' e,
@@ -1379,6 +1379,7 @@ simpl in *; refold_compile (length TE).
       }
     fwd eapply E_close_eval with (n := length efree) as HH.
       { assumption. }
+      { admit. (* tricky - depends on state_wf and compilation counting evars *) }
       { invc Hwf. eassumption. }
       destruct HH as (efree' & Hefree' & Hval' & Hlen').
     E_star HS.
