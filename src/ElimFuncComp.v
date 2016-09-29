@@ -67,12 +67,13 @@ Definition compile_list_pair base :=
         end in go_list_pair.
 
 
-Definition rec_free :=
-    let fix go acc n :=
-        match n with
-        | 0 => acc
-        | S n' => go (E.UpVar n' :: acc) n'
-        end in go [].
+Fixpoint rec_free' acc n :=
+    match n with
+    | 0 => acc
+    | S n' => rec_free' (E.UpVar n' :: acc) n'
+    end.
+
+Definition rec_free n := rec_free' [] n.
 
 Definition shift : E.expr -> E.expr :=
     let fix go e :=
@@ -298,6 +299,20 @@ Lemma compile_list_length : forall base tes,
 intros. remember (compile_list base tes) as ees.
 rewrite compile_list_Forall' in *.
 symmetry. eauto using Forall2_length.
+Qed.
+
+Lemma compile_list_pair_length : forall base tps,
+    length (compile_list_pair base tps) = length tps.
+induction tps.
+- simpl. reflexivity.
+- simpl. congruence.
+Qed.
+
+Lemma shift_list_pair_length : forall eps,
+    length (shift_list_pair eps) = length eps.
+induction eps.
+- simpl. reflexivity.
+- simpl. congruence.
 Qed.
 
 Lemma compile_eliminator_list'_nth_error : forall base n elims i elim,
@@ -1347,6 +1362,25 @@ Lemma var_max_succ : forall n e,
 intros0 Hvm. invc Hvm; constructor; lia.
 Qed.
 
+Lemma var_max_add : forall n m e,
+    var_max n e ->
+    var_max (n + m) e.
+induction m; intros0 Hvm.
+- replace (n + 0) with n by lia. assumption.
+- replace (n + S m) with (S (n + m)) by lia.
+  eapply var_max_succ.
+  eapply IHm. assumption.
+Qed.
+
+Lemma var_max_ge : forall n m e,
+    n >= m ->
+    var_max m e ->
+    var_max n e.
+intros0 Hge Hvm.
+replace n with (m + (n - m)) by lia.
+eapply var_max_add. assumption.
+Qed.
+
 Lemma upvar_list'_var_max : forall m acc n,
     n < m ->
     Forall (var_max m) acc ->
@@ -1392,6 +1426,74 @@ intros0 Hval HH. destruct HH as [ (Hfree & Hn & Hlen) | (Hfree & Hlen) ].
   + assumption.
 Qed.
 
+Lemma rec_free'_var_max : forall m acc n,
+    n < m ->
+    Forall (var_max m) acc ->
+    Forall (var_max m) (rec_free' acc n).
+first_induction n; intros0 Hlt Hacc.
+- simpl. assumption.
+- simpl. eapply IHn.
+  + lia.
+  + constructor; eauto. constructor. assumption.
+Qed.
+
+Lemma rec_free_var_max : forall n,
+    Forall (var_max (S n)) (rec_free n).
+intros. eapply rec_free'_var_max.
+- lia.
+- constructor.
+Qed.
+
+Lemma rec_free'_length : forall acc n,
+    length (rec_free' acc n) = length acc + n.
+first_induction n; intros; simpl.
+- lia.
+- rewrite IHn. simpl. lia.
+Qed.
+
+Lemma rec_free_length : forall n,
+    length (rec_free n) = n.
+intros. eapply rec_free'_length.
+Qed.
+
+Lemma E_elimbody_close_eval : forall E fname n cases target l k,
+    length l > n ->
+    Forall E.value l ->
+    exists free',
+        E.sstar E (E.Run (E.ElimBody (E.Close fname (rec_free n)) cases target) l k)
+                  (E.Run (E.ElimBody (E.Close fname free') cases target) l k) /\
+        Forall E.value free' /\
+        length free' = n.
+intros0 Hl Hlval.
+destruct (eq_nat_dec n 0) as [Hn | Hn].
+  { subst n. exists []. unfold rec_free. simpl. eauto using E.SStarNil. }
+assert (Hn' : n > 0) by lia. clear Hn.
+
+remember (rec_free n) as free.
+assert (Forall (var_max (S n)) free) by (subst free; eapply rec_free_var_max).
+assert (length free > 0) by (subst free; rewrite rec_free_length; auto).
+
+E_start HS.
+E_step HS.
+  { eapply E.SElimStepRec. inversion 1.
+    cut (Forall (fun _ => False) free).
+      { destruct free; simpl in *; try solve [exfalso; lia].
+        inversion 1. assumption. }
+    list_magic_on (free, tt). eapply var_max_not_value; eauto.
+  }
+fwd eapply E_close_eval with (free := free) as HH; eauto.
+  { list_magic_on (free, tt). eapply var_max_ge; try eassumption. }
+  destruct HH as (free' & Hfree' & Hval' & Hlen').
+E_star HS.
+  { unfold S1. eapply Hfree'. }
+clear Hfree'.
+E_step HS.
+  { eapply E.SCloseDone. assumption. }
+
+eapply E_splus_sstar in HS.
+rewrite <- rec_free_length with (n := n). rewrite <- Heqfree.
+eauto.
+Qed.
 
 (* TODO - use E_close_eval instead of whatever's in there right now *)
 Theorem I_sim : forall TE EE ELIMS t t' e,
@@ -1497,6 +1599,10 @@ simpl in *; refold_compile (length TE).
     reflexivity.
 
 - E_start HS.
+
+  (* we start at the E.Call *)
+
+  (* eval closure *)
   fwd eapply E_call_close_eval_either with (n := length efree) as HH.
     { invc Hwf. eassumption. }
     { on (_ \/ _), fun H => destruct H; [ left | right ].
@@ -1512,6 +1618,8 @@ simpl in *; refold_compile (length TE).
   E_star HS.
     { unfold S1. eapply Hefree'. }
   clear Hefree'.
+
+  (* make the call *)
   on (I_expr _ _ _ etarget), invc.
   E_step HS.
     { eapply E.SMakeCall.
@@ -1519,12 +1627,49 @@ simpl in *; refold_compile (length TE).
       - constructor. list_magic_on (args, (eargs, tt)). eauto using I_expr_value.
       - eassumption. }
 
-      (*
+  (* now we are at the E.ElimBody *)
+
+  (* eval rec *)
+  set (v := E.Constr tag eargs).
+  fwd eapply E_elimbody_close_eval with (n := length efree) (l := v :: efree') as HH.
+    { simpl. lia. }
+    { constructor; eauto. constructor.
+      list_magic_on (args, (eargs, tt)). eauto using I_expr_value. }
+    destruct HH as (efree'' & Hefree'' & Hval'' & Hlen'').
+  E_star HS.
+    { unfold S2. eapply Hefree''. }
+  clear Hefree''.
+
+  (* eval target *)
   E_step HS.
-    { 
-  
-    *)
-  admit.
+    { eapply E.SElimStepTarget.
+      - constructor. assumption.
+      - inversion 1. }
+  E_step HS.
+    { eapply E.SArg.
+      - simpl. reflexivity. }
+
+  (* enter the case *)
+  remember (shift_list_pair _) as ecases.
+  assert (length ecases = length cases). {
+    subst ecases. rewrite shift_list_pair_length, compile_list_pair_length. reflexivity.
+  }
+  fwd eapply length_nth_error_Some with (xs := cases) (ys := ecases); eauto.
+    destruct ** as [[ecase erec] ?].
+  assert (exists ee',
+      E.unroll_elim (E.Close (length TE + n) efree'') ecase eargs erec = Some ee')
+          by admit. (* length eargs = length erec, plus a lemma *)
+    destruct ** as [ee' ?].
+  E_step HS.
+    { eapply E.SEliminate.
+      - constructor. assumption.
+      - list_magic_on (args, (eargs, tt)). eauto using I_expr_value.
+      - eassumption.
+      - eassumption.
+    }
+
+  eexists. split. eapply HS. unfold S6.
+  admit. (* need to change definition of match_states... *)
 
 - destruct (Forall2_app_inv_l _ _ **) as (? & ? & ? & ? & ?).
   on (Forall2 _ (_ :: _) _), invc.
