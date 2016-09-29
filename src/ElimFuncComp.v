@@ -953,16 +953,6 @@ Ltac E_step_ex HS P :=
     end.
 
 
-Definition upvar_tail i es :=
-    Forall E.value (firstn i es) /\
-    skipn i es = skipn i (upvar_list (length es)).
-
-Definition E_state_expr s :=
-    match s with
-    | E.Run e _ _ => e
-    | E.Stop e => e
-    end.
-
 
 Lemma upvar_list'_num_locals : forall acc n,
     E.num_locals_list (upvar_list' acc n) = max (E.num_locals_list acc) (S n).
@@ -1053,18 +1043,6 @@ induction es; intros0 Hval.
 - invc Hval. simpl. rewrite E.value_num_locals by auto. eauto.
 Qed.
 
-Lemma upvar_tail_num_locals : forall i es,
-    i < length es ->
-    upvar_tail i es ->
-    E.num_locals_list es = length es.
-intros0 Hlt Htail; unfold upvar_tail in Htail; destruct ** as [Hval Hskip].
-rewrite <- firstn_skipn with (n := i) (l := es) at 1.
-rewrite E_num_locals_list_app.
-rewrite E_num_locals_list_values by auto.
-rewrite Hskip. rewrite upvar_list_skipn_num_locals by auto.
-lia.
-Qed.
-
 Lemma nth_error_length_le : forall A (xs : list A) n,
     (forall i, i >= n -> nth_error xs i = None) ->
     length xs <= n.
@@ -1131,12 +1109,46 @@ first_induction m; intros.
   + eapply IHm.
 Qed.
 
-Lemma upvar_tail_next : forall i es v,
+Inductive var_max (n : nat) : E.expr -> Prop :=
+| VmArg : 0 < n -> var_max n E.Arg
+| VmUpVar : forall i, S i < n -> var_max n (E.UpVar i).
+
+Definition vals_and_vars i n es :=
+    Forall E.value (firstn i es) /\
+    Forall (var_max n) (skipn i es).
+
+Lemma var_max_num_locals : forall n e,
+    var_max n e ->
+    E.num_locals e <= n.
+destruct e; inversion 1; simpl; lia.
+Qed.
+
+Lemma E_num_locals_var_max : forall n es,
+    Forall (var_max n) es ->
+    E.num_locals_list es <= n.
+intros0 Hvm.
+rewrite E.num_locals_list_is_maximum.
+rewrite maximum_le_Forall. rewrite <- Forall_map.
+list_magic_on (es, tt).
+on (var_max _ _), invc; simpl; lia.
+Qed.
+
+Lemma vals_and_vars_num_locals : forall i n es,
+    vals_and_vars i n es ->
+    E.num_locals_list es <= n.
+unfold vals_and_vars. intros0 Hvv. destruct Hvv as [Hvals Hvars].
+rewrite <- firstn_skipn with (n := i) (l := es).
+rewrite E_num_locals_list_app.
+rewrite E_num_locals_list_values by auto.
+simpl. eapply E_num_locals_var_max. assumption.
+Qed.
+
+Lemma vals_and_vars_next : forall i n es v,
     i < length es ->
-    upvar_tail i es ->
+    vals_and_vars i n es ->
     E.value v ->
-    upvar_tail (S i) (firstn i es ++ [v] ++ skipn (S i) es).
-intros0 Hlt Htail Hval.
+    vals_and_vars (S i) n (firstn i es ++ [v] ++ skipn (S i) es).
+intros0 Hlt Hvv Hval. destruct Hvv as [Hvals Hvars].
 
 assert (S i = length (firstn i es ++ [v])). {
   rewrite app_length. simpl.
@@ -1151,7 +1163,6 @@ assert (Hlen : length es = length (firstn i es ++ [v] ++ skipn (S i) es)). {
   lia.
 }
 
-unfold upvar_tail in *. break_and.
 split.
 
 - rewrite app_assoc. rewrite firstn_app by lia. rewrite firstn_all by lia.
@@ -1159,22 +1170,44 @@ split.
 
 - rewrite app_assoc. rewrite skipn_app by lia.
   replace (S i - _) with 0 by lia.
-  rewrite <- app_assoc, <- Hlen.
   unfold skipn at 1. replace (S i) with (1 + i) by lia.
-  do 2 rewrite <- skipn_add. congruence.
+  rewrite <- skipn_add.
+  remember (skipn i es) as es'. on (Forall _ es'), invc; simpl; eauto.
+Qed.
+
+Lemma var_max_not_value : forall n e,
+    var_max n e ->
+    ~ E.value e.
+destruct e; inversion 1; inversion 1.
+Qed.
+
+Lemma var_max_step : forall E e l k,
+    var_max (length l) e ->
+    exists i v,
+        nth_error l i = Some v /\
+        E.sstep E (E.Run e l k) (k v).
+intros0 Hvm.
+invc Hvm;
+rewrite <- nth_error_Some in *;
+destruct (nth_error _ _) eqn:?; try congruence.
+
+- eexists. eexists. split; [ eassumption | ].
+  eapply E.SArg. assumption.
+
+- eexists. eexists. split; [ eassumption | ].
+  eapply E.SUpVar. assumption.
 Qed.
 
 Lemma E_close_eval_one : forall E i fname free l k,
     i < length free ->
-    E.num_locals_list free <= length l ->
     Forall E.value l ->
-    upvar_tail i free ->
+    vals_and_vars i (length l) free ->
     exists free',
         E.sstar E (E.Run (E.Close fname free)  l k)
                   (E.Run (E.Close fname free') l k) /\
-        upvar_tail (S i) free' /\
+        vals_and_vars (S i) (length l) free' /\
         length free' = length free.
-intros0 Hlt Hl Hlval Htail.
+intros0 Hlt Hlval Hvv. destruct Hvv as [Hvals Hvars].
 
 destruct (nth_error free i) as [e |] eqn:He; cycle 1.
   { exfalso. rewrite <- nth_error_Some in Hlt. congruence. }
@@ -1190,11 +1223,11 @@ assert (Hfree : free = firstn i free ++ [e] ++ skipn (S i) free). {
     + symmetry. eapply skipn_more. eassumption.
 }
 
-assert (nth_error (upvar_list (length free)) i = Some e). {
-  destruct Htail as [_ Hskip].
-  replace i with (i + 0) in He |- * by lia.
-  rewrite <- skipn_nth_error in He |- *.
-  rewrite <- Hskip. assumption.
+assert (var_max (length l) e). {
+  eapply Forall_nth_error; eauto.
+  rewrite skipn_nth_error.
+  instantiate (1 := 0). replace (i + 0) with i by lia.
+  assumption.
 }
 
 rewrite Hfree.
@@ -1203,74 +1236,52 @@ E_start HS.
 
 E_step HS.
   { eapply E.SCloseStep.
-    - destruct Htail. assumption.
-    - eauto using upvar_list_nth_error_not_value.
+    - assumption.
+    - eauto using var_max_not_value.
   }
 
-assert (i < length l). {
-  fwd eapply upvar_tail_num_locals; eauto. lia.
-}
-
-assert (exists free',
-    E.sstep E S1 (E.Run (E.Close fname free') l k) /\
-    upvar_tail (S i) free' /\
-    length free' = length free). {
-  destruct i.
-
-  - rewrite upvar_list_nth_error_zero in * by assumption. inject_some.
-    destruct (nth_error l 0) as [v |] eqn:Hv; [ | exfalso; eapply nth_error_Some; eauto ].
-    match type of Hfree with _ = ?a ++ [_] ++ ?b => exists (a ++ [v] ++ b) end.
-    split; [|split].  remvar (E.Run _ l k) as s.  eapply E.SArg.
-    + eassumption.
-    + reflexivity.
-    + eapply upvar_tail_next; eauto. eapply Forall_nth_error; eassumption.
-    + rewrite Hfree at 3. repeat rewrite app_length. simpl. lia.
-
-  - rewrite upvar_list_nth_error_succ in * by assumption. inject_some.
-    destruct (nth_error l (S i)) as [v |] eqn:Hv; [ | exfalso; eapply nth_error_Some; eauto ].
-    match type of Hfree with _ = ?a ++ [_] ++ ?b => exists (a ++ [v] ++ b) end.
-    split; [|split].  remvar (E.Run _ l k) as s.  eapply E.SUpVar.
-    + eassumption.
-    + reflexivity.
-    + eapply upvar_tail_next; eauto. eapply Forall_nth_error; eassumption.
-    + rewrite Hfree at 3. repeat rewrite app_length. simpl. lia.
-}
-destruct ** as (free' & Hstep & Htail' & Hlen).
+fwd eapply var_max_step; eauto. destruct ** as (i' & v & Hnthv & Hstepv).
 E_step HS.
-  { exact Hstep. }
+  { eapply Hstepv. }
+clear Hstepv.
 
 eapply E_splus_sstar in HS.
-rewrite <- Hfree. eauto.
+eexists. split; [|split]. eapply HS.
+- eapply vals_and_vars_next.
+  + assumption.
+  + split; assumption.
+  + eapply Forall_nth_error with (xs := l); eauto.
+- repeat rewrite app_length. f_equal.
 Qed.
 
 Lemma E_close_eval' : forall E fname l k  j i free,
     i + j = length free ->
     i < length free ->
-    E.num_locals_list free <= length l ->
     Forall E.value l ->
-    upvar_tail i free ->
+    vals_and_vars i (length l) free ->
     exists free',
         E.sstar E (E.Run (E.Close fname free)  l k)
                   (E.Run (E.Close fname free') l k) /\
         Forall E.value free' /\
         length free' = length free.
-induction j; intros0 Hi Hlt Hl Hlval Htail.
+induction j; intros0 Hi Hlt Hlval Hvv.
 { lia. }
 
 (* Give explicit instantiations, otherwise lia breaks with "abstract cannot
    handle existentials" *)
 fwd eapply E_close_eval_one with (E := E) (fname := fname) (k := k); eauto.
-  destruct ** as (free' & Hstep' & Htail' & Hlen').
+  destruct ** as (free' & Hstep' & Hvv' & Hlen').
 
-destruct (eq_nat_dec (S i) (length free)).
+destruct (eq_nat_dec (S i) (length free)) as [Hlen | Hlen].
 { (* easy case: that was the last free variable, nothing more to eval *)
-  unfold upvar_tail in Htail'. rewrite firstn_all in Htail' by congruence.
-  break_and. eauto.
+  rewrite Hlen in Hvv'. destruct Hvv'.
+  rewrite firstn_all in * by congruence.
+  eauto.
 }
 
-fwd eapply upvar_tail_num_locals with (es := free); eauto.
-fwd eapply upvar_tail_num_locals with (es := free'); eauto. { lia. }
-specialize (IHj (S i) free' ltac:(lia) ltac:(lia) ltac:(lia) ** **).
+fwd eapply vals_and_vars_num_locals with (es := free); eauto.
+fwd eapply vals_and_vars_num_locals with (es := free'); eauto.
+specialize (IHj (S i) free' ltac:(lia) ltac:(lia) ** **).
 destruct IHj as (free'' & Hstep'' & Hval'' & Hlen'').
 
 exists free''. split; [|split].
@@ -1279,52 +1290,46 @@ exists free''. split; [|split].
 - congruence.
 Qed.
 
-Lemma E_close_eval : forall E fname n l k,
-    n > 0 ->
-    n <= length l ->
+Lemma E_close_eval : forall E fname free l k,
+    0 < length free ->
     Forall E.value l ->
+    Forall (var_max (length l)) free ->
     exists free',
-        E.sstar E (E.Run (E.Close fname (upvar_list n))  l k)
+        E.sstar E (E.Run (E.Close fname free)  l k)
                   (E.Run (E.Close fname free') l k) /\
         Forall E.value free' /\
-        length free' = n.
-intros0 Hn Hlen Hlval.
-fwd eapply E_close_eval' with (i := 0) (j := n) (free := upvar_list n).
-- rewrite upvar_list_length. lia.
-- rewrite upvar_list_length. lia.
-- rewrite upvar_list_num_locals. eassumption.
+        length free' = length free.
+intros0 Hlt Hlval Hvm.
+fwd eapply E_close_eval' with (i := 0) (j := length free) (free := free).
+- lia.
+- assumption.
 - eassumption.
-- unfold upvar_tail.
-  simpl. split; eauto.
-  rewrite upvar_list_length. reflexivity.
+- split. { constructor. }
+  assumption.
 - break_exists. break_and. break_and.
-  rewrite upvar_list_length in *.
   eauto.
 Qed.
 
-Lemma E_call_close_eval : forall E fname n l k arg,
-    n > 0 ->
-    n <= length l ->
+Lemma E_call_close_eval : forall E fname free l k arg,
+    0 < length free ->
     Forall E.value l ->
+    Forall (var_max (length l)) free ->
     exists free',
-        E.sstar E (E.Run (E.Call (E.Close fname (upvar_list n)) arg)  l k)
+        E.sstar E (E.Run (E.Call (E.Close fname free) arg)  l k)
                   (E.Run (E.Call (E.Close fname free') arg) l k) /\
         Forall E.value free' /\
-        length free' = n.
-intros0 Hn Hlen Hval.
+        length free' = length free.
+intros0 Hlt Hlval Hvm.
 
 E_start HS.
 E_step HS.
   { eapply E.SCallL. inversion 1. subst.
-    fwd eapply upvar_list_not_value with (n := n) as HH.
-    remember (upvar_list n) as free.
-    assert (length free > 0). { subst. rewrite upvar_list_length. assumption. }
     cut (Forall (fun _ => False) free).
       { destruct free; simpl in *; try solve [exfalso; lia].
         inversion 1. assumption. }
-    list_magic_on (free, tt).
+    list_magic_on (free, tt). eapply var_max_not_value; eauto.
   }
-fwd eapply E_close_eval with (n := n) as HH; eauto.
+fwd eapply E_close_eval with (free := free) as HH; eauto.
   destruct HH as (free' & Hfree' & Hval' & Hlen').
 E_star HS.
   { unfold S1. eapply Hfree'. }
@@ -1334,6 +1339,34 @@ E_step HS.
 
 eapply E_splus_sstar in HS.
 eauto.
+Qed.
+
+Lemma var_max_succ : forall n e,
+    var_max n e ->
+    var_max (S n) e.
+intros0 Hvm. invc Hvm; constructor; lia.
+Qed.
+
+Lemma upvar_list'_var_max : forall m acc n,
+    n < m ->
+    Forall (var_max m) acc ->
+    Forall (var_max m) (upvar_list' acc n).
+first_induction n; intros0 Hlt Hacc; simpl.
+- constructor; eauto. constructor. lia.
+- eapply IHn.
+  + lia.
+  + constructor; eauto. constructor. assumption.
+Qed.
+
+Lemma upvar_list_var_max : forall m n,
+    n <= m ->
+    Forall (var_max m) (upvar_list n).
+intros0 Hle.
+destruct n.
+  { simpl. constructor. }
+eapply upvar_list'_var_max.
+- lia.
+- constructor.
 Qed.
 
 Lemma E_call_close_eval_either : forall E fname free n l k arg,
@@ -1347,7 +1380,11 @@ Lemma E_call_close_eval_either : forall E fname free n l k arg,
         length free' = n.
 intros0 Hval HH. destruct HH as [ (Hfree & Hn & Hlen) | (Hfree & Hlen) ].
 
-- rewrite Hfree. eapply E_call_close_eval; eauto.
+- assert (Hlen' : length free = n) by (subst free; eapply upvar_list_length).
+  rewrite <- Hlen'. eapply E_call_close_eval.
+  + lia.
+  + assumption.
+  + subst free. eapply upvar_list_var_max. assumption.
 
 - exists free. split; [|split].
   + eapply E.SStarNil.
@@ -1459,7 +1496,35 @@ simpl in *; refold_compile (length TE).
     rewrite Hlen'.
     reflexivity.
 
-- admit.
+- E_start HS.
+  fwd eapply E_call_close_eval_either with (n := length efree) as HH.
+    { invc Hwf. eassumption. }
+    { on (_ \/ _), fun H => destruct H; [ left | right ].
+      - break_and. split; [|split].
+        + eassumption.
+        + assumption.
+        + admit. (* tricky - depends on state_wf and compilation counting evars *)
+      - split.
+        + assumption.
+        + reflexivity.
+    }
+    destruct HH as (efree' & Hefree' & Hval' & Hlen').
+  E_star HS.
+    { unfold S1. eapply Hefree'. }
+  clear Hefree'.
+  on (I_expr _ _ _ etarget), invc.
+  E_step HS.
+    { eapply E.SMakeCall.
+      - eassumption.
+      - constructor. list_magic_on (args, (eargs, tt)). eauto using I_expr_value.
+      - eassumption. }
+
+      (*
+  E_step HS.
+    { 
+  
+    *)
+  admit.
 
 - destruct (Forall2_app_inv_l _ _ **) as (? & ? & ? & ? & ?).
   on (Forall2 _ (_ :: _) _), invc.
