@@ -1,6 +1,7 @@
 (* Boring stuff, including but not limited to list lemmas *)
 Require Import Arith List Omega StructTact.StructTactics StuartTact.
 Import ListNotations.
+Require Import Psatz.
 
 Require Import Monads.
 
@@ -74,6 +75,13 @@ Qed.
 Lemma maximum_le_Forall : forall ns m,
     maximum ns <= m <-> Forall (fun n => n <= m) ns.
 intros; split; eauto using maximum_le_Forall_fwd, maximum_le_Forall_rev.
+Qed.
+
+Lemma maximum_app : forall xs ys,
+    maximum (xs ++ ys) = max (maximum xs) (maximum ys).
+induction xs; destruct ys; simpl; try reflexivity.
+- rewrite app_nil_r. lia.
+- rewrite IHxs. simpl. lia.
 Qed.
 
 
