@@ -924,7 +924,7 @@ Ltac E_plus HS :=
         [ solver; unfold S2
         | clear HS' ] in
     match type of HS with
-    | E.sstar ?E ?s0 ?s1 => go E s0 s1 E.sstar
+    | E.sstar ?E ?s0 ?s1 => go E s0 s1 E.splus
             ltac:(eapply E_sstar_then_splus with (1 := HS'))
     | E.splus ?E ?s0 ?s1 => go E s0 s1 E.splus
             ltac:(eapply E_splus_then_splus with (1 := HS'))
@@ -1302,6 +1302,60 @@ fwd eapply E_close_eval' with (i := 0) (j := n) (free := upvar_list n).
   eauto.
 Qed.
 
+Lemma E_call_close_eval : forall E fname n l k arg,
+    n > 0 ->
+    n <= length l ->
+    Forall E.value l ->
+    exists free',
+        E.sstar E (E.Run (E.Call (E.Close fname (upvar_list n)) arg)  l k)
+                  (E.Run (E.Call (E.Close fname free') arg) l k) /\
+        Forall E.value free' /\
+        length free' = n.
+intros0 Hn Hlen Hval.
+
+E_start HS.
+E_step HS.
+  { eapply E.SCallL. inversion 1. subst.
+    fwd eapply upvar_list_not_value with (n := n) as HH.
+    remember (upvar_list n) as free.
+    assert (length free > 0). { subst. rewrite upvar_list_length. assumption. }
+    cut (Forall (fun _ => False) free).
+      { destruct free; simpl in *; try solve [exfalso; lia].
+        inversion 1. assumption. }
+    list_magic_on (free, tt).
+  }
+fwd eapply E_close_eval with (n := n) as HH; eauto.
+  destruct HH as (free' & Hfree' & Hval' & Hlen').
+E_star HS.
+  { unfold S1. eapply Hfree'. }
+clear Hfree'.
+E_step HS.
+  { eapply E.SCloseDone. assumption. }
+
+eapply E_splus_sstar in HS.
+eauto.
+Qed.
+
+Lemma E_call_close_eval_either : forall E fname free n l k arg,
+    Forall E.value l ->
+    (free = upvar_list n /\ n > 0 /\ n <= length l) \/
+        (Forall E.value free /\ length free = n) ->
+    exists free',
+        E.sstar E (E.Run (E.Call (E.Close fname free) arg)  l k)
+                  (E.Run (E.Call (E.Close fname free') arg) l k) /\
+        Forall E.value free' /\
+        length free' = n.
+intros0 Hval HH. destruct HH as [ (Hfree & Hn & Hlen) | (Hfree & Hlen) ].
+
+- rewrite Hfree. eapply E_call_close_eval; eauto.
+
+- exists free. split; [|split].
+  + eapply E.SStarNil.
+  + assumption.
+  + assumption.
+Qed.
+
+
 (* TODO - use E_close_eval instead of whatever's in there right now *)
 Theorem I_sim : forall TE EE ELIMS t t' e,
     env_ok TE EE ELIMS ->
@@ -1375,55 +1429,35 @@ simpl in *; refold_compile (length TE).
   + list_magic_on (args, (eargs, tt)). eauto using I_expr_value.
   + eauto using IConstr, I_expr_value.
 
-- on (_ \/ _), fun H => destruct H.
+- E_start HS.
+  fwd eapply E_call_close_eval_either with (n := length efree) as HH.
+    { invc Hwf. eassumption. }
+    { on (_ \/ _), fun H => destruct H; [ left | right ].
+      - break_and. split; [|split].
+        + eassumption.
+        + assumption.
+        + admit. (* tricky - depends on state_wf and compilation counting evars *)
+      - split.
+        + assumption.
+        + reflexivity.
+    }
+    destruct HH as (efree' & Hefree' & Hval' & Hlen').
+  E_star HS.
+    { unfold S1. eapply Hefree'. }
+  clear Hefree'.
+  E_step HS.
+    { eapply E.SCallR.
+      - constructor. assumption.
+      - eapply I_expr_not_value; eauto. }
 
-  + on (_ /\ _), fun H => destruct H as [Hefree Hlen].
-
-    E_start HS.
-    E_step HS.
-      { eapply E.SCallL. inversion 1.
-        fwd eapply upvar_list_not_value as HH. rewrite <- Hefree in HH.
-        cut (Forall (fun _ => False) efree).
-          { destruct efree; simpl in Hlen; try solve [exfalso; lia].
-            inversion 1. assumption. }
-        list_magic_on (efree, tt).
-      }
-    fwd eapply E_close_eval with (n := length efree) as HH.
-      { assumption. }
-      { admit. (* tricky - depends on state_wf and compilation counting evars *) }
-      { invc Hwf. eassumption. }
-      destruct HH as (efree' & Hefree' & Hval' & Hlen').
-    E_star HS.
-      { unfold S1. rewrite Hefree. eapply Hefree'. }
-    clear Hefree'.
-    E_step HS.
-      { eapply E.SCloseDone. assumption. }
-    E_step HS.
-      { eapply E.SCallR.
-        - constructor. assumption.
-        - eapply I_expr_not_value; eauto. }
-
-    eexists. split.
-    * eassumption.
-    * constructor; eauto.
-      intros0 IE'.
-      constructor; eauto.
-      econstructor; eauto.
-      rewrite Hlen'.
-      reflexivity.
-
-  + E_start HS.
-    E_step HS.
-      { eapply E.SCallR.
-        - constructor. assumption.
-        - eapply I_expr_not_value; eauto. }
-
-    eexists. split.
-    * eassumption.
-    * constructor; eauto.
-      intros0 IE'.
-      constructor; eauto.
-      econstructor; eauto.
+  eexists. split.
+  + eassumption.
+  + constructor; eauto.
+    intros0 IE'.
+    constructor; eauto.
+    econstructor; eauto.
+    rewrite Hlen'.
+    reflexivity.
 
 - admit.
 
