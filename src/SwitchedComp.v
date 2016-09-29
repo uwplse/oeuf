@@ -31,7 +31,7 @@ Definition compile (e : E.expr) : S.expr :=
         | E.UpVar n => S.UpVar n
         | E.Call f a => S.Call (go f) (go a)
         | E.Constr tag args => S.Constr tag (go_list args)
-        | E.ElimBody rec cases target =>
+        | E.ElimBody rec cases =>
                 let rec' := go rec in
                 let fix go_cases cases :=
                     match cases with

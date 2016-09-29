@@ -18,7 +18,7 @@ Inductive expr :=
 | UpVar : nat -> expr
 | Call : expr -> expr -> expr
 | Constr (tag : nat) (args : list expr)
-| ElimBody (rec : expr) (cases : list (expr * rec_info)) (target : expr)
+| ElimBody (rec : expr) (cases : list (expr * rec_info))
 | Close (f : function_name) (free : list expr)
 .
 
@@ -53,7 +53,7 @@ Definition subst (arg : expr) (vals : list expr) (e : expr) : option expr :=
         | UpVar n => nth_error vals n
         | Call f a => Call <$> go f <*> go a
         | Constr c es => Constr c <$> go_list es
-        | ElimBody rec cases target => ElimBody <$> go rec <*> go_list_pair cases <*> go target
+        | ElimBody rec cases => ElimBody <$> go rec <*> go_list_pair cases
         | Close f free => Close f <$> go_list free
         end in
     go e.
@@ -74,6 +74,7 @@ Fixpoint unroll_elim (rec : expr)
     | _, _ => None
     end.
 
+(* TODO remove this whole thing *)
 Inductive step (E : env) : expr -> expr -> Prop :=
 | MakeCall : forall f a free e e',
     value a ->
@@ -92,6 +93,7 @@ Inductive step (E : env) : expr -> expr -> Prop :=
     step E e e' ->
     Forall value vs ->
     step E (Constr tag (vs ++ [e] ++ es)) (Constr tag (vs ++ [e'] ++ es))
+    (*
 | ElimStepRec : forall rec rec' info target,
         step E rec rec' ->
         step E (ElimBody rec info target) (ElimBody rec' info target)
@@ -105,6 +107,7 @@ Inductive step (E : env) : expr -> expr -> Prop :=
     nth_error cases tag = Some (case, info) ->
     unroll_elim rec case args info = Some e' ->
     step E (ElimBody rec cases (Constr tag args)) e'
+    *)
 | CloseStep : forall f vs e e' es,
     step E e e' ->
     Forall value vs ->
@@ -142,7 +145,6 @@ Definition add_env : list expr :=
         (Close nat_elim [UpVar 0; UpVar 1])
         [(Close elim_zero_lam_b [UpVar 0; UpVar 1], []);
          (Close elim_succ_lam_a [UpVar 0; UpVar 1], [true])]
-        Arg
     ].
 
 (* Note on compilation of Elim:
@@ -151,8 +153,9 @@ Definition add_env : list expr :=
      [Arg; UpVar0; UpVar1; ...] up to the number of used upvars.
    - The `rec` argument should refer to the newly generated function, with
      upvars set to [UpVar0; UpVar1; ...] up to the number of used upvars.
-   - The target should always be Arg.  This can't be made implicit because it
-     must be available for substitution.
+   - The target is always (implicitly) Arg.  Also, upon entering a case, Arg is
+     *removed* from the local context, and everything is shifted down.  Later
+     we will no-op "compile" to another semantics that doesn't do that.
  *)
 
 Definition add_prog := (add_reflect, add_env).
@@ -170,6 +173,7 @@ Fixpoint nat_reflect n : expr :=
     | S n => Constr 1 [nat_reflect n]
     end.
 
+(*
 Theorem add_1_2 : { x | star add_env
         (Call (Call add_reflect (nat_reflect 1)) (nat_reflect 2)) x }.
 eexists.
@@ -187,6 +191,7 @@ eright. eapply MakeCall; try solve [repeat econstructor].
 eright. eapply MakeCall; try solve [repeat econstructor].
 eleft.
 Defined.
+*)
 (* Eval compute in proj1_sig add_1_2. *)
 
 
@@ -204,8 +209,7 @@ Definition expr_rect_mut
     (HUpVar :   forall n, P (UpVar n))
     (HCall :    forall f a, P f -> P a -> P (Call f a))
     (HConstr :  forall tag args, Pl args -> P (Constr tag args))
-    (HElimBody : forall rec cases target,
-        P rec -> Plp cases -> P target -> P (ElimBody rec cases target))
+    (HElimBody : forall rec cases, P rec -> Plp cases -> P (ElimBody rec cases))
     (HClose :   forall f free, Pl free -> P (Close f free))
     (Hnil :     Pl [])
     (Hcons :    forall e es, P e -> Pl es -> Pl (e :: es))
@@ -232,8 +236,7 @@ Definition expr_rect_mut
         | UpVar n => HUpVar n
         | Call f a => HCall f a (go f) (go a)
         | Constr tag args => HConstr tag args (go_list args)
-        | ElimBody rec cases target =>
-                HElimBody rec cases target (go rec) (go_pair_list cases) (go target)
+        | ElimBody rec cases => HElimBody rec cases (go rec) (go_pair_list cases)
         | Close f free => HClose f free (go_list free)
         end in go e.
 
@@ -243,8 +246,8 @@ Definition expr_ind' (P : expr -> Prop) (Pp : (expr * rec_info) -> Prop)
     (HUpVar :   forall n, P (UpVar n))
     (HCall :    forall f a, P f -> P a -> P (Call f a))
     (HConstr :  forall c args, Forall P args -> P (Constr c args))
-    (HElimBody : forall rec cases target,
-        P rec -> Forall Pp cases -> P target -> P (ElimBody rec cases target))
+    (HElimBody : forall rec cases,
+        P rec -> Forall Pp cases -> P (ElimBody rec cases))
     (HClose :   forall f free, Forall P free -> P (Close f free))
     (Hpair :    forall e r, P e -> Pp (e, r))
     (e : expr) : P e :=
@@ -257,11 +260,10 @@ Definition expr_ind'' (P : expr -> Prop)
     (HUpVar :   forall n, P (UpVar n))
     (HCall :    forall f a, P f -> P a -> P (Call f a))
     (HConstr :  forall c args, Forall P args -> P (Constr c args))
-    (HElimBody : forall rec cases target,
+    (HElimBody : forall rec cases,
         P rec ->
         Forall (fun c => P (fst c)) cases ->
-        P target ->
-        P (ElimBody rec cases target))
+        P (ElimBody rec cases))
     (HClose :   forall f free, Forall P free -> P (Close f free))
     (e : expr) : P e :=
     ltac:(refine (@expr_rect_mut P (Forall P) (fun c => P (fst c)) (Forall (fun c => P (fst c)))
@@ -327,7 +329,7 @@ Definition num_upvars :=
         | UpVar i => S i
         | Call f a => max (go f) (go a)
         | Constr _ args => go_list args
-        | ElimBody rec cases target => max (go rec) (max (go_list_pair cases) (go target))
+        | ElimBody rec cases => max (go rec) (go_list_pair cases)
         | Close _ free => go_list free
         end in go.
 
@@ -383,7 +385,7 @@ Definition num_locals :=
         | UpVar i => S (S i)
         | Call f a => max (go f) (go a)
         | Constr _ args => go_list args
-        | ElimBody rec cases target => max (go rec) (max (go_list_pair cases) (go target))
+        | ElimBody rec cases => max (go rec) (go_list_pair cases)
         | Close _ free => go_list free
         end in go.
 
@@ -439,7 +441,7 @@ Definition renumber (f : function_name -> function_name) : expr -> expr :=
         | UpVar i => UpVar i
         | Call f a => Call (go f) (go a)
         | Constr tag args => Constr tag (go_list args)
-        | ElimBody rec cases target => ElimBody (go rec) (go_list_pair cases) (go target)
+        | ElimBody rec cases => ElimBody (go rec) (go_list_pair cases)
         | Close fname free => Close (f fname) (go_list free)
         end in go.
 
@@ -496,7 +498,7 @@ Definition wf E : expr -> Prop :=
         | UpVar _ => True
         | Call f a => go f /\ go a
         | Constr _ args => go_list args
-        | ElimBody rec cases target => go rec /\ go_list_pair cases /\ go target
+        | ElimBody rec cases => go rec /\ go_list_pair cases
         | Close fname free =>
                 (exists body,
                     nth_error E fname = Some body /\
@@ -544,9 +546,8 @@ induction e using expr_rect_mut with
   left. constructor; assumption.
 - destruct IHe; [ | right; assumption ].
   left. assumption.
-- destruct IHe1; [ | right; inversion 1; contradiction ].
-  destruct IHe2; [ | right; inversion 1; break_and; contradiction ].
-  destruct IHe3; [ | right; inversion 1; break_and; contradiction ].
+- destruct IHe; [ | right; inversion 1; contradiction ].
+  destruct IHe0; [ | right; inversion 1; contradiction ].
   left. simpl; refold_wf E. auto.
 - destruct IHe; [ | right; inversion 1; contradiction ].
   destruct (nth_error E f) as [ body | ] eqn:Hf;
@@ -583,11 +584,10 @@ Qed.
 Inductive closed : expr -> Prop :=
 | CCall : forall f a, closed f -> closed a -> closed (Call f a)
 | CConstr : forall tag args, Forall closed args -> closed (Constr tag args)
-| CElimBody : forall rec cases target,
+| CElimBody : forall rec cases,
         closed rec ->
         Forall (fun p => closed (fst p)) cases ->
-        closed target ->
-        closed (ElimBody rec cases target)
+        closed (ElimBody rec cases)
 | CClose : forall fname free, Forall closed free -> closed (Close fname free)
 .
 
@@ -650,6 +650,7 @@ first_induction args; destruct info; simpl; intros0 Hrec Hcase Hargs Helim; try 
   + constructor; eauto.
 Qed.
 
+(*
 Lemma closed_step : forall E e e',
     closed e ->
     step E e e' ->
@@ -673,6 +674,7 @@ induction e using expr_ind''; intros0 Hcl Hstep; invc Hcl; invc Hstep.
   on _, invc_using Forall_3part_inv.
   constructor. eapply Forall_app; [ | constructor ]; eauto.
 Qed.
+*)
 
 
 
@@ -723,21 +725,20 @@ Inductive sstep (E : env) : state -> state -> Prop :=
         sstep E (Run (Call (Close fname free) arg) l k)
                 (Run body (arg :: free) k)
 
-| SElimStepRec : forall rec cases target l k,
+| SElimStepRec : forall rec cases l k,
         ~ value rec ->
-        sstep E (Run (ElimBody rec cases target) l k)
-                (Run rec l (fun v => Run (ElimBody v cases target) l k))
-| SElimStepTarget : forall rec cases target l k,
-        value rec ->
-        ~ value target ->
-        sstep E (Run (ElimBody rec cases target) l k)
-                (Run target l (fun v => Run (ElimBody rec cases v) l k))
+        sstep E (Run (ElimBody rec cases) l k)
+                (Run rec l (fun v => Run (ElimBody v cases) l k))
 | SEliminate : forall rec cases tag args l k case info e',
         value rec ->
         Forall value args ->
         nth_error cases tag = Some (case, info) ->
         unroll_elim rec case args info = Some e' ->
-        sstep E (Run (ElimBody rec cases (Constr tag args)) l k)
+        (* XXX this step *removes* the scrutinee from the local context!
+           This is super janky but it makes the incoming match_states much
+           easier, because it means the contexts match exactly after entering
+           the actual case. *)
+        sstep E (Run (ElimBody rec cases) (Constr tag args :: l) k)
                 (Run e' l k)
 .
 
@@ -784,11 +785,11 @@ induction e using expr_ind''; intros0 Hcls; invc Hcls; simpl; refold_num_locals.
     simpl. rewrite (IHargs ** **). on (_ -> _ = _), fun H => rewrite H by eauto.
     reflexivity.
 
-- rewrite (IHe1 **), (IHe2 **).
+- rewrite (IHe **).
   generalize dependent cases. induction cases; intros.
   + simpl. reflexivity.
   + do 2 on (Forall _ (_ :: _)), invc.
-    simpl. destruct a. simpl in *. rewrite (H4 **).
+    simpl. destruct a. simpl in *. rewrite (H3 **).
     simpl. eapply (IHcases ** **).
 
 - generalize dependent free. induction free; intros.
@@ -912,13 +913,6 @@ intros0 Henv; induction 1; intros Hwf; invc Hwf.
   + lia.
   + intros. constructor; firstorder eauto.
     simpl. refold_num_locals. rewrite value_num_locals by eassumption. lia.
-
-- simpl in *; refold_wf E; refold_num_locals.
-  do 2 break_and.
-  constructor; eauto.
-  + lia.
-  + intros. constructor; firstorder eauto.
-    simpl. refold_num_locals. do 2 rewrite value_num_locals by eassumption. lia.
 
 - admit. (* needs facts about unroll_elim *)
 Admitted.

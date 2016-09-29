@@ -94,7 +94,7 @@ Definition shift : E.expr -> E.expr :=
         | E.UpVar n => E.UpVar (S n)
         | E.Call f a => E.Call (go f) (go a)
         | E.Constr tag args => E.Constr tag (go_list args)
-        | E.ElimBody rec cases target => E.ElimBody (go rec) (go_list_pair cases) (go target)
+        | E.ElimBody rec cases => E.ElimBody (go rec) (go_list_pair cases)
         | E.Close fname free => E.Close fname (go_list free)
         end in go.
 
@@ -122,9 +122,8 @@ Definition shift_list_pair :=
 Definition compile_eliminator base n cases :=
     let num_upvars := S (T.num_upvars_list_pair cases) in
     let cases' := compile_list_pair base cases in
-    let cases'' := shift_list_pair cases' in
     let rec := E.Close (base + n) (rec_free num_upvars) in
-    E.ElimBody rec cases'' E.Arg.
+    E.ElimBody rec cases'.
 
 Fixpoint compile_eliminator_list' base n elims :=
     match elims with
@@ -153,93 +152,6 @@ Definition compile_cu (cu :
 
 
 
-Section test.
-
-Open Scope state_monad.
-
-Require Tagged TaggedNumberedComp.
-Definition numbered :=
-    (@pair _ _ <$> TaggedNumberedComp.compile Tagged.add_reflect
-               <*> TaggedNumberedComp.compile_list Tagged.add_env) [].
-
-Definition elimfunc :=
-    let '(main, env, elims) := numbered in
-    (compile (length env) main, compile_env elims env).
-
-(* Eval compute in elimfunc. *)
-
-Lemma elimfunc_ok : elimfunc = (E.add_reflect, E.add_env).
-reflexivity.
-Qed.
-
-Theorem T_add_2_3 : { x | T.star T.add_env
-        (T.Call (T.Call T.add_reflect (T.nat_reflect 2)) (T.nat_reflect 3)) x }.
-eexists.
-
-unfold T.add_reflect.
-eright. eapply T.CallL, T.MakeCall; try solve [repeat econstructor].
-
-eright. eapply T.MakeCall; try solve [repeat econstructor].
-eright. eapply T.CallL, T.Eliminate; try solve [repeat econstructor]. cbv beta.
-(*
-          (T.ElimN  0
-                [(T.Close  T.elim_zero_lam_b  [T.nat_reflect  3;  T.nat_reflect  2],  []);
-                (T.Close  T.elim_succ_lam_a  [T.nat_reflect  3;  T.nat_reflect  2],
-                [true])]  (T.nat_reflect  2))  (T.nat_reflect  3))  
-                *)
-
-eright. eapply T.CallL, T.CallL, T.MakeCall; try solve [repeat econstructor].
-eright. eapply T.CallL, T.CallR, T.Eliminate; try solve [repeat econstructor]. cbv beta.
-
-eright. eapply T.CallL, T.CallR, T.CallL, T.MakeCall; try solve [repeat econstructor].
-eright. eapply T.CallL, T.CallR, T.CallR, T.Eliminate; try solve [repeat econstructor]. cbv beta.
-
-eright. eapply T.CallL, T.CallR, T.MakeCall; try solve [repeat econstructor].
-eright. eapply T.CallL, T.MakeCall; try solve [repeat econstructor].
-eright. eapply T.MakeCall; try solve [repeat econstructor].
-eright. eapply T.MakeCall; try solve [repeat econstructor].
-eright. eapply T.MakeCall; try solve [repeat econstructor].
-eleft.
-Defined.
-(* Eval compute in proj1_sig T_add_2_3. *)
-
-Theorem E_add_2_3 : { x | E.star E.add_env
-        (E.Call (E.Call E.add_reflect (E.nat_reflect 2)) (E.nat_reflect 3)) x }.
-eexists.
-
-unfold E.add_reflect.
-eright. eapply E.CallL, E.MakeCall; try solve [repeat econstructor].
-
-eright. eapply E.MakeCall; try solve [repeat econstructor].
-eright. eapply E.CallL, E.MakeCall; try solve [repeat econstructor].
-eright. eapply E.CallL, E.Eliminate; try solve [repeat econstructor].
-(*
-          (E.ElimBody  (E.Close  E.nat_elim  [E.nat_reflect  3;  E.nat_reflect  2])
-                [(E.Close  E.elim_zero_lam_b  [E.nat_reflect  3;  E.nat_reflect  2],  []);
-                (E.Close  E.elim_succ_lam_a  [E.nat_reflect  3;  E.nat_reflect  2],
-                [true])]  (E.nat_reflect  2))  (E.nat_reflect  3))  
-                *)
-
-eright. eapply E.CallL, E.CallL, E.MakeCall; try solve [repeat econstructor].
-eright. eapply E.CallL, E.CallR, E.MakeCall; try solve [repeat econstructor].
-eright. eapply E.CallL, E.CallR, E.Eliminate; try solve [repeat econstructor].
-
-eright. eapply E.CallL, E.CallR, E.CallL, E.MakeCall; try solve [repeat econstructor].
-eright. eapply E.CallL, E.CallR, E.CallR, E.MakeCall; try solve [repeat econstructor].
-eright. eapply E.CallL, E.CallR, E.CallR, E.Eliminate; try solve [repeat econstructor].
-
-eright. eapply E.CallL, E.CallR, E.MakeCall; try solve [repeat econstructor].
-eright. eapply E.CallL, E.MakeCall; try solve [repeat econstructor].
-eright. eapply E.MakeCall; try solve [repeat econstructor].
-eright. eapply E.MakeCall; try solve [repeat econstructor].
-eright. eapply E.MakeCall; try solve [repeat econstructor].
-eleft.
-Defined.
-(* Eval compute in proj1_sig E_add_2_3. *)
-
-End test.
-
-
 Definition env_ok TE EE ELIMS :=
     EE = compile_env ELIMS TE.
 
@@ -258,9 +170,9 @@ Inductive I_expr (TE : T.env) (EE : E.env) : T.expr -> E.expr -> Prop :=
         I_expr TE EE (T.Call tf ta) (E.Call ef ea)
 | IElimN : forall tnum tcases ttarget fname efree etarget erec ecases,
         fname = length TE + tnum ->
-        nth_error EE fname = Some (E.ElimBody erec ecases E.Arg) ->
+        nth_error EE fname = Some (E.ElimBody erec ecases) ->
         erec = E.Close fname (rec_free (length efree)) ->
-        ecases = shift_list_pair (compile_list_pair (length TE) tcases) ->
+        ecases = compile_list_pair (length TE) tcases ->
         ((efree = upvar_list (length efree) /\ length efree > 0) \/ Forall E.value efree) ->
         I_expr TE EE ttarget etarget ->
         I_expr TE EE (T.ElimN tnum tcases ttarget)
@@ -1456,12 +1368,12 @@ Lemma rec_free_length : forall n,
 intros. eapply rec_free'_length.
 Qed.
 
-Lemma E_elimbody_close_eval : forall E fname n cases target l k,
+Lemma E_elimbody_close_eval : forall E fname n cases l k,
     length l > n ->
     Forall E.value l ->
     exists free',
-        E.sstar E (E.Run (E.ElimBody (E.Close fname (rec_free n)) cases target) l k)
-                  (E.Run (E.ElimBody (E.Close fname free') cases target) l k) /\
+        E.sstar E (E.Run (E.ElimBody (E.Close fname (rec_free n)) cases) l k)
+                  (E.Run (E.ElimBody (E.Close fname free') cases) l k) /\
         Forall E.value free' /\
         length free' = n.
 intros0 Hl Hlval.
@@ -1640,19 +1552,10 @@ simpl in *; refold_compile (length TE).
     { unfold S2. eapply Hefree''. }
   clear Hefree''.
 
-  (* eval target *)
-  E_step HS.
-    { eapply E.SElimStepTarget.
-      - constructor. assumption.
-      - inversion 1. }
-  E_step HS.
-    { eapply E.SArg.
-      - simpl. reflexivity. }
-
   (* enter the case *)
-  remember (shift_list_pair _) as ecases.
+  remember (compile_list_pair _ _) as ecases.
   assert (length ecases = length cases). {
-    subst ecases. rewrite shift_list_pair_length, compile_list_pair_length. reflexivity.
+    subst ecases. rewrite compile_list_pair_length. reflexivity.
   }
   fwd eapply length_nth_error_Some with (xs := cases) (ys := ecases); eauto.
     destruct ** as [[ecase erec] ?].
@@ -1668,8 +1571,8 @@ simpl in *; refold_compile (length TE).
       - eassumption.
     }
 
-  eexists. split. eapply HS. unfold S6.
-  admit. (* need to change definition of match_states... *)
+  eexists. split. eapply HS. unfold S4.
+  admit. (* need facts about unroll_elim, and that efree' = el *)
 
 - destruct (Forall2_app_inv_l _ _ **) as (? & ? & ? & ? & ?).
   on (Forall2 _ (_ :: _) _), invc.
