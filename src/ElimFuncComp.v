@@ -1065,6 +1065,105 @@ rewrite Hskip. rewrite upvar_list_skipn_num_locals by auto.
 lia.
 Qed.
 
+Lemma nth_error_length_le : forall A (xs : list A) n,
+    (forall i, i >= n -> nth_error xs i = None) ->
+    length xs <= n.
+first_induction n; intros0 Hge.
+- destruct xs.
+  + simpl. lia.
+  + specialize (Hge 0 ltac:(lia)). discriminate.
+- destruct xs.
+  + simpl. lia.
+  + simpl. cut (length xs <= n). { intros. lia. }
+    eapply IHn. intros. specialize (Hge (S i) ltac:(lia)). simpl in *. assumption.
+Qed.
+
+Lemma nth_error_firstn : forall A (xs ys : list A) n,
+    (forall i, i < n -> nth_error ys i = nth_error xs i) ->
+    (forall i, i >= n -> nth_error ys i = None) ->
+    ys = firstn n xs.
+induction xs; intros0 Hlt Hge.
+- replace (firstn n []) with (@nil A) by (destruct n; reflexivity).
+  destruct ys.
+    { reflexivity. }
+  destruct (eq_nat_dec n 0).
+  + specialize (Hge 0 ltac:(lia)). discriminate.
+  + specialize (Hlt 0 ltac:(lia)). discriminate.
+- destruct ys.
+  + destruct n.
+      { reflexivity. }
+    specialize (Hlt 0 ltac:(lia)). discriminate.
+  + destruct n.
+      { specialize (Hge 0 ltac:(lia)). discriminate. }
+    simpl.
+    rewrite <- (IHxs ys).
+    * specialize (Hlt 0 ltac:(lia)). simpl in Hlt. inject_some. reflexivity.
+    * intros. specialize (Hlt (S i) ltac:(lia)). assumption.
+    * intros. specialize (Hge (S i) ltac:(lia)). assumption.
+Qed.
+
+Lemma firstn_app : forall A (xs ys : list A) n,
+    n <= length xs ->
+    firstn n (xs ++ ys) = firstn n xs.
+induction xs; intros0 Hle.
+- simpl in *. destruct n; try lia. simpl. reflexivity.
+- destruct n; simpl in *.
+    { reflexivity. }
+  f_equal. eapply IHxs. lia.
+Qed.
+
+Lemma skipn_app : forall A (xs ys : list A) n,
+    n >= length xs ->
+    skipn n (xs ++ ys) = skipn (n - length xs) ys.
+induction xs; intros0 Hge.
+- simpl. replace (n - 0) with n by lia. reflexivity.
+- destruct n; simpl in *.
+    { lia. }
+  eapply IHxs. lia.
+Qed.
+
+Lemma skipn_add : forall A (xs : list A) n m,
+    skipn n (skipn m xs) = skipn (n + m) xs.
+first_induction m; intros.
+- simpl. replace (n + 0) with n by lia. reflexivity.
+- replace (n + S m) with (S (n + m)) by lia. destruct xs; simpl.
+  + destruct n; simpl; reflexivity.
+  + eapply IHm.
+Qed.
+
+Lemma upvar_tail_next : forall i es v,
+    i < length es ->
+    upvar_tail i es ->
+    E.value v ->
+    upvar_tail (S i) (firstn i es ++ [v] ++ skipn (S i) es).
+intros0 Hlt Htail Hval.
+
+assert (S i = length (firstn i es ++ [v])). {
+  rewrite app_length. simpl.
+  cut (i = length (firstn i es)).  { intro. lia. }
+  rewrite firstn_length. lia.
+}
+
+assert (Hlen : length es = length (firstn i es ++ [v] ++ skipn (S i) es)). {
+  rewrite <- firstn_skipn with (n := S i) (l := es) at 1.
+  repeat rewrite app_length in *. rewrite Nat.add_assoc.
+  f_equal.  fwd eapply firstn_length with (n := S i) (l := es).
+  lia.
+}
+
+unfold upvar_tail in *. break_and.
+split.
+
+- rewrite app_assoc. rewrite firstn_app by lia. rewrite firstn_all by lia.
+  eapply Forall_app; eauto.
+
+- rewrite app_assoc. rewrite skipn_app by lia.
+  replace (S i - _) with 0 by lia.
+  rewrite <- app_assoc, <- Hlen.
+  unfold skipn at 1. replace (S i) with (1 + i) by lia.
+  do 2 rewrite <- skipn_add. congruence.
+Qed.
+
 Lemma E_close_eval_one : forall E i fname free l k,
     i < length free ->
     E.num_locals_list free <= length l ->
@@ -1124,7 +1223,7 @@ assert (exists free',
     split; [|split].  remvar (E.Run _ l k) as s.  eapply E.SArg.
     + eassumption.
     + reflexivity.
-    + admit.
+    + eapply upvar_tail_next; eauto. eapply Forall_nth_error; eassumption.
     + rewrite Hfree at 3. repeat rewrite app_length. simpl. lia.
 
   - rewrite upvar_list_nth_error_succ in * by assumption. inject_some.
@@ -1133,7 +1232,7 @@ assert (exists free',
     split; [|split].  remvar (E.Run _ l k) as s.  eapply E.SUpVar.
     + eassumption.
     + reflexivity.
-    + admit.
+    + eapply upvar_tail_next; eauto. eapply Forall_nth_error; eassumption.
     + rewrite Hfree at 3. repeat rewrite app_length. simpl. lia.
 }
 destruct ** as (free' & Hstep & Htail' & Hlen).
@@ -1142,7 +1241,7 @@ E_step HS.
 
 eapply E_splus_sstar in HS.
 rewrite <- Hfree. eauto.
-Admitted.
+Qed.
 
 Lemma E_close_eval' : forall E fname l k  j i free,
     i + j = length free ->
