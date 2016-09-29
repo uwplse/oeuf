@@ -1360,9 +1360,20 @@ simpl in *; refold_compile (length TE).
     eapply compile_I_expr; eauto.
     admit. (* elims_match *)
 
-- admit.
+- destruct (Forall2_app_inv_l _ _ **) as (? & ? & ? & ? & ?).
+  on (Forall2 _ (_ :: _) _), invc.
+  rename x into e_vs. rename y into e_e. rename l' into e_es.
 
-- admit.
+  eexists. split. eapply E.SPlusOne, E.SConstrStep.
+  + list_magic_on (vs, (e_vs, tt)). eauto using I_expr_value.
+  + eauto using I_expr_value'.
+  + constructor; eauto.
+    intros. constructor; eauto.
+    constructor. eapply Forall2_app; eauto. constructor; eauto.
+
+- eexists. split. eapply E.SPlusOne, E.SConstrDone.
+  + list_magic_on (args, (eargs, tt)). eauto using I_expr_value.
+  + eauto using IConstr, I_expr_value.
 
 - on (_ \/ _), fun H => destruct H.
 
@@ -1416,9 +1427,20 @@ simpl in *; refold_compile (length TE).
 
 - admit.
 
-- admit.
+- destruct (Forall2_app_inv_l _ _ **) as (? & ? & ? & ? & ?).
+  on (Forall2 _ (_ :: _) _), invc.
+  rename x into e_vs. rename y into e_e. rename l' into e_es.
 
-- admit.
+  eexists. split. eapply E.SPlusOne, E.SCloseStep.
+  + list_magic_on (vs, (e_vs, tt)). eauto using I_expr_value.
+  + eauto using I_expr_value'.
+  + constructor; eauto.
+    intros. constructor; eauto.
+    constructor. eapply Forall2_app; eauto. constructor; eauto.
+
+- eexists. split. eapply E.SPlusOne, E.SCloseDone.
+  + list_magic_on (free, (efree, tt)). eauto using I_expr_value.
+  + eauto using IClose, I_expr_value.
 
 Admitted.
 
