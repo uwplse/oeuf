@@ -7,6 +7,8 @@ LOG=$(printf "%s-%s-%s-oeuf-hook.txt" \
              "$(TZ="America/Los_Angeles" date "+%H%M%S")" \
              "$(hostname -s)")
 
+METRICS="metrics.json"
+
 function main {
   echo ---------------------
   echo OEUF HOOK CLEANER
@@ -71,4 +73,8 @@ else
     bash .notify.sh "$LOG"
 fi
 
+sh make_metrics.sh
+scp "$METRICS" "$WEBHOST:$WEBDIR/$LOG"
+
 rm -f "$LOG"
+rm -f "$METRICS"
