@@ -7,7 +7,9 @@ LOG=$(printf "%s-%s-%s-oeuf-hook.txt" \
              "$(TZ="America/Los_Angeles" date "+%H%M%S")" \
              "$(hostname -s)")
 
-METRICS="metrics.json"
+METRICS=$(printf "%s-%s-metrics.json" \
+             "$(TZ="America/Los_Angeles" date "+%y%m%d")" \
+             "$(TZ="America/Los_Angeles" date "+%H%M%S")")
 
 function main {
   echo ---------------------
@@ -74,7 +76,10 @@ else
 fi
 
 sh make_metrics.sh
+cp metrics.json "$METRICS$
+scp metrics.json "$WEBHOST:$WEBDIR/$LOG"
 scp "$METRICS" "$WEBHOST:$WEBDIR/$LOG"
+
 
 rm -f "$LOG"
 rm -f "$METRICS"
