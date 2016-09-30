@@ -213,6 +213,13 @@ rewrite compile_list_Forall' in *.
 symmetry. eauto using Forall2_length.
 Qed.
 
+Lemma compile_list_pair_Forall_fwd : forall base tps eps,
+    compile_list_pair base tps = eps -> Forall2 (fun tp ep => compile_pair base tp = ep) tps eps.
+induction tps; intros0 HH.
+- simpl in HH. subst. constructor.
+- simpl in HH. destruct eps; invc HH. constructor; eauto.
+Qed.
+
 Lemma compile_list_pair_length : forall base tps,
     length (compile_list_pair base tps) = length tps.
 induction tps.
@@ -1407,7 +1414,45 @@ rewrite <- rec_free_length with (n := n). rewrite <- Heqfree.
 eauto.
 Qed.
 
-(* TODO - use E_close_eval instead of whatever's in there right now *)
+Lemma E_unroll_elim_ok : forall rec case args info,
+    length args = length info ->
+    exists e', E.unroll_elim rec case args info = Some e'.
+first_induction args; destruct info; intros0 Hlen; try discriminate; simpl in *.
+- eauto.
+- remember (if b then _ else _) as case'.
+  specialize (IHargs rec case' info ltac:(lia)). eauto.
+Qed.
+
+Lemma T_unroll_elim_length : forall case args rec mk_rec e',
+    T.unroll_elim case args rec mk_rec = Some e' ->
+    length args = length rec.
+first_induction args; destruct rec; intros0 Hunroll; try discriminate; simpl in *.
+- reflexivity.
+- f_equal. eauto.
+Qed.
+
+Lemma unroll_elim_sim : forall TE EE ELIMS,
+    forall tcase ecase targs eargs info tmk_rec erec te' ee',
+    env_ok TE EE ELIMS ->
+    I_expr TE EE tcase ecase ->
+    Forall2 (I_expr TE EE) targs eargs ->
+    (forall te ee, I_expr TE EE te ee -> I_expr TE EE (tmk_rec te) (E.Call erec ee)) ->
+    T.unroll_elim tcase targs info tmk_rec = Some te' ->
+    E.unroll_elim erec ecase eargs info = Some ee' ->
+    I_expr TE EE te' ee'.
+first_induction targs; intros0 Henv Hcase Hargs Hrec Tunroll Eunroll;
+invc Hargs; destruct info; try discriminate; simpl in *.
+  { inject_some. assumption. }
+
+rename a into targ. rename y into earg. rename l' into eargs.
+eapply IHtargs with (5 := Tunroll) (6 := Eunroll); try eassumption.
+destruct b.
+- constructor.
+  + constructor; eassumption.
+  + eapply Hrec. eassumption.
+- constructor; eassumption.
+Qed.
+
 Theorem I_sim : forall TE EE ELIMS t t' e,
     env_ok TE EE ELIMS ->
     E.state_wf EE e ->
@@ -1559,10 +1604,18 @@ simpl in *; refold_compile (length TE).
   }
   fwd eapply length_nth_error_Some with (xs := cases) (ys := ecases); eauto.
     destruct ** as [[ecase erec] ?].
-  assert (exists ee',
-      E.unroll_elim (E.Close (length TE + n) efree'') ecase eargs erec = Some ee')
-          by admit. (* length eargs = length erec, plus a lemma *)
-    destruct ** as [ee' ?].
+  assert ((ecase, erec) = compile_pair (length TE) (case, rec)). {
+    on (_ = compile_list_pair _ _), fun H => (symmetry in H;
+        eapply compile_list_pair_Forall_fwd in H).
+    remember (case, rec) as tp. remember (ecase, erec) as ep.
+    symmetry.
+    eapply Forall2_nth_error with (P := fun tp ep => compile_pair _ tp = ep); eauto.
+  }
+  assert (length args = length rec) by (eauto using T_unroll_elim_length).
+  assert (erec = rec) by (simpl in *; congruence).
+  assert (length eargs = length args) by (symmetry; eauto using Forall2_length).
+  assert (length eargs = length erec) by congruence.
+  fwd eapply E_unroll_elim_ok; eauto. destruct ** as (ee' & ?).
   E_step HS.
     { eapply E.SEliminate.
       - constructor. assumption.
@@ -1572,7 +1625,13 @@ simpl in *; refold_compile (length TE).
     }
 
   eexists. split. eapply HS. unfold S4.
-  admit. (* need facts about unroll_elim, and that efree' = el *)
+  constructor.
+  + subst erec. eapply unroll_elim_sim; try eassumption.
+    * admit. (* cases are related - true by compile_I *)
+    * intros. econstructor; eauto.
+      admit. (* need to be stricter about free vars on the closure *)
+  + admit. (* need to be stricter about free vars on the closure *)
+  + assumption.
 
 - destruct (Forall2_app_inv_l _ _ **) as (? & ? & ? & ? & ?).
   on (Forall2 _ (_ :: _) _), invc.
