@@ -29,7 +29,7 @@ Hypothesis no_repet : list_norepet (prog_defs_names prog).
 
 (* Well formedness of a stack frame in memory *)
 Definition stack_frame_wf (b : block) (stacksize : Z) (mi : meminj) (m : mem) : Prop :=
-   Mem.range_perm m b 0 stacksize Cur Freeable /\ forall b' delta, mi b' <> Some (b,delta).
+   Mem.range_perm m b 0 stacksize Cur Freeable /\ (forall b' delta, mi b' <> Some (b,delta)) /\ Mem.valid_block m b.
 
 (* This says that our injection maps every old block to something new *)
 Definition total_inj (mi : meminj) (m : mem) : Prop :=
@@ -99,7 +99,8 @@ Proof.
   destruct H0.
   app Mem.free_right_inj Mem.mem_inj.
   intros.
-  specialize (H1 b' delta). congruence.
+  specialize (H1 b' delta). 
+  congruence.
 Qed.
 
 (* If we have a stack frame, we can free it and end up with still injecting memory *)
@@ -116,7 +117,8 @@ Proof.
   app Mem.free_right_inject Mem.inject.
   intros.
   unfold stack_frame_wf in *. break_and.
-  specialize (H9 b1 delta). congruence.
+  specialize (H9 b1 delta). 
+  congruence.
 Qed.
 
 
@@ -299,12 +301,12 @@ Inductive match_cont : Dmajor.cont -> Dflatmajor.cont -> meminj -> mem -> Prop :
     Plt (highest_block k') b ->
     match_cont (Dmajor.Kcall oid f e k) (Dflatmajor.Kcall oid f (Vptr b Int.zero) e' k') mi m.
 
-
 Inductive match_states : Dmajor.state -> Dflatmajor.state -> Prop :=
 | match_state : forall f s k k' b e e' m m' z mi,
     Mem.inject mi m m' ->
     stack_frame_wf b (fn_stackspace f) mi m' ->
     Plt (highest_block k') b ->
+    Plt (highest_block k') (Mem.nextblock m') ->
     match_cont k k' mi m' ->
     env_inj mi e e' ->
     wf_mem mi m m' ->
@@ -313,6 +315,7 @@ Inductive match_states : Dmajor.state -> Dflatmajor.state -> Prop :=
       (Dflatmajor.State f s k' (Vptr b Int.zero) e' m' z)
 | match_callstate : forall f args args' k k' m m' z mi,
     Mem.inject mi m m' ->
+    Plt (highest_block k') (Mem.nextblock m') ->
     match_cont k k' mi m' ->
     wf_mem mi m m' ->
     Val.inject_list mi args args' ->
@@ -321,6 +324,7 @@ Inductive match_states : Dmajor.state -> Dflatmajor.state -> Prop :=
       (Dflatmajor.Callstate f args' k' m' z)
 | match_returnstate : forall v v' k k' m m' z mi,
     Mem.inject mi m m' ->
+    Plt (highest_block k') (Mem.nextblock m') ->
     match_cont k k' mi m' ->
     wf_mem mi m m' ->
     Val.inject mi v v' ->
@@ -384,7 +388,10 @@ Proof.
   econstructor; eauto.
   unfold Mem.range_perm in *.
   intros.
-  eapply Mem.perm_store_1; eauto.
+  solve [eauto with mem].
+  break_and.
+  split;
+    solve [eauto with mem].
 Qed.
 
 
@@ -409,34 +416,36 @@ Proof.
   unfold stack_frame_wf in *.
   break_and. split; eauto.
   unfold Mem.range_perm in *. intros.
-  eapply H1 in H7.
-  eapply Mem.perm_free_1 in H3; eauto.
+  eapply H1 in H8.
+  eauto with mem.
+  split; eauto with mem.
 Qed.  
 
 Lemma stack_frame_wf_alloc_mapped :
   forall b z mi m,
     stack_frame_wf b z mi m ->
-    z > 0 ->
     forall lo hi m' b0 c v m'' bx,
       Mem.alloc m lo hi = (m',b0) ->
       Mem.store c m' b0 lo v  = Some m'' ->
       stack_frame_wf b z (fun x => if peq x bx then Some (b0,0) else mi x) m''.
 Proof.
   intros.
+  assert (Hrange : z > 0 \/ z <= 0) by omega.
+  destruct Hrange.
+  
   unfold stack_frame_wf in *.
   break_and. split.
   unfold Mem.range_perm in *.
   intros.
-  eapply H in H4.
+  eapply H in H5.
   eapply Mem.perm_store_1; eauto.
   eapply Mem.perm_alloc_1; eauto.
+  split.
   intros. break_match; eauto.
 
   intro.
   unfold Mem.range_perm in H.
   specialize (H 0).
-  assert (Mem.valid_block m b) by
-      (eapply Mem.perm_valid_block; eapply H; omega).
   unfold Mem.valid_block in *.
   app Mem.alloc_result Mem.alloc.
   subst b0.
@@ -444,9 +453,23 @@ Proof.
   | [ H : Some _ = Some _ |- _ ] => inv H
   end.
   app Plt_ne Plt.
-  
-Qed.
+  eauto with mem.
 
+  unfold stack_frame_wf in *.
+  break_and. split.
+  unfold Mem.range_perm.
+  intros. omega.
+
+  assert (b <> b0) by (eauto with mem).
+  split.
+
+  intros.
+  break_if; eauto. congruence.
+
+  eauto with mem.
+Qed.
+  
+  
 Lemma match_cont_store :
   forall k k' m mi,
     match_cont k k' mi m ->
@@ -483,10 +506,7 @@ Proof.
   subst. congruence.
 
   eauto.
-
-  admit. (* need to thread it through *)
-Admitted.
-
+Qed.
 
 Lemma total_inj_store :
   forall c m b ofs v m',
@@ -981,7 +1001,7 @@ Proof.
   split. unfold Mem.range_perm.
   intros.
   eauto with mem.
-  eauto.
+  split; eauto with mem.
 Qed.
 
 
@@ -1068,6 +1088,72 @@ Proof.
   eapply IHl; eauto.
 Qed.
 
+
+Lemma env_inj_set_optvar :
+  forall mi e e',
+    env_inj mi e e' ->
+    forall v v',
+      Val.inject mi v v' ->
+      forall optid,
+        env_inj mi (set_optvar optid v e) (set_optvar optid v' e').
+Proof.
+  intros.
+  unfold set_optvar.
+  destruct optid; eauto.
+  eapply env_inj_set; eauto.
+Qed.
+
+
+Lemma stack_frame_wf_alloc_unmapped :
+  forall b z mi m,
+    stack_frame_wf b z mi m ->
+    forall lo hi m' b',
+      Mem.alloc m lo hi = (m',b') ->
+      stack_frame_wf b z mi m'.
+Proof.
+  intros.
+  unfold stack_frame_wf in *.
+  break_and. split; eauto.
+  clear H1.
+  unfold Mem.range_perm in *.
+  intros.
+  eauto with mem.
+  split; eauto with mem.
+Qed.
+
+
+Lemma match_cont_alloc :
+  forall k k' mi m,
+    match_cont k k' mi m ->
+    forall lo hi b m',
+      Mem.alloc m lo hi = (m',b) ->
+      match_cont k k' mi m'.
+Proof.
+  induction 1; intros;
+    econstructor; eauto.
+  eapply stack_frame_wf_alloc_unmapped; eauto.
+Qed.
+
+Lemma Plt_pos_max :
+  forall x y z,
+    Plt x z ->
+    Plt y z ->
+    Plt (Pos.max x y) z.
+Proof.
+  intros.
+  destruct (Pos.max_spec x y); break_and;
+    find_rewrite; eauto.
+Qed.
+
+Lemma Plt_highest_block_call_cont :
+  forall k x,
+    Plt (highest_block k) x ->
+    Plt (highest_block (call_cont k)) x.
+Proof.
+  induction k; intros; simpl; auto.
+Qed.
+
+
 Lemma single_step_correct:
   forall S1 t S2, Dmajor.step ge S1 t S2 ->
   forall T1, match_states S1 T1 ->
@@ -1089,6 +1175,7 @@ Proof.
   * app free_stack_frame stack_frame_wf; eauto.
     eexists; split; try eapply plus_one; econstructor; eauto.
     eapply is_call_cont_transf; eauto.
+    erewrite Mem.nextblock_free; eauto.
     eapply match_cont_free_stack_frame; eauto.
     eapply wf_mem_free_right; eauto.
   * eexists; split; try eapply plus_one; econstructor; eauto.
@@ -1097,8 +1184,8 @@ Proof.
   (* Interesting case *)
   (* store to the heap *)
   * destruct vaddr; simpl in *; try congruence.
-    instantiate (1 := (Vptr b Int.zero)) in H9.
-    instantiate (1 := (Vptr b Int.zero)) in H7.
+    instantiate (1 := (Vptr b Int.zero)) in H10.
+    instantiate (1 := (Vptr b Int.zero)) in H8.
     
     app wf_mem_store_mapped wf_mem.
     app Mem.store_mapped_inject Mem.inject; try solve [invp Mem.inject; eauto].
@@ -1113,6 +1200,7 @@ Proof.
     | [ H : Some _ = Some _ |- _ ] => inv H
     end.
     rewrite Int.add_zero. rewrite Z.add_0_r in *. eauto.
+    erewrite Mem.nextblock_store; eauto.
     eapply match_cont_store; eauto.
     eapply wf_mem_store; eauto.
     rewrite Z.add_0_r in *.
@@ -1132,6 +1220,11 @@ Proof.
     | [ H : Some _ = Some _ |- _ ] => inv H
     end.
     rewrite Int.add_zero. break_match; try congruence.
+
+    simpl.
+    unfold stack_frame_wf in *.
+    break_and. unfold Mem.valid_block in *.
+    eapply Plt_pos_max; eauto.
     econstructor; eauto.
   * invp external_call.
     invp Val.inject.
@@ -1150,13 +1243,16 @@ Proof.
 
     eapply stack_frame_wf_alloc_mapped; eauto.
 
-    admit. (* need to thread it through *)
+    erewrite Mem.nextblock_store; try eapply H13.
+    eapply Mem.nextblock_alloc in H12.
+    rewrite H12. eapply Plt_trans_succ; eauto.
     
     eapply match_cont_alloc_store; eauto.
     eapply wf_mem_alloc_not_mapped; eauto.
     
     
     (* just env_inj proof here *)
+    (* TODO: make lemma *)
     {
       unfold env_inj. intros.
 
@@ -1172,10 +1268,11 @@ Proof.
 
       rewrite PTree.gso in * by congruence.
       unfold env_inj in *.
-      app H5 (e ! id0).
+      app H6 (e ! id0).
       eexists; split; eauto.
-      
-      inv H18; econstructor; eauto.
+
+      invp (Val.inject mi v x2);
+      econstructor; eauto.
       find_rewrite.
       break_match; try congruence.
 
@@ -1189,7 +1286,7 @@ Proof.
       unfold minimal_inj_domain in *.
 
       app Mem.alloc_result Mem.alloc.
-      eapply H1 in H19; clear H1.
+      app H1 (mi b0). clear H1.
 
       subst b0. unfold Mem.valid_block in *.
       app Plt_ne Plt.
@@ -1204,33 +1301,37 @@ Proof.
     invp switch_argument; invp Val.inject; econstructor; eauto.
   * app free_stack_frame stack_frame_wf.
     eexists; split; try eapply plus_one; econstructor; eauto.
+    erewrite Mem.nextblock_free; eauto.
+    eapply Plt_highest_block_call_cont; eauto.
     eapply match_call_cont; eauto.
     eapply match_cont_free_stack_frame; eauto.
     eapply wf_mem_free_right; eauto.
   * app free_stack_frame stack_frame_wf.
     eexists; split; try eapply plus_one; econstructor; eauto; try eapply match_call_cont; eauto.
+    erewrite Mem.nextblock_free; eauto.
+    eapply Plt_highest_block_call_cont; eauto.
     eapply match_cont_free_stack_frame; eauto.
     eapply wf_mem_free_right; eauto.
   * app (alloc_stack_frame (fn_stackspace f)) wf_mem.
     eexists; split; try eapply plus_one; econstructor; eauto.
 
-    (* This one's annoying *)
-    admit.
-
-    (* This needs some thinking *)
-    admit.
-
-
+    app Mem.alloc_result Mem.alloc. subst. eauto.
+    app Mem.nextblock_alloc Mem.alloc. find_rewrite.
+    eapply Plt_trans_succ; eauto.
+    
+    eapply match_cont_alloc; eauto.
+    
     eapply env_inj_set_locals;
     eapply env_inj_set_params; eauto.
 
     
-  * inv H2.
+  * inv H3.
     eexists; split; try eapply plus_one; try econstructor; eauto.
-    (* match_cont needs Kcall to contain a Vptr for sp *)
-    admit.
+    simpl in H2. eapply Plt_pos_max_r in H2. eauto.
+    eapply env_inj_set_optvar; eauto.
 
-
-Admitted.
+    Unshelve.
+    repeat (econstructor; eauto).
+Qed.
 
 End PRESERVATION.
