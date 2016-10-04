@@ -18,12 +18,8 @@ Coercion option_to_res : option >-> res.
 
 Local Open Scope option_monad.
 
-Definition transf_to_cminor (j : CompilationUnit.compilation_unit) : res Cminor.program :=
-  OK (Metadata.init_metadata j)
-  @@ UntypedComp.compile_cu
-(* Delay check_length because prior to UntypedComp, the list of functions is an
- * `hlist`, not a `list`. *)
- @@@ Metadata.check_length
+Definition transf_untyped_to_cminor (l : list UntypedComp.U.expr * list Metadata.metadata) : res Cminor.program :=
+  OK l
   @@ LiftedComp.compile_cu
  @@@ TaggedComp.compile_cu
   @@ TaggedNumberedComp.compile_cu
@@ -38,34 +34,51 @@ Definition transf_to_cminor (j : CompilationUnit.compilation_unit) : res Cminor.
   @@ print print_Cminor
 .
 
-Definition transf_to_asm (j : CompilationUnit.compilation_unit) : res Asm.program :=
-  OK j
- @@@ transf_to_cminor
+
+Definition transf_untyped_to_asm (l : list UntypedComp.U.expr * list Metadata.metadata) : res Asm.program :=
+  OK l
+ @@@ Metadata.check_length
+ @@@ transf_untyped_to_cminor
  @@@ transf_cminor_program
 .
 
 
-Require SourceLang.
-Require String.
-Require Import HList.
+Definition transf_to_asm (j : CompilationUnit.compilation_unit) : res Asm.program :=
+  OK (Metadata.init_metadata j)
+  @@ UntypedComp.compile_cu
+(* Delay check_length because prior to UntypedComp, the list of functions is an
+ * `hlist`, not a `list`. *)
+  @@@ transf_untyped_to_asm
+  .
 
-Delimit Scope string_scope with string.
-Bind Scope string_scope with String.string.
+Definition transf_to_cminor (j : CompilationUnit.compilation_unit) : res Cminor.program :=
+  OK (Metadata.init_metadata j)
+  @@ UntypedComp.compile_cu
+(* Delay check_length because prior to UntypedComp, the list of functions is an
+ * `hlist`, not a `list`. *)
+  @@@ transf_untyped_to_cminor.
 
-Definition add_cu :=
-    CompilationUnit.CompilationUnit
-        [SourceLang.add_reflect_ty]
-        (hcons SourceLang.add_reflect hnil)
-        ["add"%string].
+(* Require SourceLang. *)
+(* Require String. *)
+(* Require Import HList. *)
 
-Definition add_cu' :=
-     OK (Metadata.init_metadata add_cu)
-     @@ UntypedComp.compile_cu
-    @@@ Metadata.check_length
-     @@ LiftedComp.compile_cu
-    @@@ TaggedComp.compile_cu
-     @@ TaggedNumberedComp.compile_cu
-     @@ ElimFuncComp.compile_cu.
+(* Delimit Scope string_scope with string. *)
+(* Bind Scope string_scope with String.string. *)
+
+(* Definition add_cu := *)
+(*     CompilationUnit.CompilationUnit *)
+(*         [SourceLang.add_reflect_ty] *)
+(*         (hcons SourceLang.add_reflect hnil) *)
+(*         ["add"%string]. *)
+
+(* Definition add_cu' := *)
+(*      OK (Metadata.init_metadata add_cu) *)
+(*      @@ UntypedComp.compile_cu *)
+(*     @@@ Metadata.check_length *)
+(*      @@ LiftedComp.compile_cu *)
+(*     @@@ TaggedComp.compile_cu *)
+(*      @@ TaggedNumberedComp.compile_cu *)
+(*      @@ ElimFuncComp.compile_cu. *)
 (*
 Eval compute in add_cu'.
 Eval compute in match add_cu' with | OK (a, b) => length b | _ => 999 end.
