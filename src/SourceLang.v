@@ -1118,3 +1118,151 @@ Proof.
     induction args; intuition.
   - break_exists. eauto 10.
 Qed.
+
+Lemma constr_type_eq_dec :
+  forall cname arg_tys ty (ct1 ct2 : constr_type cname arg_tys ty),
+    {ct1 = ct2} + {ct1 <> ct2}.
+Proof.
+  intros.
+  induction ct1; intros;
+    try solve [
+          dependent destruction ct2; left; reflexivity].
+Qed.
+
+
+Lemma type_dec_eq :
+  forall (t1 t2 : type),
+    { t1 = t2 } + { t1 <> t2 }.
+Proof.
+  decide equality.
+  destruct t; destruct t0; try decide equality;
+    left; reflexivity.
+Defined.
+
+Lemma elim_eq_dec :
+  forall case_tys target_ty ty (e1 e2 : elim case_tys (ADT target_ty) ty),
+    {e1 = e2} + {e1 <> e2}.
+Proof.
+  induction e1; intros; dependent destruction e2; try solve [left; reflexivity].
+Qed.
+
+
+Lemma expr_eq_dec :
+  forall {tys ty} (e1 e2 : expr tys ty),
+    {e1 = e2} + {e1 <> e2}.
+Proof.
+  refine (expr_mut_rect 
+            (fun tys ty e1 => forall e2 : expr tys ty, {e1 = e2} + {e1 <> e2})
+            (fun tys l h1 => forall (h2 : hlist (expr tys) l), {h1 = h2} + {h1 <> h2}) 
+            _ _ _ _ _ _ _); intros.
+
+  destruct e2; try solve [right; intro; solve_by_inversion].
+  destruct (@member_eq_dec _ type_eq_dec _ _ m m0).
+  left. congruence. right. intro. eapply n. inv H.
+
+  eapply Eqdep_dec.inj_pair2_eq_dec in H1.
+  eapply Eqdep_dec.inj_pair2_eq_dec in H1.
+  congruence.
+
+  eapply list_eq_dec. eapply type_eq_dec.
+  
+  eapply Eqdep_dec.inj_pair2_eq_dec in H1.
+  eapply Eqdep_dec.inj_pair2_eq_dec in H1.
+  eapply type_eq_dec.
+  eapply list_eq_dec. eapply type_eq_dec.
+  eapply type_eq_dec.
+
+
+  dependent destruction e2; try solve [right; intro; solve_by_inversion].
+  destruct (H e2). subst. left. reflexivity.
+  right. intro. apply n. inv H0.
+  eapply Eqdep_dec.inj_pair2_eq_dec in H2; try eapply type_eq_dec.
+  eapply Eqdep_dec.inj_pair2_eq_dec in H2; try eapply type_eq_dec.
+  eapply Eqdep_dec.inj_pair2_eq_dec in H2; try eapply list_eq_dec; try eapply type_eq_dec.
+  congruence.
+
+  dependent destruction e0; try solve [right; intro; solve_by_inversion].
+  destruct (type_eq_dec ty1 ty0); try solve [right; intro; solve_by_inversion]; subst.
+  destruct (H e0_1).
+  Focus 2. right. intro. apply n. inv H1.
+  eapply Eqdep_dec.inj_pair2_eq_dec in H3; try eapply type_eq_dec.
+  eapply Eqdep_dec.inj_pair2_eq_dec in H3; try eapply type_eq_dec.
+  eapply Eqdep_dec.inj_pair2_eq_dec in H3; try eapply list_eq_dec; try eapply type_eq_dec.
+  congruence.
+  destruct (H0 e0_2).
+  Focus 2. right. intro. apply n. inv H1.
+  eapply Eqdep_dec.inj_pair2_eq_dec in H4; try eapply type_eq_dec.
+  eapply Eqdep_dec.inj_pair2_eq_dec in H4; try eapply list_eq_dec; try eapply type_eq_dec.
+  congruence.
+  left. congruence.
+
+  
+  
+  dependent destruction e2; try solve [right; intro; solve_by_inversion].
+  destruct (constr_name_eq_dec c c0); try solve [right; intro; solve_by_inversion].
+  subst.
+
+  destruct (list_eq_dec type_eq_dec arg_tys arg_tys0); try solve [right; intro; solve_by_inversion].
+  subst.
+
+  destruct (constr_type_eq_dec _ _ _ ct ct0). subst.
+  Focus 2. right. intro. apply n. inv H0.
+  eapply Eqdep_dec.inj_pair2_eq_dec in H2; try decide equality.
+  eapply Eqdep_dec.inj_pair2_eq_dec in H2; try eapply list_eq_dec; try eapply type_eq_dec.
+  eapply Eqdep_dec.inj_pair2_eq_dec in H2; try decide equality.
+  congruence.
+
+  destruct (H h). subst. left. reflexivity.
+  right. intro. apply n. inv H0.
+  eapply Eqdep_dec.inj_pair2_eq_dec in H2; try eapply list_eq_dec; try eapply type_eq_dec.
+  eapply Eqdep_dec.inj_pair2_eq_dec in H2; try eapply list_eq_dec; try eapply type_eq_dec.
+  congruence.
+  
+
+  dependent destruction e2; try solve [right; intro; inversion H1].
+  destruct (list_eq_dec type_eq_dec case_tys case_tys0).
+  Focus 2. right. intro. apply n. inv H1. congruence.
+  subst case_tys0.
+  destruct (H h).
+  Focus 2. right. intro. apply n. inv H1.
+  eapply Eqdep_dec.inj_pair2_eq_dec in H5; try eapply list_eq_dec; try eapply type_eq_dec.
+  eapply Eqdep_dec.inj_pair2_eq_dec in H5; try eapply list_eq_dec; try eapply type_eq_dec.
+  congruence.
+  subst h.
+  destruct (type_name_eq_dec target_ty target_tyn).
+  Focus 2.
+  right. intro. inv H1. congruence.
+  subst target_tyn.
+
+
+  destruct (elim_eq_dec _ _ _ e e0).
+  Focus 2. right. intro.
+  inv H1.
+  eapply Eqdep_dec.inj_pair2_eq_dec in H3; try eapply list_eq_dec; try eapply type_eq_dec.
+  eapply Eqdep_dec.inj_pair2_eq_dec in H3; try eapply list_eq_dec; try eapply type_eq_dec; try decide equality.
+  eapply Eqdep_dec.inj_pair2_eq_dec in H3; try eapply list_eq_dec; try eapply type_eq_dec.
+  congruence.
+  subst e0.
+
+
+  destruct (H0 e2). left. congruence.
+  right. intro. inv H1.
+  eapply Eqdep_dec.inj_pair2_eq_dec in H3; try eapply list_eq_dec; try eapply type_eq_dec; try decide equality.
+  eapply Eqdep_dec.inj_pair2_eq_dec in H3; try eapply list_eq_dec; try eapply type_eq_dec; try decide equality.
+  congruence.
+
+  dependent destruction h2. left. reflexivity.
+  dependent destruction h2.
+
+  destruct (H b).
+  Focus 2.
+  right. intro. inv H1.
+  eapply Eqdep_dec.inj_pair2_eq_dec in H3; try eapply list_eq_dec; try eapply type_eq_dec; try decide equality.
+  congruence.
+
+  subst b.
+  destruct (H0 h2). left. congruence.
+  right. intro. inv H1.
+  eapply Eqdep_dec.inj_pair2_eq_dec in H3; try eapply list_eq_dec; try eapply type_eq_dec; try decide equality.
+  congruence.
+Defined.
