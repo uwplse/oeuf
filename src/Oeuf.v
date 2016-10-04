@@ -2,7 +2,7 @@ Require Import compcert.driver.Compiler compcert.common.Errors.
 Require Import Common Monads.
 Require UntypedComp TaggedComp LiftedComp SwitchedComp FlattenedComp FmajorComp.
 Require Fmajortoemajor Emajortodmajor Dflatmajortocmajor Cmajortominor.
-Require TaggedNumberedComp ElimFuncComp.
+Require TaggedNumberedComp ElimFuncComp ElimFuncComp2.
 Require CompilationUnit Metadata.
 
 Require Import compcert.common.AST.
@@ -24,6 +24,7 @@ Definition transf_untyped_to_cminor (l : list UntypedComp.U.expr * list Metadata
  @@@ TaggedComp.compile_cu
   @@ TaggedNumberedComp.compile_cu
   @@ ElimFuncComp.compile_cu
+  @@ ElimFuncComp2.compile_cu
   @@ SwitchedComp.compile_cu
   @@ FlattenedComp.compile_cu
  @@@ FmajorComp.compile_cu

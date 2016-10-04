@@ -10,18 +10,6 @@ Module T := TaggedNumbered.
 Module E := ElimFunc.
 
 
-Fixpoint upvar_list' acc n :=
-    match n with
-    | 0 => E.Arg :: acc
-    | S n' => upvar_list' (E.UpVar n' :: acc) n'
-    end.
-
-Definition upvar_list n :=
-    match n with
-    | 0 => []
-    | S n' => upvar_list' [] n'
-    end.
-
 Definition compile base :=
     let fix go e :=
         let fix go_list es :=
@@ -35,8 +23,8 @@ Definition compile base :=
         | T.Call f a => E.Call (go f) (go a)
         | T.Constr tag args => E.Constr tag (go_list args)
         | T.ElimN n cases target =>
-                let num_upvars := S (T.num_upvars_list_pair cases) in
-                let func := E.Close (base + n) (upvar_list num_upvars) in
+                let expect := T.num_locals_list_pair cases in
+                let func := E.CloseDyn (base + n) 0 expect in
                 E.Call func (go target)
         | T.Close fname free => E.Close fname (go_list free)
         end in go.
@@ -67,62 +55,10 @@ Definition compile_list_pair base :=
         end in go_list_pair.
 
 
-Fixpoint rec_free' acc n :=
-    match n with
-    | 0 => acc
-    | S n' => rec_free' (E.UpVar n' :: acc) n'
-    end.
-
-Definition rec_free n := rec_free' [] n.
-
-Definition shift : E.expr -> E.expr :=
-    let fix go e :=
-        let fix go_list es :=
-            match es with
-            | [] => []
-            | e :: es => go e :: go_list es
-            end in
-        let fix go_pair p :=
-            let '(e, r) := p in (go e, r) in
-        let fix go_list_pair ps :=
-            match ps with
-            | [] => []
-            | p :: ps => go_pair p :: go_list_pair ps
-            end in
-        match e with
-        | E.Arg => E.UpVar 0
-        | E.UpVar n => E.UpVar (S n)
-        | E.Call f a => E.Call (go f) (go a)
-        | E.Constr tag args => E.Constr tag (go_list args)
-        | E.ElimBody rec cases => E.ElimBody (go rec) (go_list_pair cases)
-        | E.Close fname free => E.Close fname (go_list free)
-        end in go.
-
-Definition shift_list :=
-    let go := shift in
-    let fix go_list es :=
-        match es with
-        | [] => []
-        | e :: es => go e :: go_list es
-        end in go_list.
-
-Definition shift_pair : (E.expr * E.rec_info) -> (E.expr * E.rec_info) :=
-    let go := shift in
-    let fix go_pair p :=
-        let '(e, r) := p in (go e, r) in go_pair.
-
-Definition shift_list_pair :=
-    let go_pair := shift_pair in
-    let fix go_list_pair ps :=
-        match ps with
-        | [] => []
-        | p :: ps => go_pair p :: go_list_pair ps
-        end in go_list_pair.
-
 Definition compile_eliminator base n cases :=
-    let num_upvars := S (T.num_upvars_list_pair cases) in
+    let expect := T.num_locals_list_pair cases in
     let cases' := compile_list_pair base cases in
-    let rec := E.Close (base + n) (rec_free num_upvars) in
+    let rec := E.CloseDyn (base + n) 1 expect in
     E.ElimBody rec cases'.
 
 Fixpoint compile_eliminator_list' base n elims :=
@@ -168,17 +104,16 @@ Inductive I_expr (TE : T.env) (EE : E.env) (el : list E.expr) : T.expr -> E.expr
         I_expr TE EE el tf ef ->
         I_expr TE EE el ta ea ->
         I_expr TE EE el (T.Call tf ta) (E.Call ef ea)
-| IElimN : forall tnum tcases ttarget fname efree etarget erec ecases,
+| IElimN : forall tnum tcases ttarget fname func etarget erec ecases,
         fname = length TE + tnum ->
         nth_error EE fname = Some (E.ElimBody erec ecases) ->
-        erec = E.Close fname (rec_free (length efree)) ->
+        let expect := T.num_locals_list_pair tcases in
+        erec = E.CloseDyn fname 1 expect ->
         ecases = compile_list_pair (length TE) tcases ->
-        let n := S (T.num_upvars_list_pair tcases) in
-        length efree = n ->
-        (efree = upvar_list n \/ efree = firstn n el) ->
+        (func = E.CloseDyn fname 0 expect \/ func = E.Close fname el) ->
         I_expr TE EE el ttarget etarget ->
         I_expr TE EE el (T.ElimN tnum tcases ttarget)
-                        (E.Call (E.Close fname efree) etarget).
+                        (E.Call func etarget).
 
 Inductive I (TE : T.env) (EE : E.env) : T.state -> E.state -> Prop :=
 | IRun : forall te tl tk ee el ek,
@@ -235,13 +170,6 @@ induction tps.
 - simpl. congruence.
 Qed.
 
-Lemma shift_list_pair_length : forall eps,
-    length (shift_list_pair eps) = length eps.
-induction eps.
-- simpl. reflexivity.
-- simpl. congruence.
-Qed.
-
 Lemma compile_eliminator_list'_nth_error : forall base n elims i elim,
     nth_error elims i = Some elim ->
     nth_error (compile_eliminator_list' base n elims) i =
@@ -273,17 +201,6 @@ Lemma compile_eliminator_list_length : forall base elims,
     length (compile_eliminator_list base elims) = length elims.
 intros. eapply compile_eliminator_list'_length.
 Qed.
-
-
-(*
-
-Lemma env_ok_nth_error : forall TE EE ELIMS i x,
-    env_ok TE EE ELIMS ->
-    nth_error TE i = Some x ->
-    exists cases,
-        nth_error ELIMS i = Some cases /\
-        x = compile_eliminator (length TE) i cases.
-*)
 
 Lemma env_ok_length : forall TE EE ELIMS,
     env_ok TE EE ELIMS ->
@@ -402,33 +319,6 @@ congruence.
 Qed.
 
 
-Lemma upvar_list'_snoc : forall acc x n,
-    upvar_list' (acc ++ [x]) n = upvar_list' acc n ++ [x].
-first_induction n; intros; simpl in *.
-- reflexivity.
-- rewrite <- IHn. f_equal.
-Qed.
-
-Lemma upvar_list_snoc : forall n,
-    upvar_list (S (S n)) = upvar_list (S n) ++ [E.UpVar n].
-intros. simpl.
-rewrite <- upvar_list'_snoc. simpl. reflexivity.
-Qed.
-
-Lemma upvar_list'_length : forall acc n,
-    length (upvar_list' acc n) = S n + length acc.
-first_induction n; simpl; intros.
-- reflexivity.
-- rewrite IHn. simpl. lia.
-Qed.
-
-Lemma upvar_list_length : forall n,
-    length (upvar_list n) = n.
-destruct n; simpl.
-- reflexivity.
-- rewrite upvar_list'_length. simpl. lia.
-Qed.
-
 Lemma compile_I_expr : forall TE EE ELIMS el,
     env_ok TE EE ELIMS ->
     forall t e,
@@ -473,12 +363,7 @@ subst.
     fwd eapply env_ok_nth_error_elim; eauto. break_exists. break_and.
     replace x with cases in * by congruence.
 
-    subst e. rewrite upvar_list'_length, Nat.add_0_r.
-    unfold compile_eliminator.  reflexivity.
-
-  + remember (T.num_upvars_list_pair cases) as m.
-    replace (S m) with (S m + 0) by lia.
-    eapply upvar_list'_length.
+    subst e.  unfold compile_eliminator.  reflexivity.
 
   + simpl in Helims. T.refold_elims_match ELIMS. do 2 break_and.
     eauto.
@@ -624,26 +509,6 @@ induction n; simpl; intros0 Hn.
   rewrite IHn; eauto.
 Qed.
 
-Lemma upvar_list'_not_value : forall acc n,
-    Forall (fun e => ~ E.value e) acc ->
-    Forall (fun e => ~ E.value e) (upvar_list' acc n).
-first_induction n; intros0 Hacc; simpl in *.
-- constructor.
-  + inversion 1.
-  + assumption.
-- eapply IHn.
-  constructor.
-  + inversion 1.
-  + assumption.
-Qed.
-
-Lemma upvar_list_not_value : forall n,
-    Forall (fun e => ~ E.value e) (upvar_list n).
-intros. destruct n; simpl.
-- constructor.
-- eapply upvar_list'_not_value. constructor.
-Qed.
-
 Lemma skipn_nth_error : forall A i j (xs : list A),
     nth_error (skipn i xs) j = nth_error xs (i + j).
 first_induction xs; first_induction i; simpl; intros; eauto.
@@ -671,68 +536,6 @@ eapply skipn_nth_error_change'.
 - lia.
 Qed.
 
-Lemma upvar_list'_nth_error_zero : forall n,
-    nth_error (upvar_list' [] n) 0 = Some E.Arg.
-first_induction n; intros.
-- reflexivity.
-- unfold upvar_list'. fold upvar_list'.
-  change ([E.UpVar n]) with ([] ++ [E.UpVar n]).
-  rewrite upvar_list'_snoc.
-  rewrite nth_error_app1 by (rewrite upvar_list'_length; simpl; lia).
-  assumption.
-Qed.
-
-Lemma upvar_list'_nth_error_succ : forall n i,
-    i < n ->
-    nth_error (upvar_list' [] n) (S i) = Some (E.UpVar i).
-first_induction n; intros0 Hlt.
-{ lia. }
-
-unfold upvar_list'. fold upvar_list'.
-change ([E.UpVar n]) with ([] ++ [E.UpVar n]).
-rewrite upvar_list'_snoc.
-
-destruct (eq_nat_dec i n).
-- subst i.
-  rewrite nth_error_app2; cycle 1; rewrite upvar_list'_length.
-  { simpl. lia. }
-  simpl. replace (n - (n + 0)) with 0 by lia.
-  simpl. reflexivity.
-- assert (i < n) by lia.
-  rewrite nth_error_app1 by (rewrite upvar_list'_length; simpl; lia).
-  eauto.
-Qed.
-
-Lemma upvar_list_nth_error_zero : forall n,
-    0 < n ->
-    nth_error (upvar_list n) 0 = Some E.Arg.
-destruct n; intros; try lia.
-unfold upvar_list. eapply upvar_list'_nth_error_zero.
-Qed.
-
-Lemma upvar_list_nth_error_succ : forall n i,
-    S i < n ->
-    nth_error (upvar_list n) (S i) = Some (E.UpVar i).
-destruct n; intros; try lia.
-unfold upvar_list. eapply upvar_list'_nth_error_succ. lia.
-Qed.
-
-Lemma upvar_list_nth_error_not_value : forall n i e,
-    nth_error (upvar_list n) i = Some e ->
-    ~ E.value e.
-intros0 Hnth.
-assert (i < n). {
-  assert (HH : nth_error (upvar_list n) i <> None) by congruence.
-  rewrite nth_error_Some in HH. rewrite upvar_list_length in HH.
-  assumption.
-}
-destruct i.
-
-- rewrite upvar_list_nth_error_zero in Hnth by assumption.
-  inject_some. inversion 1.
-- rewrite upvar_list_nth_error_succ in Hnth by assumption.
-  inject_some. inversion 1.
-Qed.
 
 Lemma E_sstar_neq_splus : forall E s s',
     s <> s' ->
@@ -813,109 +616,13 @@ Ltac E_plus HS :=
             ltac:(eapply E_splus_then_splus with (1 := HS'))
     end.
 
-Ltac E_step_ex HS P :=
-    let S_ := fresh "S" in
-    let S2 := fresh "S" in
-    let HS' := fresh HS "'" in
-    let H := fresh "Hex" in
-    let H_S2 := fresh "H_" S2 in
-    let go E s0 s1 Erel solver :=
-        assert (H : exists S2 : E.state, E.sstep E s1 S2 /\ P S2); [ | 
-            destruct H as [S2 [H H_S2] ];
-            rename HS into HS';
-            assert (HS : Erel E s0 S2);
-            [ solver; exact H
-            | clear H; clear HS' ]
-        ] in
-    match type of HS with
-    | E.sstar ?E ?s0 ?s1 => go E s0 s1 E.splus
-            ltac:(eapply E_sstar_then_splus with (1 := HS');
-                  eapply E.SPlusOne)
-    | E.splus ?E ?s0 ?s1 => go E s0 s1 E.splus
-            ltac:(eapply E_splus_snoc with (1 := HS'))
-    end.
 
-
-
-Lemma upvar_list'_num_locals : forall acc n,
-    E.num_locals_list (upvar_list' acc n) = max (E.num_locals_list acc) (S n).
-first_induction n; intros.
-- unfold upvar_list'. unfold E.num_locals_list; E.refold_num_locals.
-  unfold E.num_locals. lia.
-- simpl. rewrite IHn. unfold E.num_locals_list; E.refold_num_locals.
-  unfold E.num_locals. lia.
-Qed.
-
-Lemma upvar_list_num_locals : forall n,
-    E.num_locals_list (upvar_list n) = n.
-destruct n.
-- reflexivity.
-- simpl. eapply upvar_list'_num_locals.
-Qed.
-
-Lemma upvar_list'_app : forall acc1 acc2 n,
-    upvar_list' (acc1 ++ acc2) n = upvar_list' acc1 n ++ acc2.
-first_induction n; intros; simpl.
-- reflexivity.
-- remvar (_ :: _ ++ _) as acc. eapply IHn. eauto.
-Qed.
-
-Lemma upvar_list'_firstn_ge : forall i acc n,
-    i >= n ->
-    firstn (S i) (upvar_list' acc n) = upvar_list' (firstn (i - n) acc) n.
-first_induction n; intros0 Hge.
-- simpl. replace (i - 0) with i by lia. reflexivity.
-- unfold upvar_list'. fold upvar_list'. rewrite IHn by lia.
-  f_equal.
-  remember (i - n) as j. destruct j; try lia.
-  simpl. f_equal. f_equal. lia.
-Qed.
-
-Lemma upvar_list'_firstn_eq : forall i acc n,
-    i = n ->
-    firstn (S i) (upvar_list' acc n) = upvar_list' [] i.
-intros. rewrite upvar_list'_firstn_ge by lia.
-replace (i - n) with 0 by lia. simpl. congruence.
-Qed.
-
-Lemma upvar_list'_firstn_lt : forall i acc n,
-    i < n ->
-    firstn (S i) (upvar_list' acc n) = upvar_list' [] i.
-first_induction n; intros0 Hlt.
-- lia.
-- unfold upvar_list'. fold upvar_list'.
-  destruct (eq_nat_dec i n).
-  + rewrite upvar_list'_firstn_eq; auto.
-  + rewrite IHn by lia. reflexivity.
-Qed.
-
-Lemma upvar_list_firstn : forall i n,
-    i <= n ->
-    firstn i (upvar_list n) = upvar_list i.
-destruct n, i; intros0 Hle; try lia; try reflexivity.
-
-destruct (eq_nat_dec i n).
-- unfold upvar_list. rewrite upvar_list'_firstn_eq; auto.
-- apply upvar_list'_firstn_lt. lia.
-Qed.
 
 Lemma E_num_locals_list_app : forall xs ys,
     E.num_locals_list (xs ++ ys) = max (E.num_locals_list xs) (E.num_locals_list ys).
 intros.
 do 3 rewrite E.num_locals_list_is_maximum.
 rewrite map_app. rewrite maximum_app. reflexivity.
-Qed.
-
-Lemma upvar_list_skipn_num_locals : forall i n,
-    i < n ->
-    E.num_locals_list (skipn i (upvar_list n)) = n.
-intros0 Hle.
-fwd eapply upvar_list_num_locals with (n := n) as HH.
-rewrite <- firstn_skipn with (n := i) (l := upvar_list n) in HH.
-rewrite E_num_locals_list_app in HH.
-rewrite upvar_list_firstn in HH by lia.
-rewrite upvar_list_num_locals in HH.
-lia.
 Qed.
 
 Lemma E_num_locals_list_values : forall es,
@@ -990,26 +697,6 @@ first_induction m; intros.
 - replace (n + S m) with (S (n + m)) by lia. destruct xs; simpl.
   + destruct n; simpl; reflexivity.
   + eapply IHm.
-Qed.
-
-Inductive var_max (n : nat) : E.expr -> Prop :=
-| VmArg : 0 < n -> var_max n E.Arg
-| VmUpVar : forall i, S i < n -> var_max n (E.UpVar i).
-
-Lemma var_max_num_locals : forall n e,
-    var_max n e ->
-    E.num_locals e <= n.
-destruct e; inversion 1; simpl; lia.
-Qed.
-
-Lemma E_num_locals_var_max : forall n es,
-    Forall (var_max n) es ->
-    E.num_locals_list es <= n.
-intros0 Hvm.
-rewrite E.num_locals_list_is_maximum.
-rewrite maximum_le_Forall. rewrite <- Forall_map.
-list_magic_on (es, tt).
-on (var_max _ _), invc; simpl; lia.
 Qed.
 
 Lemma Forall_firstn : forall A P (xs : list A) n,
@@ -1129,253 +816,6 @@ rewrite <- firstn_skipn with (n := k - n) at 1. f_equal.
   reflexivity.
 Qed.
 
-Lemma var_max_not_value : forall n e,
-    var_max n e ->
-    ~ E.value e.
-destruct e; inversion 1; inversion 1.
-Qed.
-
-Lemma var_max_step : forall E e l k,
-    var_max (length l) e ->
-    exists i v,
-        nth_error l i = Some v /\
-        E.sstep E (E.Run e l k) (k v).
-intros0 Hvm.
-invc Hvm;
-rewrite <- nth_error_Some in *;
-destruct (nth_error _ _) eqn:?; try congruence.
-
-- eexists. eexists. split; [ eassumption | ].
-  eapply E.SArg. assumption.
-
-- eexists. eexists. split; [ eassumption | ].
-  eapply E.SUpVar. assumption.
-Qed.
-
-
-(* The first `i` are from `xs1` and the rest are from `xs2` *)
-Definition sliding {A} i (xs1 xs2 ys : list A) :=
-    firstn i ys = firstn i xs1 /\
-    skipn i ys = skipn i xs2.
-
-(*
-Lemma sliding_num_locals : forall i vs es es',
-    Forall E.value l ->
-    vals_and_vars i l es ->
-    E.num_locals_list es <= length l.
-unfold vals_and_vars. intros0 Hlval Hvv. destruct Hvv as [Hvals Hvars].
-rewrite <- firstn_skipn with (n := i) (l := es).
-rewrite E_num_locals_list_app.
-rewrite E_num_locals_list_values; cycle 1.
-  { rewrite Hvals. eauto using Forall_firstn. }
-simpl. eapply E_num_locals_var_max. assumption.
-Qed.
-*)
-
-Lemma sliding_next : forall A i (xs1 xs2 ys : list A) x,
-    i < length ys ->
-    sliding i xs1 xs2 ys ->
-    nth_error xs1 i = Some x ->
-    sliding (S i) xs1 xs2 (firstn i ys ++ [x] ++ skipn (S i) ys).
-intros0 Hlt Hsld Hnth. destruct Hsld as [Hpre Hsuf].
-
-assert (S i = length (firstn i ys ++ [x])). {
-  rewrite app_length. simpl.
-  cut (i = length (firstn i ys)).  { intro. lia. }
-  rewrite firstn_length. lia.
-}
-
-split.
-
-- rewrite app_assoc. rewrite firstn_app by lia. rewrite firstn_all by lia.
-  do 2 rewrite firstn_slice.
-  rewrite slice_split with (n := 0) (k := i) (m := S i) by lia.
-  erewrite <- nth_error_slice by eassumption.
-  f_equal. unfold slice. simpl. replace (i - 0) with i by lia. assumption.
-
-- rewrite app_assoc. rewrite skipn_app by lia.
-  replace (S i - _) with 0 by lia.
-  unfold skipn at 1. replace (S i) with (1 + i) by lia.
-  do 2 rewrite <- skipn_add.
-  f_equal. assumption.
-Qed.
-
-Lemma sliding_app : forall A i (xs1 xs2 : list A) x,
-    i < length xs2 ->
-    length xs1 = length xs2 ->
-    nth_error xs1 i = Some x ->
-    sliding (S i) xs1 xs2 (firstn i xs1 ++ [x] ++ skipn (S i) xs2).
-intros0 Hlt Hlen Hnth.
-
-assert (S i = length (firstn i xs1 ++ [x])). {
-  rewrite app_length. simpl.
-  cut (i = length (firstn i xs1)).  { intro. lia. }
-  rewrite firstn_length. lia.
-}
-
-split.
-
-- rewrite app_assoc. rewrite firstn_app by lia. rewrite firstn_all by lia.
-  do 2 rewrite firstn_slice.
-  rewrite slice_split with (n := 0) (k := i) (m := S i) by lia.
-  erewrite <- nth_error_slice by eassumption.
-  reflexivity.
-
-- rewrite app_assoc. rewrite skipn_app by lia.
-  replace (S i - _) with 0 by lia.
-  unfold skipn at 1. reflexivity.
-Qed.
-
-Lemma sliding_nth_error_lt : forall A i j (xs1 xs2 ys : list A),
-    j < i ->
-    sliding i xs1 xs2 ys ->
-    nth_error ys j = nth_error xs1 j.
-intros0 Hlt Hsld. destruct Hsld as [Hpre Hsuf].
-fwd eapply firstn_nth_error_lt with (xs := ys); eauto.
-fwd eapply firstn_nth_error_lt with (xs := xs1); eauto.
-congruence.
-Qed.
-
-Lemma sliding_nth_error_ge : forall A i j (xs1 xs2 ys : list A),
-    j >= i ->
-    sliding i xs1 xs2 ys ->
-    nth_error ys j = nth_error xs2 j.
-intros0 Hlt Hsld. destruct Hsld as [Hpre Hsuf].
-replace j with (i + (j - i)) by lia.
-do 2 rewrite <- skipn_nth_error. congruence.
-Qed.
-
-Lemma sliding_split : forall A i (xs1 xs2 ys : list A) x,
-    nth_error xs2 i = Some x ->
-    sliding i xs1 xs2 ys ->
-    ys = firstn i xs1 ++ [x] ++ skipn (S i) xs2.
-intros0 Hnth Hsld. destruct Hsld as [Hpre Hsuf].
-fwd eapply nth_error_slice with (1 := Hnth) as Hnth'.
-rewrite <- Hnth'. rewrite skipn_slice. rewrite <- slice_split; try lia; cycle 1.
-  { cut (i < length xs2). { intro. lia. }
-    rewrite <- nth_error_Some. congruence. }
-rewrite <- skipn_slice.
-rewrite <- firstn_skipn with (l := ys) (n := i). congruence.
-Qed.
-
-Lemma sliding_length : forall A i (xs1 xs2 ys : list A),
-    length xs1 = length xs2 ->
-    sliding i xs1 xs2 ys ->
-    length ys = length xs1.
-intros0 Hlen Hsld. destruct Hsld as [Hpre Hsuf].
-rewrite <- firstn_skipn with (l := ys) (n := i). rewrite app_length.
-rewrite Hpre, Hsuf.
-rewrite firstn_length. rewrite skipn_length. lia.
-Qed.
-
-Lemma sliding_zero : forall A (xs1 xs2 : list A),
-    sliding 0 xs1 xs2 xs2.
-intros. split.
-- simpl. reflexivity.
-- simpl. reflexivity.
-Qed.
-
-
-Lemma E_close_eval_one : forall E i fname free vs es l k,
-    i < length free ->
-    length vs = length es ->
-    Forall E.value vs ->
-    Forall (fun e => ~ E.value e) es ->
-    sliding i vs es free ->
-    (forall i e v,
-        nth_error es i = Some e ->
-        nth_error vs i = Some v ->
-        forall k', E.sstep E (E.Run e l k') (k' v)) ->
-    exists free',
-        E.sstar E (E.Run (E.Close fname free)  l k)
-                  (E.Run (E.Close fname free') l k) /\
-        sliding (S i) vs es free'.
-intros0 Hlen Hlen' Hval Hnval Hsld Hstep.
-
-destruct (nth_error free i) as [e |] eqn:He; cycle 1.
-  { exfalso. rewrite <- nth_error_Some in Hlen. congruence. }
-
-assert (nth_error es i = Some e). {
-  erewrite <- sliding_nth_error_ge; try eassumption. lia.
-}
-
-fwd eapply length_nth_error_Some.
-  { symmetry. eassumption. }
-  { eassumption. }
-destruct ** as [v Hv].
-
-erewrite sliding_split with (xs1 := vs) (xs2 := es) (ys := free); try eassumption.
-E_start HS.
-
-E_step HS.
-  { eapply E.SCloseStep.
-    - eapply Forall_firstn. eassumption.
-    - eapply Forall_nth_error with (1 := Hnval). eassumption.
-  }
-
-E_step HS.
-  { eapply Hstep; eauto. }
-
-eapply E_splus_sstar in HS.
-eexists. split. eapply HS.
-eapply sliding_app; eauto.
-eapply sliding_length in Hsld; eauto. congruence.
-Qed.
-
-Lemma E_close_eval' : forall E fname l k  j i free vs es,
-    i + j = length free ->
-    i < length free ->
-    length vs = length es ->
-    Forall E.value vs ->
-    Forall (fun e => ~ E.value e) es ->
-    sliding i vs es free ->
-    (forall i e v,
-        nth_error es i = Some e ->
-        nth_error vs i = Some v ->
-        forall k', E.sstep E (E.Run e l k') (k' v)) ->
-    E.sstar E (E.Run (E.Close fname free)  l k)
-              (E.Run (E.Close fname vs) l k).
-induction j; intros0 Hi Hlt Hlen Hval Hnval Hsld Hstep.
-{ lia. }
-
-(* Give explicit instantiations, otherwise lia breaks with "abstract cannot
-   handle existentials" *)
-fwd eapply E_close_eval_one with (E := E) (fname := fname) (k := k); eauto.
-  destruct ** as (free' & Hstep' & Hsld').
-
-assert (length free = length vs) by eauto using sliding_length.
-assert (length free' = length vs) by eauto using sliding_length.
-
-destruct (eq_nat_dec (S i) (length free)) as [Hlen' | Hlen'].
-{ (* easy case: that was the last free variable, nothing more to eval *)
-  destruct Hsld' as [Hpre' Hsuf'].
-  replace (S i) with (length free') in Hpre' at 1 by congruence.
-  replace (S i) with (length vs) in Hpre' at 1 by congruence.
-  do 2 rewrite firstn_all in Hpre' by reflexivity.
-  rewrite <- Hpre'. assumption.
-}
-
-specialize (IHj (S i) free' vs es ltac:(lia) ltac:(lia) ** ** ** ** **).
-
-eapply E_sstar_then_sstar; eassumption.
-Qed.
-
-Lemma E_close_eval : forall E fname l k vs es,
-    0 < length es ->
-    length vs = length es ->
-    Forall E.value vs ->
-    Forall (fun e => ~ E.value e) es ->
-    (forall i e v,
-        nth_error es i = Some e ->
-        nth_error vs i = Some v ->
-        forall k', E.sstep E (E.Run e l k') (k' v)) ->
-    E.sstar E (E.Run (E.Close fname es) l k)
-              (E.Run (E.Close fname vs) l k).
-intros0 Hlt Hlen Hval Hnval Hstep.
-eapply E_close_eval' with (i := 0) (j := length es) (free := es);
-  try solve [eauto using sliding_zero | lia].
-Qed.
-
 
 
 Lemma Forall_contradict : forall A P (xs : list A),
@@ -1387,235 +827,6 @@ cut (Forall (fun _ => False) xs).
   { destruct xs; simpl in *; try lia.
     inversion 1. assumption. }
 list_magic_on (xs, tt).
-Qed.
-
-Lemma E_call_close_eval : forall E fname n free l k arg,
-    0 < n ->
-    Forall E.value l ->
-    free = upvar_list n ->
-    length l >= n ->
-    E.sstar E (E.Run (E.Call (E.Close fname free) arg)  l k)
-              (E.Run (E.Call (E.Close fname (firstn n l)) arg) l k).
-intros0 Hlt Hlval Hfree Hmin.
-
-assert (length free = n). {
-  subst free. rewrite upvar_list_length. reflexivity.
-}
-
-E_start HS.
-
-E_step HS.
-  { eapply E.SCallL. inversion 1.
-    eapply Forall_contradict; eauto.
-    - lia.
-    - rewrite Hfree. eapply upvar_list_not_value.
-  }
-
-E_star HS.
-  { eapply E_close_eval with (es := free) (vs := firstn n l); eauto.
-    - lia.
-    - rewrite firstn_length. lia.
-    - eapply Forall_firstn. assumption.
-    - rewrite Hfree. eapply upvar_list_not_value.
-    - intros0 He Hv. intros.
-      subst free. rewrite upvar_list_length in *. destruct i.
-      + rewrite upvar_list_nth_error_zero in He by auto.
-        inject_some. eapply E.SArg.
-        symmetry. rewrite <- Hv. eapply firstn_nth_error_lt. assumption.
-      + assert (S i < n). {
-          rewrite <- upvar_list_length. rewrite <- nth_error_Some. congruence.
-        }
-        rewrite upvar_list_nth_error_succ in He by auto.
-        inject_some. eapply E.SUpVar.
-        symmetry. rewrite <- Hv. eapply firstn_nth_error_lt. assumption.
-  }
-E_step HS.
-  { eapply E.SCloseDone. eapply Forall_firstn. assumption. }
-
-eapply E_splus_sstar in HS.
-eauto.
-Qed.
-
-Lemma var_max_succ : forall n e,
-    var_max n e ->
-    var_max (S n) e.
-intros0 Hvm. invc Hvm; constructor; lia.
-Qed.
-
-Lemma var_max_add : forall n m e,
-    var_max n e ->
-    var_max (n + m) e.
-induction m; intros0 Hvm.
-- replace (n + 0) with n by lia. assumption.
-- replace (n + S m) with (S (n + m)) by lia.
-  eapply var_max_succ.
-  eapply IHm. assumption.
-Qed.
-
-Lemma var_max_ge : forall n m e,
-    n >= m ->
-    var_max m e ->
-    var_max n e.
-intros0 Hge Hvm.
-replace n with (m + (n - m)) by lia.
-eapply var_max_add. assumption.
-Qed.
-
-Lemma upvar_list'_var_max : forall m acc n,
-    n < m ->
-    Forall (var_max m) acc ->
-    Forall (var_max m) (upvar_list' acc n).
-first_induction n; intros0 Hlt Hacc; simpl.
-- constructor; eauto. constructor. lia.
-- eapply IHn.
-  + lia.
-  + constructor; eauto. constructor. assumption.
-Qed.
-
-Lemma upvar_list_var_max : forall m n,
-    n <= m ->
-    Forall (var_max m) (upvar_list n).
-intros0 Hle.
-destruct n.
-  { simpl. constructor. }
-eapply upvar_list'_var_max.
-- lia.
-- constructor.
-Qed.
-
-Lemma E_call_close_eval_either : forall E fname free n l k arg,
-    Forall E.value l ->
-    length l >= n ->
-    length free = n ->
-    (free = upvar_list n \/ free = firstn n l) ->
-    E.sstar E (E.Run (E.Call (E.Close fname free) arg)  l k)
-              (E.Run (E.Call (E.Close fname (firstn n l)) arg) l k).
-intros0 Hlval Hln Hlen HH.
-
-(* need a special case for zero *)
-destruct (eq_nat_dec n 0); [ | destruct HH as [ Hvar | Hval ] ].
-
-- subst n. destruct free; try discriminate.  simpl.
-  eapply E.SStarNil.
-
-- eapply E_call_close_eval; try solve [ eauto | lia ].
-
-- rewrite <- Hval.
-  eapply E.SStarNil.
-Qed.
-
-Lemma rec_free'_var_max : forall m acc n,
-    n < m ->
-    Forall (var_max m) acc ->
-    Forall (var_max m) (rec_free' acc n).
-first_induction n; intros0 Hlt Hacc.
-- simpl. assumption.
-- simpl. eapply IHn.
-  + lia.
-  + constructor; eauto. constructor. assumption.
-Qed.
-
-Lemma rec_free_var_max : forall n,
-    Forall (var_max (S n)) (rec_free n).
-intros. eapply rec_free'_var_max.
-- lia.
-- constructor.
-Qed.
-
-Lemma rec_free'_length : forall acc n,
-    length (rec_free' acc n) = length acc + n.
-first_induction n; intros; simpl.
-- lia.
-- rewrite IHn. simpl. lia.
-Qed.
-
-Lemma rec_free_length : forall n,
-    length (rec_free n) = n.
-intros. eapply rec_free'_length.
-Qed.
-
-
-Lemma rec_free'_not_value : forall acc n,
-    Forall (fun e => ~ E.value e) acc ->
-    Forall (fun e => ~ E.value e) (rec_free' acc n).
-first_induction n; intros0 Hacc.
-- simpl. assumption.
-- simpl. eapply IHn. constructor; eauto. inversion 1.
-Qed.
-
-Lemma rec_free_not_value : forall n,
-    Forall (fun e => ~ E.value e) (rec_free n).
-intros. eapply rec_free'_not_value. constructor.
-Qed.
-
-Lemma rec_free'_nth_error : forall acc n,
-    (forall i, i < length acc -> nth_error acc i = Some (E.UpVar (n + i))) ->
-    (forall i, i < n + length acc -> nth_error (rec_free' acc n) i = Some (E.UpVar i)).
-first_induction n; intros0 Hacc; intros0 Hlt.
-- simpl. eapply Hacc. lia.
-- simpl. rewrite IHn; eauto.
-  + destruct i0 as [|j]; intros; simpl in *.
-    * simpl. f_equal. f_equal. lia.
-    * replace (n + S j) with (S n + j) by lia.
-      eapply Hacc. lia.
-  + simpl. lia.
-Qed.
-
-Lemma rec_free_nth_error : forall n i,
-    i < n ->
-    nth_error (rec_free n) i = Some (E.UpVar i).
-intros0 Hlt.
-eapply rec_free'_nth_error; simpl.
-- intros. lia.
-- lia.
-Qed.
-
-Lemma E_elimbody_close_eval : forall E fname n cases l k,
-    length l > n ->
-    Forall E.value l ->
-    E.sstar E (E.Run (E.ElimBody (E.Close fname (rec_free n)) cases) l k)
-              (E.Run (E.ElimBody (E.Close fname (firstn n (skipn 1 l))) cases) l k).
-intros0 Hl Hlval.
-destruct (eq_nat_dec n 0) as [Hn | Hn].
-  { subst n. unfold rec_free. simpl. eauto using E.SStarNil. }
-assert (Hn' : n > 0) by lia. clear Hn.
-
-fwd eapply rec_free_length with (n := n).
-
-              (*
-remember (rec_free n) as free.
-assert (Forall (var_max (S n)) free) by (subst free; eapply rec_free_var_max).
-assert (length free > 0) by (subst free; rewrite rec_free_length; auto).
-              *)
-
-E_start HS.
-E_step HS.
-  { eapply E.SElimStepRec. inversion 1.
-    eapply Forall_contradict; eauto; try lia.
-    eapply rec_free_not_value. }
-E_star HS.
-  { eapply E_close_eval with (es := rec_free n) (vs := firstn n (skipn 1 l));
-        eauto; try lia.
-    - rewrite firstn_length. rewrite skipn_length. lia.
-    - eapply Forall_firstn. eapply Forall_skipn. assumption.
-    - eapply rec_free_not_value.
-    - intros0 He Hv. intros.
-      assert (i < n). {
-        rewrite <- rec_free_length with (n := n).
-        rewrite <- nth_error_Some. congruence.
-      }
-      rewrite rec_free_nth_error in He by assumption.
-      inject_some. eapply E.SUpVar.
-      rewrite firstn_skipn_swap in Hv.
-      rewrite skipn_nth_error in Hv.
-      rewrite firstn_nth_error_lt in Hv by lia.
-      assumption.
-  }
-E_step HS.
-  { eapply E.SCloseDone. eapply Forall_firstn, Forall_skipn. assumption. }
-
-eapply E_splus_sstar in HS.
-eauto.
 Qed.
 
 Lemma E_unroll_elim_ok : forall rec case args info,
@@ -1668,18 +879,46 @@ invc II; invc Tval.
 - constructor. list_magic_on (free, (efree, tt)).
 Qed.
 
+Lemma E_call_close_dyn_either : forall E fname expect l k func arg,
+    Forall E.value l ->
+    (func = E.CloseDyn fname 0 expect \/ func = E.Close fname l) ->
+    E.sstar E (E.Run (E.Call func arg) l k)
+              (E.Run (E.Call (E.Close fname l) arg) l k).
+intros0 Hlval Hfunc. destruct Hfunc; subst func.
+
+- E_start HS.
+  E_step HS.
+    { eapply E.SCallL. inversion 1. }
+  E_step HS.
+    { eapply E.SCloseDyn. }
+  eapply E_splus_sstar. assumption.
+
+- eapply E.SStarNil.
+Qed.
+
+Inductive T_elims_match_state ELIMS : T.state -> Prop :=
+| EmsRun : forall e l k,
+        T.elims_match ELIMS e ->
+        (forall v, T.value v -> T_elims_match_state ELIMS (k v)) ->
+        T_elims_match_state ELIMS (T.Run e l k)
+| EmsStop : forall e,
+        T.elims_match ELIMS e ->
+        T_elims_match_state ELIMS (T.Stop e)
+.
+
 Theorem I_sim : forall TE EE ELIMS t t' e,
     env_ok TE EE ELIMS ->
-    E.state_wf EE e ->
+    T.elims_match_list ELIMS TE ->
+    T_elims_match_state ELIMS t ->
     I TE EE t e ->
     T.sstep TE t t' ->
     exists e',
         E.splus EE e e' /\
         I TE EE t' e'.
 destruct t as [te tl tk | te]; cycle 1.
-  { intros0 Henv Hwf II Tstep. invc Tstep. }
+  { intros0 Henv Helims Helims' II Tstep. invc Tstep. }
 generalize dependent tk. generalize dependent tl.
-induction te using T.expr_ind''; intros0 Henv Hwf II Tstep;
+induction te using T.expr_ind''; intros0 Henv Helims Helims' II Tstep;
 invc Tstep; invc II; try on (I_expr _ _ _ _ _), invc;
 simpl in *; refold_compile (length TE).
 
@@ -1733,7 +972,8 @@ simpl in *; refold_compile (length TE).
   + eassumption.
   + constructor; eauto.
       { eapply compile_I_expr; eauto.
-        admit. (* elims_match *) }
+        rewrite T.elims_match_list_Forall in *.
+        eapply Forall_nth_error; eassumption. }
     all: constructor; try list_magic_on (free, (efree, tt)).
     all: eauto using I_expr_value, T_value_I_expr_locals.
 
@@ -1757,63 +997,41 @@ simpl in *; refold_compile (length TE).
     eauto using IConstr, T.VConstr, E.VConstr.
 
 - (* SElimNStep *)
-  assert (length el >= length efree). {
-    admit. (* tricky - depends on state_wf and compilation counting evars *)
-  }
-  assert (length (firstn (length efree) el) = length efree).
-    { rewrite firstn_length. lia. }
-
   E_start HS.
 
   E_star HS.
-    { eapply E_call_close_eval_either with (n := length efree); eauto.
-      on (length efree = _), fun H => rewrite H. assumption. }
+    { eapply E_call_close_dyn_either; eauto. }
 
   E_step HS.
     { eapply E.SCallR.
       - constructor. eauto using Forall_firstn.
       - eapply I_expr_not_value; eauto. }
 
-  eexists. split.
-  + eassumption.
-  + constructor; eauto.
-    intros0 IE'.
-    constructor; eauto.
-    econstructor; eauto using T_value_I_expr_locals; try congruence.
-      { right. congruence. }
+  eexists. split. eassumption.
+  constructor; eauto.
+  intros0 Tval Eval IE'. constructor; eauto.
+  econstructor; eauto using T_value_I_expr_locals.
 
 - (* SEliminate *)
-  assert (length el >= length efree). {
-    admit. (* tricky - depends on state_wf and compilation counting evars *)
-  }
-
   E_start HS.
 
   (* we start at the E.Call *)
 
   (* eval closure *)
   E_star HS.
-    { eapply E_call_close_eval_either with (n := length efree); eauto.
-      on (length efree = _), fun H => rewrite H. assumption. }
+    { eapply E_call_close_dyn_either; eauto. }
 
   (* make the call *)
   on (I_expr _ _ _ _ etarget), invc.
   E_step HS.
-    { eapply E.SMakeCall.
-      - eauto using Forall_firstn.
-      - constructor. list_magic_on (args, (eargs, tt)). eauto using I_expr_value.
-      - eassumption. }
+    { eapply E.SMakeCall; eauto.
+      constructor. list_magic_on (args, (eargs, tt)). eauto using I_expr_value. }
 
   (* now we are at the E.ElimBody *)
 
   (* eval rec *)
-  set (v := E.Constr tag eargs).
-  E_star HS.
-    { eapply E_elimbody_close_eval with (n := length efree) (l := v :: _).
-      - simpl. rewrite firstn_length. lia.
-      - constructor; eauto using Forall_firstn.
-        constructor. list_magic_on (args, (eargs, tt)). eauto using I_expr_value.
-    }
+  E_step HS. { eapply E.SElimStepRec. inversion 1. }
+  E_step HS. { eapply E.SCloseDyn. } simpl in S4.
 
   (* enter the case *)
   remember (compile_list_pair _ _) as ecases.
@@ -1842,20 +1060,23 @@ simpl in *; refold_compile (length TE).
       - eassumption.
     }
 
-  eexists. split. eapply HS. unfold S4.
-  constructor; eauto using Forall_firstn.
-  all: admit. (* proof is broken *)
-  (*
-  + eapply unroll_elim_sim; try eassumption.
-  + subst erec. eapply unroll_elim_sim; try eassumption.
-    * eapply compile_I_expr; eauto.
-      -- admit. (* elims_match *)
-      -- simpl in *. congruence.
-    * intros. econstructor; eauto.
-      admit. (* need to be stricter about free vars on the closure *)
-  + admit. (* need to be stricter about free vars on the closure *)
-  + assumption.
-  *)
+  eexists. split. eapply HS. unfold S5.
+  constructor; eauto.
+  eapply unroll_elim_sim; eauto.
+  + eapply compile_I_expr; eauto.
+    invc Helims'.
+    simpl in *. T.refold_elims_match ELIMS. do 2 break_and.
+    rewrite T.elims_match_list_pair_Forall in *.
+    cut (T.elims_match_pair ELIMS (case, rec)). { intro. eauto. }
+    eapply Forall_nth_error; eauto.
+  + simpl. intros0 IE'. econstructor.
+    * reflexivity.
+    * eassumption.
+    * reflexivity.
+    * assumption.
+    * right. reflexivity.
+    * assumption.
+  + simpl in *. congruence.
 
 - destruct (Forall2_app_inv_l _ _ **) as (? & ? & ? & ? & ?).
   on (Forall2 _ (_ :: _) _), invc.
@@ -1870,6 +1091,10 @@ simpl in *; refold_compile (length TE).
 
 - eexists. split. eapply E.SPlusOne, E.SCloseDone.
   + list_magic_on (free, (efree, tt)). eauto using I_expr_value.
-  + eauto using IClose, I_expr_value.
+  + assert (Forall E.value efree).
+      { list_magic_on (free, (efree, tt)). eauto using I_expr_value. }
+    assert (Forall2 (I_expr TE EE []) free efree).
+      { list_magic_on (free, (efree, tt)). eauto using T_value_I_expr_locals. }
+    eauto using IClose, T.VClose, E.VClose.
 
-Admitted.
+Qed.

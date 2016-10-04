@@ -416,6 +416,69 @@ assumption.
 Qed.
 
 
+
+Definition num_locals :=
+    let fix go e :=
+        let fix go_list es :=
+            match es with
+            | [] => 0
+            | e :: es => max (go e) (go_list es)
+            end in
+        let fix go_pair p :=
+            match p with
+            | (e, _) => go e
+            end in
+        let fix go_list_pair ps :=
+            match ps with
+            | [] => 0
+            | p :: ps => max (go_pair p) (go_list_pair ps)
+            end in
+        match e with
+        | Arg => 1
+        | UpVar i => S (S i)
+        | Call f a => max (go f) (go a)
+        | Constr _ args => go_list args
+        | ElimN _ cases target => max (go_list_pair cases) (go target)
+        | Close _ free => go_list free
+        end in go.
+
+(* Nested fixpoint aliases *)
+Definition num_locals_list :=
+    let go := num_locals in
+    let fix go_list es :=
+        match es with
+        | [] => 0
+        | e :: es => max (go e) (go_list es)
+        end in go_list.
+
+Definition num_locals_pair :=
+    let go := num_locals in
+    let fix go_pair (p : expr * rec_info) :=
+        match p with
+        | (e, _) => go e
+        end in go_pair.
+
+Definition num_locals_list_pair :=
+    let go_pair := num_locals_pair in
+    let fix go_list_pair ps :=
+        match ps with
+        | [] => 0
+        | p :: ps => max (go_pair p) (go_list_pair ps)
+        end in go_list_pair.
+
+Ltac refold_num_locals :=
+    fold num_locals_list in *;
+    fold num_locals_pair in *;
+    fold num_locals_list_pair in *.
+
+Lemma num_locals_list_is_maximum : forall es,
+    num_locals_list es = maximum (map num_locals es).
+induction es; simpl in *; eauto.
+Qed.
+
+
+
+
 Lemma subst_list_is_map_partial : forall arg free es,
     subst_list arg free es = map_partial (subst arg free) es.
 induction es.
