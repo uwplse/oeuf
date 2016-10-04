@@ -1,9 +1,9 @@
 Require Import Common Monads.
 Require Import Metadata.
-Require ElimFunc Switched String.
+Require ElimFunc2 Switched String.
 Delimit Scope string_scope with string.
 
-Module E := ElimFunc.
+Module E := ElimFunc2.
 Module S := Switched.
 
 

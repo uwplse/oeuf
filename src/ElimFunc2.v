@@ -20,7 +20,6 @@ Inductive expr :=
 | Constr (tag : nat) (args : list expr)
 | ElimBody (rec : expr) (cases : list (expr * rec_info))
 | Close (f : function_name) (free : list expr)
-| CloseDyn (f : function_name) (drop : nat) (expect : nat)
 .
 
 Definition env := list expr.
@@ -44,59 +43,6 @@ Fixpoint unroll_elim (rec : expr)
     end.
 
 
-(* Demo *)
-
-Definition add_lam_a :=             0.
-Definition add_lam_b :=             1.
-Definition elim_zero_lam_b :=       2.
-Definition elim_succ_lam_a :=       3.
-Definition elim_succ_lam_IHa :=     4.
-Definition elim_succ_lam_b :=       5.
-Definition nat_elim :=              6.
-
-Definition add_reflect := Close add_lam_a [].
-
-Definition add_env : list expr :=
-    (* add_lam_a *)
-    [ Close add_lam_b [Arg]
-    (* add_lam_b *)
-    ; Call (Call (Close nat_elim [Arg; UpVar 0]) (UpVar 0)) Arg
-    (* elim_zero_lam_b *)
-    ; Arg
-    (* elim_succ_lam_a *)
-    ; Close elim_succ_lam_IHa [Arg; UpVar 0; UpVar 1]
-    (* elim_succ_lam_IHa *)
-    ; Close elim_succ_lam_b [Arg; UpVar 0; UpVar 1; UpVar 2]
-    (* elim_succ_lam_b *)
-    ; Call (UpVar 0) (Constr 1 [Arg])
-    (* nat_elim *)
-    ; ElimBody
-        (Close nat_elim [UpVar 0; UpVar 1])
-        [(Close elim_zero_lam_b [UpVar 0; UpVar 1], []);
-         (Close elim_succ_lam_a [UpVar 0; UpVar 1], [true])]
-    ].
-
-(* Note on compilation of Elim:
-   - The Elim cases must be shifted: Arg -> UpVar0, UpVar0 -> UpVar1, etc.
-     Then the call to the newly generated function must have upvars set to
-     [Arg; UpVar0; UpVar1; ...] up to the number of used upvars.
-   - The `rec` argument should refer to the newly generated function, with
-     upvars set to [UpVar0; UpVar1; ...] up to the number of used upvars.
-   - The target is always (implicitly) Arg.  Also, upon entering a case, Arg is
-     *removed* from the local context, and everything is shifted down.  Later
-     we will no-op "compile" to another semantics that doesn't do that.
- *)
-
-Definition add_prog := (add_reflect, add_env).
-
-Fixpoint nat_reflect n : expr :=
-    match n with
-    | 0 => Constr 0 []
-    | S n => Constr 1 [nat_reflect n]
-    end.
-
-
-
 (*
  * Mutual recursion/induction schemes for expr
  *)
@@ -112,7 +58,6 @@ Definition expr_rect_mut
     (HConstr :  forall tag args, Pl args -> P (Constr tag args))
     (HElimBody : forall rec cases, P rec -> Plp cases -> P (ElimBody rec cases))
     (HClose :   forall f free, Pl free -> P (Close f free))
-    (HCloseDyn : forall f drop expect, P (CloseDyn f drop expect))
     (Hnil :     Pl [])
     (Hcons :    forall e es, P e -> Pl es -> Pl (e :: es))
     (Hpair :    forall e r, P e -> Pp (e, r))
@@ -140,7 +85,6 @@ Definition expr_rect_mut
         | Constr tag args => HConstr tag args (go_list args)
         | ElimBody rec cases => HElimBody rec cases (go rec) (go_pair_list cases)
         | Close f free => HClose f free (go_list free)
-        | CloseDyn f drop expect => HCloseDyn f drop expect
         end in go e.
 
 (* Useful wrapper for `expr_rect_mut with (Pl := Forall P)` *)
@@ -152,11 +96,10 @@ Definition expr_ind' (P : expr -> Prop) (Pp : (expr * rec_info) -> Prop)
     (HElimBody : forall rec cases,
         P rec -> Forall Pp cases -> P (ElimBody rec cases))
     (HClose :   forall f free, Forall P free -> P (Close f free))
-    (HCloseDyn : forall f drop expect, P (CloseDyn f drop expect))
     (Hpair :    forall e r, P e -> Pp (e, r))
     (e : expr) : P e :=
     ltac:(refine (@expr_rect_mut P (Forall P) Pp (Forall Pp)
-        HArg HUpVar HCall HConstr HElimBody HClose HCloseDyn _ _ Hpair _ _ e); eauto).
+        HArg HUpVar HCall HConstr HElimBody HClose _ _ Hpair _ _ e); eauto).
 
 (* Useful wrapper for `expr_rect_mut with (Pl := Forall P)` *)
 Definition expr_ind'' (P : expr -> Prop)
@@ -169,90 +112,9 @@ Definition expr_ind'' (P : expr -> Prop)
         Forall (fun c => P (fst c)) cases ->
         P (ElimBody rec cases))
     (HClose :   forall f free, Forall P free -> P (Close f free))
-    (HCloseDyn : forall f drop expect, P (CloseDyn f drop expect))
     (e : expr) : P e :=
     ltac:(refine (@expr_rect_mut P (Forall P) (fun c => P (fst c)) (Forall (fun c => P (fst c)))
-        HArg HUpVar HCall HConstr HElimBody HClose HCloseDyn _ _ _ _ _ e); eauto).
-
-
-(*
- * Nested fixpoint aliases for subst
- *)
-
-Definition num_locals :=
-    let fix go e :=
-        let fix go_list es :=
-            match es with
-            | [] => 0
-            | e :: es => max (go e) (go_list es)
-            end in
-        let fix go_pair p :=
-            match p with
-            | (e, _) => go e
-            end in
-        let fix go_list_pair ps :=
-            match ps with
-            | [] => 0
-            | p :: ps => max (go_pair p) (go_list_pair ps)
-            end in
-        match e with
-        | Arg => 1
-        | UpVar i => S (S i)
-        | Call f a => max (go f) (go a)
-        | Constr _ args => go_list args
-        | ElimBody rec cases => max (go rec) (go_list_pair cases)
-        | Close _ free => go_list free
-        | CloseDyn _ _ expect => expect
-        end in go.
-
-(* Nested fixpoint aliases *)
-Definition num_locals_list :=
-    let go := num_locals in
-    let fix go_list es :=
-        match es with
-        | [] => 0
-        | e :: es => max (go e) (go_list es)
-        end in go_list.
-
-Definition num_locals_pair :=
-    let go := num_locals in
-    let fix go_pair (p : expr * rec_info) :=
-        match p with
-        | (e, _) => go e
-        end in go_pair.
-
-Definition num_locals_list_pair :=
-    let go_pair := num_locals_pair in
-    let fix go_list_pair ps :=
-        match ps with
-        | [] => 0
-        | p :: ps => max (go_pair p) (go_list_pair ps)
-        end in go_list_pair.
-
-Ltac refold_num_locals :=
-    fold num_locals_list in *;
-    fold num_locals_pair in *;
-    fold num_locals_list_pair in *.
-
-Lemma num_locals_list_is_maximum : forall es,
-    num_locals_list es = maximum (map num_locals es).
-induction es; simpl in *; eauto.
-Qed.
-
-Lemma value_num_locals : forall e, value e -> num_locals e = 0.
-induction e using expr_ind''; intros0 Hval; invc Hval;
-simpl; refold_num_locals;
-rewrite num_locals_list_is_maximum.
-
-- cut (maximum (map num_locals args) <= 0). { intro. lia. }
-  rewrite maximum_le_Forall, <- Forall_map. list_magic_on (args, tt).
-  firstorder lia.
-
-- cut (maximum (map num_locals free) <= 0). { intro. lia. }
-  rewrite maximum_le_Forall, <- Forall_map. list_magic_on (free, tt).
-  firstorder lia.
-Qed.
-
+        HArg HUpVar HCall HConstr HElimBody HClose _ _ _ _ _ e); eauto).
 
 
 (* Continuation-based step relation *)
@@ -277,10 +139,6 @@ Inductive sstep (E : env) : state -> state -> Prop :=
 | SCloseDone : forall fname vs l k,
         Forall value vs ->
         sstep E (Run (Close fname vs) l k) (k (Close fname vs))
-
-| SCloseDyn : forall fname drop expect l k,
-        sstep E (Run (CloseDyn fname drop expect) l k)
-                (k (Close fname (skipn drop l)))
 
 | SConstrStep : forall fname vs e es l k,
         Forall value vs ->
