@@ -24,37 +24,12 @@ Inductive simple_star {A : Type} (step : A -> A -> Prop) : A -> A -> Prop :=
 
 (* Dummy definition, fill in later *)
 Inductive correspond {tys ty} (exp : SourceLang.expr tys ty) (st : Asm.state).
-
-
-Lemma type_dec_eq :
-  forall (t1 t2 : SourceLang.type),
-    { t1 = t2 } + { t1 <> t2 }.
-Proof.
-  decide equality.
-  destruct t; destruct t0; try decide equality;
-    left; reflexivity.
-Defined.
-
-
-(* This is crazy *)
-Fixpoint grab_expr {t1s t2s : list SourceLang.type} {ty : SourceLang.type} (exprs : hlist (SourceLang.expr t1s) t2s) (expr : SourceLang.expr t1s ty) : Prop .
-  destruct exprs eqn:?. exact False.
-  destruct (type_dec_eq ty a). exact True.
-  exact (grab_expr _ _ _ h expr).
-Defined.
-
-Inductive initial_state (cu : compilation_unit) : forall tys ty, SourceLang.expr tys ty -> Prop := 
-| initial_intro :
-    forall ty expr,
-      @grab_expr nil (types cu) ty (exprs cu) expr ->
-      initial_state cu nil ty expr.
-    
       
 Theorem Oeuf_correct :
   forall cu asmprog,
     transf_to_asm cu = OK asmprog ->
     forall tys ty expr,
-      initial_state cu tys ty expr ->
+      CompilationUnit.initial_state cu tys ty expr ->
       forall expr',
         simple_star SourceLang.step expr expr' ->
         exists st st',

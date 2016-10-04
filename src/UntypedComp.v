@@ -5,12 +5,15 @@ Require Import Metadata.
 Require Import Program.
 
 Require Import HList.
+Require Import CompilationUnit.
 
 Require SourceLang.
 Require Untyped.
 
 Module S := SourceLang.
 Module U := Untyped.
+
+
 
 Definition elim_to_type_name {l cases target} (e : S.elim l cases target) : type_name :=
   match e with
@@ -280,3 +283,58 @@ Proof.
     rewrite <- constructor_index_correct with (e := e) (ct := ct).
     now rewrite nth_error_hmap_simple_hget.
 Qed.
+
+(* Move to Untyped *)
+Inductive initial_state (prog : list U.expr * list metadata) : U.expr -> Prop :=
+| initial_intro :
+    forall expr,
+      In expr (fst prog) ->
+      initial_state prog expr.
+
+Lemma grab_expr_in :
+  forall {ty tys l} (exprs : hlist (SourceLang.expr l) tys) (expr : SourceLang.expr l ty),
+    grab_expr l tys ty exprs expr ->
+    In (compile expr) (compile_hlist exprs).
+Proof.
+  induction exprs; intros.
+  simpl in H. inversion H.
+  simpl in H. break_match_hyp. subst.
+  unfold eq_rect_r in *.
+  simpl in *. break_match_hyp. left. congruence.
+  right. eapply IHexprs; eauto.
+  simpl. right. eapply IHexprs; eauto.
+Qed.
+
+
+Lemma initial_state_exists :
+  forall cu tprog,
+    @compile_cu nil (types cu) (Metadata.init_metadata cu) = tprog ->
+    forall tys ty expr,
+      CompilationUnit.initial_state cu tys ty expr ->
+      initial_state tprog (compile expr).
+Proof.
+  intros.
+  inv H0. subst.
+  destruct cu. simpl in *.
+  econstructor; eauto. simpl.
+
+  assert (expr = expr0).
+  {
+    eapply EqdepFacts.eq_sigT_eq_dep in H5.
+    eapply Eqdep_dec.eq_dep_eq_dec in H5.
+    eapply EqdepFacts.eq_sigT_eq_dep in H5.
+    eapply Eqdep_dec.eq_dep_eq_dec in H5.
+
+    congruence.
+
+    intros. eapply SourceLang.type_eq_dec.
+    eapply list_eq_dec. eapply SourceLang.type_eq_dec.
+  }
+
+  clear H5. subst expr0.
+
+  eapply grab_expr_in; eauto.
+Qed.
+  
+    
+      
