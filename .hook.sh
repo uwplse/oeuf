@@ -66,7 +66,7 @@ function main {
 (time main) &> "$LOG"
 scp "$LOG" "$WEBHOST:$WEBDIR/$LOG"
 sh make_metrics.sh
-cp metrics.json "$METRICS$
+cp metrics.json "$METRICS"
 scp metrics.json "$WEBHOST:$WEBDIRTL"
 scp "$METRICS" "$WEBHOST:$WEBDIR"
 
