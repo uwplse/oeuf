@@ -117,6 +117,82 @@ Definition expr_ind'' (P : expr -> Prop)
         HArg HUpVar HCall HConstr HElimBody HClose _ _ _ _ _ e); eauto).
 
 
+
+Definition num_locals :=
+    let fix go e :=
+        let fix go_list es :=
+            match es with
+            | [] => 0
+            | e :: es => max (go e) (go_list es)
+            end in
+        let fix go_pair p :=
+            match p with
+            | (e, _) => go e
+            end in
+        let fix go_list_pair ps :=
+            match ps with
+            | [] => 0
+            | p :: ps => max (go_pair p) (go_list_pair ps)
+            end in
+        match e with
+        | Arg => 1
+        | UpVar i => S (S i)
+        | Call f a => max (go f) (go a)
+        | Constr _ args => go_list args
+        | ElimBody rec cases => max (go rec) (go_list_pair cases)
+        | Close _ free => go_list free
+        end in go.
+
+(* Nested fixpoint aliases *)
+Definition num_locals_list :=
+    let go := num_locals in
+    let fix go_list es :=
+        match es with
+        | [] => 0
+        | e :: es => max (go e) (go_list es)
+        end in go_list.
+
+Definition num_locals_pair :=
+    let go := num_locals in
+    let fix go_pair (p : expr * rec_info) :=
+        match p with
+        | (e, _) => go e
+        end in go_pair.
+
+Definition num_locals_list_pair :=
+    let go_pair := num_locals_pair in
+    let fix go_list_pair ps :=
+        match ps with
+        | [] => 0
+        | p :: ps => max (go_pair p) (go_list_pair ps)
+        end in go_list_pair.
+
+Ltac refold_num_locals :=
+    fold num_locals_list in *;
+    fold num_locals_pair in *;
+    fold num_locals_list_pair in *.
+
+Lemma num_locals_list_is_maximum : forall es,
+    num_locals_list es = maximum (map num_locals es).
+induction es; simpl in *; eauto.
+Qed.
+
+Lemma value_num_locals : forall e, value e -> num_locals e = 0.
+induction e using expr_ind''; intros0 Hval; invc Hval;
+simpl; refold_num_locals;
+rewrite num_locals_list_is_maximum.
+
+- cut (maximum (map num_locals args) <= 0). { intro. lia. }
+  rewrite maximum_le_Forall, <- Forall_map. list_magic_on (args, tt).
+  firstorder lia.
+
+- cut (maximum (map num_locals free) <= 0). { intro. lia. }
+  rewrite maximum_le_Forall, <- Forall_map. list_magic_on (free, tt).
+  firstorder lia.
+Qed.
+
+
+
 (* Continuation-based step relation *)
 
 Inductive state :=
