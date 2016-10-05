@@ -2,6 +2,7 @@
 
 WEBHOST="uwplse.org"
 WEBDIR="/var/www/oeuf/logs"
+WEBDIRTL="/var/www/oeuf"
 LOG=$(printf "%s-%s-%s-oeuf-hook.txt" \
              "$(TZ="America/Los_Angeles" date "+%y%m%d")" \
              "$(TZ="America/Los_Angeles" date "+%H%M%S")" \
@@ -64,6 +65,11 @@ function main {
 
 (time main) &> "$LOG"
 scp "$LOG" "$WEBHOST:$WEBDIR/$LOG"
+sh make_metrics.sh
+cp metrics.json "$METRICS$
+scp metrics.json "$WEBHOST:$WEBDIRTL"
+scp "$METRICS" "$WEBHOST:$WEBDIR"
+
 
 ALL_PASS="ALL TESTS PASSED"
 PASSED=`grep "$ALL_PASS" "$LOG" | wc -l`
@@ -74,12 +80,6 @@ else
     echo "Problematic build"
     bash .notify.sh "$LOG"
 fi
-
-sh make_metrics.sh
-cp metrics.json "$METRICS$
-scp metrics.json "$WEBHOST:$WEBDIR/$LOG"
-scp "$METRICS" "$WEBHOST:$WEBDIR/$LOG"
-
 
 rm -f "$LOG"
 rm -f "$METRICS"
