@@ -3,6 +3,8 @@ Require Import Common.
 Require Import Utopia.
 
 
+Require Import Metadata.
+
 Inductive expr :=
 | Var (n : nat)
 | Lam (body : expr)
@@ -151,6 +153,13 @@ Inductive step : expr -> expr -> Prop :=
     Forall value args ->
     step (Elim ty cases (Constr c args))
         (unroll_elim case c args (Elim ty cases)).
+
+
+Inductive initial_state (prog : list expr * list metadata) : expr -> Prop :=
+| initial_intro :
+    forall expr,
+      In expr (fst prog) ->
+      initial_state prog expr.
 
 
 

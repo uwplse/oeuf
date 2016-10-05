@@ -284,13 +284,6 @@ Proof.
     now rewrite nth_error_hmap_simple_hget.
 Qed.
 
-(* Move to Untyped *)
-Inductive initial_state (prog : list U.expr * list metadata) : U.expr -> Prop :=
-| initial_intro :
-    forall expr,
-      In expr (fst prog) ->
-      initial_state prog expr.
-
 Lemma grab_expr_in :
   forall {ty tys l} (exprs : hlist (SourceLang.expr l) tys) (expr : SourceLang.expr l ty),
     grab_expr l tys ty exprs expr ->
@@ -304,7 +297,6 @@ Proof.
   right. eapply IHexprs; eauto.
   simpl. right. eapply IHexprs; eauto.
 Qed.
-
 
 Lemma initial_state_exists :
   forall cu tprog,
