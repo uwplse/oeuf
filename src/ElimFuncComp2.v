@@ -83,6 +83,22 @@ Definition compile_cu (cu : list A.expr * list metadata) : list B.expr * list me
     (exprs', metas).
 
 
+Lemma compile_list_Forall : forall aes bes,
+    compile_list aes = bes ->
+    Forall2 (fun a b => compile a = b) aes bes.
+induction aes; destruct bes; intros0 Hcomp; simpl in Hcomp; try discriminate.
+- constructor.
+- invc Hcomp. eauto.
+Qed.
+
+Lemma compile_list_length : forall es,
+    length (compile_list es) = length es.
+intros. induction es.
+- reflexivity.
+- simpl. f_equal. eauto.
+Qed.
+
+
 
 Inductive I_expr (AE : A.env) (BE : B.env) : A.expr -> B.expr -> Prop :=
 | IArg : I_expr AE BE A.Arg B.Arg
@@ -838,24 +854,59 @@ destruct ae; inv Astep; invc II; [ try on (I_expr _ _ _ _), invc.. | ].
   + eapply Forall2_nth_error; eauto. admit. (* list lemma *)
 
 - (* SCallL *)
-  destruct (is_close_dyn_zero_dec ae1).
-  all: admit.
-  (*
+  B_start HS.
+  B_step HS. { eapply B.SCallL. eauto using I_expr_not_value. }
 
-  + (* must be able to take a second step, because a' is not A_matchable. *)
-    on (is_close_dyn_zero _), invc.
-    on (I_expr _ _ (A.CloseDyn _ _ _) _), invc.
-    replace (close_dyn_free drop 0) with ([] : list B.expr) by (destruct drop; auto).
+  eexists. split. left. exact HS.
+  unfold S1. constructor; eauto.
+    { simpl in *. lia. }
+  intros. constructor; eauto.
+    { constructor; eauto. }
+    { simpl in *. rewrite B.value_num_locals by assumption. lia. }
 
-    eexists. split; eauto.
-    eapply ICallCloseDyn; eauto.
-    simpl in *. B.refold_num_locals. lia.
+- (* SCallL - CDZ *)
+  eexists. split. right. split.
+    { reflexivity. }
+    { simpl. lia. }
+  eapply ICallCdz; eauto.
+
+- (* SCallR *)
+  B_start HS.
+  B_step HS. { eapply B.SCallR; eauto using I_expr_value, I_expr_not_value. }
+
+  eexists. split. left. exact HS.
+  unfold S1. constructor; eauto.
+    { simpl in *. lia. }
+  intros. constructor; eauto.
+    { constructor; eauto. }
+    { simpl in *. rewrite B.value_num_locals with (e := bv) by assumption. lia. }
+
+- (* SCallR - CDZ *)
+  on (A.value (A.CloseDyn _ _ _)), invc.
+
+- (* SMakeCall *)
+  fwd eapply length_nth_error_Some with (i := fname) (ys := compile_list AE) as HH.
+    { symmetry. eapply compile_list_length. }
+    { eassumption. }
+    destruct HH as [bbody ?].
+
+  on (I_expr _ _ (A.Close _ _) _), invc.
 
   + B_start HS.
-    B_step HS. { eapply B.SCallL. admit. (* broken *) }
-    eexists. split. left. eauto.
-    admit.
-  *)
+    B_step HS.
+      { eapply B.SMakeCall; eauto using I_expr_value.
+        list_magic_on (free, (bfree, tt)). eauto using I_expr_value. }
+
+    eexists. split. left. exact HS.
+    unfold S1. constructor; simpl; eauto.
+    * eapply Forall2_nth_error with (x := body) (y := bbody); cycle 1; eauto.
+      remember (compile_list AE) as BE.
+      symmetry in HeqBE. eapply compile_list_Forall in HeqBE.
+      assert (Forall A_close_dyn_placement AE) by admit. (* TODO - add hyp *)
+      list_magic_on (AE, (BE, tt)). eauto using compile_I_expr.
+    * constructor; try list_magic_on (bfree, (free, tt)); eauto using I_expr_value.
+    * admit. (* TODO - need A.enough_free hyp *)
+    * rewrite firstn_all by (symmetry; eauto using Forall2_length). eauto.
 
 Admitted.
 
