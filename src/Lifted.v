@@ -5,7 +5,7 @@ Require Import Monads.
 
 Require Import StuartTact.
 Require Import ListLemmas.
-
+Require Import Metadata.
 
 Definition function_name := nat.
 
@@ -366,3 +366,9 @@ Lemma data_value_ok : forall LE e,
 induction e using expr_ind'; intros0 Ldat; invc Ldat.
 constructor. list_magic_on (args, tt).
 Qed.
+
+Inductive initial_state (prog : list expr * list metadata) : expr -> Prop :=
+| initial_intro :
+    forall expr,
+      In expr (fst prog) ->
+      initial_state prog expr.
