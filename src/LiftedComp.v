@@ -139,15 +139,37 @@ Definition compile_cu (cu : list U.expr * list metadata) : list L.expr * list me
     let '(tt, (_, metas')) := gen_metas_list exprs metas (0, []) in
     (exprs', metas ++ metas').
 
-Lemma initial_state_exists :
-  forall cu cu',
-    compile_cu cu = cu' ->
-    forall expr,
-      U.initial_state cu expr ->
-      exists expr',
-        L.initial_state cu' expr'. (* /\ match_states expr expr' *)
-Proof.
-Admitted.
-  
+
   
 End compile.
+
+
+Section Simulation.
+
+
+  Variable prog : list U.expr * list metadata.
+  Variable tprog : list L.expr * list metadata.
+  Hypothesis TRANSF : compile_cu prog = tprog.
+  
+  Inductive match_states : L.env -> U.expr -> L.expr -> Prop :=.
+
+  Lemma step_sim :
+    forall el el' er E,
+      match_states E el er ->
+      U.step el el' ->
+      exists er',
+        L.step E er er' /\ match_states E el' er'.
+  Proof.
+  Admitted.
+
+  Lemma initial_state_exists :
+      forall expr,
+        U.initial_state prog expr ->
+        exists expr' E,
+          L.initial_state tprog expr' /\
+          match_states E expr expr'.
+  Proof.
+  Admitted.
+
+  
+End Simulation.
