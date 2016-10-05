@@ -12,6 +12,7 @@ Require Import compcert.common.Events.
 Require Import compcert.common.Globalenvs.
 
 
+
 Inductive simple_star {A : Type} (step : A -> A -> Prop) : A -> A -> Prop :=
 | star_nil :
     forall st,
