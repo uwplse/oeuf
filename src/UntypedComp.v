@@ -303,7 +303,7 @@ Lemma initial_state_exists :
     @compile_cu nil (types cu) (Metadata.init_metadata cu) = tprog ->
     forall tys ty expr,
       CompilationUnit.initial_state cu tys ty expr ->
-      initial_state tprog (compile expr).
+      Untyped.initial_state tprog (compile expr).
 Proof.
   intros.
   inv H0. subst.

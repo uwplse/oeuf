@@ -139,6 +139,15 @@ Definition compile_cu (cu : list U.expr * list metadata) : list L.expr * list me
     let '(tt, (_, metas')) := gen_metas_list exprs metas (0, []) in
     (exprs', metas ++ metas').
 
-
-
+Lemma initial_state_exists :
+  forall cu cu',
+    compile_cu cu = cu' ->
+    forall expr,
+      U.initial_state cu expr ->
+      exists expr',
+        L.initial_state cu' expr'. (* /\ match_states expr expr' *)
+Proof.
+Admitted.
+  
+  
 End compile.
