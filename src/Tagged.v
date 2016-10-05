@@ -3,7 +3,7 @@ Require Import Common.
 Require Import Utopia.
 Require Import Monads.
 Require Import ListLemmas.
-
+Require Import Metadata.
 
 Definition function_name := nat.
 
@@ -503,3 +503,9 @@ first_induction args; destruct rec; intros0 Hlen; simpl in Hlen; try discriminat
 - inv Hlen.
   fwd eapply IHargs; try eassumption.
 Qed.
+
+Inductive initial_state (prog : list expr * list metadata) : expr -> Prop :=
+| initial_intro :
+    forall expr,
+      In expr (fst prog) ->
+      initial_state prog expr.
