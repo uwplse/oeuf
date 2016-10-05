@@ -287,12 +287,274 @@ induction i; intros; simpl in *; subst.
 - destruct xs; try discriminate. eapply IHi; eauto.
 Qed.
 
-Lemma skipn_nth_error : forall A i (xs : list A) y ys,
-    skipn i xs = y :: ys ->
-    nth_error xs i = Some y.
-induction i; intros; simpl in *; subst.
-- reflexivity.
-- destruct xs; try discriminate. eauto.
+
+
+(* unsorted *)
+
+Lemma firstn_all : forall A n xs,
+    n = length xs ->
+    @firstn A n xs = xs.
+induction n; simpl; intros0 Hn.
+- destruct xs; simpl in *; congruence.
+- destruct xs; simpl in *; try discriminate Hn.
+  rewrite IHn; eauto.
+Qed.
+
+Lemma skipn_nth_error : forall A i j (xs : list A),
+    nth_error (skipn i xs) j = nth_error xs (i + j).
+first_induction xs; first_induction i; simpl; intros; eauto.
+destruct j; simpl; reflexivity.
 Qed.
 
 
+Lemma skipn_nth_error_change' : forall A i j (xs ys : list A),
+    skipn i xs = skipn i ys ->
+    j >= 0 ->
+    nth_error xs (i + j) = nth_error ys (i + j).
+intros0 Hskip Hj.
+rewrite <- skipn_nth_error, <- skipn_nth_error. congruence.
+Qed.
+
+Lemma skipn_nth_error_change : forall A i j (xs ys : list A),
+    skipn i xs = skipn i ys ->
+    j >= i ->
+    nth_error xs j = nth_error ys j.
+intros0 Hskip Hj.
+set (k := j - i).
+replace j with (i + k) by (unfold k; lia).
+eapply skipn_nth_error_change'.
+- assumption.
+- lia.
+Qed.
+
+Lemma firstn_nth_error_lt : forall A (xs : list A) n i,
+    i < n ->
+    nth_error (firstn n xs) i = nth_error xs i.
+first_induction n; intros0 Hlt.
+{ lia. }
+
+destruct xs, i; simpl.
+- reflexivity.
+- reflexivity.
+- reflexivity.
+- eapply IHn. lia.
+Qed.
+
+Lemma firstn_nth_error_ge : forall A (xs : list A) n i,
+    i >= n ->
+    nth_error (firstn n xs) i = None.
+first_induction n; intros0 Hlt.
+
+- simpl. destruct i; reflexivity.
+- destruct xs, i; simpl; try reflexivity. 
+  + lia.
+  + eapply IHn. lia.
+Qed.
+
+
+Lemma app_inv_length : forall A (xs ys zs : list A),
+    xs = ys ++ zs ->
+    firstn (length ys) xs = ys /\
+    skipn (length ys) xs = zs.
+first_induction ys; intros0 Heq; destruct xs; try discriminate; simpl in *.
+- eauto.
+- eauto.
+- specialize (IHys xs zs ltac:(congruence)). break_and.
+  split; congruence.
+Qed.
+
+Lemma nth_error_length_le : forall A (xs : list A) n,
+    (forall i, i >= n -> nth_error xs i = None) ->
+    length xs <= n.
+first_induction n; intros0 Hge.
+- destruct xs.
+  + simpl. lia.
+  + specialize (Hge 0 ltac:(lia)). discriminate.
+- destruct xs.
+  + simpl. lia.
+  + simpl. cut (length xs <= n). { intros. lia. }
+    eapply IHn. intros. specialize (Hge (S i) ltac:(lia)). simpl in *. assumption.
+Qed.
+
+Lemma nth_error_firstn : forall A (xs ys : list A) n,
+    (forall i, i < n -> nth_error ys i = nth_error xs i) ->
+    (forall i, i >= n -> nth_error ys i = None) ->
+    ys = firstn n xs.
+induction xs; intros0 Hlt Hge.
+- replace (firstn n []) with (@nil A) by (destruct n; reflexivity).
+  destruct ys.
+    { reflexivity. }
+  destruct (eq_nat_dec n 0).
+  + specialize (Hge 0 ltac:(lia)). discriminate.
+  + specialize (Hlt 0 ltac:(lia)). discriminate.
+- destruct ys.
+  + destruct n.
+      { reflexivity. }
+    specialize (Hlt 0 ltac:(lia)). discriminate.
+  + destruct n.
+      { specialize (Hge 0 ltac:(lia)). discriminate. }
+    simpl.
+    rewrite <- (IHxs ys).
+    * specialize (Hlt 0 ltac:(lia)). simpl in Hlt. inject_some. reflexivity.
+    * intros. specialize (Hlt (S i) ltac:(lia)). assumption.
+    * intros. specialize (Hge (S i) ltac:(lia)). assumption.
+Qed.
+
+Lemma firstn_app : forall A (xs ys : list A) n,
+    n <= length xs ->
+    firstn n (xs ++ ys) = firstn n xs.
+induction xs; intros0 Hle.
+- simpl in *. destruct n; try lia. simpl. reflexivity.
+- destruct n; simpl in *.
+    { reflexivity. }
+  f_equal. eapply IHxs. lia.
+Qed.
+
+Lemma skipn_app : forall A (xs ys : list A) n,
+    n >= length xs ->
+    skipn n (xs ++ ys) = skipn (n - length xs) ys.
+induction xs; intros0 Hge.
+- simpl. replace (n - 0) with n by lia. reflexivity.
+- destruct n; simpl in *.
+    { lia. }
+  eapply IHxs. lia.
+Qed.
+
+Lemma skipn_add : forall A (xs : list A) n m,
+    skipn n (skipn m xs) = skipn (n + m) xs.
+first_induction m; intros.
+- simpl. replace (n + 0) with n by lia. reflexivity.
+- replace (n + S m) with (S (n + m)) by lia. destruct xs; simpl.
+  + destruct n; simpl; reflexivity.
+  + eapply IHm.
+Qed.
+
+Lemma Forall_firstn : forall A P (xs : list A) n,
+    Forall P xs ->
+    Forall P (firstn n xs).
+induction xs; intros0 Hfa.
+- destruct n; constructor.
+- destruct n; simpl.
+  + constructor.
+  + invc Hfa. constructor; eauto.
+Qed.
+
+Lemma Forall_skipn : forall A P (xs : list A) n,
+    Forall P xs ->
+    Forall P (skipn n xs).
+induction xs; intros0 Hfa.
+- destruct n; constructor.
+- destruct n; simpl.
+  + assumption.
+  + invc Hfa. eauto.
+Qed.
+
+Definition slice {A} (n m : nat) (xs : list A) :=
+    firstn (m - n) (skipn n xs).
+
+Lemma firstn_slice : forall A (xs : list A) n,
+    firstn n xs = slice 0 n xs.
+intros. unfold slice. simpl. f_equal. lia.
+Qed.
+
+Lemma skipn_length : forall A (xs : list A) n,
+    length (skipn n xs) = length xs - n.
+first_induction n; intros; simpl.
+- lia.
+- destruct xs.
+  + simpl. lia.
+  + simpl. rewrite IHn. reflexivity.
+Qed.
+
+Lemma skipn_slice : forall A (xs : list A) n,
+    skipn n xs = slice n (length xs) xs.
+intros. unfold slice. rewrite firstn_all; eauto.
+rewrite skipn_length. reflexivity.
+Qed.
+
+Lemma slice_length : forall A (xs : list A) n m,
+    m <= length xs ->
+    length (slice n m xs) = m - n.
+intros0 Hle.  unfold slice.
+rewrite firstn_length, skipn_length. lia.
+Qed.
+
+Lemma slice_cons : forall A (xs : list A) x n m,
+    slice n m xs = slice (S n) (S m) (x :: xs).
+intros. unfold slice.
+simpl. reflexivity.
+Qed.
+
+Lemma nth_error_slice : forall A (xs : list A) i x,
+    nth_error xs i = Some x ->
+    slice i (S i) xs = [x].
+induction xs; destruct i; intros0 Hnth; try discriminate; simpl in *.
+- unfold slice. simpl. congruence.
+- rewrite <- slice_cons. eauto.
+Qed.
+
+Lemma firstn_firstn' : forall A (xs : list A) n k,
+    firstn n (firstn (n + k) xs) = firstn n xs.
+first_induction n; intros; simpl.
+  { reflexivity. }
+destruct xs.
+- reflexivity.
+- f_equal. eapply IHn.
+Qed.
+
+Lemma firstn_firstn : forall A (xs : list A) n m,
+    m >= n ->
+    firstn n (firstn m xs) = firstn n xs.
+intros0 Hle.
+replace m with (n + (m - n)) by lia.
+eapply firstn_firstn'.
+Qed.
+
+Lemma firstn_skipn_swap : forall A (xs : list A) n m,
+    firstn n (skipn m xs) = skipn m (firstn (n + m) xs).
+induction xs; intros; simpl.
+- destruct n, m; simpl; reflexivity.
+- destruct m; simpl.
+  + f_equal. lia.
+  + replace (n + S m) with (S (n + m)) by lia. simpl. eauto.
+Qed.
+
+Lemma skipn_skipn : forall A (xs : list A) n k,
+    k <= n ->
+    skipn (n - k) (skipn k xs) = skipn n xs.
+first_induction n; intros; simpl.
+  { replace k with 0 by lia. simpl. reflexivity. }
+destruct k, xs; simpl.
+- reflexivity.
+- reflexivity.
+- destruct (n - k); reflexivity.
+- eapply IHn. lia.
+Qed.
+
+Lemma slice_split : forall A (xs : list A) n k m,
+    n <= k ->
+    k <= m ->
+    slice n m xs = slice n k xs ++ slice k m xs.
+intros0 Hn Hm. 
+rewrite <- firstn_skipn with (n := k - n) at 1. f_equal.
+- unfold slice. simpl.
+  eapply firstn_firstn. lia.
+- unfold slice. simpl.
+  replace (m - n) with ((m - k) + (k - n)) by lia.
+  rewrite <- firstn_skipn_swap.
+  rewrite skipn_skipn by auto.
+  reflexivity.
+Qed.
+
+
+
+Lemma Forall_contradict : forall A P (xs : list A),
+    0 < length xs ->
+    Forall P xs ->
+    ~ Forall (fun x => ~ P x) xs.
+intros0 Hlen Hfa Hnfa.
+cut (Forall (fun _ => False) xs).
+  { destruct xs; simpl in *; try lia.
+    inversion 1. assumption. }
+list_magic_on (xs, tt).
+Qed.
