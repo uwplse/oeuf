@@ -275,3 +275,232 @@ Inductive splus (E : env) : state -> state -> Prop :=
         splus E s s''.
 
 
+
+
+
+Definition enough_free E :=
+    let fix go e :=
+        let fix go_list es :=
+            match es with
+            | [] => True
+            | e :: es => go e /\ go_list es
+            end in
+        let fix go_pair p :=
+            let '(e, r) := p in
+            go e in
+        let fix go_list_pair ps :=
+            match ps with
+            | [] => True
+            | p :: ps => go_pair p /\ go_list_pair ps
+            end in
+        match e with
+        | Arg => True
+        | UpVar _ => True
+        | Call f a => go f /\ go a
+        | Constr _ args => go_list args
+        | ElimBody rec cases => go rec /\ go_list_pair cases
+        | Close fname free => go_list free /\
+            exists body,
+                nth_error E fname = Some body /\
+                num_locals body <= S (length free)
+        end in go.
+
+Definition enough_free_list E :=
+    let go := enough_free E in
+    let fix go_list es :=
+        match es with
+        | [] => True
+        | e :: es => go e /\ go_list es
+        end in go_list.
+
+Definition enough_free_pair E :=
+    let go := enough_free E in
+    let fix go_pair (p : expr * rec_info) :=
+        match p with
+        | (e, _) => go e
+        end in go_pair.
+
+Definition enough_free_list_pair E :=
+    let go_pair := enough_free_pair E in
+    let fix go_list_pair ps :=
+        match ps with
+        | [] => True
+        | p :: ps => go_pair p /\ go_list_pair ps
+        end in go_list_pair.
+
+Ltac refold_enough_free E :=
+    fold (enough_free_list E) in *;
+    fold (enough_free_pair E) in *;
+    fold (enough_free_list_pair E) in *.
+
+Inductive enough_free_state E : state -> Prop :=
+| EfsRun : forall e l k,
+        enough_free E e ->
+        Forall (enough_free E) l ->
+        (forall v,
+            enough_free E v ->
+            enough_free_state E (k v)) ->
+        enough_free_state E (Run e l k)
+| EfsStop : forall e,
+        enough_free E e ->
+        enough_free_state E (Stop e).
+
+Lemma enough_free_list_Forall : forall E es,
+    enough_free_list E es <-> Forall (enough_free E) es.
+induction es; split; intro HH.
+- constructor.
+- constructor.
+- invc HH. constructor; firstorder.
+- invc HH. constructor; firstorder.
+Qed.
+
+Lemma enough_free_list_pair_Forall : forall E ps,
+    enough_free_list_pair E ps <-> Forall (fun p => enough_free E (fst p)) ps.
+induction ps; split; intro HH.
+- constructor.
+- constructor.
+- invc HH. destruct a. constructor; firstorder.
+- invc HH. destruct a. constructor; firstorder.
+Qed.
+
+
+
+Ltac efd_fixup E := simpl; refold_enough_free E;
+    try rewrite enough_free_list_Forall;
+    try rewrite enough_free_list_pair_Forall.
+
+Ltac efd_fail E := right; efd_fixup E; inversion 1; eauto.
+
+Definition enough_free_dec E e : { enough_free E e } + { ~ enough_free E e }.
+induction e using expr_rect_mut with
+    (Pl := fun es => { Forall (enough_free E) es } + { ~ Forall (enough_free E) es })
+    (Pp := fun p => { enough_free E (fst p) } + { ~ enough_free E (fst p) })
+    (Plp := fun ps => { Forall (fun p => enough_free E (fst p)) ps } +
+                      { ~ Forall (fun p => enough_free E (fst p)) ps }).
+
+- left. constructor.
+- left. constructor.
+- destruct IHe1; [ | efd_fail E ].
+  destruct IHe2; [ | efd_fail E ].
+  left. firstorder.
+- destruct IHe; [ | efd_fail E ].
+  left. efd_fixup E. firstorder.
+- destruct IHe; [ | efd_fail E ].
+  destruct IHe0; [ | efd_fail E ].
+  left. efd_fixup E. firstorder.
+- destruct IHe; [ | efd_fail E ].
+  destruct (nth_error E f) as [ body | ] eqn:?; cycle 1.
+    { right. inversion 1. refold_enough_free E. firstorder congruence. }
+  destruct (le_dec (num_locals body) (S (length free))); cycle 1.
+    { right. inversion 1. refold_enough_free E. break_exists. break_and.
+      replace x with body in * by congruence. lia. }
+  left. efd_fixup E. firstorder.
+
+- left. constructor.
+- destruct IHe; [ | efd_fail E ].
+  destruct IHe0; [ | efd_fail E ].
+  left. efd_fixup E. firstorder.
+
+- simpl. assumption.
+
+- left. constructor.
+- destruct IHe; [ | efd_fail E ].
+  destruct IHe0; [ | efd_fail E ].
+  left. efd_fixup E. firstorder.
+Defined.
+
+
+
+Lemma enough_free_unroll_elim : forall E rec case args info e',
+    unroll_elim rec case args info = Some e' ->
+    enough_free E rec ->
+    enough_free E case ->
+    enough_free_list E args ->
+    enough_free E e'.
+first_induction args; destruct info; intros0 Hunroll EFrec EFcase EFargs; try discriminate.
+  { simpl in *. congruence. }
+
+simpl in *. refold_enough_free E.
+destruct EFargs.
+destruct b.
+- eapply IHargs; try eassumption.
+  simpl. auto.
+- eapply IHargs; try eassumption.
+  simpl. auto.
+Qed.
+
+Lemma enough_free_step : forall E s s',
+    Forall (enough_free E) E ->
+    enough_free_state E s ->
+    sstep E s s' ->
+    enough_free_state E s'.
+intros0 Henv Hefs Hstep. invc Hstep; invc Hefs.
+
+- (* SArg *)
+  eapply H5. eapply Forall_nth_error; eauto.
+
+- (* SUpVar *)
+  eapply H5. eapply Forall_nth_error; eauto.
+
+- (* SCloseStep *)
+  on (enough_free _ _), invc. refold_enough_free E. rewrite enough_free_list_Forall in *.
+  on (Forall _ (_ ++ _ :: _)), invc_using Forall_3part_inv.
+
+  constructor; eauto.
+  intros. constructor; eauto.
+  simpl. refold_enough_free E. rewrite enough_free_list_Forall.
+  split; eauto using Forall_app.
+  rewrite app_length in *. simpl in *. assumption.
+
+- (* SCloseDone *) eauto.
+
+- (* SConstrStep *)
+  simpl in *. refold_enough_free E. rewrite enough_free_list_Forall in *.
+  on (Forall _ (_ ++ _ :: _)), invc_using Forall_3part_inv.
+
+  constructor; eauto.
+  intros. constructor; eauto.
+  simpl. refold_enough_free E. rewrite enough_free_list_Forall.
+  eauto using Forall_app.
+
+- (* SConstrDone *) eauto.
+
+- (* SCallL *)
+  on (enough_free _ _), invc.
+  constructor; eauto.
+  intros. constructor; eauto.
+  split; assumption.
+
+- (* SCallR *)
+  on (enough_free _ _), invc.
+  constructor; eauto.
+  intros. constructor; eauto.
+  split; assumption.
+
+- (* SMakeCall *)
+  constructor; eauto.
+    { eapply Forall_nth_error with (xs := E); eassumption. }
+  on (enough_free _ _), invc.
+  on (enough_free _ (Close _ _)), invc. refold_enough_free E.
+  rewrite enough_free_list_Forall in *.
+  eauto.
+
+- (* SElimStepRec *)
+  on (enough_free _ _), invc. refold_enough_free E.
+  constructor; eauto.
+  intros. constructor; eauto.
+  simpl. refold_enough_free E. eauto.
+
+- (* SEliminate *)
+  on (enough_free _ _), invc. refold_enough_free E.
+  on (Forall _ (Constr _ _ :: _)), invc.
+  simpl in *. refold_enough_free E.
+
+  fwd eapply enough_free_unroll_elim; try eassumption; eauto.
+    { cut (enough_free_pair E (case, info)); [ simpl; intro; assumption | ].
+      rewrite enough_free_list_pair_Forall in *.
+      eapply Forall_nth_error; [ | eassumption ].
+      list_magic_on (cases, tt). destruct cases_i. auto. }
+
+  constructor; eauto.
+Qed.
