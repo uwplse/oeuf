@@ -2,6 +2,8 @@ Require Import Oeuf.
 Require Import CompilationUnit.
 Require Import HList.
 Require Import Untyped.
+Require Import StepSim.
+Require Import StepLib.
 
 Require Import compcert.lib.Coqlib.
 Require Import compcert.ia32.Asm.
@@ -17,15 +19,6 @@ Require Import StructTact.Util.
 Require Import EricTact.
 
 
-Inductive simple_star {A : Type} (step : A -> A -> Prop) : A -> A -> Prop :=
-| star_nil :
-    forall st,
-      simple_star step st st
-| star_left :
-    forall st1 st2 st3,
-      step st1 st2 ->
-      simple_star step st2 st3 ->
-      simple_star step st1 st3.
 
 Section Simulation.
 
@@ -34,43 +27,9 @@ Section Simulation.
   Hypothesis TRANSF : transf_to_asm prog = OK tprog.
   Definition ge := Genv.globalenv tprog.
 
-(* Dummy top level definition, fill in later *)
-Inductive correspond {tys ty} (exp : SourceLang.expr tys ty) (st : Asm.state).
-
-Inductive match_states {tys ty} (exp : SourceLang.expr tys ty) (st : Asm.state).
-
-  
-Lemma match_correspond :
-  forall {tys ty} (exp : SourceLang.expr tys ty) st,
-    match_states exp st ->
-    correspond exp st.
-Proof.
-Admitted.
-
-Lemma correspond_initial_match :
-  forall {tys ty} expr,
-      CompilationUnit.initial_state prog tys ty expr ->
-      forall st,
-        Asm.initial_state tprog st ->
-        correspond expr st ->
-        match_states expr st.
-Proof.
-Admitted.
-
-Lemma step_sim :
-  forall {tys ty} (exp exp' : SourceLang.expr tys ty),
-    SourceLang.step exp exp' ->
-    forall st,
-      match_states exp st ->
-      exists st',
-        plus Asm.step ge st E0 st' /\
-        match_states exp' st'.
-Proof.
-Admitted.
-
 Lemma star_step_sim :
   forall {tys ty} (exp exp' : SourceLang.expr tys ty),
-    simple_star SourceLang.step exp exp' ->
+    sstar SourceLang.step exp exp' ->
     forall st,
       match_states exp st ->
       exists st',
@@ -82,7 +41,7 @@ Proof.
   eapply step_sim in H; eauto.
   break_exists. break_and.
   app plus_star plus.
-  destruct (IHsimple_star x); eauto.
+  destruct (IHsstar x); eauto.
   break_and. eexists; split;
                try eapply H5.
   eapply star_trans; eauto.
@@ -91,7 +50,7 @@ Qed.
 
 Theorem Oeuf_sim :
   forall tys ty expr expr',
-    simple_star SourceLang.step expr expr' ->
+    sstar SourceLang.step expr expr' ->
     forall st,
       CompilationUnit.initial_state prog tys ty expr ->
       Asm.initial_state tprog st ->
