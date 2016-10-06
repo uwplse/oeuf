@@ -1337,10 +1337,33 @@ destruct ae; inv Astep; invc II; [ try on (I_expr _ _ _ _), invc.. | | ].
   * constructor; eauto. subst free'. assumption.
 
 - (* SConstrStep *)
-  admit.
+  on (Forall2 _ (_ ++ _ :: _) _), invc_using Forall2_3part_inv.
+
+  B_start HS.
+  B_step HS.
+    { eapply B.SConstrStep; eauto using I_expr_not_value.
+      list_magic_on (vs, (ys1, tt)). eauto using I_expr_value. }
+
+  simpl in *. B.refold_num_locals. rewrite B.num_locals_list_is_maximum in *.
+  rewrite map_app, map_cons in *. rewrite maximum_app in *. simpl in *.
+
+  eexists. split. left. exact HS.
+  unfold S1. constructor; simpl; eauto.
+    { lia. }
+  intros. constructor; eauto.
+    { constructor; eauto using Forall2_app. }
+    { simpl. B.refold_num_locals. rewrite B.num_locals_list_is_maximum.
+      rewrite map_app, map_cons. rewrite maximum_app. simpl.
+      erewrite B.value_num_locals by eassumption. lia. }
 
 - (* SConstrDone *)
-  admit.
+  B_start HS.
+  B_step HS.
+    { eapply B.SConstrDone. list_magic_on (args, (bargs, tt)). eauto using I_expr_value. }
+
+  eexists. split. left. exact HS.
+  unfold S1. eapply H10; constructor; eauto.
+  + list_magic_on (args, (bargs, tt)). eauto using I_expr_value.
 
 - (* SElimStepRec *)
   B_start HS.
