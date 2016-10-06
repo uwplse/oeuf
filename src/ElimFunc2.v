@@ -139,7 +139,8 @@ Definition num_locals :=
         | UpVar i => S (S i)
         | Call f a => max (go f) (go a)
         | Constr _ args => go_list args
-        | ElimBody rec cases => max (go rec) (go_list_pair cases)
+        (* Recall: ElimBody implicitly accesses Arg, and removes it before running cases *)
+        | ElimBody rec cases => max (max (go rec) (S (go_list_pair cases))) 1
         | Close _ free => go_list free
         end in go.
 
@@ -177,6 +178,11 @@ Lemma num_locals_list_is_maximum : forall es,
 induction es; simpl in *; eauto.
 Qed.
 
+Lemma num_locals_list_pair_is_maximum : forall es,
+    num_locals_list_pair es = maximum (map (fun p => num_locals (fst p)) es).
+induction es; simpl in *; try destruct a; eauto.
+Qed.
+
 Lemma value_num_locals : forall e, value e -> num_locals e = 0.
 induction e using expr_ind''; intros0 Hval; invc Hval;
 simpl; refold_num_locals;
@@ -189,6 +195,16 @@ rewrite num_locals_list_is_maximum.
 - cut (maximum (map num_locals free) <= 0). { intro. lia. }
   rewrite maximum_le_Forall, <- Forall_map. list_magic_on (free, tt).
   firstorder lia.
+Qed.
+
+Lemma unroll_elim_num_locals : forall rec case args info e',
+    unroll_elim rec case args info = Some e' ->
+    num_locals e' <= maximum [num_locals rec; num_locals case; num_locals_list args].
+first_induction args; destruct info; intros0 Hunroll; try discriminate; simpl in *; inject_some.
+- lia.
+- destruct b; specialize (IHargs ?? ?? ?? ?? **); simpl in *; refold_num_locals.
+  + repeat rewrite Nat.max_le_iff in *. firstorder.
+  + repeat rewrite Nat.max_le_iff in *. firstorder.
 Qed.
 
 
