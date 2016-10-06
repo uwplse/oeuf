@@ -263,6 +263,37 @@ on (Forall _ (_ :: _)), invc.
 eauto.
 Qed.
 
+Lemma Forall2_app_inv : forall A B (P : A -> B -> Prop) xs1 xs2 ys
+        (Q : _ -> _ -> _ -> Prop),
+    (forall ys1 ys2,
+        Forall2 P xs1 ys1 ->
+        Forall2 P xs2 ys2 ->
+        ys = ys1 ++ ys2 ->
+        Q xs1 xs2 ys) ->
+    Forall2 P (xs1 ++ xs2) ys -> Q xs1 xs2 ys.
+induction xs1; intros0 HQ Hfa.
+- eauto.
+- rewrite <- app_comm_cons in *. invc Hfa.
+  on _, invc_using IHxs1. eauto.
+Qed.
+
+
+Lemma Forall2_3part_inv : forall A B (P : A -> B -> Prop) xs1 x2 xs3 ys
+        (Q : _ -> _ -> _ -> _ -> Prop),
+    (forall ys1 y2 ys3,
+        Forall2 P xs1 ys1 ->
+        P x2 y2 ->
+        Forall2 P xs3 ys3 ->
+        ys = ys1 ++ y2 :: ys3 ->
+        Q xs1 x2 xs3 ys) ->
+    Forall2 P (xs1 ++ x2 :: xs3) ys -> Q xs1 x2 xs3 ys.
+intros0 HQ Hmap.
+on _, invc_using Forall2_app_inv.
+on _, invc.
+eauto.
+Qed.
+
+
 Lemma Forall_app : forall A (P : A -> Prop) xs ys,
     Forall P xs ->
     Forall P ys ->
@@ -298,6 +329,14 @@ induction n; simpl; intros0 Hn.
 - destruct xs; simpl in *; congruence.
 - destruct xs; simpl in *; try discriminate Hn.
   rewrite IHn; eauto.
+Qed.
+
+Lemma firstn_all' : forall A n xs,
+    n >= length xs ->
+    @firstn A n xs = xs.
+induction n; simpl; intros0 Hn; destruct xs; simpl in *; try reflexivity.
+- lia.
+- f_equal. eapply IHn. lia.
 Qed.
 
 Lemma skipn_nth_error : forall A i j (xs : list A),
@@ -448,6 +487,26 @@ induction xs; intros0 Hfa.
   + assumption.
   + invc Hfa. eauto.
 Qed.
+
+Lemma Forall2_firstn : forall A B P (xs : list A) (ys : list B) n,
+    Forall2 P xs ys ->
+    Forall2 P (firstn n xs) (firstn n ys).
+induction xs; destruct ys; intros0 Hfa; invc Hfa;
+destruct n; constructor; eauto.
+Qed.
+
+Lemma Forall2_skipn : forall A B P (xs : list A) (ys : list B) n,
+    Forall2 P xs ys ->
+    Forall2 P (skipn n xs) (skipn n ys).
+induction xs; destruct ys; intros0 Hfa; invc Hfa.
+- destruct n; constructor.
+- destruct n; simpl.
+  + constructor; eauto.
+  + eauto.
+Qed.
+
+
+
 
 Definition slice {A} (n m : nat) (xs : list A) :=
     firstn (m - n) (skipn n xs).
