@@ -4,6 +4,7 @@ Require Import Monads.
 Require Import StuartTact.
 Require Import ListLemmas.
 Require Import Metadata.
+Require Import StepLib.
 Require Utopia String.
 
 Require Lifted.
@@ -96,3 +97,29 @@ Inductive R (LE : L.env) (TE : T.env) : L.expr -> T.expr -> Prop :=
 
 Definition I l t := compile l = Some t.
 Hint Unfold I.
+
+
+Section Preservation.
+
+  (* Variable prog : list L.expr * list metadata. *)
+  (* Variable tprog : list T.expr * list metadata. *)
+
+  (* Hypothesis TRANSF : compile_cu prog = Some tprog. *)
+
+  Inductive match_states (LE : L.env) (TE : T.env) : L.expr -> T.expr -> Prop :=
+  | match_st :
+      forall l t,
+        R LE TE l t ->
+        match_states LE TE l t.
+
+  Lemma step_sim :
+    forall LE TE l t,
+      match_states LE TE l t ->
+      forall l',
+        L.step LE l l' ->
+        exists t',
+          splus (T.step TE) t t'.
+  Proof.
+  Admitted.
+
+End Preservation.

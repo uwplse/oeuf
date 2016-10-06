@@ -254,7 +254,7 @@ Proof.
     + auto.
 Qed.
 
-Theorem forward_simulation :
+Theorem forward_simulation_closed :
   forall ty (e e' : S.expr [] ty),
     S.step e e' ->
     U.step (compile e) (compile e').
@@ -283,6 +283,17 @@ Proof.
     rewrite <- constructor_index_correct with (e := e) (ct := ct).
     now rewrite nth_error_hmap_simple_hget.
 Qed.
+
+Theorem forward_simulation :
+  forall tys ty (e e' : S.expr tys ty),
+    S.step e e' ->
+    U.step (compile e) (compile e').
+Proof.
+Admitted.
+
+
+
+
 
 Lemma grab_expr_in :
   forall {ty tys l} (exprs : hlist (SourceLang.expr l) tys) (expr : SourceLang.expr l ty),

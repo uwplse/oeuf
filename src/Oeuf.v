@@ -18,6 +18,7 @@ Coercion option_to_res : option >-> res.
 
 Local Open Scope option_monad.
 
+
 Definition transf_untyped_to_cminor (l : list UntypedComp.U.expr * list Metadata.metadata) : res Cminor.program :=
   OK l
   @@ LiftedComp.compile_cu
