@@ -302,7 +302,7 @@ Definition enough_free E :=
         | Close fname free => go_list free /\
             exists body,
                 nth_error E fname = Some body /\
-                num_locals body <= S (length free)
+                num_locals body <= length free
         end in go.
 
 Definition enough_free_list E :=
@@ -391,7 +391,7 @@ induction e using expr_rect_mut with
 - destruct IHe; [ | efd_fail E ].
   destruct (nth_error E f) as [ body | ] eqn:?; cycle 1.
     { right. inversion 1. refold_enough_free E. firstorder congruence. }
-  destruct (le_dec (num_locals body) (S (length free))); cycle 1.
+  destruct (le_dec (num_locals body) (length free)); cycle 1.
     { right. inversion 1. refold_enough_free E. break_exists. break_and.
       replace x with body in * by congruence. lia. }
   left. efd_fixup E. firstorder.

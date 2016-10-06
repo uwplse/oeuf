@@ -114,17 +114,14 @@ Inductive I_expr (AE : A.env) (BE : B.env) : A.expr -> B.expr -> Prop :=
         I_expr AE BE arec brec ->
         Forall2 (fun ap bp => I_expr AE BE (fst ap) (fst bp)) acases bcases ->
         I_expr AE BE (A.ElimBody arec acases) (B.ElimBody brec bcases)
-| IClose1 : forall fname afree bfree,
-        Forall2 (I_expr AE BE) afree bfree ->
-        I_expr AE BE (A.Close fname afree) (B.Close fname bfree)
-| IClose2 : forall fname afree bfree n body,
+| IClose : forall fname afree bfree body,
         nth_error BE fname = Some body ->
+        let n := length bfree in
         B.num_locals body <= n ->
         Forall2 (I_expr AE BE) (firstn n afree) bfree ->
         (* Additional constraints ensure we avoid matching non-values to values.
-           This case only occurs after evaluating a CloseDyn, so it's okay. *)
-        Forall A.value afree ->
-        Forall B.value bfree ->
+           This only matters after evaluating a CloseDyn, so it's okay. *)
+        Forall A.value (skipn n afree) ->
         I_expr AE BE (A.Close fname afree) (B.Close fname bfree)
 | ICloseDyn : forall fname adrop aexpect bfree,
         close_dyn_free adrop aexpect = bfree ->
@@ -305,32 +302,50 @@ Qed.
 
 Lemma compile_I_expr : forall AE BE ae be,
     A_close_dyn_placement ae ->
+    B.enough_free BE be ->
     compile ae = be ->
     I_expr AE BE ae be.
 intros AE BE.
 induction ae using A.expr_rect_mut with
     (Pl := fun aes => forall bes,
         A_close_dyn_placement_list aes ->
+        B.enough_free_list BE bes ->
         compile_list aes = bes ->
         Forall2 (I_expr AE BE) aes bes)
     (Pp := fun ap => forall bp,
         A_close_dyn_placement_pair ap ->
+        B.enough_free_pair BE bp ->
         compile_pair ap = bp ->
         I_expr AE BE (fst ap) (fst bp))
     (Plp := fun aps => forall bps,
         A_close_dyn_placement_list_pair aps ->
+        B.enough_free_list_pair BE bps ->
         compile_list_pair aps = bps ->
         Forall2 (fun ap bp => I_expr AE BE (fst ap) (fst bp)) aps bps);
-intros0 Hcdp Hcomp; simpl in Hcomp; refold_compile; try rewrite <- Hcomp;
+intros0 Hcdp Hfree Hcomp;
+simpl in Hcomp; refold_compile; try rewrite <- Hcomp; try rewrite <- Hcomp in Hfree;
+simpl in Hfree; B.refold_enough_free BE; repeat (break_exists || break_and);
 invc Hcdp || simpl in Hcdp; try solve [eauto | constructor; eauto].
 
 (* Call case *)
-destruct ae1; try invc Hcdp; try solve [constructor; eauto; constructor; eauto].
-destruct expect.
-- simpl. rewrite close_dyn_free_zero. eapply ICallCdzExpr. eauto.
-- constructor.
-  + constructor; eauto. lia.
-  + eauto.
+- destruct ae1; try invc Hcdp; try solve [constructor; eauto; constructor; eauto].
+  destruct expect.
+  + simpl. rewrite close_dyn_free_zero. eapply ICallCdzExpr. eauto.
+  + constructor.
+    * constructor; eauto. lia.
+    * eauto.
+
+(* Close case *)
+- rename x into body. refold_A_close_dyn_placement.
+  rewrite compile_list_length in *.
+  econstructor; eauto.
+  + rewrite compile_list_length. assumption.
+  + rewrite compile_list_length. rewrite firstn_all by auto. eapply IHae; eauto.
+  + remember (skipn _ _) as free'.
+    assert (length free' = 0).
+      { subst free'. rewrite skipn_length. rewrite compile_list_length. lia. }
+    destruct free'; try discriminate.
+    constructor.
 Qed.
 
 Definition var_n n :=
@@ -374,17 +389,62 @@ rewrite skipn_nth_error. rewrite free_list_nth_error by lia.
 reflexivity.
 Qed.
 
+Lemma var_n_num_locals : forall n, B.num_locals (var_n n) = S n.
+destruct n; simpl; reflexivity.
+Qed.
+
+Lemma close_dyn_free_num_locals : forall expect drop,
+    0 < expect ->
+    B.num_locals_list (close_dyn_free drop expect) = drop + expect.
+intros0 Hlt.
+
+rewrite B.num_locals_list_is_maximum.
+fwd eapply close_dyn_free_length with (drop := drop) (expect := expect).
+remember (close_dyn_free _ _) as free.
+
+assert (maximum (map B.num_locals free) <= drop + expect). {
+    rewrite maximum_le_Forall. rewrite <- Forall_map.
+    rewrite Forall_forall. intros0 Hin.
+    eapply In_nth_error in Hin. break_exists.
+    assert (x0 < expect). {
+      erewrite <- close_dyn_free_length with (drop := drop).
+      rewrite <- nth_error_Some. congruence.
+    }
+    subst free. rewrite close_dyn_free_nth_error in * by assumption.
+    inject_some. rewrite var_n_num_locals.
+    lia.
+}
+
+assert (maximum (map B.num_locals free) >= drop + expect). {
+    replace free with (slice 0 expect free); cycle 1.
+      { unfold slice. simpl. rewrite firstn_all by lia. reflexivity. }
+    rewrite slice_split with (k := expect - 1) by lia.
+    rewrite map_app. rewrite maximum_app.
+    replace (expect) with (S (expect - 1)) at 3 by lia.
+    erewrite nth_error_slice; cycle 1.
+      { subst free. eapply close_dyn_free_nth_error. lia. }
+    simpl. rewrite var_n_num_locals.
+    lia.
+}
+
+lia.
+Qed.
+
 Lemma I_expr_value : forall AE BE a b,
     I_expr AE BE a b ->
     A.value a ->
     B.value b.
 induction a using A.expr_ind''; intros0 II Aval; invc II; invc Aval.
 - constructor. list_magic_on (args, (bargs, tt)).
-- constructor. list_magic_on (free, (bfree, tt)).
 - constructor.
   do 2 on (Forall _ free), fun H => eapply Forall_firstn with (n := n) in H.
   remember (firstn n free) as afree.
   list_magic_on (afree, (bfree, tt)).
+Qed.
+
+Lemma slice_all : forall A (xs : list A),
+    slice 0 (length xs) xs = xs.
+intros. unfold slice. simpl. rewrite firstn_all by lia. reflexivity.
 Qed.
 
 Lemma I_expr_value' : forall AE BE a b,
@@ -395,8 +455,13 @@ intros ? ?.
 make_first b.
 induction b using B.expr_ind''; intros0 II Bval; invc II; invc Bval.
 - constructor. list_magic_on (args, (aargs, tt)).
-- constructor. list_magic_on (free, (afree, tt)).
-- constructor. assumption.
+- constructor. rewrite <- slice_all. rewrite slice_split with (k := length free); cycle 1.
+    { lia. }
+    { erewrite <- Forall2_length by eassumption. rewrite firstn_length. lia. }
+  eapply Forall_app.
+  + rewrite <- firstn_slice. fold n. remember (firstn n afree) as afree'.
+    list_magic_on (afree', (free, tt)).
+  + rewrite <- skipn_slice. assumption.
 - destruct aexpect.
   + lia.
   + simpl.
@@ -793,6 +858,45 @@ Qed.
 
 
 
+
+Lemma compile_num_locals : forall a b,
+    compile a = b ->
+    A.num_locals a = B.num_locals b.
+induction a using A.expr_rect_mut with
+    (Pl := fun a => forall b,
+        compile_list a = b ->
+        A.num_locals_list a = B.num_locals_list b)
+    (Pp := fun a => forall b,
+        compile_pair a = b ->
+        A.num_locals_pair a = B.num_locals_pair b)
+    (Plp := fun a => forall b,
+        compile_list_pair a = b ->
+        A.num_locals_list_pair a = B.num_locals_list_pair b);
+intros0 Hcomp;
+simpl in *; refold_compile; A.refold_num_locals;
+subst; simpl; B.refold_num_locals.
+
+- reflexivity.
+- reflexivity.
+- erewrite IHa1, IHa2; reflexivity.
+- erewrite IHa; reflexivity.
+- erewrite IHa, IHa0; reflexivity.
+- erewrite IHa; reflexivity.
+- break_if.
+  + subst. rewrite close_dyn_free_zero. reflexivity.
+  + rewrite close_dyn_free_num_locals by lia. reflexivity.
+
+- reflexivity.
+- erewrite IHa, IHa0; reflexivity.
+
+- eauto.
+
+- reflexivity.
+- erewrite IHa, IHa0; reflexivity.
+Qed.
+
+
+
 Ltac max_split :=
     repeat match goal with | [ |- _ /\ _ ] => split end.
 
@@ -810,17 +914,29 @@ Definition state_metric s :=
     | A.Stop e => metric e
     end.
 
+Lemma compile_list_nth_error : forall aes ae n be,
+    nth_error aes n = Some ae ->
+    nth_error (compile_list aes) n = Some be ->
+    compile ae = be.
+intros. remember (compile_list aes) as bes eqn:Hcomp.
+symmetry in Hcomp. eapply compile_list_Forall in Hcomp.
+eapply Forall2_nth_error with (1 := Hcomp); eassumption.
+Qed.
+
 Theorem I_sim : forall AE BE a a' b,
     compile_list AE = BE ->
+    Forall A_close_dyn_placement AE ->
+    Forall (B.enough_free BE) BE ->
     I AE BE a b ->
     A.sstep AE a a' ->
+    B.enough_free_state BE b ->
     exists b',
         (B.splus BE b b' \/
          (b' = b /\ state_metric a' < state_metric a)) /\
         I AE BE a' b'.
 
 destruct a as [ae al ak | ae];
-intros0 Henv II Astep; [ | solve [invc Astep] ].
+intros0 Henv Acdp Bef_env II Astep Bef; [ | solve [invc Astep] ].
 
 destruct ae; inv Astep; invc II; [ try on (I_expr _ _ _ _), invc.. | ].
 
@@ -837,7 +953,9 @@ destruct ae; inv Astep; invc II; [ try on (I_expr _ _ _ _), invc.. | ].
   eapply H9. (* TODO - need a structtact for this *)
   + eapply Forall_nth_error; eauto.
   + eapply Forall_nth_error; eauto.
-  + eapply Forall2_nth_error; eauto. admit. (* list lemma *)
+  + eapply Forall2_nth_error; eauto.
+    rewrite firstn_nth_error_lt by (rewrite <- nth_error_Some; congruence).
+    assumption.
 
 - (* SUpVar *)
   fwd eapply nth_error_Some_ex with (n := S n) (xs := bl) as HH.
@@ -851,7 +969,9 @@ destruct ae; inv Astep; invc II; [ try on (I_expr _ _ _ _), invc.. | ].
   eapply H9. (* TODO - need a structtact for this *)
   + eapply Forall_nth_error; eauto.
   + eapply Forall_nth_error; eauto.
-  + eapply Forall2_nth_error; eauto. admit. (* list lemma *)
+  + eapply Forall2_nth_error; eauto.
+    rewrite firstn_nth_error_lt by (rewrite <- nth_error_Some; congruence).
+    assumption.
 
 - (* SCallL *)
   B_start HS.
@@ -885,52 +1005,56 @@ destruct ae; inv Astep; invc II; [ try on (I_expr _ _ _ _), invc.. | ].
   on (A.value (A.CloseDyn _ _ _)), invc.
 
 - (* SMakeCall *)
-  fwd eapply length_nth_error_Some with (i := fname) (ys := compile_list AE) as HH.
-    { symmetry. eapply compile_list_length. }
-    { eassumption. }
-    destruct HH as [bbody ?].
+  on (I_expr _ _ (A.Close _ _) _), invc.  rename body0 into bbody.
+  remember (firstn n free) as free'.
+  assert (Forall A.value free') by (subst free'; eauto using Forall_firstn).
 
-  on (I_expr _ _ (A.Close _ _) _), invc.
-
-  + B_start HS.
-    B_step HS.
-      { eapply B.SMakeCall; eauto using I_expr_value.
-        list_magic_on (free, (bfree, tt)). eauto using I_expr_value. }
-
-    eexists. split. left. exact HS.
-    unfold S1. constructor; simpl; eauto.
-    * eapply Forall2_nth_error with (x := body) (y := bbody); cycle 1; eauto.
-      remember (compile_list AE) as BE.
-      symmetry in HeqBE. eapply compile_list_Forall in HeqBE.
-      assert (Forall A_close_dyn_placement AE) by admit. (* TODO - add hyp *)
-      list_magic_on (AE, (BE, tt)). eauto using compile_I_expr.
-    * constructor; try list_magic_on (bfree, (free, tt)); eauto using I_expr_value.
-    * admit. (* TODO - need A.enough_free hyp *)
-    * rewrite firstn_all by (symmetry; eauto using Forall2_length). eauto.
-
-Admitted.
-
-(* number/order of subgoals may have changed...
-
-- (* SCallR *)
   B_start HS.
-  B_step HS. { eapply B.SCallR.
+  B_step HS.
+    { eapply B.SMakeCall; eauto using I_expr_value.
+      list_magic_on (free', (bfree, tt)). eauto using I_expr_value. }
 
-- (* SMakeCall *) admit.
+  eexists. split. left. exact HS.
+  unfold S1. constructor; simpl; eauto.
+  * eapply Forall2_nth_error with (x := body) (y := bbody); cycle 1; eauto.
+    remember (compile_list AE) as BE.
+    symmetry in HeqBE. eapply compile_list_Forall in HeqBE.
+    list_magic_on (AE, (BE, tt)).
+    eapply compile_I_expr; eapply Forall_nth_error + idtac; solve [eauto].
+  * constructor; try list_magic_on (bfree, (free', tt)); eauto using I_expr_value.
+  * constructor; eauto. subst free'. assumption.
 
-- (* SConstrStep *) admit.
+- (* SConstrStep *)
+  admit.
 
-- (* SConstrDone *) admit.
+- (* SConstrDone *)
+  admit.
 
-- (* SElimStepRec *) admit.
+- (* SElimStepRec *)
+  B_start HS.
+  B_step HS.
+    { eapply B.SElimStepRec. eauto using I_expr_not_value. }
 
-- (* SEliminate *) admit.
+  eexists. split. left. exact HS.
+  unfold S1. constructor; eauto.
+    { simpl in *. lia. }
+  intros. constructor; eauto.
+    { constructor; eauto. }
+    { simpl in *. rewrite B.value_num_locals by assumption. lia. }
 
-- (* SCloseStep *) admit.
+- (* SEliminate *)
+  admit. (* need something about having at least one local *)
 
-- (* SCloseDone *) admit.
+- (* SCloseStep *)
+  admit.
 
-- (* SCloseDyn *) admit.
+- (* SCloseDone *)
+  admit.
+
+- (* SCloseDyn *)
+  admit.
+
+- (* SCloseDyn - CDZ *)
+  admit.
 
 Admitted.
-*)

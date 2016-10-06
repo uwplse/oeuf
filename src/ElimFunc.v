@@ -202,7 +202,7 @@ Definition num_locals :=
         | Constr _ args => go_list args
         | ElimBody rec cases => max (go rec) (go_list_pair cases)
         | Close _ free => go_list free
-        | CloseDyn _ _ expect => expect
+        | CloseDyn _ drop expect => if eq_nat_dec expect 0 then 0 else drop + expect
         end in go.
 
 (* Nested fixpoint aliases *)
