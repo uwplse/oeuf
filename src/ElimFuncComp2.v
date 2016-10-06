@@ -98,6 +98,13 @@ intros. induction es.
 - simpl. f_equal. eauto.
 Qed.
 
+Lemma compile_list_pair_length : forall es,
+    length (compile_list_pair es) = length es.
+intros. induction es.
+- reflexivity.
+- simpl. f_equal. eauto.
+Qed.
+
 
 
 Inductive I_expr (AE : A.env) (BE : B.env) : A.expr -> B.expr -> Prop :=
@@ -112,7 +119,7 @@ Inductive I_expr (AE : A.env) (BE : B.env) : A.expr -> B.expr -> Prop :=
         I_expr AE BE (A.Constr tag aargs) (B.Constr tag bargs)
 | IElimBody : forall arec acases brec bcases,
         I_expr AE BE arec brec ->
-        Forall2 (fun ap bp => I_expr AE BE (fst ap) (fst bp)) acases bcases ->
+        Forall2 (fun ap bp => I_expr AE BE (fst ap) (fst bp) /\ snd ap = snd bp) acases bcases ->
         I_expr AE BE (A.ElimBody arec acases) (B.ElimBody brec bcases)
 | IClose : forall fname afree bfree body,
         nth_error BE fname = Some body ->
@@ -316,12 +323,12 @@ induction ae using A.expr_rect_mut with
         A_close_dyn_placement_pair ap ->
         B.enough_free_pair BE bp ->
         compile_pair ap = bp ->
-        I_expr AE BE (fst ap) (fst bp))
+        I_expr AE BE (fst ap) (fst bp) /\ snd ap = snd bp)
     (Plp := fun aps => forall bps,
         A_close_dyn_placement_list_pair aps ->
         B.enough_free_list_pair BE bps ->
         compile_list_pair aps = bps ->
-        Forall2 (fun ap bp => I_expr AE BE (fst ap) (fst bp)) aps bps);
+        Forall2 (fun ap bp => I_expr AE BE (fst ap) (fst bp) /\ snd ap = snd bp) aps bps);
 intros0 Hcdp Hfree Hcomp;
 simpl in Hcomp; refold_compile; try rewrite <- Hcomp; try rewrite <- Hcomp in Hfree;
 simpl in Hfree; B.refold_enough_free BE; repeat (break_exists || break_and);
@@ -346,6 +353,7 @@ invc Hcdp || simpl in Hcdp; try solve [eauto | constructor; eauto].
       { subst free'. rewrite skipn_length. rewrite compile_list_length. lia. }
     destruct free'; try discriminate.
     constructor.
+
 Qed.
 
 Definition var_n n :=
@@ -896,6 +904,19 @@ subst; simpl; B.refold_num_locals.
 Qed.
 
 
+Lemma unroll_elim_sim : forall AE BE,
+    forall arec brec acase bcase aargs bargs ainfo binfo ae',
+    A.unroll_elim arec acase aargs ainfo = Some ae' ->
+    I_expr AE BE arec brec ->
+    I_expr AE BE acase bcase ->
+    Forall2 (I_expr AE BE) aargs bargs ->
+    ainfo = binfo ->
+    exists be',
+        B.unroll_elim brec bcase bargs binfo = Some be' /\
+        I_expr AE BE ae' be'.
+admit.
+Admitted.
+
 
 Ltac max_split :=
     repeat match goal with | [ |- _ /\ _ ] => split end.
@@ -903,8 +924,8 @@ Ltac max_split :=
 
 Fixpoint metric e :=
     match e with
-    | A.CloseDyn _ _ 0 => 1
-    | A.Call f _ => S (metric f)
+    | A.Call (A.CloseDyn _ _ _) _ => 2
+    | A.CloseDyn _ _ _ => 1
     | _ => 0
     end.
 
@@ -922,6 +943,27 @@ intros. remember (compile_list aes) as bes eqn:Hcomp.
 symmetry in Hcomp. eapply compile_list_Forall in Hcomp.
 eapply Forall2_nth_error with (1 := Hcomp); eassumption.
 Qed.
+
+Lemma nth_error_le_maximum_map : forall A f xs (x : A) n,
+    nth_error xs n = Some x ->
+    f x <= maximum (map f xs).
+induction xs; intros0 Hnth.
+- destruct n; discriminate.
+- destruct n; simpl in *.
+  + inject_some. lia.
+  + specialize (IHxs ?? ?? **). lia.
+Qed.
+
+Lemma B_num_locals_case_le_maximum : forall bcases n p,
+    nth_error bcases n = Some p ->
+    B.num_locals_pair p <= B.num_locals_list_pair bcases.
+first_induction bcases; intros0 Hnth; simpl in *.
+- destruct n; discriminate.
+- destruct n; simpl in *.
+  + inject_some. lia.
+  + specialize (IHbcases ?? ?? **). lia.
+Qed.
+
 
 Theorem I_sim : forall AE BE a a' b,
     compile_list AE = BE ->
@@ -1037,13 +1079,54 @@ destruct ae; inv Astep; invc II; [ try on (I_expr _ _ _ _), invc.. | ].
 
   eexists. split. left. exact HS.
   unfold S1. constructor; eauto.
-    { simpl in *. lia. }
+    { simpl in *. B.refold_num_locals. lia. }
   intros. constructor; eauto.
     { constructor; eauto. }
     { simpl in *. rewrite B.value_num_locals by assumption. lia. }
 
 - (* SEliminate *)
-  admit. (* need something about having at least one local *)
+  destruct bl as [ | bv bl].
+    { simpl in *. B.refold_num_locals. lia. }
+  on (Forall2 _ _ (bv :: bl)), invc.
+  on (I_expr _ _ _ bv), invc.
+
+  fwd eapply length_nth_error_Some as HH; [ | eassumption | ].
+    { eapply Forall2_length. eassumption. }
+    destruct HH as [[bcase binfo] ?].
+
+  replace binfo with info in *; cycle 1.
+    { on (Forall2 _ _ bcases), fun H => fwd eapply Forall2_nth_error with (1 := H); eauto.
+      simpl in *.  firstorder. }
+
+  fwd eapply unroll_elim_sim as HH; eauto.
+    { on (Forall2 _ _ bcases), fun H => fwd eapply Forall2_nth_error with (1 := H); eauto.
+      simpl in *. firstorder eauto. }
+    destruct HH as [be' [? ?]].
+
+
+  B_start HS.
+  B_step HS.
+    { eapply B.SEliminate; eauto using I_expr_value.
+      list_magic_on (args, (bargs, tt)). eauto using I_expr_value. }
+
+  on (Forall A.value _), invc.
+  on (Forall B.value _), invc.
+
+  eexists. split. left. exact HS.
+  unfold S1. constructor; eauto.
+  + simpl in *. B.refold_num_locals.
+    fwd eapply B.unroll_elim_num_locals; eauto. simpl in *.
+    assert (B.num_locals brec = 0).
+      { eapply B.value_num_locals. eauto using I_expr_value. }
+    assert (B.num_locals_pair (bcase, info) <= B.num_locals_list_pair bcases).
+      { eauto using B_num_locals_case_le_maximum. }
+    assert (B.num_locals_list bargs <= 0).
+      { rewrite B.num_locals_list_is_maximum. rewrite maximum_le_Forall.
+        rewrite <- Forall_map.
+        on (B.value (B.Constr _ _)), invc.
+        list_magic_on (bargs, tt).
+        rewrite B.value_num_locals by auto. lia. }
+    simpl in *. lia.
 
 - (* SCloseStep *)
   admit.
@@ -1055,6 +1138,14 @@ destruct ae; inv Astep; invc II; [ try on (I_expr _ _ _ _), invc.. | ].
   admit.
 
 - (* SCloseDyn - CDZ *)
-  admit.
+  invc Bef. simpl in *. B.refold_enough_free (compile_list AE).
+  repeat (break_and || break_exists). rename x into bbody.
+
+  eexists. split. right. split.
+    { reflexivity. }
+    { simpl. lia. }
+  constructor; eauto.
+  constructor; eauto.
+  econstructor; simpl; eauto using Forall_skipn.
 
 Admitted.

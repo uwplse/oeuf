@@ -200,7 +200,8 @@ Definition num_locals :=
         | UpVar i => S (S i)
         | Call f a => max (go f) (go a)
         | Constr _ args => go_list args
-        | ElimBody rec cases => max (go rec) (go_list_pair cases)
+        (* Recall: ElimBody implicitly accesses Arg, and removes it before running cases *)
+        | ElimBody rec cases => max (max (go rec) (S (go_list_pair cases))) 1
         | Close _ free => go_list free
         | CloseDyn _ drop expect => if eq_nat_dec expect 0 then 0 else drop + expect
         end in go.
@@ -237,6 +238,11 @@ Ltac refold_num_locals :=
 Lemma num_locals_list_is_maximum : forall es,
     num_locals_list es = maximum (map num_locals es).
 induction es; simpl in *; eauto.
+Qed.
+
+Lemma num_locals_list_pair_is_maximum : forall es,
+    num_locals_list_pair es = maximum (map (fun p => num_locals (fst p)) es).
+induction es; simpl in *; try destruct a; eauto.
 Qed.
 
 Lemma value_num_locals : forall e, value e -> num_locals e = 0.
