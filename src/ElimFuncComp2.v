@@ -141,6 +141,10 @@ Inductive I_expr (AE : A.env) (BE : B.env) : A.expr -> B.expr -> Prop :=
         I_expr AE BE aarg barg ->
         I_expr AE BE (A.Call (A.CloseDyn fname adrop 0) aarg)
                      (B.Call (B.Close fname []) barg)
+| IElimCdzExpr : forall fname adrop acases bcases,
+        Forall2 (fun ap bp => I_expr AE BE (fst ap) (fst bp) /\ snd ap = snd bp) acases bcases ->
+        I_expr AE BE (A.ElimBody (A.CloseDyn fname adrop 0) acases)
+                     (B.ElimBody (B.Close fname []) bcases)
 .
 
 Inductive I (AE : A.env) (BE : B.env) : A.state -> B.state -> Prop :=
@@ -180,6 +184,21 @@ Inductive I (AE : A.env) (BE : B.env) : A.state -> B.state -> Prop :=
         I AE BE (A.Run (A.CloseDyn fname drop 0) al
                     (fun av => A.Run (A.Call av aarg) al ak))
                 (B.Run (B.Call (B.Close fname []) barg) bl bk)
+
+| IElimCdz : forall fname drop acases al ak bcases bl bk,
+        Forall2 (fun ap bp => I_expr AE BE (fst ap) (fst bp) /\ snd ap = snd bp) acases bcases ->
+        Forall A.value al ->
+        Forall B.value bl ->
+        S (B.num_locals_list_pair bcases) <= length bl ->
+        Forall2 (I_expr AE BE) (firstn (length bl) al) bl ->
+        (forall av bv,
+            A.value av ->
+            B.value bv ->
+            I_expr AE BE av bv ->
+            I AE BE (ak av) (bk bv)) ->
+        I AE BE (A.Run (A.CloseDyn fname drop 0) al
+                    (fun av => A.Run (A.ElimBody av acases) al ak))
+                (B.Run (B.ElimBody (B.Close fname []) bcases) bl bk)
 
 | IStop : forall ae be,
         I_expr AE BE ae be ->
@@ -245,6 +264,7 @@ Definition A_close_dyn_placement :=
         | A.Call (A.CloseDyn _ _ _) a => go a
         | A.Call f a => go f /\ go a
         | A.Constr _ args => go_list args
+        | A.ElimBody (A.CloseDyn _ _ _) cases => go_list_pair cases
         | A.ElimBody rec cases => go rec /\ go_list_pair cases
         | A.Close _ free => go_list free
         | A.CloseDyn _ _ _ => False
@@ -338,6 +358,16 @@ invc Hcdp || simpl in Hcdp; try solve [eauto | constructor; eauto].
 - destruct ae1; try invc Hcdp; try solve [constructor; eauto; constructor; eauto].
   destruct expect.
   + simpl. rewrite close_dyn_free_zero. eapply ICallCdzExpr. eauto.
+  + constructor.
+    * constructor; eauto. lia.
+    * eauto.
+
+(* ElimBody case *)
+- refold_A_close_dyn_placement.
+  destruct ae; break_and; try on (A_close_dyn_placement _), invc;
+    try solve [constructor; eauto; constructor; eauto].
+  destruct expect.
+  + simpl. rewrite close_dyn_free_zero. eapply IElimCdzExpr. eauto.
   + constructor.
     * constructor; eauto. lia.
     * eauto.
@@ -914,8 +944,16 @@ Lemma unroll_elim_sim : forall AE BE,
     exists be',
         B.unroll_elim brec bcase bargs binfo = Some be' /\
         I_expr AE BE ae' be'.
-admit.
-Admitted.
+first_induction aargs; destruct ainfo; intros0 Aunroll IIrec IIcase IIargs IIinfo;
+  try discriminate.
+
+- invc IIargs.
+  eexists. split. reflexivity.
+  simpl in Aunroll. inject_some. assumption.
+
+- invc IIargs. simpl. eapply IHaargs; try eassumption; eauto.
+  destruct b; eauto using ICall.
+Qed.
 
 
 Ltac max_split :=
@@ -924,6 +962,7 @@ Ltac max_split :=
 
 Fixpoint metric e :=
     match e with
+    | A.ElimBody (A.CloseDyn _ _ _) _ => 2
     | A.Call (A.CloseDyn _ _ _) _ => 2
     | A.CloseDyn _ _ _ => 1
     | _ => 0
@@ -980,7 +1019,7 @@ Theorem I_sim : forall AE BE a a' b,
 destruct a as [ae al ak | ae];
 intros0 Henv Acdp Bef_env II Astep Bef; [ | solve [invc Astep] ].
 
-destruct ae; inv Astep; invc II; [ try on (I_expr _ _ _ _), invc.. | ].
+destruct ae; inv Astep; invc II; [ try on (I_expr _ _ _ _), invc.. | | ].
 
 
 - (* SArg *)
@@ -1084,6 +1123,13 @@ destruct ae; inv Astep; invc II; [ try on (I_expr _ _ _ _), invc.. | ].
     { constructor; eauto. }
     { simpl in *. rewrite B.value_num_locals by assumption. lia. }
 
+- (* SElimStepRec - CDZ *)
+  eexists. split. right. split.
+    { reflexivity. }
+    { simpl. lia. }
+  eapply IElimCdz; eauto.
+    { simpl in *. B.refold_num_locals. lia. }
+
 - (* SEliminate *)
   destruct bl as [ | bv bl].
     { simpl in *. B.refold_num_locals. lia. }
@@ -1128,6 +1174,9 @@ destruct ae; inv Astep; invc II; [ try on (I_expr _ _ _ _), invc.. | ].
         rewrite B.value_num_locals by auto. lia. }
     simpl in *. lia.
 
+- (* SEliminate - CDZ *)
+  on (A.value (A.CloseDyn _ _ _)), invc.
+
 - (* SCloseStep *)
   admit.
 
@@ -1137,7 +1186,7 @@ destruct ae; inv Astep; invc II; [ try on (I_expr _ _ _ _), invc.. | ].
 - (* SCloseDyn *)
   admit.
 
-- (* SCloseDyn - CDZ *)
+- (* SCloseDyn - Call CDZ *)
   invc Bef. simpl in *. B.refold_enough_free (compile_list AE).
   repeat (break_and || break_exists). rename x into bbody.
 
@@ -1147,5 +1196,17 @@ destruct ae; inv Astep; invc II; [ try on (I_expr _ _ _ _), invc.. | ].
   constructor; eauto.
   constructor; eauto.
   econstructor; simpl; eauto using Forall_skipn.
+
+- (* SCloseDyn - Elim CDZ *)
+  invc Bef. simpl in *. B.refold_enough_free (compile_list AE).
+  repeat (break_and || break_exists). rename x into bbody.
+
+  eexists. split. right. split.
+    { reflexivity. }
+    { simpl. lia. }
+  constructor; eauto.
+  constructor; eauto.
+  econstructor; simpl; eauto using Forall_skipn.
+    { simpl. B.refold_num_locals. lia. }
 
 Admitted.
