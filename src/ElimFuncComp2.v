@@ -1233,6 +1233,23 @@ eapply B_close_eval_sliding' with (i := 0) (j := expect) (es := close_dyn_free d
   destruct (drop + i); eauto using B.SArg, B.SUpVar.
 Qed.
 
+Lemma skipn_app_l : forall A (xs ys : list A) n,
+    n <= length xs ->
+    skipn n (xs ++ ys) = skipn n xs ++ ys.
+induction xs; destruct n; intros0 Hlt; simpl in *; try lia.
+- reflexivity.
+- reflexivity.
+- apply IHxs. lia.
+Qed.
+
+Lemma firstn_app' : forall A (xs ys : list A) n,
+    n >= length xs ->
+    firstn n (xs ++ ys) = xs ++ firstn (n - length xs) ys.
+induction xs; intros0 Hge; simpl in *.
+- replace (n - 0) with n by lia. reflexivity.
+- destruct n; simpl in *. { lia. }
+  rewrite IHxs by lia. reflexivity.
+Qed.
 
 Theorem I_sim : forall AE BE a a' b,
     compile_list AE = BE ->
@@ -1433,10 +1450,74 @@ destruct ae; inv Astep; invc II; [ try on (I_expr _ _ _ _), invc.. | | ].
   on (A.value (A.CloseDyn _ _ _)), invc.
 
 - (* SCloseStep *)
-  admit.
+  (* The element of `free` to be evaluated (`e`) must left of `n`, so `firstn` will keep it. *)
+  assert (n >= S (length vs)). {
+    destruct (ge_dec n (S (length vs))). { eassumption. }
+    exfalso. assert (n <= length vs) by lia.
+    rewrite skipn_app_l in * by auto.
+    on (Forall A.value (_ ++ _)), invc_using Forall_app_inv.
+    on (Forall A.value (e :: _)), invc.
+    eauto.
+  }
+
+  change (e :: es) with ([e] ++ es) in *.
+  rewrite firstn_app', firstn_app' in * by (simpl; lia).
+  remember (firstn _ es) as es'.
+  assert (n = length (vs ++ [e] ++ es')).
+    { fwd eapply Forall2_length; eauto. }
+  assert (length es' <= length es).
+    { repeat rewrite app_length in *. simpl in *. lia. }
+
+  simpl in *. B.refold_num_locals.
+  on (Forall2 _ (_ ++ _ :: _) _), fun H => inversion H using Forall2_3part_inv.
+  intros. subst bfree.
+
+  B_start HS.
+  B_step HS.
+    { eapply B.SCloseStep; eauto using I_expr_not_value.
+      list_magic_on (vs, (ys1, tt)). eauto using I_expr_value. }
+
+  rewrite B.num_locals_list_is_maximum in *.
+  rewrite map_app, map_cons in *. rewrite maximum_app in *. simpl in *.
+
+  eexists. split. left. exact HS.
+  unfold S1. constructor; simpl; eauto.
+    { lia. }
+  intros. constructor; eauto.
+    { collect_length_hyps.
+      econstructor; eauto.
+      - rewrite app_length in *. simpl in *. congruence.
+      - repeat rewrite app_length in *. simpl in *. omega.
+      - rewrite firstn_app' by (rewrite app_length; simpl; omega).
+        change (av :: es) with ([av] ++ es).
+        rewrite firstn_app' by (rewrite app_length; simpl; omega).
+        replace (firstn _ es) with es'; cycle 1.
+          { subst es'. unfold n. f_equal. do 2 rewrite app_length. simpl. reflexivity. }
+        eapply Forall2_app; eauto. constructor; eauto.
+      - replace (length _) with n; cycle 1.
+          { unfold n. do 2 rewrite app_length. simpl. omega. }
+        rewrite skipn_app in * by omega.
+        change (av :: es) with ([av] ++ es).
+        change (e :: es) with ([e] ++ es) in *.
+        rewrite skipn_app in * by (simpl; omega).
+        simpl in *. assumption.
+    }
+    { simpl. B.refold_num_locals. rewrite B.num_locals_list_is_maximum.
+      rewrite map_app, map_cons. rewrite maximum_app. simpl.
+      erewrite B.value_num_locals by eassumption. lia. }
 
 - (* SCloseDone *)
-  admit.
+  remember (firstn n free) as free'.
+  assert (Forall A.value free') by (subst free'; eauto using Forall_firstn).
+
+  B_start HS.
+  B_step HS.
+    { eapply B.SCloseDone. list_magic_on (free', (bfree, tt)). eauto using I_expr_value. }
+
+  eexists. split. left. exact HS.
+  unfold S1. eapply H10; econstructor; eauto.
+  + list_magic_on (free', (bfree, tt)). eauto using I_expr_value.
+  + fold n. congruence.
 
 - (* SCloseDyn *)
   simpl in *. B.refold_num_locals.
@@ -1489,4 +1570,4 @@ destruct ae; inv Astep; invc II; [ try on (I_expr _ _ _ _), invc.. | | ].
     { lia. }
     { simpl. B.refold_num_locals. lia. }
 
-Admitted.
+Qed.
