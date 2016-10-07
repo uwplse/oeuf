@@ -520,3 +520,130 @@ intros0 Henv Hefs Hstep. invc Hstep; invc Hefs.
 
   constructor; eauto.
 Qed.
+
+
+
+
+Definition no_elim_body :=
+    let fix go e :=
+        let fix go_list es :=
+            match es with
+            | [] => True
+            | e :: es => go e /\ go_list es
+            end in
+        match e with
+        | Arg => True
+        | UpVar _ => True
+        | Call f a => go f /\ go a
+        | Constr _ args => go_list args
+        | ElimBody _ _ => False
+        | Close _ free => go_list free
+        end in go.
+
+Definition no_elim_body_list :=
+    let go := no_elim_body in
+    let fix go_list es :=
+        match es with
+        | [] => True
+        | e :: es => go e /\ go_list es
+        end in go_list.
+
+Definition no_elim_body_pair :=
+    let go := no_elim_body in
+    let fix go_pair (p : expr * rec_info) :=
+        match p with
+        | (e, _) => go e
+        end in go_pair.
+
+Definition no_elim_body_list_pair :=
+    let go_pair := no_elim_body_pair in
+    let fix go_list_pair ps :=
+        match ps with
+        | [] => True
+        | p :: ps => go_pair p /\ go_list_pair ps
+        end in go_list_pair.
+
+Ltac refold_no_elim_body :=
+    fold no_elim_body_list in *;
+    fold no_elim_body_pair in *;
+    fold no_elim_body_list_pair in *.
+
+Definition elim_body_placement e :=
+    match e with
+    | ElimBody rec cases => no_elim_body rec /\ no_elim_body_list_pair cases
+    | _ => no_elim_body e
+    end.
+
+Lemma no_elim_body_list_Forall : forall es,
+    no_elim_body_list es <-> Forall no_elim_body es.
+induction es; split; intro HH.
+- constructor.
+- constructor.
+- invc HH. constructor; firstorder.
+- invc HH. constructor; firstorder.
+Qed.
+
+Lemma no_elim_body_list_pair_Forall : forall ps,
+    no_elim_body_list_pair ps <-> Forall (fun p => no_elim_body (fst p)) ps.
+induction ps; split; intro HH.
+- constructor.
+- constructor.
+- invc HH. destruct a. constructor; firstorder.
+- invc HH. destruct a. constructor; firstorder.
+Qed.
+
+
+
+Definition shift :=
+    let fix go e :=
+        let fix go_list es :=
+            match es with
+            | [] => []
+            | e :: es => go e :: go_list es
+            end in
+        let fix go_pair p :=
+            let '(e, r) := p in
+            (go e, r) in
+        let fix go_list_pair ps :=
+            match ps with
+            | [] => []
+            | p :: ps => go_pair p :: go_list_pair ps
+            end in
+        match e with
+        | Arg => UpVar 0
+        | UpVar n => UpVar (S n)
+        | Call f a => Call (go f) (go a)
+        | Constr tag args => Constr tag (go_list args)
+        | ElimBody rec cases => ElimBody (go rec) (go_list_pair cases)
+        | Close fname free => Close fname (go_list free)
+        end in go.
+
+Definition shift_list :=
+    let go := shift in
+    let fix go_list es :=
+        match es with
+        | [] => []
+        | e :: es => go e :: go_list es
+        end in go_list.
+
+Definition shift_pair :=
+    let go := shift in
+    let fix go_pair (p : expr * rec_info) :=
+        let '(e, r) := p in
+        (go e, r) in go_pair.
+
+Definition shift_list_pair :=
+    let go_pair := shift_pair in
+    let fix go_list_pair ps :=
+        match ps with
+        | [] => []
+        | p :: ps => go_pair p :: go_list_pair ps
+        end in go_list_pair.
+
+Ltac refold_shift :=
+    fold shift_list in *;
+    fold shift_pair in *;
+    fold shift_list_pair in *.
+
+
+
