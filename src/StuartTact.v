@@ -317,8 +317,12 @@ Ltac invcs_using I H := invc_using I H; simpl in *.
 
 (* Wrappers for various tactics, for use with `on` *)
 
-Ltac apply_ lem H := apply lem in H.
-Ltac eapply_ lem H := eapply lem in H.
+Ltac apply_ H := apply H.
+Ltac eapply_ H := eapply H.
+
+Ltac apply_lem lem H := apply lem in H.
+Ltac eapply_lem lem H := eapply lem in H.
+
 
 Ltac rewrite_fwd lem H := rewrite -> lem in H.
 Ltac rewrite_rev lem H := rewrite <- lem in H.
