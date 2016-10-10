@@ -593,6 +593,79 @@ induction ps; split; intro HH.
 Qed.
 
 
+Ltac nebd_fail := right; (inversion 1 + simpl); eauto.
+
+Definition no_elim_body_dec e : { no_elim_body e } + { ~ no_elim_body e }.
+induction e using expr_rect_mut with
+    (Pl := fun es => { no_elim_body_list es } + { ~ no_elim_body_list es })
+    (Pp := fun p => { no_elim_body_pair p } + { ~ no_elim_body_pair p })
+    (Plp := fun ps => { no_elim_body_list_pair ps } + { ~ no_elim_body_list_pair ps });
+try solve [left; constructor | right; inversion 1].
+
+- destruct IHe1; [| nebd_fail ].
+  destruct IHe2; [| nebd_fail ].
+  left. constructor; auto.
+
+- destruct IHe; [| nebd_fail ].
+  left. auto.
+
+- destruct IHe; [| nebd_fail ].
+  left. auto.
+
+- destruct IHe; [| nebd_fail ].
+  destruct IHe0; [| nebd_fail ].
+  left. constructor; auto.
+
+- simpl. assumption.
+
+- destruct IHe; [| nebd_fail ].
+  destruct IHe0; [| nebd_fail ].
+  left. constructor; auto.
+Defined.
+
+Definition no_elim_body_list_dec es : { no_elim_body_list es } + { ~ no_elim_body_list es }.
+induction es.
+- left. constructor.
+- destruct (no_elim_body_dec a); [| nebd_fail ].
+  destruct IHes; [| nebd_fail ].
+  left. constructor; auto.
+Qed.
+
+Definition no_elim_body_pair_dec p : { no_elim_body_pair p } + { ~ no_elim_body_pair p }.
+destruct p.
+destruct (no_elim_body_dec e); [| nebd_fail ].
+left. auto.
+Qed.
+
+Definition no_elim_body_list_pair_dec ps :
+    { no_elim_body_list_pair ps } + { ~ no_elim_body_list_pair ps }.
+induction ps.
+- left. constructor.
+- destruct (no_elim_body_pair_dec a); [| nebd_fail ].
+  destruct IHps; [| nebd_fail ].
+  left. constructor; auto.
+Qed.
+
+
+Definition elim_body_placement_dec e : { elim_body_placement e } + { ~ elim_body_placement e }.
+destruct e; try eapply no_elim_body_dec.
+
+simpl.
+destruct (no_elim_body_dec e); [| nebd_fail ].
+destruct (no_elim_body_list_pair_dec cases); [| nebd_fail ].
+left. auto.
+Qed.
+
+Definition elim_body_placement_list_dec es :
+    { Forall elim_body_placement es } + { ~ Forall elim_body_placement es }.
+induction es.
+- left. constructor.
+- destruct (elim_body_placement_dec a); [| nebd_fail ].
+  destruct IHes; [| nebd_fail ].
+  left. constructor; auto.
+Qed.
+
+
 
 Definition shift :=
     let fix go e :=

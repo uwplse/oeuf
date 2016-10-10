@@ -64,10 +64,15 @@ Ltac refold_compile :=
     fold compile_list_pair in *.
 
 
-Definition compile_cu (cu : list S.expr * list metadata) : list S.expr * list metadata :=
+Definition compile_cu' (cu : list S.expr * list metadata) : list S.expr * list metadata :=
     let '(exprs, metas) := cu in
     let exprs' := compile_list exprs in
     (exprs', metas).
+
+Definition compile_cu cu : option _ :=
+    if S.elim_body_placement_list_dec (fst cu)
+        then Some (compile_cu' cu)
+        else None.
 
 
 Lemma compile_list_Forall : forall aes bes,
@@ -380,8 +385,46 @@ subst. rewrite shift_value_eq in *; eauto.
 Qed.
 
 
+Lemma unroll_elim_sim : forall AE BE,
+    forall arec brec acase bcase aargs bargs ainfo binfo ae',
+    S.unroll_elim arec acase aargs ainfo = Some ae' ->
+    I_expr AE BE (S.shift arec) brec ->
+    I_expr AE BE (S.shift acase) bcase ->
+    Forall2 (I_expr AE BE) (S.shift_list aargs) bargs ->
+    ainfo = binfo ->
+    exists be',
+        S.unroll_elim brec bcase bargs binfo = Some be' /\
+        I_expr AE BE (S.shift ae') be'.
+first_induction aargs; destruct ainfo; intros0 Aunroll IIrec IIcase IIargs IIinfo;
+  try discriminate.
+
+- invc IIargs.
+  eexists. split. reflexivity.
+  simpl in Aunroll. inject_some. assumption.
+
+- invc IIargs. simpl. eapply IHaargs; try eassumption; eauto.
+  destruct b; simpl; S.refold_shift; eauto using ICall.
+Qed.
+
+Lemma unroll_elim_no_elim_body : forall rec case args info e',
+    S.unroll_elim rec case args info = Some e' ->
+    S.no_elim_body rec ->
+    S.no_elim_body case ->
+    Forall S.no_elim_body args ->
+    S.no_elim_body e'.
+first_induction args; destruct info; intros0 Hunroll Hrec Hcase Hargs;
+try discriminate; simpl in Hunroll.
+
+- inject_some. assumption.
+
+- invc Hargs.
+  destruct b; eapply IHargs; eauto; simpl; eauto.
+Qed.
+
+
 Theorem I_sim : forall AE BE a a' b,
     compile_list AE = BE ->
+    Forall S.elim_body_placement AE ->
     I AE BE a b ->
     A.sstep AE a a' ->
     exists b',
@@ -389,7 +432,7 @@ Theorem I_sim : forall AE BE a a' b,
         I AE BE a' b'.
 
 destruct a as [ae al ak | ae];
-intros0 Henv II Astep; [ | solve [invc Astep] ].
+intros0 Henv Aebp II Astep; [ | solve [invc Astep] ].
 
 destruct ae; inv Astep; invc II; try on (I_expr _ _ _ _), invc.
 
@@ -456,7 +499,7 @@ destruct ae; inv Astep; invc II; try on (I_expr _ _ _ _), invc.
   eexists. split. eapply B.SMakeCall; eauto.
     { list_magic_on (free, (bfree, tt)). }
   constructor 1; eauto.
-    { simpl in *. admit. (* TODO - add hyp *) }
+    { eapply Forall_nth_error; eauto. }
     { eapply Forall2_nth_error with (xs := AE) (ys := BE); try eassumption.
       list_magic_on (AE, (BE, tt)). eauto using compile_I_expr. }
     { constructor; eauto. list_magic_on (free, (bfree, tt)). }
@@ -473,7 +516,7 @@ destruct ae; inv Astep; invc II; try on (I_expr _ _ _ _), invc.
   eexists. split. eapply B.SMakeCall; eauto.
     { list_magic_on (free, (bfree, tt)). }
   constructor 1; eauto.
-    { simpl in *. admit. (* TODO - add hyp *) }
+    { eapply Forall_nth_error; eauto. }
     { eapply Forall2_nth_error with (xs := AE) (ys := BE); try eassumption.
       list_magic_on (AE, (BE, tt)). eauto using compile_I_expr. }
     { constructor; eauto. rewrite shift_value_eq in *; eauto. }
@@ -542,21 +585,32 @@ destruct ae; inv Astep; invc II; try on (I_expr _ _ _ _), invc.
 - simpl in *. contradiction.
 
 
-- fwd eapply length_nth_error_Some with (ys := bcases) as HH; [ | eassumption | ].
-    { rewrite <- shift_list_pair_Forall2 in *. eauto using Forall2_length. }
+- rewrite <- shift_list_pair_Forall2 in *.
+  fwd eapply length_nth_error_Some with (ys := bcases) as HH; [ | eassumption | ].
+    { eauto using Forall2_length. }
     destruct HH as [[bcase binfo] ?].
   on (Forall2 _ _ bl), invc.
   on (I_expr _ _ (A.Constr _ _) _), invc.
-  assert (HH : exists be', S.unroll_elim brec bcase bargs binfo = Some be') by admit.
-    destruct HH as [be' ?].
+  assert (HH : on_fst (I_expr AE (compile_list AE)) (S.shift_pair (case, info)) (bcase, binfo)).
+    { pattern (case, info), (bcase, binfo). eapply Forall2_nth_error; eauto. }
+    unfold on_fst in HH. simpl in HH. break_and. subst binfo.
   repeat on (Forall _ (_ :: _)), invc.
+
+  fwd eapply unroll_elim_sim as HH; eauto.
+    { rewrite shift_value_eq; eauto. }
+    { eapply forall_value_shift_I_expr'; eauto. }
+    destruct HH as [be' [? ?]].
 
   eexists. split. eapply B.SEliminate; eauto.
     { list_magic_on (args, (bargs, tt)). }
   constructor 2; eauto.
     { list_magic_on (args, (bargs, tt)). }
-    { admit. (* unroll_elim no_elim_body *) }
-    { admit. (* unroll_elim I_expr *) }
+    { simpl in *. break_and.
+      eapply unroll_elim_no_elim_body; eauto.
+      - rewrite S.no_elim_body_list_pair_Forall in *.
+        change case with (fst (case, info)). pattern (case, info).
+        eapply Forall_nth_error; cycle 1; eassumption.
+      - list_magic_on (args, tt). eauto using value_no_elim_body. }
 
 - simpl in *. contradiction.
 
@@ -612,5 +666,5 @@ destruct ae; inv Astep; invc II; try on (I_expr _ _ _ _), invc.
     { constructor. list_magic_on (free, (bfree, tt)). }
     { constructor. auto. }
 
-Admitted.
+Qed.
 
