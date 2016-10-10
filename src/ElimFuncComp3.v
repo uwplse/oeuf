@@ -309,6 +309,14 @@ Lemma shift_list_is_map : forall es,
 induction es; simpl; eauto.
 Qed.
 
+Lemma shift_list_Forall : forall es es',
+    S.shift_list es = es' ->
+    Forall2 (fun e e' => S.shift e = e') es es'.
+induction es; simpl; S.refold_shift; intros0 Hshift.
+- invc Hshift. constructor.
+- invc Hshift. constructor; eauto.
+Qed.
+
 Lemma shift_value : forall e,
     S.value e ->
     S.value (S.shift e).
@@ -349,6 +357,17 @@ Ltac solve_value :=
     eapply Forall_nth_error + eapply Forall2_nth_error;
     cycle 1; solve [eauto].
 
+Lemma forall_value_shift_I_expr : forall AE BE aes bes,
+    Forall A.value aes ->
+    Forall2 (I_expr AE BE) (S.shift_list aes) bes ->
+    Forall2 (I_expr AE BE) aes bes.
+intros0 Hval II.
+remember (S.shift_list aes) as aes'. symmetry in Heqaes'.
+apply shift_list_Forall in Heqaes'.
+list_magic_on (aes, (aes', (bes, tt))).
+subst. rewrite shift_value_eq in *; eauto.
+Qed.
+
 Theorem I_sim : forall AE BE a a' b,
     compile_list AE = BE ->
     I AE BE a b ->
@@ -386,26 +405,67 @@ destruct ae; inv Astep; invc II; try on (I_expr _ _ _ _), invc.
 
 
 - eexists. split. eapply B.SCallL; eauto.
-  constructor; eauto.
+  constructor 1; eauto.
     { simpl in *. eapply no_elim_body_placement; firstorder. }
-  intros. constructor; eauto.
+  intros. constructor 1; eauto.
     { simpl in *. split; eauto using value_no_elim_body. firstorder. }
   constructor; eauto.
 
 - eexists. split. eapply B.SCallL; eauto.
-  eapply IRunCase; eauto.
+  constructor 2; eauto.
     { simpl in *. firstorder. }
-  intros. eapply IRunCase; eauto.
+  intros. constructor 2; eauto.
     { simpl in *. split; eauto using value_no_elim_body. firstorder. }
   simpl. constructor; eauto. rewrite shift_value_eq; eauto.
 
 
-- admit.
-- admit.
+- eexists. split. eapply B.SCallR; eauto.
+  constructor 1; eauto.
+    { simpl in *. eapply no_elim_body_placement; firstorder. }
+  intros. constructor 1; eauto.
+    { simpl in *. split; eauto using value_no_elim_body. }
+  simpl. constructor; eauto.
+
+- eexists. split. eapply B.SCallR; eauto.
+  constructor 2; eauto.
+    { simpl in *. firstorder. }
+  intros. constructor 2; eauto.
+    { simpl in *. split; eauto using value_no_elim_body. }
+  simpl. constructor; eauto. rewrite shift_value_eq; eauto.
 
 
-- admit.
-- admit.
+- on (I_expr _ _ (A.Close _ _) _), invc.
+  fwd eapply length_nth_error_Some with (ys := compile_list AE) as HH;
+    cycle 1; eauto using compile_list_length.
+    destruct HH as [bbody ?].
+  fwd eapply compile_list_Forall with (aes := AE); eauto.
+  remember (compile_list AE) as BE.
+
+  eexists. split. eapply B.SMakeCall; eauto.
+    { list_magic_on (free, (bfree, tt)). }
+  constructor 1; eauto.
+    { simpl in *. admit. (* TODO - add hyp *) }
+    { eapply Forall2_nth_error with (xs := AE) (ys := BE); try eassumption.
+      list_magic_on (AE, (BE, tt)). eauto using compile_I_expr. }
+    { constructor; eauto. list_magic_on (free, (bfree, tt)). }
+
+- S.refold_shift.
+  on (I_expr _ _ (A.Close _ _) _), invc.
+  fwd eapply length_nth_error_Some with (ys := compile_list AE) as HH;
+    cycle 1; eauto using compile_list_length.
+    destruct HH as [bbody ?].
+  fwd eapply compile_list_Forall with (aes := AE); eauto.
+  remember (compile_list AE) as BE.
+  on _, apply_lem forall_value_shift_I_expr; eauto.
+
+  eexists. split. eapply B.SMakeCall; eauto.
+    { list_magic_on (free, (bfree, tt)). }
+  constructor 1; eauto.
+    { simpl in *. admit. (* TODO - add hyp *) }
+    { eapply Forall2_nth_error with (xs := AE) (ys := BE); try eassumption.
+      list_magic_on (AE, (BE, tt)). eauto using compile_I_expr. }
+    { constructor; eauto. rewrite shift_value_eq in *; eauto. }
+    { constructor; eauto. list_magic_on (free, (bfree, tt)). }
 
 
 - admit.
