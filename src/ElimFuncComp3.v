@@ -368,6 +368,18 @@ list_magic_on (aes, (aes', (bes, tt))).
 subst. rewrite shift_value_eq in *; eauto.
 Qed.
 
+Lemma forall_value_shift_I_expr' : forall AE BE aes bes,
+    Forall A.value aes ->
+    Forall2 (I_expr AE BE) aes bes ->
+    Forall2 (I_expr AE BE) (S.shift_list aes) bes.
+intros0 Hval II.
+remember (S.shift_list aes) as aes'. symmetry in Heqaes'.
+apply shift_list_Forall in Heqaes'.
+list_magic_on (aes, (aes', (bes, tt))).
+subst. rewrite shift_value_eq in *; eauto.
+Qed.
+
+
 Theorem I_sim : forall AE BE a a' b,
     compile_list AE = BE ->
     I AE BE a b ->
@@ -468,28 +480,137 @@ destruct ae; inv Astep; invc II; try on (I_expr _ _ _ _), invc.
     { constructor; eauto. list_magic_on (free, (bfree, tt)). }
 
 
-- admit.
-- admit.
+- on _, invc_using Forall2_3part_inv.
+
+  eexists. split. eapply B.SConstrStep; eauto.
+    { list_magic_on (vs, (ys1, tt)). }
+  constructor 1; eauto.
+    { simpl in *. S.refold_no_elim_body. rewrite S.no_elim_body_list_Forall in *.
+      on _, invc_using Forall_3part_inv. eauto using no_elim_body_placement. }
+  intros. constructor 1; eauto.
+    { simpl in *. S.refold_no_elim_body. rewrite S.no_elim_body_list_Forall in *.
+      on _, invc_using Forall_3part_inv.
+      eapply Forall_app; eauto using value_no_elim_body. }
+  constructor; eauto. eapply Forall2_app; eauto. eapply Forall2_app; eauto.
+
+- S.refold_shift.
+  rewrite shift_list_is_map in *. rewrite map_app, map_cons in *.
+  on _, invc_using Forall2_3part_inv. rewrite <- shift_list_is_map in *.
+  on _, (fun H => apply forall_value_shift_I_expr in H; [ | solve [eauto] ]).
+
+  eexists. split. eapply B.SConstrStep; eauto.
+    { list_magic_on (vs, (ys1, tt)). }
+  constructor 2; eauto.
+    { simpl in *. S.refold_no_elim_body. rewrite S.no_elim_body_list_Forall in *.
+      on _, invc_using Forall_3part_inv. eauto. }
+  intros. constructor 2; eauto.
+    { simpl in *. S.refold_no_elim_body. rewrite S.no_elim_body_list_Forall in *.
+      on _, invc_using Forall_3part_inv.
+      eapply Forall_app; eauto using value_no_elim_body. }
+  simpl. S.refold_shift. constructor; eauto.
+  rewrite shift_list_is_map. rewrite map_app, map_cons.
+  eapply Forall2_app. { rewrite <- shift_list_is_map. eapply forall_value_shift_I_expr'; eauto. }
+  constructor; cycle 1. { rewrite <- shift_list_is_map. auto. }
+  rewrite shift_value_eq; eauto.
 
 
-- admit.
-- admit.
+- eexists. split. eapply B.SConstrDone; eauto.
+    { list_magic_on (args, (bargs, tt)). }
+  on _, eapply_.
+    { constructor. eauto. }
+    { constructor. list_magic_on (args, (bargs, tt)). }
+    { constructor. auto. }
+
+- S.refold_shift.
+  on _, apply_lem forall_value_shift_I_expr; eauto.
+
+  eexists. split. eapply B.SConstrDone; eauto.
+    { list_magic_on (args, (bargs, tt)). }
+  on _, eapply_.
+    { constructor. eauto. }
+    { constructor. list_magic_on (args, (bargs, tt)). }
+    { constructor. auto. }
 
 
-- admit.
-- admit.
+- eexists. split. eapply B.SElimStepRec; eauto.
+  constructor 1; eauto.
+    { simpl in *. eapply no_elim_body_placement. firstorder. }
+  intros. constructor 1; eauto.
+    { simpl in *. split; eauto using value_no_elim_body. firstorder. }
+  constructor; eauto.
+
+- simpl in *. contradiction.
 
 
-- admit.
-- admit.
+- fwd eapply length_nth_error_Some with (ys := bcases) as HH; [ | eassumption | ].
+    { rewrite <- shift_list_pair_Forall2 in *. eauto using Forall2_length. }
+    destruct HH as [[bcase binfo] ?].
+  on (Forall2 _ _ bl), invc.
+  on (I_expr _ _ (A.Constr _ _) _), invc.
+  assert (HH : exists be', S.unroll_elim brec bcase bargs binfo = Some be') by admit.
+    destruct HH as [be' ?].
+  repeat on (Forall _ (_ :: _)), invc.
+
+  eexists. split. eapply B.SEliminate; eauto.
+    { list_magic_on (args, (bargs, tt)). }
+  constructor 2; eauto.
+    { list_magic_on (args, (bargs, tt)). }
+    { admit. (* unroll_elim no_elim_body *) }
+    { admit. (* unroll_elim I_expr *) }
+
+- simpl in *. contradiction.
 
 
-- admit.
-- admit.
+- on _, invc_using Forall2_3part_inv.
+
+  eexists. split. eapply B.SCloseStep; eauto.
+    { list_magic_on (vs, (ys1, tt)). }
+  constructor 1; eauto.
+    { simpl in *. S.refold_no_elim_body. rewrite S.no_elim_body_list_Forall in *.
+      on _, invc_using Forall_3part_inv. eauto using no_elim_body_placement. }
+  intros. constructor 1; eauto.
+    { simpl in *. S.refold_no_elim_body. rewrite S.no_elim_body_list_Forall in *.
+      on _, invc_using Forall_3part_inv.
+      eapply Forall_app; eauto using value_no_elim_body. }
+  constructor; eauto. eapply Forall2_app; eauto. eapply Forall2_app; eauto.
+
+- S.refold_shift.
+  rewrite shift_list_is_map in *. rewrite map_app, map_cons in *.
+  on _, invc_using Forall2_3part_inv. rewrite <- shift_list_is_map in *.
+  on _, (fun H => apply forall_value_shift_I_expr in H; [ | solve [eauto] ]).
+
+  eexists. split. eapply B.SCloseStep; eauto.
+    { list_magic_on (vs, (ys1, tt)). }
+  constructor 2; eauto.
+    { simpl in *. S.refold_no_elim_body. rewrite S.no_elim_body_list_Forall in *.
+      on _, invc_using Forall_3part_inv. eauto. }
+  intros. constructor 2; eauto.
+    { simpl in *. S.refold_no_elim_body. rewrite S.no_elim_body_list_Forall in *.
+      on _, invc_using Forall_3part_inv.
+      eapply Forall_app; eauto using value_no_elim_body. }
+  simpl. S.refold_shift. constructor; eauto.
+  rewrite shift_list_is_map. rewrite map_app, map_cons.
+  eapply Forall2_app. { rewrite <- shift_list_is_map. eapply forall_value_shift_I_expr'; eauto. }
+  constructor; cycle 1. { rewrite <- shift_list_is_map. auto. }
+  rewrite shift_value_eq; eauto.
 
 
-- admit.
-- admit.
+- eexists. split. eapply B.SCloseDone; eauto.
+    { list_magic_on (free, (bfree, tt)). }
+  on _, eapply_.
+    { constructor. eauto. }
+    { constructor. list_magic_on (free, (bfree, tt)). }
+    { constructor. auto. }
+
+- S.refold_shift.
+  on _, apply_lem forall_value_shift_I_expr; eauto.
+
+  eexists. split. eapply B.SCloseDone; eauto.
+    { list_magic_on (free, (bfree, tt)). }
+  on _, eapply_.
+    { constructor. eauto. }
+    { constructor. list_magic_on (free, (bfree, tt)). }
+    { constructor. auto. }
 
 Admitted.
 
