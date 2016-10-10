@@ -2,9 +2,9 @@ Require Import Oeuf.
 Require Import CompilationUnit.
 Require Import HList.
 Require Import Untyped.
-Require Import StepSim.
 Require Import StepLib.
-
+Require Import Semantics.
+        
 Require Import compcert.lib.Coqlib.
 Require Import compcert.ia32.Asm.
 Require Import compcert.common.AST.
@@ -18,15 +18,33 @@ Require Import StructTact.Util.
 
 Require Import EricTact.
 
+(* *)
 
+(*
+ We need some kind of semantics notion for Oeuf programs
+Let's try using a modified version of CompCert's, and see what happens
+ 
+*)
 
+(*
+We're going to need a few things:
+1. a simulation from SourceLang to Flattened, which all use no traces
+2. a simulation from Fmajor to Asm, which all use traces
+3. some way to hook it all up together
+*)
+
+(*
 Section Simulation.
 
   Variable prog : compilation_unit.
   Variable tprog : Asm.program.
   Hypothesis TRANSF : transf_to_asm prog = OK tprog.
-  Definition ge := Genv.globalenv tprog.
 
+
+
+  Lemma fsim :
+    forward_simulation (SourceLang.semantics prog) (Asm.semantics tprog).
+  
 Lemma star_step_sim :
   forall {tys ty} (exp exp' : SourceLang.expr tys ty),
     sstar SourceLang.step exp exp' ->
@@ -79,3 +97,4 @@ Proof.
 Admitted.
 
 End Simulation.
+*)
