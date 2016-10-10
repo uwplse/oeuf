@@ -304,6 +304,11 @@ simpl; S.refold_shift.
 - invc Hval. f_equal; eauto.
 Qed.
 
+Lemma shift_list_is_map : forall es,
+    S.shift_list es = map S.shift es.
+induction es; simpl; eauto.
+Qed.
+
 Lemma shift_value : forall e,
     S.value e ->
     S.value (S.shift e).
@@ -311,36 +316,32 @@ intros. rewrite shift_value_eq; eauto.
 Qed.
 Hint Resolve shift_value.
 
+Lemma shift_value' : forall e,
+    S.value (S.shift e) ->
+    S.value e.
+induction e using S.expr_ind''; intros0 Hval; invc Hval; simpl in *; S.refold_shift.
+
+- rewrite shift_list_is_map in *. rewrite <- Forall_map in *.
+  constructor. list_magic_on (args, tt).
+
+- rewrite shift_list_is_map in *. rewrite <- Forall_map in *.
+  constructor. list_magic_on (free, tt).
+Qed.
+Hint Resolve shift_value'.
+
 Lemma shift_not_value : forall e,
     ~ S.value e ->
     ~ S.value (S.shift e).
-induction e using S.expr_rect_mut with
-    (Pl := fun e =>
-        Forall (fun e => ~ S.value e) e ->
-        Forall (fun e => ~ S.value e) (S.shift_list e))
-    (Pp := fun p =>
-        ~ S.value (fst p) ->
-        ~ S.value (fst (S.shift_pair p)))
-    (Plp := fun ps =>
-        Forall (fun p => ~ S.value (fst p)) ps ->
-        Forall (fun p => ~ S.value (fst p)) (S.shift_list_pair ps));
-intros0 Hval; simpl; S.refold_shift; try solve [inversion 1].
-
-- contradict Hval. invc Hval. constructor.
-  admit. (* TODO *)
-- contradict Hval. invc Hval. constructor.
-  admit. (* TODO *)
-
-- constructor.
-- invc Hval. constructor; eauto.
-
-- simpl in Hval. eauto.
-
-- constructor.
-- invc Hval. constructor; eauto.
-Admitted.
+intros. intro. eauto.
+Qed.
 Hint Resolve shift_not_value.
 
+Lemma shift_not_value' : forall e,
+    ~ S.value (S.shift e) ->
+    ~ S.value e.
+intros. intro. eauto.
+Qed.
+Hint Resolve shift_not_value'.
 
 
 
@@ -362,23 +363,23 @@ intros0 Henv II Astep; [ | solve [invc Astep] ].
 destruct ae; inv Astep; invc II; try on (I_expr _ _ _ _), invc.
 
 
-- assert (HH : exists bv, nth_error bl 0 = Some bv) by admit.
+- fwd eapply length_nth_error_Some with (ys := bl) as HH; cycle 1; eauto using Forall2_length.
     destruct HH as [bv ?].
   eexists. split. eapply B.SArg; eauto.
   on _, eapply_; solve_value.
 
-- assert (HH : exists bv, nth_error bl 0 = Some bv) by admit.
+- fwd eapply length_nth_error_Some with (ys := bl) as HH; cycle 1; eauto using Forall2_length.
     destruct HH as [bv ?].
   eexists. split. eapply B.SUpVar; eauto.
   on _, eapply_; solve_value.
 
 
-- assert (HH : exists bv, nth_error bl (S n) = Some bv) by admit.
+- fwd eapply length_nth_error_Some with (ys := bl) as HH; cycle 1; eauto using Forall2_length.
     destruct HH as [bv ?].
   eexists. split. eapply B.SUpVar; eauto.
   on _, eapply_; solve_value.
 
-- assert (HH : exists bv, nth_error bl (S n) = Some bv) by admit.
+- fwd eapply length_nth_error_Some with (ys := bl) as HH; cycle 1; eauto using Forall2_length.
     destruct HH as [bv ?].
   eexists. split. eapply B.SUpVar; eauto.
   on _, eapply_; solve_value.
@@ -392,14 +393,43 @@ destruct ae; inv Astep; invc II; try on (I_expr _ _ _ _), invc.
   constructor; eauto.
 
 - eexists. split. eapply B.SCallL; eauto.
-  admit.
-  (*
-  constructor; eauto.
-    { simpl in *. eapply no_elim_body_placement; firstorder. }
-  intros. constructor; eauto.
+  eapply IRunCase; eauto.
+    { simpl in *. firstorder. }
+  intros. eapply IRunCase; eauto.
     { simpl in *. split; eauto using value_no_elim_body. firstorder. }
-  constructor; eauto.
-*)
+  simpl. constructor; eauto. rewrite shift_value_eq; eauto.
+
+
+- admit.
+- admit.
+
+
+- admit.
+- admit.
+
+
+- admit.
+- admit.
+
+
+- admit.
+- admit.
+
+
+- admit.
+- admit.
+
+
+- admit.
+- admit.
+
+
+- admit.
+- admit.
+
+
+- admit.
+- admit.
 
 Admitted.
 
