@@ -720,3 +720,33 @@ Ltac refold_shift :=
 
 
 
+Definition value_dec : forall e : expr, { value e } + { ~ value e }.
+induction e using expr_rect_mut with
+    (Pl := fun es => { Forall value es } + { ~ Forall value es })
+    (Pp := fun p => { value (fst p) } + { ~ value (fst p) })
+    (Plp := fun ps => { Forall (fun p => value (fst p)) ps } +
+                      { ~ Forall (fun p => value (fst p)) ps });
+try solve [left; constructor | right; inversion 1].
+
+- (* constr *)
+  destruct IHe; [ | right; inversion 1; eauto ].
+  left. constructor. eauto.
+
+- (* close *)
+  destruct IHe; [ | right; inversion 1; eauto ].
+  left. constructor. eauto.
+
+- (* cons *)
+  destruct IHe; [ | right; inversion 1; eauto ].
+  destruct IHe0; [ | right; inversion 1; eauto ].
+  left. constructor; eauto.
+
+- (* pair *)
+  simpl. assumption.
+
+- (* cons *)
+  destruct IHe; [ | right; inversion 1; eauto ].
+  destruct IHe0; [ | right; inversion 1; eauto ].
+  left. constructor; eauto.
+Defined.
+

@@ -230,6 +230,16 @@ induction xs; destruct ys; intros; split; inversion 1; subst; simpl in *; eauto.
 - constructor; eauto. rewrite -> IHxs. assumption.
 Qed.
 
+Lemma Forall2_map_l : forall A A' B (P : A' -> B -> Prop) (fx : A -> A') xs ys,
+    Forall2 (fun x y => P (fx x) y) xs ys <-> Forall2 P (map fx xs) ys.
+intros. rewrite <- map_id with (l := ys) at 2. eapply Forall2_map.
+Qed.
+
+Lemma Forall2_map_r : forall A B B' (P : A -> B' -> Prop) (fy : B -> B') xs ys,
+    Forall2 (fun x y => P x (fy y)) xs ys <-> Forall2 P xs (map fy ys).
+intros. rewrite <- map_id with (l := xs) at 2. eapply Forall2_map.
+Qed.
+
 Lemma Forall2_map_eq : forall A B R (fx : A -> R) (fy : B -> R) xs ys,
     Forall2 (fun x y => fx x = fy y) xs ys ->
     map fx xs = map fy ys.

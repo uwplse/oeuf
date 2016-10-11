@@ -11,7 +11,7 @@ Inductive expr :=
 | Deref : expr -> nat -> expr
 | Call : expr -> expr -> expr
 | Constr (tag : nat) (args : list expr)
-| Switch (cases : list expr) (target : expr)
+| Switch (cases : list expr)
 | Close (f : function_name) (free : list expr)
 .
 
@@ -21,157 +21,132 @@ Inductive value : expr -> Prop :=
 | VConstr : forall tag args, Forall value args -> value (Constr tag args)
 | VClose : forall f free, Forall value free -> value (Close f free).
 
-Section subst.
-Open Scope option_monad.
+(* Continuation-based step relation *)
 
-Definition subst (arg : expr) (vals : list expr) (e : expr) : option expr :=
-    let fix go e :=
-        let fix go_list es : option (list expr) :=
-            match es with
-            | [] => Some []
-            | e :: es => cons <$> go e <*> go_list es
-            end in
-        match e with
-        | Arg => Some arg
-        | UpVar n => nth_error vals n
-        | Deref e' n => (fun e => Deref e n) <$> go e'
-        | Call f a => Call <$> go f <*> go a
-        | Constr c es => Constr c <$> go_list es
-        | Switch cases target => Switch <$> go_list cases <*> go target
-        | Close f free => Close f <$> go_list free
-        end in
-    go e.
-End subst.
+Inductive state :=
+| Run (e : expr) (l : list expr) (k : expr -> state)
+| Stop (e : expr).
 
-Inductive step (E : env) : expr -> expr -> Prop :=
-| MakeCall : forall f a free e e',
-    value a ->
-    Forall value free ->
-    nth_error E f = Some e ->
-    subst a free e = Some e' ->
-    step E (Call (Close f free) a) e'
-| CallL : forall e1 e1' e2,
-    step E e1 e1' ->
-    step E (Call e1 e2) (Call e1' e2)
-| CallR : forall v e2 e2',
-    value v ->
-    step E e2 e2' ->
-    step E (Call v e2) (Call v e2')
-| ConstrStep : forall tag vs e e' es,
-    step E e e' ->
-    Forall value vs ->
-    step E (Constr tag (vs ++ [e] ++ es)) (Constr tag (vs ++ [e'] ++ es))
-| SwitchStep : forall t t' cases,
-        step E t t' ->
-        step E (Switch cases t) (Switch cases t')
-| Switchinate : forall tag args cases case,
-    nth_error cases tag = Some case ->
-    Forall value args ->
-    step E (Switch cases (Constr tag args)) case
-| CloseStep : forall f vs e e' es,
-    step E e e' ->
-    Forall value vs ->
-    step E (Close f (vs ++ [e] ++ es)) (Close f (vs ++ [e'] ++ es))
-| DerefStep : forall e1 e1' n,
-    step E e1 e1' ->
-    step E (Deref e1 n) (Deref e1' n)
-| DerefinateConstr : forall tag args n a,
-    nth_error args n = Some a ->
-    step E (Deref (Constr tag args) n) a
-| DerefinateClosure : forall f args n a,
-    nth_error args n = Some a ->
-    step E (Deref (Close f args) n) a
+Inductive sstep (E : env) : state -> state -> Prop :=
+| SArg : forall l k v,
+        nth_error l 0 = Some v ->
+        sstep E (Run Arg l k) (k v)
+| SUpVar : forall n l k v,
+        nth_error l (S n) = Some v ->
+        sstep E (Run (UpVar n) l k) (k v)
+
+| SDerefStep : forall e off l k,
+        ~ value e ->
+        sstep E (Run (Deref e off) l k)
+                (Run e l (fun v => Run (Deref v off) l k))
+| SDerefinateConstr : forall tag args off l k v,
+        nth_error args off = Some v ->
+        sstep E (Run (Deref (Constr tag args) off) l k) (k v)
+| SDerefinateClose : forall fname free off l k v,
+        nth_error free off = Some v ->
+        sstep E (Run (Deref (Close fname free) off) l k) (k v)
+
+| SConstrStep : forall fname vs e es l k,
+        Forall value vs ->
+        ~ value e ->
+        sstep E (Run (Constr fname (vs ++ [e] ++ es)) l k)
+                (Run e l (fun v => Run (Constr fname (vs ++ [v] ++ es)) l k))
+| SConstrDone : forall fname vs l k,
+        Forall value vs ->
+        sstep E (Run (Constr fname vs) l k) (k (Constr fname vs))
+
+| SCloseStep : forall fname vs e es l k,
+        Forall value vs ->
+        ~ value e ->
+        sstep E (Run (Close fname (vs ++ [e] ++ es)) l k)
+                (Run e l (fun v => Run (Close fname (vs ++ [v] ++ es)) l k))
+| SCloseDone : forall fname vs l k,
+        Forall value vs ->
+        sstep E (Run (Close fname vs) l k) (k (Close fname vs))
+
+| SCallL : forall e1 e2 l k,
+        ~ value e1 ->
+        sstep E (Run (Call e1 e2) l k)
+                (Run e1 l (fun v => Run (Call v e2) l k))
+| SCallR : forall e1 e2 l k,
+        value e1 ->
+        ~ value e2 ->
+        sstep E (Run (Call e1 e2) l k)
+                (Run e2 l (fun v => Run (Call e1 v) l k))
+| SMakeCall : forall fname free arg l k body,
+        Forall value free ->
+        value arg ->
+        nth_error E fname = Some body ->
+        sstep E (Run (Call (Close fname free) arg) l k)
+                (Run body (arg :: free) k)
+
+| SSwitchinate : forall cases tag args l k case,
+        nth_error cases tag = Some case ->
+        sstep E (Run (Switch cases) (Constr tag args :: l) k)
+                (Run case (Constr tag args :: l) k)
 .
 
-Fixpoint nat_reflect n : expr :=
-    match n with
-    | 0 => Constr 0 []
-    | S n => Constr 1 [nat_reflect n]
-    end.
+Inductive sstar (E : env) : state -> state -> Prop :=
+| SStarNil : forall e, sstar E e e
+| SStarCons : forall e e' e'',
+        sstep E e e' ->
+        sstar E e' e'' ->
+        sstar E e e''.
 
-Definition add_expr := Call (Call (Close 0 []) (nat_reflect 1)) (nat_reflect 2).
-
-Definition add_env :=
-       [Close 1 [Arg];
-       Call
-         (Call
-            (Call (Call (Close 8 []) (Close 2 [Arg; UpVar 0]))
-               (Close 3 [Arg; UpVar 0])) (UpVar 0)) Arg;
-       Arg;
-       Close 4 [Arg; UpVar 0; UpVar 1];
-       Close 5 [Arg; UpVar 0; UpVar 1; UpVar 2];
-       Call (UpVar 0) (Constr 1 [Arg]);
-       Switch
-         [UpVar 1;
-         Call (Call (UpVar 0) (Deref Arg 0))
-           (Call (Close 6 [UpVar 0; UpVar 1]) (Deref Arg 0))] Arg;
-       Close 6 [Arg; UpVar 0]; Close 7 [Arg]].
-Definition add_prog := (add_expr, add_env).
+Inductive splus (E : env) : state -> state -> Prop :=
+| SPlusOne : forall s s',
+        sstep E s s' ->
+        splus E s s'
+| SPlusCons : forall s s' s'',
+        sstep E s s' ->
+        splus E s' s'' ->
+        splus E s s''.
 
 
-Definition add_env2 :=
-  [Close 1 [Arg];
-     Call
-       (Call (Close 6 [Close 3 [Arg; UpVar 0]; Close 2 [Arg; UpVar 0]])
-             (UpVar 0)) Arg;
-     Arg;
-     Close 4 [Arg; UpVar 0; UpVar 1];
-     Close 5 [Arg; UpVar 0; UpVar 1; UpVar 2];
-     Call (UpVar 0) (Constr 1 [Arg]);
-     Switch
-       [UpVar 1;
-          Call (Call (UpVar 0) (Deref Arg 0))
-               (Call (Close 6 [UpVar 0; UpVar 1]) (Deref Arg 0))] Arg].
-Definition add_prog2 := (add_expr, add_env).
 
-Inductive star (E : env) : expr -> expr -> Prop :=
-| StarNil : forall e, star E e e
-| StarCons : forall e e' e'',
-        step E e e' ->
-        star E e' e'' ->
-        star E e e''.
+(*
+ * Mutual recursion/induction schemes for expr
+ *)
 
-Theorem add_1_2 : { x | star add_env add_expr x }.
-eexists.
-unfold add_expr.
-eright. solve [repeat econstructor].
-eright. solve [repeat econstructor].
-eright. solve [repeat econstructor].
-eright. solve [repeat econstructor].
-eright. solve [repeat econstructor].
-eright. solve [repeat econstructor].
-eright. solve [repeat econstructor].
-eright. solve [repeat econstructor].
-eright. solve [repeat econstructor].
-eright. solve [repeat econstructor].
-eright. solve [repeat econstructor].
-eright. solve [repeat econstructor].
-eright. solve [repeat econstructor].
-eright. solve [repeat econstructor].
-eleft.
-Defined.
+Definition expr_rect_mut
+        (P : expr -> Type)
+        (Pl : list expr -> Type)
+    (HArg :     P Arg)
+    (HUpVar :   forall n, P (UpVar n))
+    (HDeref :   forall e off, P e -> P (Deref e off))
+    (HCall :    forall f a, P f -> P a -> P (Call f a))
+    (HConstr :  forall tag args, Pl args -> P (Constr tag args))
+    (HSwitch :  forall cases, Pl cases -> P (Switch cases))
+    (HClose :   forall f free, Pl free -> P (Close f free))
+    (Hnil :     Pl [])
+    (Hcons :    forall e es, P e -> Pl es -> Pl (e :: es))
+    (e : expr) : P e :=
+    let fix go e :=
+        let fix go_list es :=
+            match es as es_ return Pl es_ with
+            | [] => Hnil
+            | e :: es => Hcons e es (go e) (go_list es)
+            end in
+        match e as e_ return P e_ with
+        | Arg => HArg
+        | UpVar n => HUpVar n
+        | Deref e off => HDeref e off (go e)
+        | Call f a => HCall f a (go f) (go a)
+        | Constr tag args => HConstr tag args (go_list args)
+        | Switch cases => HSwitch cases (go_list cases)
+        | Close f free => HClose f free (go_list free)
+        end in go e.
 
+(* Useful wrapper for `expr_rect_mut with (Pl := Forall P)` *)
+Definition expr_ind' (P : expr -> Prop)
+    (HArg :     P Arg)
+    (HUpVar :   forall n, P (UpVar n))
+    (HDeref :   forall e off, P e -> P (Deref e off))
+    (HCall :    forall f a, P f -> P a -> P (Call f a))
+    (HConstr :  forall tag args, Forall P args -> P (Constr tag args))
+    (HSwitch :  forall cases, Forall P cases -> P (Switch cases))
+    (HClose :   forall f free, Forall P free -> P (Close f free))
+    (e : expr) : P e :=
+    ltac:(refine (@expr_rect_mut P (Forall P)
+        HArg HUpVar HDeref HCall HConstr HSwitch HClose _ _ e); eauto).
 
-(* Eval compute in proj1_sig add_1_2. *)
-
-
-Theorem add2_1_2 : { x | star add_env2 add_expr x }.
-Proof.
-eexists.
-unfold add_expr.
-eright. solve [repeat econstructor].
-eright. solve [repeat econstructor].
-eright. solve [repeat econstructor].
-eright. solve [repeat econstructor].
-eright. solve [repeat econstructor].
-eright. solve [repeat econstructor].
-eright. solve [repeat econstructor].
-eright. solve [repeat econstructor].
-eright. solve [repeat econstructor].
-eright. solve [repeat econstructor].
-eright. solve [repeat econstructor].
-eright. solve [repeat econstructor].
-eleft.
-Defined.
-
-(* Eval compute in proj1_sig add2_1_2.*) 
