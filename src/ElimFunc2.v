@@ -750,3 +750,97 @@ try solve [left; constructor | right; inversion 1].
   left. constructor; eauto.
 Defined.
 
+
+
+
+
+Fixpoint upvar_list' acc n :=
+    match n with
+    | 0 => acc
+    | S n' => upvar_list' (UpVar n' :: acc) n'
+    end.
+
+Definition upvar_list n := upvar_list' [] n.
+
+Lemma upvar_list'_length : forall acc n,
+    length (upvar_list' acc n) = length acc + n.
+first_induction n; intros.
+- simpl. lia.
+- simpl. rewrite IHn. simpl. lia.
+Qed.
+
+Lemma upvar_list_length : forall n,
+    length (upvar_list n) = n.
+intros. eapply upvar_list'_length.
+Qed.
+
+Lemma upvar_list'_acc : forall acc n,
+    upvar_list' acc n = upvar_list' [] n ++ acc.
+first_induction n; intros; simpl; eauto.
+- rewrite (IHn [_]). rewrite IHn. rewrite <- app_assoc. simpl. reflexivity.
+Qed.
+
+Lemma upvar_list_tail : forall n,
+    upvar_list (S n) = upvar_list n ++ [UpVar n].
+intros. unfold upvar_list at 1. simpl.
+rewrite upvar_list'_acc. reflexivity.
+Qed.
+
+
+
+Definition rec_shape e :=
+    exists fname n, e = Close fname (upvar_list n).
+
+Definition elim_rec_shape :=
+    let fix go e :=
+        let fix go_list es :=
+            match es with
+            | [] => True
+            | e :: es => go e /\ go_list es
+            end in
+        let fix go_pair p :=
+            let '(e, r) := p in
+            go e in
+        let fix go_list_pair ps :=
+            match ps with
+            | [] => True
+            | p :: ps => go_pair p /\ go_list_pair ps
+            end in
+        match e with
+        | Arg => True
+        | UpVar _ => True
+        | Call f a => go f /\ go a
+        | Constr _ args => go_list args
+        | ElimBody rec cases => rec_shape rec /\ go rec /\ go_list_pair cases
+        | Close _ free => go_list free
+        end in go.
+
+Definition elim_rec_shape_list :=
+    let go := elim_rec_shape in
+    let fix go_list es :=
+        match es with
+        | [] => True
+        | e :: es => go e /\ go_list es
+        end in go_list.
+
+Definition elim_rec_shape_pair :=
+    let go := elim_rec_shape in
+    let fix go_pair (p : expr * rec_info) :=
+        match p with
+        | (e, _) => go e
+        end in go_pair.
+
+Definition elim_rec_shape_list_pair :=
+    let go_pair := elim_rec_shape_pair in
+    let fix go_list_pair ps :=
+        match ps with
+        | [] => True
+        | p :: ps => go_pair p /\ go_list_pair ps
+        end in go_list_pair.
+
+Ltac refold_elim_rec_shape :=
+    fold elim_rec_shape_list in *;
+    fold elim_rec_shape_pair in *;
+    fold elim_rec_shape_list_pair in *.
+
+
