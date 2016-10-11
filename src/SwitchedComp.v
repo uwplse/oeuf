@@ -3,6 +3,7 @@ Require Import Metadata.
 Require Import ListLemmas.
 Require ElimFunc2 ElimFunc3 Switched String.
 Delimit Scope string_scope with string.
+Require Import Psatz.
 
 Module A := ElimFunc3.
 Module AS := ElimFunc2.
@@ -166,10 +167,13 @@ Inductive I (AE : AS.env) (BE : B.env) : A.state -> B.state -> Prop :=
                     (fun v => A.Run (AS.ElimBody v acases) al ak))
                 (B.Run (B.Switch bcases) bl bk)
 
-| IElimRecUpVar : forall fname i n afree acases al ak bcases bl bk,
+| IElimRecUpVar : forall fname i n afree acases al ak bcases bl bk vs e es,
         n = length afree ->
         sliding i (skipn 1 al) (AS.upvar_list n) afree ->
         Forall2 (I_case (I_expr AE BE) (B.Close fname (B.upvar_list n))) acases bcases ->
+        afree = vs ++ [e] ++ es ->
+        Forall AS.value vs ->
+        ~ AS.value e ->
 
         Forall AS.value al ->
         Forall B.value bl ->
@@ -181,9 +185,7 @@ Inductive I (AE : AS.env) (BE : B.env) : A.state -> B.state -> Prop :=
             I AE BE (ak av) (bk bv)) ->
         I AE BE (A.Run (AS.UpVar i) al
                     (fun v =>
-                        let free' := firstn i al ++ [v] ++
-                                     skipn (S i) (AS.upvar_list n) in
-                        A.Run (AS.Close fname free') al
+                        A.Run (AS.Close fname (vs ++ [v] ++ es)) al
                             (fun v => A.Run (AS.ElimBody v acases) al ak)))
                 (B.Run (B.Switch bcases) bl bk)
 
@@ -308,6 +310,47 @@ first_induction n; intros0 Hfa.
 Qed.
 
 
+Lemma sliding_predicate_i : forall A (P : A -> Prop) i xs ys zs1 z2 zs3,
+    sliding i xs ys (zs1 ++ [z2] ++ zs3) ->
+    Forall P xs ->
+    Forall (fun y => ~ P y) ys ->
+    Forall P zs1 ->
+    ~ P z2 ->
+    i = length zs1.
+intros0 Hxs Hys Hsld Hzs1 Hz2.
+
+destruct (lt_eq_lt_dec (length zs1) i) as [[? | ?] | ?]; try lia.
+
+- (* i > length zs1 *) exfalso.
+  fwd eapply sliding_nth_error_lt as HH; eauto.
+  rewrite nth_error_app2 in HH by lia.
+  replace (_ - _) with 0 in HH by lia. simpl in HH. symmetry in HH.
+  fwd eapply Forall_nth_error with (P := P); [ | eassumption | ]; auto.
+
+- (* i < length zs1 *) exfalso.
+  fwd eapply sliding_nth_error_ge as HH; [ | eauto | ]; eauto.
+  rewrite nth_error_app1 in HH by lia.
+  destruct (nth_error _ _) eqn:Heq; cycle 1.
+    { rewrite <- nth_error_Some in *. congruence. }
+  symmetry in HH.
+  eapply Forall_nth_error in Heq; eauto.
+  eapply Forall_nth_error in HH; eauto. simpl in *.
+  auto.
+Qed.
+
+Lemma sliding_predicate_nth : forall A (P : A -> Prop) i xs ys zs1 z2 zs3,
+    sliding i xs ys (zs1 ++ [z2] ++ zs3) ->
+    Forall P xs ->
+    Forall (fun y => ~ P y) ys ->
+    Forall P zs1 ->
+    ~ P z2 ->
+    nth_error ys i = Some z2.
+intros. fwd eapply sliding_predicate_i; eauto.
+erewrite <- sliding_nth_error_ge by eauto.
+subst i. rewrite nth_error_app2 by lia.
+replace (_ - _) with 0 by lia. simpl. reflexivity.
+Qed.
+
 
 Theorem I_sim : forall AE BE a a' b,
     compile_list AE = BE ->
@@ -322,7 +365,7 @@ Theorem I_sim : forall AE BE a a' b,
 destruct a as [ae al ak | ae];
 intros0 Henv Arec II Astep; [ | solve [invc Astep] ].
 
-invc II; try destruct ae; invc Astep; try on (I_expr _ _ _ _), invc.
+invc II; try destruct ae; inv Astep; try on (I_expr _ _ _ _), invc.
 
 - fwd eapply length_nth_error_Some with (ys := bl) as HH;
     cycle 1; eauto using Forall2_length.
@@ -405,14 +448,40 @@ invc II; try destruct ae; invc Astep; try on (I_expr _ _ _ _), invc.
     { constructor. list_magic_on (free, (bfree, tt)). }
   constructor; eauto.
 
-- admit.
+- eexists. split. right. split. reflexivity.
+    { admit. (* metric *) }
+  eapply IElimRecClose; eauto.
 
-- admit.
+- admit. (* similar to SEliminate *)
 
-- admit.
+- 
+  (* show that `e` is `UpVar i` *)
+  fwd eapply sliding_predicate_i as Hi; simpl;
+    eauto using Forall_skipn, AS.upvar_list_not_value.
+  fwd eapply sliding_nth_error_ge with (i := i) (j := i) as HH; eauto.
+    rewrite Hi in HH. rewrite nth_error_app2 in HH by lia.
+    replace (_ - _) with 0 in HH by lia. simpl in HH.
+    rewrite AS.upvar_list_nth_error in HH; cycle 1.
+      { rewrite app_length. simpl. lia. }
+    inject_some.
 
-- admit.
+  eexists. split. right. split. reflexivity.
+    { admit. (* metric *) }
+  eapply IElimRecUpVar; simpl; eauto.
 
-- admit. 
+- eexists. split. right. split. reflexivity.
+    { admit. (* metric *) }
+  eapply IElimRec; eauto. 
+
+- fwd eapply sliding_predicate_i as Hi; simpl;
+    eauto using Forall_skipn, AS.upvar_list_not_value.
+
+  eexists. split. right. split. reflexivity.
+    { admit. (* metric *) }
+  eapply IElimRecClose; eauto.
+    { rewrite app_length in *. simpl in *.
+      eapply sliding_next'; [ | eassumption | ]; eauto.
+      destruct al; simpl in *; try discriminate. assumption. }
+    { rewrite app_length in *. simpl in *. assumption. }
 
 Admitted.

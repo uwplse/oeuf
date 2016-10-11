@@ -786,6 +786,31 @@ intros. unfold upvar_list at 1. simpl.
 rewrite upvar_list'_acc. reflexivity.
 Qed.
 
+Lemma upvar_list_nth_error : forall i n,
+    i < n ->
+    nth_error (upvar_list n) i = Some (UpVar i).
+first_induction n; intros0 Hlt.
+  { exfalso. lia. }
+destruct (eq_nat_dec i n).
+- subst i. rewrite upvar_list_tail.
+  rewrite nth_error_app2 by (rewrite upvar_list_length; lia).
+  rewrite upvar_list_length. replace (n - n) with 0 by lia.
+  simpl. reflexivity.
+- assert (i < n) by lia.
+  rewrite upvar_list_tail.
+  rewrite nth_error_app1 by (rewrite upvar_list_length; lia).
+  eauto.
+Qed.
+
+Lemma upvar_list_not_value : forall n,
+    Forall (fun e => ~ value e) (upvar_list n).
+intros. eapply nth_error_Forall. intros.
+assert (i < n).
+  { rewrite <- upvar_list_length with (n := n). rewrite <- nth_error_Some.  congruence. }
+rewrite upvar_list_nth_error in * by auto.
+inject_some. inversion 1.
+Qed.
+
 
 
 Definition rec_shape e :=
