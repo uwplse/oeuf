@@ -146,7 +146,7 @@ Definition program : Type := list (stmt * expr) * nat (* name of main *) .
 
 
 Require Semantics.
-
+(*
 Definition Semantics (p : program) : Semantics.semantics.
   refine (Semantics.Semantics_gen _ _ _ _ _ _ _ ).
   exact step.
@@ -155,7 +155,7 @@ Definition Semantics (p : program) : Semantics.semantics.
   admit.
   admit.
 Admitted.
-
+*)
 
 
 Definition add_name : nat := 0.
