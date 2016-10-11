@@ -7,6 +7,7 @@ Require Import compcert.lib.Coqlib.
 Require Import compcert.common.Events.
 Require Import compcert.common.Globalenvs.
 Require Import compcert.lib.Integers.
+Global Unset Asymmetric Patterns.
 
 Require Import StructTact.StructTactics.
 Require Import StructTact.Util.

@@ -1267,7 +1267,7 @@ Proof.
   eapply Eqdep_dec.inj_pair2_eq_dec in H3; try eapply list_eq_dec; try eapply type_eq_dec; try decide equality.
   congruence.
 Defined.
-(*
+
 Require Semantics.
 
 Definition Semantics {ty} (exp : expr [] ty) : Semantics.semantics.
@@ -1278,4 +1278,4 @@ Definition Semantics {ty} (exp : expr [] ty) : Semantics.semantics.
   exact tt.
   repeat (econstructor; eauto); admit.
 Admitted.
-*)
+
