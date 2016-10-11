@@ -662,6 +662,106 @@ split.
   f_equal. assumption.
 Qed.
 
+Lemma skipn_app_l : forall A (xs ys : list A) n,
+    n <= length xs ->
+    skipn n (xs ++ ys) = skipn n xs ++ ys.
+induction xs; destruct n; intros0 Hlt; simpl in *; try lia.
+- reflexivity.
+- reflexivity.
+- apply IHxs. lia.
+Qed.
+
+Lemma slice_app_l : forall A i j (xs1 xs2 : list A),
+    i <= j ->
+    j <= length xs1 ->
+    slice i j (xs1 ++ xs2) = slice i j xs1.
+intros0 Hi Hj.
+unfold slice.
+rewrite skipn_app_l by lia.
+rewrite firstn_app; cycle 1.
+  { rewrite skipn_length. lia. }
+reflexivity.
+Qed.
+
+Lemma slice_app_r : forall A i j (xs1 xs2 : list A),
+    i >= length xs1 ->
+    slice i j (xs1 ++ xs2) = slice (i - length xs1) (j - length xs1) xs2.
+intros0 Hlen.
+unfold slice.
+replace (j - _ - (i - _)) with (j - i) by lia. f_equal.
+eapply skipn_app. lia.
+Qed.
+
+Lemma slice_app_change_l : forall A i j (xs1 xs1' xs2 : list A),
+    i >= length xs1 ->
+    length xs1 = length xs1' ->
+    slice i j (xs1 ++ xs2) = slice i j (xs1' ++ xs2).
+intros0 Hi Hlen.
+rewrite slice_app_r by auto.
+rewrite Hlen. rewrite <- slice_app_r by lia.
+reflexivity.
+Qed.
+
+Lemma slice_app_change_r : forall A i j (xs1 xs2 xs2' : list A),
+    i <= j ->
+    j <= length xs1 ->
+    slice i j (xs1 ++ xs2) = slice i j (xs1 ++ xs2').
+intros0 Hi Hj.
+rewrite slice_app_l by auto.
+erewrite <- slice_app_l by auto.
+reflexivity.
+Qed.
+
+Lemma app_inv_both : forall A (xs1 xs2 ys1 ys2 : list A),
+    length xs1 = length ys1 ->
+    xs1 ++ xs2 = ys1 ++ ys2 ->
+    xs1 = ys1 /\ xs2 = ys2.
+first_induction xs1; destruct ys1; intros0 Hlen Happ; try discriminate; simpl in *.
+- eauto.
+- invc Happ. specialize (IHxs1 xs2 ys1 ys2 ltac:(lia) **).
+  firstorder congruence.
+Qed.
+
+Lemma sliding_next' : forall A i (xs1 xs2 ys1 ys3 : list A) y2 y2',
+    i = length ys1 ->
+    sliding i xs1 xs2 (ys1 ++ [y2] ++ ys3) ->
+    nth_error xs1 i = Some y2' ->
+    sliding (S i) xs1 xs2 (ys1 ++ [y2'] ++ ys3).
+intros0 Hlen Hsld Hnth.
+unfold sliding in *.
+repeat rewrite firstn_slice in *. repeat rewrite skipn_slice in *.
+eapply nth_error_slice in Hnth.
+destruct Hsld as [Hpre Hsuf]. split.
+
+- rewrite slice_split with (k := i) by lia.
+  rewrite slice_split with (k := i) (xs := xs1) by lia.
+  f_equal.  
+  + erewrite slice_app_change_r by lia. eassumption.
+  + rewrite slice_app_r by lia.
+    replace (i - _) with 0 by lia. replace (S i - _) with 1 by lia.
+    rewrite Hnth.  unfold slice. simpl. reflexivity.
+
+- simple refine (let Hxs2 : length _ = length _ := _ in _); [ shelve.. | | ].
+    { eapply f_equal. exact Hsuf. }
+    clearbody Hxs2.
+    rewrite slice_length in Hxs2 by lia.
+    rewrite slice_length in Hxs2 by lia.
+
+  repeat rewrite app_length in *. simpl in *.
+  rewrite slice_split with (k := S i) in Hsuf by omega.
+  rewrite slice_split with (k := S i) (xs := xs2) in Hsuf by omega.
+  eapply app_inv_both in Hsuf; cycle 1.
+    { rewrite slice_length by (rewrite app_length; simpl; lia).
+      rewrite slice_length by lia. reflexivity. }
+  destruct Hsuf as [Hsuf1 Hsuf2].
+  rewrite <- Hsuf2.
+  change (y2' :: ys3) with ([y2'] ++ ys3). rewrite app_assoc.
+  change (y2 :: ys3) with ([y2] ++ ys3). rewrite app_assoc.
+  eapply slice_app_change_l.
+  + rewrite app_length. simpl. lia.
+  + do 2 rewrite app_length. simpl. lia.
+Qed.
+
 Lemma sliding_app : forall A i (xs1 xs2 : list A) x,
     i < length xs2 ->
     length xs1 = length xs2 ->
