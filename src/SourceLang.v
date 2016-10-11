@@ -1269,7 +1269,7 @@ Proof.
 Defined.
 
 Require Semantics.
-
+(*
 Definition Semantics {ty} (exp : expr [] ty) : Semantics.semantics.
   refine (Semantics.Semantics_gen _ _ _ _ _ _ _).
   exact (fun x : unit => (@step [] ty)).
@@ -1278,4 +1278,4 @@ Definition Semantics {ty} (exp : expr [] ty) : Semantics.semantics.
   exact tt.
   repeat (econstructor; eauto); admit.
 Admitted.
-
+*)
