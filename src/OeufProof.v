@@ -18,13 +18,14 @@ Require Import StructTact.Util.
 
 Require Import EricTact.
 
-(* *)
 
 (*
  We need some kind of semantics notion for Oeuf programs
 Let's try using a modified version of CompCert's, and see what happens
  
 *)
+
+
 
 (*
 We're going to need a few things:
