@@ -47,10 +47,10 @@ Section compile.
           let (sargs, args) := split psargs in
           fresh >>= fun dst =>
           ret_state (F.Seq (sequence sargs) (F.MakeConstr dst tag args), F.Temp dst)
-        | S.Switch cases target =>
+        | S.Switch cases =>
           go_list cases >>= fun pscases =>
-          go target >>= fun ptarget =>
-          let (starget, target) := ptarget in
+          (* target is implicitly S.Skip *)
+          let (starget, target) := (F.Skip, F.Arg) in
           fresh >>= fun dst =>
           ret_state (F.Seq starget (F.Switch (map (fun p => let (s, e) := p : _ * _ in F.Seq s (F.Assign dst e)) pscases) target), F.Temp dst)
         | S.Close fn args =>
