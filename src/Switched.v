@@ -150,3 +150,28 @@ Definition expr_ind' (P : expr -> Prop)
     ltac:(refine (@expr_rect_mut P (Forall P)
         HArg HUpVar HDeref HCall HConstr HSwitch HClose _ _ e); eauto).
 
+
+
+Fixpoint upvar_list' acc n :=
+    match n with
+    | 0 => acc
+    | S n' => upvar_list' (UpVar n' :: acc) n'
+    end.
+
+Definition upvar_list n := upvar_list' [] n.
+
+Lemma upvar_list'_acc : forall acc n,
+    upvar_list' acc n = upvar_list' [] n ++ acc.
+first_induction n; intros; simpl; eauto.
+- rewrite (IHn [_]). rewrite IHn. rewrite <- app_assoc. simpl. reflexivity.
+Qed.
+
+Lemma upvar_list_tail : forall n,
+    upvar_list (S n) = upvar_list n ++ [UpVar n].
+intros. unfold upvar_list at 1. simpl.
+rewrite upvar_list'_acc. reflexivity.
+Qed.
+
+
+
+

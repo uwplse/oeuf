@@ -16,6 +16,12 @@ Inductive state :=
 | Run (e : expr) (l : list expr) (k : expr -> state)
 | Stop (e : expr).
 
+Definition state_expr s :=
+    match s with
+    | Run e _ _ => e
+    | Stop e => e
+    end.
+
 Inductive sstep (E : env) : state -> state -> Prop :=
 | SArg : forall l k v,
         nth_error l 0 = Some v ->

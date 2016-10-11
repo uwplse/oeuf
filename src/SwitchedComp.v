@@ -92,16 +92,6 @@ Qed.
 
 
 
-Fixpoint upvar_list' acc n :=
-    match n with
-    | 0 => B.UpVar 0 :: acc
-    | S n' => upvar_list' (B.UpVar n' :: acc) n'
-    end.
-
-Definition upvar_list n := upvar_list' [] n.
-
-
-
 
 Definition I_case (P : AS.expr -> B.expr -> Prop) brec ap bcase :=
     (* Using `let '(acase, ainfo) := ap` causes the positivity check to fail (???) *)
@@ -143,10 +133,11 @@ Inductive I (AE : AS.env) (BE : B.env) : A.state -> B.state -> Prop :=
             I AE BE (ak av) (bk bv)) ->
         I AE BE (A.Run ae al ak) (B.Run be bl bk)
 
-| IElimRecVal : forall fname n afree acases al ak bcases bl bk,
+| IElimRec : forall fname i n afree acases al ak bcases bl bk,
         n = length afree ->
-        afree = skipn 1 (firstn n al) ->
-        Forall2 (I_case (I_expr AE BE) (B.Close fname (upvar_list n))) acases bcases ->
+        sliding i (skipn 1 al) (AS.upvar_list n) afree ->
+        Forall2 (I_case (I_expr AE BE) (B.Close fname (B.upvar_list n))) acases bcases ->
+
         Forall AS.value al ->
         Forall B.value bl ->
         Forall2 (I_expr AE BE) al bl ->
@@ -156,6 +147,44 @@ Inductive I (AE : AS.env) (BE : B.env) : A.state -> B.state -> Prop :=
             I_expr AE BE av bv ->
             I AE BE (ak av) (bk bv)) ->
         I AE BE (A.Run (AS.ElimBody (AS.Close fname afree) acases) al ak)
+                (B.Run (B.Switch bcases) bl bk)
+
+| IElimRecClose : forall fname i n afree acases al ak bcases bl bk,
+        n = length afree ->
+        sliding i (skipn 1 al) (AS.upvar_list n) afree ->
+        Forall2 (I_case (I_expr AE BE) (B.Close fname (B.upvar_list n))) acases bcases ->
+
+        Forall AS.value al ->
+        Forall B.value bl ->
+        Forall2 (I_expr AE BE) al bl ->
+        (forall av bv,
+            AS.value av ->
+            B.value bv ->
+            I_expr AE BE av bv ->
+            I AE BE (ak av) (bk bv)) ->
+        I AE BE (A.Run (AS.Close fname afree) al
+                    (fun v => A.Run (AS.ElimBody v acases) al ak))
+                (B.Run (B.Switch bcases) bl bk)
+
+| IElimRecUpVar : forall fname i n afree acases al ak bcases bl bk,
+        n = length afree ->
+        sliding i (skipn 1 al) (AS.upvar_list n) afree ->
+        Forall2 (I_case (I_expr AE BE) (B.Close fname (B.upvar_list n))) acases bcases ->
+
+        Forall AS.value al ->
+        Forall B.value bl ->
+        Forall2 (I_expr AE BE) al bl ->
+        (forall av bv,
+            AS.value av ->
+            B.value bv ->
+            I_expr AE BE av bv ->
+            I AE BE (ak av) (bk bv)) ->
+        I AE BE (A.Run (AS.UpVar i) al
+                    (fun v =>
+                        let free' := firstn i al ++ [v] ++
+                                     skipn (S i) (AS.upvar_list n) in
+                        A.Run (AS.Close fname free') al
+                            (fun v => A.Run (AS.ElimBody v acases) al ak)))
                 (B.Run (B.Switch bcases) bl bk)
 
 | IStop : forall ae be,
@@ -252,8 +281,37 @@ Definition metric s :=
     | A.Stop _ => 0
     end.
 
+
+
+(*
+Lemma I_expr_upvar_list' : forall AE BE aacc n m bacc bs,
+    Forall2 (I_expr AE BE) aacc bacc ->
+    Forall2 (I_expr AE BE) (AS.upvar_list' aacc n) bs ->
+    bacc = skipn n (B.upvar_list m) ->
+    bs = B.upvar_list' bacc n.
+intros AE BE.
+first_induction n; intros0 Hfa Hup Hacc; simpl; eauto.
+*)
+
+Lemma I_expr_upvar_list : forall AE BE n bs,
+    Forall2 (I_expr AE BE) (AS.upvar_list n) bs ->
+    bs = B.upvar_list n.
+intros AE BE.
+first_induction n; intros0 Hfa.
+- invc Hfa. reflexivity.
+- rewrite AS.upvar_list_tail in *. rewrite B.upvar_list_tail.
+  invc_using Forall2_app_inv Hfa. f_equal; eauto.
+  on (Forall2 _ [_] _), invc.
+  on (I_expr _ _ (AS.UpVar _) _), invc.
+  on (Forall2 _ [] _), invc.
+  reflexivity.
+Qed.
+
+
+
 Theorem I_sim : forall AE BE a a' b,
     compile_list AE = BE ->
+    AS.elim_rec_shape (A.state_expr a) ->
     I AE BE a b ->
     A.sstep AE a a' ->
     exists b',
@@ -262,9 +320,9 @@ Theorem I_sim : forall AE BE a a' b,
         I AE BE a' b'.
 
 destruct a as [ae al ak | ae];
-intros0 Henv II Astep; [ | solve [invc Astep] ].
+intros0 Henv Arec II Astep; [ | solve [invc Astep] ].
 
-destruct ae; inv Astep; invc II; try on (I_expr _ _ _ _), invc.
+invc II; try destruct ae; invc Astep; try on (I_expr _ _ _ _), invc.
 
 - fwd eapply length_nth_error_Some with (ys := bl) as HH;
     cycle 1; eauto using Forall2_length.
@@ -318,13 +376,19 @@ destruct ae; inv Astep; invc II; try on (I_expr _ _ _ _), invc.
     { constructor. list_magic_on (args, (bargs, tt)). }
   constructor; eauto.
 
-- (* SElimStepRec *) admit.
+- (* SElimStepRec *)
+  simpl in Arec. AS.refold_elim_rec_shape. do 2 break_and.
+  on (AS.rec_shape _), fun H => destruct H as (fname & n & ?). subst ae.
 
-- (* SEliminate *) admit.
+  eexists. split. right. split. reflexivity.
+    { admit. (* metric *) }
+  eapply IElimRecClose; [ rewrite AS.upvar_list_length; reflexivity | .. ]; eauto.
+    { eapply sliding_zero. }
+    { on (I_expr _ _ (AS.Close _ _) _), invc.
+      erewrite <- I_expr_upvar_list; eauto. }
 
-- (* special elim handling *) admit. (* need to adjust IElimRecVal *)
-
-- (* special elim handling *) admit. (* need to adjust IElimRecVal *)
+- (* SEliminate *)
+  admit.
 
 - on _, invc_using Forall2_3part_inv.
 
@@ -340,5 +404,15 @@ destruct ae; inv Astep; invc II; try on (I_expr _ _ _ _), invc.
     { constructor. assumption. }
     { constructor. list_magic_on (free, (bfree, tt)). }
   constructor; eauto.
+
+- admit.
+
+- admit.
+
+- admit.
+
+- admit.
+
+- admit. 
 
 Admitted.
