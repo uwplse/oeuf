@@ -130,15 +130,39 @@ Inductive step : state -> state -> Prop :=
     step (E, Skip, Kcall dst ret E' k) (set_tmp_env E' dst val, Skip, k)
 .
 
+(* 
 Definition initial_state 
            (main_name : function_name) 
            (main_body : stmt) 
            (main_ret : expr) : state := 
   (Env [] (Close main_name []) (Close main_name []), main_body, Kstop main_ret).
+*)
+
+Inductive initial_state (main_name : function_name)(main_body : stmt)(main_ret : expr) : state -> Prop :=
+| init_s :
+    initial_state main_name main_body main_ret (Env [] (Close main_name []) (Close main_name []), main_body, Kstop main_ret).
 
 End RELSEM.
 
 Definition program : Type := list (stmt * expr) * nat (* name of main *) .
+
+
+Require Semantics.
+
+Definition Semantics (p : program) : Semantics.semantics.
+  refine (Semantics.Semantics_gen _ _ _ _ _ _ _ ).
+  exact step.
+  refine (initial_state _ _ _ ).
+  admit.
+  admit.
+  admit.
+  admit.
+  admit.
+  admit.
+Admitted.
+
+
+(*
 
 Definition add_name : nat := 0.
 
@@ -273,3 +297,4 @@ eleft.
 Defined.
 
 (* Eval compute in proj1_sig compiled_add_1_2. *)
+*)
