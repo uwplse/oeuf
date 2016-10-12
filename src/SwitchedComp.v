@@ -399,6 +399,37 @@ first_induction n; intros0 Hfa.
 Qed.
 
 
+Lemma sliding_predicate_all : forall A (P : A -> Prop) i xs ys zs,
+    sliding i xs ys zs ->
+    Forall P xs ->
+    Forall (fun y => ~ P y) ys ->
+    Forall P zs ->
+    i >= length ys.
+intros0 Hsld Hxs Hys Hzs.
+destruct (lt_dec i (length ys)); try lia.
+destruct Hsld as [Hpre Hsuf].
+
+assert (length (skipn i ys) > 0).
+  { rewrite skipn_length. lia. }
+assert (length (skipn i zs) > 0) by congruence.
+assert (HH : i < length zs).
+  { rewrite skipn_length in *. lia. }
+  rewrite <- nth_error_Some in HH.
+  destruct (nth_error zs i) eqn:?; try congruence.
+  clear HH.
+
+assert (nth_error ys i = Some a).
+  { replace i with (i + 0) by lia. rewrite <- skipn_nth_error.
+    rewrite <- Hsuf.
+    rewrite skipn_nth_error. replace (i + 0) with i by lia.
+    assumption. }
+
+fwd eapply Forall_nth_error with (xs := ys); eauto.
+fwd eapply Forall_nth_error with (xs := zs); eauto.
+simpl in *. contradiction.
+Qed.
+
+
 Lemma sliding_predicate_i : forall A (P : A -> Prop) i xs ys zs1 z2 zs3,
     sliding i xs ys (zs1 ++ [z2] ++ zs3) ->
     Forall P xs ->
@@ -406,7 +437,7 @@ Lemma sliding_predicate_i : forall A (P : A -> Prop) i xs ys zs1 z2 zs3,
     Forall P zs1 ->
     ~ P z2 ->
     i = length zs1.
-intros0 Hxs Hys Hsld Hzs1 Hz2.
+intros0 Hsld Hxs Hys Hzs1 Hz2.
 
 destruct (lt_eq_lt_dec (length zs1) i) as [[? | ?] | ?]; try lia.
 
@@ -1065,12 +1096,24 @@ try solve [do 2 break_exists; discriminate].
   rename l into al. on (Forall2 _ _ bl), invc.
     on (I_expr _ _ (AS.Constr _ _) _), invc. rename l' into bl.
   on (AS.value (AS.Close _ _)), invc.
-  assert (afree = firstn (length afree) al) by admit. (* TODO *)
+  repeat on (Forall _ (_ :: _)), invc.
+
+  simpl in *. AS.refold_elim_rec_shape.
+
+  assert (afree = firstn (length afree) al).
+    { fwd eapply sliding_predicate_all; eauto.
+        { eapply AS.upvar_list_not_value. }
+      rewrite AS.upvar_list_length in *.
+      on (sliding _ _ _ _), fun H => destruct H as [Hpre Hsuf].
+      rewrite <- firstn_all with (xs := afree) at 1 by reflexivity.
+      rewrite <- firstn_skipn with (n := i) (l := afree) at 2.
+      rewrite firstn_app by (rewrite firstn_length; lia).
+      rewrite Hpre. rewrite firstn_firstn by auto. reflexivity. }
 
   fwd eapply Forall2_nth_error_ex with (xs := acases) (ys := bcases) as HH; eauto.
     destruct HH as (bcase & ? & ?).
     on >I_case, fun H => (unfold I_case in H; destruct H as (bcase0 & ? & ?)).
-    simpl in *. AS.refold_elim_rec_shape.
+    simpl in *.
 
   destruct (eq_nat_dec (length info) 0).
 
