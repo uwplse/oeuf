@@ -356,11 +356,13 @@ Qed.
 
 
 
-Definition expr_metric e :=
+Definition expr_metric (e : AS.expr) :=
     match e with
+        (*
     | AS.ElimBody (AS.Close _ free) _ =>
         (* Count the number of non-values left to evaluate *)
         fold_left (fun sum e => sum + (if AS.value_dec e then 0 else 1)) free 0
+        *)
     | _ => 0
     end.
 
@@ -1004,8 +1006,41 @@ try solve [do 2 break_exists; discriminate].
       { constructor; eauto. constructor. eauto. }
     
     *)
-    
-  admit.
+
+  simpl in *. AS.refold_elim_rec_shape. do 2 break_and.
+  on (AS.rec_shape _), fun H => destruct H as (fname & n & ?).
+  assert (n = 0).
+    { destruct n; eauto. subst ae. on (AS.value (AS.Close _ _)), invc.
+      fwd eapply AS.upvar_list_not_value with (n := S n).
+      destruct (AS.upvar_list _) eqn:?.
+        { assert (HH : length (AS.upvar_list (S n)) = @length AS.expr []) by congruence.
+          rewrite AS.upvar_list_length in HH. simpl in HH. discriminate. }
+      do 2 on (Forall _ (_ :: _)), invc.  contradiction. }
+  subst n. replace (AS.upvar_list 0) with (@nil AS.expr) in * by reflexivity.
+  subst ae. on (I_expr _ _ (AS.Close _ _) _), invc. on (Forall2 _ [] _), invc.
+
+  rename l into al. on (Forall2 _ _ bl), invc.
+    on (I_expr _ _ (AS.Constr _ _) _), invc. rename l' into bl.
+
+  fwd eapply Forall2_nth_error_ex with (xs := cases) (ys := bcases) as HH; eauto.
+    destruct HH as (bcase & ? & ?).
+    on >I_case, fun H => (unfold I_case in H; destruct H as (bcase0 & ? & ?)).
+    simpl in *. AS.refold_elim_rec_shape.
+
+  destruct (eq_nat_dec (length info) 0).
+
+  + destruct info; try discriminate. destruct args; try discriminate.
+    on (Forall2 _ [] bargs), invc.
+    unfold unroll_case in *. simpl in *. inject_some.
+    eexists. split. left. eapply B.SPlusOne, B.SSwitchinate; eauto.
+    i_ctor. i_ctor. i_ctor.
+
+  + eexists. split. left. eapply B.SPlusOne, B.SSwitchinate; eauto.
+    eapply IRunCase with (m := 0); eauto; cycle 3.
+      { i_ctor. i_ctor. }
+      { eapply AS_unroll_elim_is_call; eauto. lia. }
+      { lia. }
+    eapply unroll_I_expr_case; eauto.
 
 - on _, invc_using Forall2_3part_inv.
 
@@ -1026,7 +1061,8 @@ try solve [do 2 break_exists; discriminate].
     { admit. (* metric *) }
   eapply IElimRecClose; eauto.
 
-- rename l into al. on (Forall2 _ _ bl), invc.
+- (* IElimRecClose, SEliminate *)
+  rename l into al. on (Forall2 _ _ bl), invc.
     on (I_expr _ _ (AS.Constr _ _) _), invc. rename l' into bl.
   on (AS.value (AS.Close _ _)), invc.
   assert (afree = firstn (length afree) al) by admit. (* TODO *)
