@@ -9,18 +9,18 @@ Module A := ElimFunc3.
 Module AS := ElimFunc2.
 Module B := Switched.
 
+Fixpoint unroll_case' rec n e (info : AS.rec_info) :=
+    match info with
+    | [] => e
+    | r :: info' =>
+            let e' := if r
+                then B.Call (B.Call e (B.Deref B.Arg n)) (B.Call rec (B.Deref B.Arg n))
+                else B.Call e (B.Deref B.Arg n) in
+            unroll_case' rec (S n) e' info'
+    end.
 
 Definition unroll_case rec e info :=
-    let fix go n e (info : AS.rec_info) :=
-        match info with
-        | [] => e
-        | r :: info' =>
-                let e' := if r
-                    then B.Call (B.Call e (B.Deref B.Arg n)) (B.Call rec (B.Deref B.Arg n))
-                    else B.Call e (B.Deref B.Arg n) in
-                go (S n) e' info'
-        end in
-    go 0 e info.
+    unroll_case' rec 0 e info.
 
 Definition compile (e : AS.expr) : B.expr :=
     let fix go e :=
@@ -121,6 +121,38 @@ Inductive I_expr (AE : AS.env) (BE : B.env) : AS.expr -> B.expr -> Prop :=
         I_expr AE BE (AS.Close tag afree) (B.Close tag bfree)
 .
 
+Inductive I_expr_case (AE : AS.env) (BE : B.env)
+    (arec : AS.expr) (brec : B.expr)
+    (aargs : list AS.expr) :
+    nat -> AS.expr -> B.expr -> Prop :=
+| IExprCaseEnd : forall n ae be,
+        I_expr AE BE ae be ->
+        I_expr_case AE BE arec brec aargs n ae be
+| IExprCaseNonrec : forall apre aarg bpre n,
+        nth_error aargs n = Some aarg ->
+        let barg := B.Deref B.Arg n in
+        I_expr_case AE BE arec brec aargs n apre bpre ->
+        I_expr_case AE BE arec brec aargs (S n)
+            (AS.Call apre aarg)
+            (B.Call bpre barg)
+| IExprCaseRec : forall apre aarg bpre n,
+        nth_error aargs n = Some aarg ->
+        let barg := B.Deref B.Arg n in
+        I_expr_case AE BE arec brec aargs (S n) apre bpre ->
+        I_expr_case AE BE arec brec aargs (S n)
+            (AS.Call apre (AS.Call arec aarg))
+            (B.Call bpre (B.Call brec barg))
+| IExprCaseValue : forall apre aarg bpre barg n,
+        AS.value aarg ->
+        B.value barg ->
+        I_expr AE BE aarg barg ->
+        I_expr_case AE BE arec brec aargs n apre bpre ->
+        I_expr_case AE BE arec brec aargs (S n)
+            (AS.Call apre aarg)
+            (B.Call bpre barg)
+.
+
+
 Inductive I (AE : AS.env) (BE : B.env) : A.state -> B.state -> Prop :=
 | IRun : forall ae al ak be bl bk,
         I_expr AE BE ae be ->
@@ -188,6 +220,30 @@ Inductive I (AE : AS.env) (BE : B.env) : A.state -> B.state -> Prop :=
                         A.Run (AS.Close fname (vs ++ [v] ++ es)) al
                             (fun v => A.Run (AS.ElimBody v acases) al ak)))
                 (B.Run (B.Switch bcases) bl bk)
+
+| IRunCase : forall arec aargs ae al0 ak  brec bargs be bl0 bk  n m tag fname,
+        (* extra premise, for squashing cases that duplicate `IRun` *)
+        (exists af aa, ae = AS.Call af aa) ->
+
+        m <= length al0 ->
+        arec = AS.Close fname (firstn m al0) ->
+        brec = B.Close fname (B.upvar_list m) ->
+        Forall2 (I_expr AE BE) aargs bargs ->
+        I_expr_case AE BE arec brec aargs n ae be ->
+
+        let al := AS.Constr tag aargs :: al0 in
+        let bl := B.Constr tag bargs :: bl0 in
+
+        Forall AS.value al ->
+        Forall B.value bl ->
+        Forall2 (I_expr AE BE) al bl ->
+        (forall av bv,
+            AS.value av ->
+            B.value bv ->
+            I_expr AE BE av bv ->
+            I AE BE (ak av) (bk bv)) ->
+        I AE BE (A.Run ae al ak)
+                (B.Run be bl bk)
 
 | IStop : forall ae be,
         I_expr AE BE ae be ->
@@ -265,6 +321,37 @@ Lemma I_expr_not_value' : forall AE BE a b,
     ~B.value b ->
     ~AS.value a.
 intros. intro. fwd eapply I_expr_value; eauto.
+Qed.
+
+
+Lemma I_expr_case_value : forall AE BE arec brec aargs n ae be,
+    I_expr_case AE BE arec brec aargs n ae be ->
+    AS.value ae ->
+    B.value be.
+inversion 1; inversion 1; eauto using I_expr_value.
+Qed.
+Hint Resolve I_expr_case_value.
+
+Lemma I_expr_case_value' : forall AE BE arec brec aargs n ae be,
+    I_expr_case AE BE arec brec aargs n ae be ->
+    B.value be ->
+    AS.value ae.
+inversion 1; inversion 1; eauto using I_expr_value'.
+Qed.
+
+Lemma I_expr_case_not_value : forall AE BE arec brec aargs n ae be,
+    I_expr_case AE BE arec brec aargs n ae be ->
+    ~ AS.value ae ->
+    ~ B.value be.
+intros. intro. fwd eapply I_expr_case_value'; eauto.
+Qed.
+Hint Resolve I_expr_case_not_value.
+
+Lemma I_expr_case_not_value' : forall AE BE arec brec aargs n ae be,
+    I_expr_case AE BE arec brec aargs n ae be ->
+    ~ B.value be ->
+    ~ AS.value ae.
+intros. intro. fwd eapply I_expr_case_value; eauto.
 Qed.
 
 
@@ -352,6 +439,364 @@ replace (_ - _) with 0 by lia. simpl. reflexivity.
 Qed.
 
 
+
+Lemma B_sstar_snoc : forall E s s' s'',
+    B.sstar E s s' ->
+    B.sstep E s' s'' ->
+    B.sstar E s s''.
+induction 1; intros.
+- econstructor; try eassumption. econstructor.
+- econstructor; eauto.
+Qed.
+
+Lemma B_splus_snoc : forall E s s' s'',
+    B.splus E s s' ->
+    B.sstep E s' s'' ->
+    B.splus E s s''.
+induction 1; intros.
+- econstructor 2; try eassumption.
+  econstructor 1; eassumption.
+- econstructor; solve [eauto].
+Qed.
+
+Lemma B_splus_sstar : forall E s s',
+    B.splus E s s' ->
+    B.sstar E s s'.
+induction 1; intros.
+- econstructor; try eassumption. constructor.
+- econstructor; eauto.
+Qed.
+
+Lemma B_sstar_then_sstar : forall E s s' s'',
+    B.sstar E s s' ->
+    B.sstar E s' s'' ->
+    B.sstar E s s''.
+induction 1; intros.
+- assumption.
+- econstructor; solve [eauto].
+Qed.
+
+Lemma B_sstar_then_splus : forall E s s' s'',
+    B.sstar E s s' ->
+    B.splus E s' s'' ->
+    B.splus E s s''.
+induction 1; intros.
+- assumption.
+- econstructor; solve [eauto].
+Qed.
+
+Lemma B_splus_then_sstar' : forall E s s' s'',
+    B.sstar E s' s'' ->
+    B.splus E s s' ->
+    B.splus E s s''.
+induction 1; intros.
+- assumption.
+- eapply IHsstar. eapply B_splus_snoc; eauto.
+Qed.
+
+Lemma B_splus_then_sstar : forall E s s' s'',
+    B.splus E s s' ->
+    B.sstar E s' s'' ->
+    B.splus E s s''.
+intros. eauto using B_splus_then_sstar'.
+Qed.
+
+Lemma B_splus_then_splus : forall E s s' s'',
+    B.splus E s s' ->
+    B.splus E s' s'' ->
+    B.splus E s s''.
+induction 1; intros; eauto using B.SPlusCons.
+Qed.
+
+Ltac B_start HS :=
+    match goal with
+    | [ |- context [ ?pred ?E ?s _ ] ] =>
+            lazymatch pred with
+            | B.sstep => idtac
+            | B.sstar => idtac
+            | B.splus => idtac
+            | _ => fail "unrecognized predicate:" pred
+            end;
+            let S_ := fresh "S" in
+            let S0 := fresh "S" in
+            set (S0 := s);
+            change s with S0;
+            assert (HS : B.sstar E S0 S0) by (eapply B.SStarNil)
+    end.
+
+Ltac B_step HS :=
+    let S_ := fresh "S" in
+    let S2 := fresh "S" in
+    let HS' := fresh HS "'" in
+    let go E s0 s1 Brel solver :=
+        rename HS into HS';
+        evar (S2 : B.state);
+        assert (HS : Brel E s0 S2);
+        [ solver; unfold S2
+        | clear HS' ] in
+    match type of HS with
+    | B.sstar ?E ?s0 ?s1 => go E s0 s1 B.splus
+            ltac:(eapply B_sstar_then_splus with (1 := HS');
+                  eapply B.SPlusOne)
+    | B.splus ?E ?s0 ?s1 => go E s0 s1 B.splus
+            ltac:(eapply B_splus_snoc with (1 := HS'))
+    end.
+
+Ltac B_star HS :=
+    let S_ := fresh "S" in
+    let S2 := fresh "S" in
+    let HS' := fresh HS "'" in
+    let go E s0 s1 Brel solver :=
+        rename HS into HS';
+        evar (S2 : B.state);
+        assert (HS : Brel E s0 S2);
+        [ solver; unfold S2
+        | clear HS' ] in
+    match type of HS with
+    | B.sstar ?E ?s0 ?s1 => go E s0 s1 B.sstar
+            ltac:(eapply B_sstar_then_sstar with (1 := HS'))
+    | B.splus ?E ?s0 ?s1 => go E s0 s1 B.splus
+            ltac:(eapply B_splus_then_sstar with (1 := HS'))
+    end.
+
+Ltac B_plus HS :=
+    let S_ := fresh "S" in
+    let S2 := fresh "S" in
+    let HS' := fresh HS "'" in
+    let go E s0 s1 Brel solver :=
+        rename HS into HS';
+        evar (S2 : B.state);
+        assert (HS : Brel E s0 S2);
+        [ solver; unfold S2
+        | clear HS' ] in
+    match type of HS with
+    | B.sstar ?E ?s0 ?s1 => go E s0 s1 B.splus
+            ltac:(eapply B_sstar_then_splus with (1 := HS'))
+    | B.splus ?E ?s0 ?s1 => go E s0 s1 B.splus
+            ltac:(eapply B_splus_then_splus with (1 := HS'))
+    end.
+
+(*
+
+Lemma case_sim1' : forall AE BE,
+    forall arec acase aargs info ae',
+    forall brec bcase tag bargs bcase0 bcase0' n bl bk,
+    AS.unroll_elim arec acase aargs info = Some ae' ->
+    unroll_case' brec n bcase0 info = bcase ->
+    AS.value arec ->
+    I_expr AE BE arec brec ->
+    Forall2 (I_expr AE BE) aargs bargs ->
+    (forall bk',
+        B.sstar BE (B.Run bcase0 (B.Constr tag bargs :: bl) bk')
+                   (B.Run bcase0' (B.Constr tag bargs :: bl) bk')) ->
+    I_expr AE BE acase bcase0' ->
+    exists be',
+        B.sstar BE (B.Run bcase (B.Constr tag bargs :: bl) bk)
+                   (B.Run be' (B.Constr tag bargs :: bl) bk) /\
+        I_expr AE BE ae' be'.
+first_induction aargs; intros0 Aunroll Bunroll Aval IIrec IIargs IIcase_step IIcase;
+destruct info; try discriminate; invc IIargs; simpl in *.
+
+  { (* easy case *) inject_some.  eexists. split; eauto. }
+
+remember (unroll_case' _ _ _ _) as bcase. symmetry in Heqbcase.
+destruct b.
+- fwd eapply IHaargs.
+  + eassumption.
+  + eassumption.
+  + assumption.
+  + eassumption.
+  + eassumption.
+  + intro.
+    B_start HS.
+    B_step HS. { eapply B.SCallL. inversion 1. }
+    *)
+
+
+
+Definition AS_is_call_dec : forall e,
+    { exists f a, e = AS.Call f a } + { ~ exists f a, e = AS.Call f a }.
+destruct e; try solve [right; intro; do 2 break_exists; discriminate].
+left. do 2 eexists. reflexivity.
+Defined.
+
+Definition B_is_call_dec : forall e,
+    { exists f a, e = B.Call f a } + { ~ exists f a, e = B.Call f a }.
+destruct e; try solve [right; intro; do 2 break_exists; discriminate].
+left. do 2 eexists. reflexivity.
+Defined.
+
+
+Lemma I_expr_case_non_call_inv : forall AE BE arec brec aargs n ae be
+        (P : _ -> _ -> _ -> Prop),
+    ~ (exists f a, ae = AS.Call f a) ->
+    (I_expr AE BE ae be -> P n ae be) ->
+    I_expr_case AE BE arec brec aargs n ae be -> P n ae be.
+intros0 Hncall HP Hcase.
+invc Hcase.
+- eauto.
+- contradict Hncall. do 2 eexists. reflexivity.
+- contradict Hncall. do 2 eexists. reflexivity.
+- contradict Hncall. do 2 eexists. reflexivity.
+Qed.
+
+Lemma I_expr_case_call_inv : forall AE BE arec brec aargs n af aa be
+        (P : _ -> _ -> _ -> _ -> Prop),
+    (forall bf ba,
+        be = B.Call bf ba ->
+        I_expr_case AE BE arec brec aargs n (AS.Call af aa) (B.Call bf ba) ->
+        P n af aa (B.Call bf ba)) ->
+    I_expr_case AE BE arec brec aargs n (AS.Call af aa) be ->
+    P n af aa be.
+intros0 HP Hcase.
+inv Hcase.
+- on (I_expr _ _ _ _), invc. eauto.
+- eauto.
+- eauto.
+- eauto.
+Qed.
+
+
+
+
+Lemma B_close_eval_sliding : forall E i fname free vs es l k,
+    i < length free ->
+    length vs = length es ->
+    Forall B.value vs ->
+    Forall (fun e => ~ B.value e) es ->
+    sliding i vs es free ->
+    (forall i e v,
+        nth_error es i = Some e ->
+        nth_error vs i = Some v ->
+        forall k', B.sstep E (B.Run e l k') (k' v)) ->
+    exists free',
+        B.sstar E (B.Run (B.Close fname free)  l k)
+                  (B.Run (B.Close fname free') l k) /\
+        sliding (S i) vs es free'.
+intros0 Hlen Hlen' Hval Hnval Hsld Hstep.
+
+destruct (nth_error free i) as [e |] eqn:He; cycle 1.
+  { exfalso. rewrite <- nth_error_Some in Hlen. congruence. }
+
+assert (nth_error es i = Some e). {
+  erewrite <- sliding_nth_error_ge; try eassumption. lia.
+}
+
+fwd eapply length_nth_error_Some.
+  { symmetry. eassumption. }
+  { eassumption. }
+destruct ** as [v Hv].
+
+erewrite sliding_split with (xs1 := vs) (xs2 := es) (ys := free); try eassumption.
+B_start HS.
+
+B_step HS.
+  { eapply B.SCloseStep.
+    - eapply Forall_firstn. eassumption.
+    - eapply Forall_nth_error with (1 := Hnval). eassumption.
+  }
+
+B_step HS.
+  { eapply Hstep; eauto. }
+
+eapply B_splus_sstar in HS.
+eexists. split. eapply HS.
+eapply sliding_app; eauto.
+eapply sliding_length in Hsld; eauto. congruence.
+Qed.
+
+Lemma B_close_eval_sliding' : forall E fname l k  j i free vs es,
+    i + j = length free ->
+    i < length free ->
+    length vs = length es ->
+    Forall B.value vs ->
+    Forall (fun e => ~ B.value e) es ->
+    sliding i vs es free ->
+    (forall i e v,
+        nth_error es i = Some e ->
+        nth_error vs i = Some v ->
+        forall k', B.sstep E (B.Run e l k') (k' v)) ->
+    B.sstar E (B.Run (B.Close fname free)  l k)
+              (B.Run (B.Close fname vs) l k).
+induction j; intros0 Hi Hlt Hlen Hval Hnval Hsld Hstep.
+{ lia. }
+
+(* Give explicit instantiations, otherwise lia breaks with "abstract cannot
+   handle existentials" *)
+fwd eapply B_close_eval_sliding with (E := E) (fname := fname) (k := k); eauto.
+  destruct ** as (free' & Hstep' & Hsld').
+
+assert (length free = length vs) by eauto using sliding_length.
+assert (length free' = length vs) by eauto using sliding_length.
+
+destruct (eq_nat_dec (S i) (length free)) as [Hlen' | Hlen'].
+{ (* easy case: that was the last free variable, nothing more to eval *)
+  destruct Hsld' as [Hpre' Hsuf'].
+  replace (S i) with (length free') in Hpre' at 1 by congruence.
+  replace (S i) with (length vs) in Hpre' at 1 by congruence.
+  do 2 rewrite firstn_all in Hpre' by reflexivity.
+  rewrite <- Hpre'. assumption.
+}
+
+specialize (IHj (S i) free' vs es ltac:(lia) ltac:(lia) ** ** ** ** **).
+
+eapply B_sstar_then_sstar; eassumption.
+Qed.
+
+Lemma B_close_upvars_eval : forall E fname n l k,
+    S n <= length l ->
+    Forall B.value l ->
+    B.sstar E (B.Run (B.Close fname (B.upvar_list n)) l k)
+              (B.Run (B.Close fname (firstn n (skipn 1 l))) l k).
+intros0 Hlen Hval.
+destruct n.
+  { unfold B.upvar_list. simpl. eapply B.SStarNil. }
+
+eapply B_close_eval_sliding' with (i := 0) (j := S n) (es := B.upvar_list (S n)).
+- rewrite B.upvar_list_length. lia.
+- rewrite B.upvar_list_length. lia.
+- rewrite firstn_length. rewrite skipn_length. rewrite B.upvar_list_length. lia.
+- eauto using Forall_firstn, Forall_skipn.
+- eapply B.upvar_list_not_value.
+- eapply sliding_zero.
+- intros. 
+  assert (i < S n).
+    { rewrite <- B.upvar_list_length with (n := S n).
+      rewrite <- nth_error_Some.  congruence. }
+  rewrite B.upvar_list_nth_error in * by auto. inject_some.
+  rewrite firstn_nth_error_lt in * by auto.
+  rewrite skipn_nth_error in *. simpl in *.
+  eapply B.SUpVar. auto.
+Qed.
+
+Lemma B_call_close_upvars_eval : forall E fname n arg l k,
+    S n <= length l ->
+    Forall B.value l ->
+    B.sstar E (B.Run (B.Call (B.Close fname (B.upvar_list n)) arg) l k)
+              (B.Run (B.Call (B.Close fname (firstn n (skipn 1 l))) arg) l k).
+intros0 Hlen Hval.
+destruct n.
+  { unfold B.upvar_list. simpl. eapply B.SStarNil. }
+
+B_start HS.
+B_step HS.
+  { eapply B.SCallL.  inversion 1.
+    fwd eapply Forall_nth_error with (i := 0) (P := B.value) as HH; eauto.
+      { rewrite B.upvar_list_nth_error by lia. reflexivity. }
+    invc HH. }
+B_star HS.
+  { eapply B_close_upvars_eval; eauto. }
+B_step HS.
+  { eapply B.SCloseDone. eauto using Forall_firstn, Forall_skipn. }
+
+eapply B_splus_sstar. exact HS.
+Qed.
+
+
+
+Ltac i_ctor := intros; constructor; eauto.
+Ltac i_lem H := intros; eapply H; eauto.
+
 Theorem I_sim : forall AE BE a a' b,
     compile_list AE = BE ->
     AS.elim_rec_shape (A.state_expr a) ->
@@ -365,7 +810,9 @@ Theorem I_sim : forall AE BE a a' b,
 destruct a as [ae al ak | ae];
 intros0 Henv Arec II Astep; [ | solve [invc Astep] ].
 
-invc II; try destruct ae; inv Astep; try on (I_expr _ _ _ _), invc.
+invc II; try destruct ae; inv Astep; try on (I_expr _ _ _ _), invc;
+(* squash duplicate cases that use IRunCase unnecessarily *)
+try solve [do 2 break_exists; discriminate].
 
 - fwd eapply length_nth_error_Some with (ys := bl) as HH;
     cycle 1; eauto using Forall2_length.
@@ -431,7 +878,24 @@ invc II; try destruct ae; inv Astep; try on (I_expr _ _ _ _), invc.
       erewrite <- I_expr_upvar_list; eauto. }
 
 - (* SEliminate *)
+  rename l into al. on (Forall2 _ (_ :: al) _), invc.
+  on (I_expr _ _ (AS.Constr _ _) _), invc. rename l' into bl.
+
+  fwd eapply length_nth_error_Some with (xs := cases) (ys := bcases) as HH;
+    eauto using Forall2_length.
+    destruct HH as [bcase ?].
+
+  fwd eapply Forall2_nth_error as HH;
+    try (on (Forall2 (I_case _ _) _ _), fun H => exact H); eauto.
+    (* TODO *)
+
+  B_start HS.
+  B_step HS.
+    { eapply B.SSwitchinate. eauto. }
+
+  eexists. split. left. exact HS.
   admit.
+  
 
 - on _, invc_using Forall2_3part_inv.
 
@@ -483,5 +947,58 @@ invc II; try destruct ae; inv Astep; try on (I_expr _ _ _ _), invc.
       eapply sliding_next'; [ | eassumption | ]; eauto.
       destruct al; simpl in *; try discriminate. assumption. }
     { rewrite app_length in *. simpl in *. assumption. }
+
+- on >I_expr_case, invc.
+
+  + on >I_expr, invc.
+    eexists. split. left. eapply B.SPlusOne, B.SCallL; eauto.
+    i_ctor. i_ctor. i_ctor.
+
+  + eexists. split. left. eapply B.SPlusOne, B.SCallL; eauto.
+    destruct (AS_is_call_dec ae1).
+    * i_lem IRunCase. i_lem IRunCase. i_lem IExprCaseNonrec. i_lem IExprCaseEnd.
+    * on (I_expr_case _ _ _ _ _ _ _ _), invc_using I_expr_case_non_call_inv; auto.
+      i_ctor. i_lem IRunCase. i_lem IExprCaseNonrec. i_lem IExprCaseEnd.
+
+  + eexists. split. left. eapply B.SPlusOne, B.SCallL; eauto.
+    destruct (AS_is_call_dec ae1).
+    * i_lem IRunCase. i_lem IRunCase. i_lem IExprCaseRec. i_lem IExprCaseEnd.
+    * on (I_expr_case _ _ _ _ _ _ _ _), invc_using I_expr_case_non_call_inv; auto.
+      i_ctor. i_lem IRunCase. i_lem IExprCaseRec. i_lem IExprCaseEnd.
+
+  + eexists. split. left. eapply B.SPlusOne, B.SCallL; eauto.
+    destruct (AS_is_call_dec ae1).
+    * i_lem IRunCase. i_lem IRunCase. i_lem IExprCaseValue. i_lem IExprCaseEnd.
+    * on (I_expr_case _ _ _ _ _ _ _ _), invc_using I_expr_case_non_call_inv; auto.
+      i_ctor. i_lem IRunCase. i_lem IExprCaseValue. i_lem IExprCaseEnd.
+
+- on >I_expr_case, inv.
+
+  + on >I_expr, invc.
+    eexists. split. left. eapply B.SPlusOne, B.SCallR; eauto.
+    i_ctor. i_ctor. i_ctor.
+
+  + exfalso. on (~ AS.value _), contradict.
+    on (Forall AS.value (_ :: _)), invc. on (AS.value (AS.Constr _ _)), invc.
+    eapply Forall_nth_error; cycle 1; eauto.
+
+  + on (Forall2 _ _ bl), invc.
+
+    B_start HS.
+    B_step HS. { eapply B.SCallR; eauto. inversion 1. }
+    B_star HS.
+      { eapply B_call_close_upvars_eval; eauto.
+        unfold bl. simpl. erewrite <- Forall2_length by eauto. lia. }
+      simpl in S2.
+
+    eexists. split. left. exact HS.
+    i_lem IRunCase.
+    * i_lem IExprCaseNonrec. i_lem IExprCaseEnd. i_ctor.
+      eauto using Forall2_firstn.
+    * i_lem IRunCase. i_lem IExprCaseValue.
+
+  + contradiction.
+
+- admit.
 
 Admitted.

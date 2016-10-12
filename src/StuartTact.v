@@ -40,6 +40,19 @@ Tactic Notation "on" uconstr(x) "," tactic3(tac) :=
             tac H
     end.
 
+Tactic Notation "on" ">" constr(pat) "," tactic3(tac) :=
+    match goal with
+    | [ H : ?T |- _ ] =>
+            let rec go x :=
+                match x with
+                | pat => tac H
+                | ?x' _ => go x'
+                | _ => fail 1
+                end
+            in go T
+    | _ => fail 1 "found no hypothesis matching pattern >" pat
+    end.
+
 
 (* generic forward reasoning *)
 
