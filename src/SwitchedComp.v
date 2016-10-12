@@ -356,20 +356,24 @@ Qed.
 
 
 
-Definition expr_metric (e : AS.expr) :=
-    match e with
-        (*
-    | AS.ElimBody (AS.Close _ free) _ =>
-        (* Count the number of non-values left to evaluate *)
-        fold_left (fun sum e => sum + (if AS.value_dec e then 0 else 1)) free 0
-        *)
-    | _ => 0
-    end.
+Definition m_non_value e :=
+    if AS.value_dec e then 0 else 1.
+
+Definition m_non_values es :=
+    fold_right (fun e sum => sum + m_non_value e) 0 es.
 
 Definition metric s :=
     match s with
-    | A.Run e _ _ => expr_metric e
-    | A.Stop _ => 0
+    | A.Run (AS.ElimBody (AS.Close fname free) _) _ _ =>
+        if AS.value_dec (AS.Close fname free) then 0 else 2 * (1 + length free)
+    | A.Run (AS.Close _ free) _ _ =>
+        1 + 2 * m_non_values free
+    | A.Run (AS.UpVar _) _ k =>
+        match k (AS.Close 0 []) with
+        | A.Run (AS.Close _ free) _ _ => 2 + 2 * m_non_values free
+        | _ => 0
+        end
+    | _ => 0
     end.
 
 
@@ -938,6 +942,46 @@ eapply unroll_I_expr_case'; eauto.
 Qed.
 
 
+Lemma m_non_value_0 : forall e,
+    AS.value e ->
+    m_non_value e = 0.
+intros. unfold m_non_value. break_if; firstorder.
+Qed.
+
+Lemma m_non_value_1 : forall e,
+    ~ AS.value e ->
+    m_non_value e = 1.
+intros. unfold m_non_value. break_if; firstorder.
+Qed.
+
+Lemma upvar_list'_m_non_values : forall acc n,
+    m_non_values (AS.upvar_list' acc n) = m_non_values acc + n.
+first_induction n; intros; simpl.
+- lia.
+- rewrite IHn. simpl. unfold m_non_value.
+  break_if; try (on >AS.value, invc). lia.
+Qed.
+
+Lemma upvar_list_m_non_values : forall n,
+    m_non_values (AS.upvar_list n) = n.
+intros. eapply upvar_list'_m_non_values.
+Qed.
+
+Lemma m_non_values_length : forall es,
+    m_non_values es <= length es.
+induction es.
+- simpl. lia.
+- simpl. unfold m_non_value. break_if; lia.
+Qed.
+
+Lemma app_m_non_values : forall es es',
+    m_non_values (es ++ es') = m_non_values es + m_non_values es'.
+induction es; intros; simpl.
+- reflexivity.
+- rewrite IHes. lia.
+Qed.
+
+
 
 Theorem I_sim : forall AE BE a a' b,
     compile_list AE = BE ->
@@ -1013,31 +1057,15 @@ try solve [do 2 break_exists; discriminate].
   on (AS.rec_shape _), fun H => destruct H as (fname & n & ?). subst ae.
 
   eexists. split. right. split. reflexivity.
-    { admit. (* metric *) }
+    { unfold metric. break_if; try contradiction. simpl.
+      rewrite AS.upvar_list_length.
+      rewrite upvar_list_m_non_values. lia. }
   eapply IElimRecClose; [ rewrite AS.upvar_list_length; reflexivity | .. ]; eauto.
     { eapply sliding_zero. }
     { on (I_expr _ _ (AS.Close _ _) _), invc.
       erewrite <- I_expr_upvar_list; eauto. }
 
 - (* SEliminate *)
-(*
-  rename l into al. on (Forall2 _ (_ :: al) _), invc.
-  on (I_expr _ _ (AS.Constr _ _) _), invc. rename l' into bl.
-
-  fwd eapply length_nth_error_Some with (xs := cases) (ys := bcases) as HH;
-    eauto using Forall2_length.
-    destruct HH as [bcase ?].
-
-  fwd eapply Forall2_nth_error as HH;
-    try (on (Forall2 (I_case _ _) _ _), fun H => exact H); eauto.
-
-  destruct (AS_is_call_dec e').
-  + eexists. split. left. eapply B.SPlusOne, B.SSwitchinate; eauto.
-    eapply IRunCase with (n := length info); eauto; cycle 1.
-      { constructor; eauto. constructor. eauto. }
-    
-    *)
-
   simpl in *. AS.refold_elim_rec_shape. do 2 break_and.
   on (AS.rec_shape _), fun H => destruct H as (fname & n & ?).
   assert (n = 0).
@@ -1089,7 +1117,8 @@ try solve [do 2 break_exists; discriminate].
   constructor; eauto.
 
 - eexists. split. right. split. reflexivity.
-    { admit. (* metric *) }
+    { unfold metric. break_if; try contradiction. simpl.
+      fwd eapply m_non_values_length with (es := afree). lia. }
   eapply IElimRecClose; eauto.
 
 - (* IElimRecClose, SEliminate *)
@@ -1143,18 +1172,26 @@ try solve [do 2 break_exists; discriminate].
     inject_some.
 
   eexists. split. right. split. reflexivity.
-    { admit. (* metric *) }
+    { simpl. do 2 rewrite app_m_non_values. simpl.
+      rewrite m_non_value_0 by repeat constructor.
+      rewrite m_non_value_1 by inversion 1. lia. }
   eapply IElimRecUpVar; simpl; eauto.
 
 - eexists. split. right. split. reflexivity.
-    { admit. (* metric *) }
+    { unfold metric. break_if; cycle 1.
+        { on (~ AS.value _), contradict. constructor. eauto. }
+      lia. }
   eapply IElimRec; eauto. 
 
 - fwd eapply sliding_predicate_i as Hi; simpl;
     eauto using Forall_skipn, AS.upvar_list_not_value.
+  assert (AS.value v).
+    { eapply Forall_nth_error; cycle 1; eauto. }
 
   eexists. split. right. split. reflexivity.
-    { admit. (* metric *) }
+    { simpl. do 2 rewrite app_m_non_values. simpl.
+      rewrite m_non_value_0 by auto.
+      rewrite m_non_value_0 by repeat constructor. lia. }
   eapply IElimRecClose; eauto.
     { rewrite app_length in *. simpl in *.
       eapply sliding_next'; [ | eassumption | ]; eauto.
@@ -1170,8 +1207,10 @@ try solve [do 2 break_exists; discriminate].
   + eexists. split. left. eapply B.SPlusOne, B.SCallL; eauto.
     destruct (AS_is_call_dec ae1).
     * i_lem IRunCase. i_lem IRunCase. i_lem IExprCaseNonrec. i_lem IExprCaseEnd.
+      Unshelve. exact fname.
     * on (I_expr_case _ _ _ _ _ _ _ _), invc_using I_expr_case_non_call_inv; auto.
       i_ctor. i_lem IRunCase. i_lem IExprCaseNonrec. i_lem IExprCaseEnd.
+      Unshelve. exact fname.
 
   + eexists. split. left. eapply B.SPlusOne, B.SCallL; eauto.
     destruct (AS_is_call_dec ae1).
@@ -1182,8 +1221,10 @@ try solve [do 2 break_exists; discriminate].
   + eexists. split. left. eapply B.SPlusOne, B.SCallL; eauto.
     destruct (AS_is_call_dec ae1).
     * i_lem IRunCase. i_lem IRunCase. i_lem IExprCaseValue. i_lem IExprCaseEnd.
+      Unshelve. exact fname. exact 0.
     * on (I_expr_case _ _ _ _ _ _ _ _), invc_using I_expr_case_non_call_inv; auto.
       i_ctor. i_lem IRunCase. i_lem IExprCaseValue. i_lem IExprCaseEnd.
+      Unshelve. exact fname. exact 0.
 
 - on >I_expr_case, inv.
 
@@ -1208,6 +1249,7 @@ try solve [do 2 break_exists; discriminate].
     i_lem IRunCase.
     * i_lem IExprCaseNonrec. i_lem IExprCaseEnd. i_ctor.
       eauto using Forall2_firstn.
+      Unshelve. exact fname.
     * i_lem IRunCase. i_lem IExprCaseValue.
 
   + contradiction.
@@ -1258,4 +1300,4 @@ try solve [do 2 break_exists; discriminate].
     eexists. split. left. eapply B.SPlusOne, B.SMakeCall; eauto.
     i_ctor.
 
-Admitted.
+Qed.
