@@ -1,4 +1,5 @@
 Require Import Common.
+Require Import Psatz.
 
 Require Import Utopia.
 Require Import Monads.
@@ -160,6 +161,18 @@ Fixpoint upvar_list' acc n :=
 
 Definition upvar_list n := upvar_list' [] n.
 
+Lemma upvar_list'_length : forall acc n,
+    length (upvar_list' acc n) = length acc + n.
+first_induction n; intros.
+- simpl. lia.
+- simpl. rewrite IHn. simpl. lia.
+Qed.
+
+Lemma upvar_list_length : forall n,
+    length (upvar_list n) = n.
+intros. eapply upvar_list'_length.
+Qed.
+
 Lemma upvar_list'_acc : forall acc n,
     upvar_list' acc n = upvar_list' [] n ++ acc.
 first_induction n; intros; simpl; eauto.
@@ -170,6 +183,31 @@ Lemma upvar_list_tail : forall n,
     upvar_list (S n) = upvar_list n ++ [UpVar n].
 intros. unfold upvar_list at 1. simpl.
 rewrite upvar_list'_acc. reflexivity.
+Qed.
+
+Lemma upvar_list_nth_error : forall i n,
+    i < n ->
+    nth_error (upvar_list n) i = Some (UpVar i).
+first_induction n; intros0 Hlt.
+  { exfalso. lia. }
+destruct (eq_nat_dec i n).
+- subst i. rewrite upvar_list_tail.
+  rewrite nth_error_app2 by (rewrite upvar_list_length; lia).
+  rewrite upvar_list_length. replace (n - n) with 0 by lia.
+  simpl. reflexivity.
+- assert (i < n) by lia.
+  rewrite upvar_list_tail.
+  rewrite nth_error_app1 by (rewrite upvar_list_length; lia).
+  eauto.
+Qed.
+
+Lemma upvar_list_not_value : forall n,
+    Forall (fun e => ~ value e) (upvar_list n).
+intros. eapply nth_error_Forall. intros.
+assert (i < n).
+  { rewrite <- upvar_list_length with (n := n). rewrite <- nth_error_Some.  congruence. }
+rewrite upvar_list_nth_error in * by auto.
+inject_some. inversion 1.
 Qed.
 
 

@@ -1125,15 +1125,6 @@ eapply B_close_eval_sliding' with (i := 0) (j := expect) (es := close_dyn_free d
   destruct (drop + i); eauto using B.SArg, B.SUpVar.
 Qed.
 
-Lemma skipn_app_l : forall A (xs ys : list A) n,
-    n <= length xs ->
-    skipn n (xs ++ ys) = skipn n xs ++ ys.
-induction xs; destruct n; intros0 Hlt; simpl in *; try lia.
-- reflexivity.
-- reflexivity.
-- apply IHxs. lia.
-Qed.
-
 Lemma firstn_app' : forall A (xs ys : list A) n,
     n >= length xs ->
     firstn n (xs ++ ys) = xs ++ firstn (n - length xs) ys.
