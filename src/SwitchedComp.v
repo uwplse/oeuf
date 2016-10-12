@@ -794,8 +794,117 @@ Qed.
 
 
 
+Lemma body_I_expr_ex : forall AE fname body,
+    nth_error AE fname = Some body ->
+    exists bbody,
+        nth_error (compile_list AE) fname = Some bbody /\
+        I_expr AE (compile_list AE) body bbody.
+intros0 Hnth.
+eapply map_nth_error with (f := compile) in Hnth.
+exists (compile body). split.
+- rewrite compile_list_is_map. assumption.
+- eapply compile_I_expr. reflexivity.
+Qed.
+
+Lemma Forall2_nth_error_ex : forall A B (P : A -> B -> Prop) xs ys i x,
+    Forall2 P xs ys ->
+    nth_error xs i = Some x ->
+    exists y,
+        nth_error ys i = Some y /\
+        P x y.
+intros0 Hfa Hnth.
+fwd eapply length_nth_error_Some with (xs := xs) (ys := ys); eauto using Forall2_length.
+break_exists.
+eexists. split; eauto.
+eapply Forall2_nth_error; eauto.
+Qed.
+
+Lemma AS_unroll_elim_is_call : forall rec case args info e',
+    AS.unroll_elim rec case args info = Some e' ->
+    length info > 0 ->
+    exists f a, e' = AS.Call f a.
+first_induction args; destruct info; intros0 Hunroll Hlen; simpl in *; try discriminate.
+- lia.
+- destruct (eq_nat_dec (length info) 0).
+  + destruct info, args; simpl in *; try discriminate. inject_some.
+    destruct b; do 2 eexists; reflexivity.
+  + eapply IHargs; eauto. lia.
+Qed.
+
+
+
+
+
+
 Ltac i_ctor := intros; constructor; eauto.
 Ltac i_lem H := intros; eapply H; eauto.
+
+
+Lemma unroll_I_expr_case' : forall AE BE,
+    forall fname afree case args args' info e',
+    forall n m bcase0 bcase,
+    let arec := AS.Close fname afree in
+    let brec := B.Close fname (B.upvar_list (length afree)) in
+
+    AS.unroll_elim arec case args info = Some e' ->
+    unroll_case' brec m bcase0 info = bcase ->
+
+    n = length args ->
+    n + m = length args' ->
+    args = skipn m args' ->
+
+    I_expr_case AE BE arec brec args' m case bcase0 ->
+
+    I_expr_case AE BE arec brec args' (n + m) e' bcase.
+
+first_induction n; intros0 Aunroll Bunroll Hn Hm Htail II;
+destruct args; try discriminate;
+destruct info; try discriminate;
+simpl in *.
+
+  { congruence. }
+
+unfold brec in *.
+replace (S (n + m)) with (n + S m) in * by lia.
+eapply IHn; eauto.
+  { erewrite <- skipn_skipn with (k := m) by lia.
+    replace (S m - m) with 1 by lia.
+    destruct (skipn _ _); simpl; congruence. }
+
+assert (nth_error args' m = Some e).
+  { assert (HH : nth_error (e :: args) 0 = Some e) by reflexivity.
+    rewrite Htail in HH. rewrite skipn_nth_error in HH.
+    replace (m + 0) with m in HH by lia. assumption. }
+
+destruct b.
+- i_lem IExprCaseRec.
+  i_lem IExprCaseNonrec.
+- i_lem IExprCaseNonrec.
+Qed.
+
+Lemma unroll_I_expr_case : forall AE BE,
+    forall fname afree case args info e',
+    forall n bcase0 bcase,
+    let arec := AS.Close fname afree in
+    let brec := B.Close fname (B.upvar_list (length afree)) in
+
+    AS.unroll_elim arec case args info = Some e' ->
+    unroll_case brec bcase0 info = bcase ->
+
+    n = length args ->
+
+    I_expr AE BE case bcase0 ->
+
+    I_expr_case AE BE arec brec args n e' bcase.
+
+intros0 Aunroll Bunroll Hlen II.
+unfold brec in *. replace n with (n + 0) in * by lia.
+eapply unroll_I_expr_case'; eauto.
+- lia.
+- i_lem IExprCaseEnd.
+Qed.
+
+
 
 Theorem I_sim : forall AE BE a a' b,
     compile_list AE = BE ->
@@ -878,6 +987,7 @@ try solve [do 2 break_exists; discriminate].
       erewrite <- I_expr_upvar_list; eauto. }
 
 - (* SEliminate *)
+(*
   rename l into al. on (Forall2 _ (_ :: al) _), invc.
   on (I_expr _ _ (AS.Constr _ _) _), invc. rename l' into bl.
 
@@ -887,15 +997,15 @@ try solve [do 2 break_exists; discriminate].
 
   fwd eapply Forall2_nth_error as HH;
     try (on (Forall2 (I_case _ _) _ _), fun H => exact H); eauto.
-    (* TODO *)
 
-  B_start HS.
-  B_step HS.
-    { eapply B.SSwitchinate. eauto. }
-
-  eexists. split. left. exact HS.
+  destruct (AS_is_call_dec e').
+  + eexists. split. left. eapply B.SPlusOne, B.SSwitchinate; eauto.
+    eapply IRunCase with (n := length info); eauto; cycle 1.
+      { constructor; eauto. constructor. eauto. }
+    
+    *)
+    
   admit.
-  
 
 - on _, invc_using Forall2_3part_inv.
 
@@ -916,7 +1026,31 @@ try solve [do 2 break_exists; discriminate].
     { admit. (* metric *) }
   eapply IElimRecClose; eauto.
 
-- admit. (* similar to SEliminate *)
+- rename l into al. on (Forall2 _ _ bl), invc.
+    on (I_expr _ _ (AS.Constr _ _) _), invc. rename l' into bl.
+  on (AS.value (AS.Close _ _)), invc.
+  assert (afree = firstn (length afree) al) by admit. (* TODO *)
+
+  fwd eapply Forall2_nth_error_ex with (xs := acases) (ys := bcases) as HH; eauto.
+    destruct HH as (bcase & ? & ?).
+    on >I_case, fun H => (unfold I_case in H; destruct H as (bcase0 & ? & ?)).
+    simpl in *. AS.refold_elim_rec_shape.
+
+  destruct (eq_nat_dec (length info) 0).
+
+  + destruct info; try discriminate. destruct args; try discriminate.
+    on (Forall2 _ [] bargs), invc.
+    unfold unroll_case in *. simpl in *. inject_some.
+    eexists. split. left. eapply B.SPlusOne, B.SSwitchinate; eauto.
+    i_ctor. i_ctor. i_ctor.
+
+  + eexists. split. left. eapply B.SPlusOne, B.SSwitchinate; eauto.
+    eapply IRunCase with (m := length afree); eauto; cycle 3.
+      { i_ctor. i_ctor. }
+      { eapply AS_unroll_elim_is_call; eauto. lia. }
+      { on (afree = _), fun H => rewrite H. rewrite firstn_length. lia. }
+    on (afree = _), fun H => rewrite <- H.
+    eapply unroll_I_expr_case; eauto.
 
 - 
   (* show that `e` is `UpVar i` *)
@@ -999,6 +1133,50 @@ try solve [do 2 break_exists; discriminate].
 
   + contradiction.
 
-- admit.
+- fwd eapply body_I_expr_ex as HH; eauto.
+    destruct HH as (bbody & ? & ?).
+
+  on >I_expr_case, inv.
+
+  + on >I_expr, invc. on (I_expr _ _ (AS.Close _ _) _), invc.
+    eexists. split. left. eapply B.SPlusOne, B.SMakeCall; eauto.
+      { list_magic_on (free, (bfree, tt)). }
+    i_ctor. constructor; eauto. list_magic_on (free, (bfree, tt)).
+
+  + on (I_expr_case _ _ _ _ _ _ _ bpre), invc_using I_expr_case_non_call_inv.
+      { intro HH. do 2 break_exists. discriminate. }
+    on (I_expr _ _ _ bpre), invc.
+    on (Forall2 _ _ bl), invc.
+    on (I_expr _ _ (AS.Constr _ _) (B.Constr _ _)), invc.
+    fwd eapply Forall2_nth_error_ex with (xs := aargs) (ys := bargs) as HH; eauto.
+      destruct HH as (barg' & ? & ?).
+
+    assert (Forall B.value bfree) by list_magic_on (free, (bfree, tt)).
+
+    B_start HS.
+    B_step HS.
+      { eapply B.SCallR.
+        - constructor. auto.
+        - inversion 1. }
+    B_step HS.  { eapply B.SDerefStep. inversion 1. }
+    B_step HS.  { eapply B.SArg. simpl. reflexivity. }
+    B_step HS.  { eapply B.SDerefinateConstr. eauto. }
+    B_step HS.  { eapply B.SMakeCall; eauto. }
+
+    eexists. split. left. exact HS. unfold S5.
+    i_ctor.
+
+  + on (AS.value (AS.Call _ _)), invc.
+
+  + on (I_expr_case _ _ _ _ _ _ _ bpre), invc_using I_expr_case_non_call_inv.
+      { intro HH. do 2 break_exists. discriminate. }
+    on (I_expr _ _ _ bpre), invc.
+    on (Forall2 _ _ bl), invc.
+    on (I_expr _ _ (AS.Constr _ _) (B.Constr _ _)), invc.
+
+    assert (Forall B.value bfree) by list_magic_on (free, (bfree, tt)).
+
+    eexists. split. left. eapply B.SPlusOne, B.SMakeCall; eauto.
+    i_ctor.
 
 Admitted.
