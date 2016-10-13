@@ -1,8 +1,8 @@
 Require Import Common Monads.
 Require Import Metadata.
-Require Switched Flattened.
+Require SelfClose Flattened.
 
-Module S := Switched.
+Module S := SelfClose.
 Module F := Flattened.
 
 Section compile.
@@ -30,7 +30,7 @@ Section compile.
         in
         match e with
         | S.Arg => ret_state (F.Skip, F.Arg)
-        | S.UpVar n => ret_state (F.Skip, F.Deref F.Self n)
+        | S.Self => ret_state (F.Skip, F.Self)
         | S.Deref e' n =>
           go e' >>= fun p =>
           let (s', e') := p in

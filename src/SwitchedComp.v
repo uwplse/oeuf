@@ -843,19 +843,6 @@ exists (compile body). split.
 - eapply compile_I_expr. reflexivity.
 Qed.
 
-Lemma Forall2_nth_error_ex : forall A B (P : A -> B -> Prop) xs ys i x,
-    Forall2 P xs ys ->
-    nth_error xs i = Some x ->
-    exists y,
-        nth_error ys i = Some y /\
-        P x y.
-intros0 Hfa Hnth.
-fwd eapply length_nth_error_Some with (xs := xs) (ys := ys); eauto using Forall2_length.
-break_exists.
-eexists. split; eauto.
-eapply Forall2_nth_error; eauto.
-Qed.
-
 Lemma AS_unroll_elim_is_call : forall rec case args info e',
     AS.unroll_elim rec case args info = Some e' ->
     length info > 0 ->
@@ -1271,7 +1258,10 @@ try solve [do 2 break_exists; discriminate].
     on (I_expr _ _ (AS.Constr _ _) (B.Constr _ _)), invc.
     fwd eapply Forall2_nth_error_ex with (xs := aargs) (ys := bargs) as HH; eauto.
       destruct HH as (barg' & ? & ?).
+    on (Forall AS.value (_ :: _)), invc.
+    on (AS.value (AS.Constr _ _)), invc.
 
+    assert (Forall B.value bargs) by list_magic_on (aargs, (bargs, tt)).
     assert (Forall B.value bfree) by list_magic_on (free, (bfree, tt)).
 
     B_start HS.
@@ -1281,7 +1271,7 @@ try solve [do 2 break_exists; discriminate].
         - inversion 1. }
     B_step HS.  { eapply B.SDerefStep. inversion 1. }
     B_step HS.  { eapply B.SArg. simpl. reflexivity. }
-    B_step HS.  { eapply B.SDerefinateConstr. eauto. }
+    B_step HS.  { eapply B.SDerefinateConstr; eauto. }
     B_step HS.  { eapply B.SMakeCall; eauto. }
 
     eexists. split. left. exact HS. unfold S5.
