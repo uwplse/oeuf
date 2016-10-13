@@ -73,6 +73,83 @@ Fixpoint unroll_elim (case : expr)
     | _, _ => None
     end.
 
+
+Inductive state :=
+| Run (e : expr) (l : list expr) (k : expr -> state)
+| Stop (e : expr).
+
+Inductive sstep (E : env) : state -> state -> Prop :=
+| SArg : forall l k v,
+        nth_error l 0 = Some v ->
+        sstep E (Run Arg l k) (k v)
+| SUpVar : forall n l k v,
+        nth_error l (S n) = Some v ->
+        sstep E (Run (UpVar n) l k) (k v)
+
+| SCloseStep : forall tag vs e es l k,
+        Forall value vs ->
+        ~ value e ->
+        sstep E (Run (Close tag (vs ++ [e] ++ es)) l k)
+                (Run e l (fun v => Run (Close tag (vs ++ [v] ++ es)) l k))
+| SCloseDone : forall tag vs l k,
+        Forall value vs ->
+        sstep E (Run (Close tag vs) l k) (k (Close tag vs))
+
+| SConstrStep : forall fname vs e es l k,
+        Forall value vs ->
+        ~ value e ->
+        sstep E (Run (Constr fname (vs ++ [e] ++ es)) l k)
+                (Run e l (fun v => Run (Constr fname (vs ++ [v] ++ es)) l k))
+| SConstrDone : forall fname vs l k,
+        Forall value vs ->
+        sstep E (Run (Constr fname vs) l k) (k (Constr fname vs))
+
+| SCallL : forall e1 e2 l k,
+        ~ value e1 ->
+        sstep E (Run (Call e1 e2) l k)
+                (Run e1 l (fun v => Run (Call v e2) l k))
+| SCallR : forall e1 e2 l k,
+        value e1 ->
+        ~ value e2 ->
+        sstep E (Run (Call e1 e2) l k)
+                (Run e2 l (fun v => Run (Call e1 v) l k))
+| SMakeCall : forall fname free arg l k body,
+        Forall value free ->
+        value arg ->
+        nth_error E fname = Some body ->
+        sstep E (Run (Call (Close fname free) arg) l k)
+                (Run body (arg :: free) k)
+
+| SElimStep : forall cases target l k,
+        ~ value target ->
+        sstep E (Run (Elim cases target) l k)
+                (Run target l (fun v => Run (Elim cases v) l k))
+| SEliminate : forall cases tag args l k case rec e',
+        Forall value args ->
+        nth_error cases tag = Some (case, rec) ->
+        unroll_elim case args rec (fun x => Elim cases x) = Some e' ->
+        sstep E (Run (Elim cases (Constr tag args)) l k)
+                (Run e' l k)
+.
+
+Inductive sstar (E : env) : state -> state -> Prop :=
+| SStarNil : forall e, sstar E e e
+| SStarCons : forall e e' e'',
+        sstep E e e' ->
+        sstar E e' e'' ->
+        sstar E e e''.
+
+Inductive splus (E : env) : state -> state -> Prop :=
+| SPlusOne : forall s s',
+        sstep E s s' ->
+        splus E s s'
+| SPlusCons : forall s s' s'',
+        sstep E s s' ->
+        splus E s' s'' ->
+        splus E s s''.
+
+
+
 Inductive step (E : env) : expr -> expr -> Prop :=
 | MakeCall : forall f a free e e',
     value a ->

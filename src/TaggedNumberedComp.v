@@ -3,13 +3,13 @@ Require Import Metadata.
 Require Tagged TaggedNumbered.
 Require String.
 
-Module T := Tagged.
-Module N := TaggedNumbered.
+Module A := Tagged.
+Module B := TaggedNumbered.
 
 Delimit Scope string_scope with string.
 Bind Scope string_scope with String.string.
 
-Definition compiler_monad A := state (list (list (N.expr * N.rec_info))) A.
+Definition compiler_monad A := state (list (list (B.expr * B.rec_info))) A.
 
 
 Section compile.
@@ -19,52 +19,52 @@ Definition get_next : compiler_monad nat :=
     fun s => (length s, s).
 Definition emit x : compiler_monad unit := fun s => (tt, s ++ [x]).
 
-Definition compile : T.expr -> compiler_monad N.expr :=
+Definition compile : A.expr -> compiler_monad B.expr :=
     let fix go e :=
-        let fix go_list es : compiler_monad (list N.expr) :=
+        let fix go_list es : compiler_monad (list B.expr) :=
             match es with
             | [] => ret_state []
-            | e :: es => @cons N.expr <$> go e <*> go_list es
+            | e :: es => @cons B.expr <$> go e <*> go_list es
             end in
-        let fix go_pair p : compiler_monad (N.expr * N.rec_info) :=
+        let fix go_pair p : compiler_monad (B.expr * B.rec_info) :=
             let '(e, r) := p in
             go e >>= fun e' => ret_state (e', r) in
-        let fix go_list_pair ps : compiler_monad (list (N.expr * N.rec_info)) :=
+        let fix go_list_pair ps : compiler_monad (list (B.expr * B.rec_info)) :=
             match ps with
             | [] => ret_state []
             | p :: ps => cons <$> go_pair p <*> go_list_pair ps
             end in
         match e with
-        | T.Arg => ret_state N.Arg
-        | T.UpVar n => ret_state (N.UpVar n)
-        | T.Call f a => N.Call <$> go f <*> go a
-        | T.Constr tag args => N.Constr tag <$> go_list args
-        | T.Elim cases target =>
+        | A.Arg => ret_state B.Arg
+        | A.UpVar n => ret_state (B.UpVar n)
+        | A.Call f a => B.Call <$> go f <*> go a
+        | A.Constr tag args => B.Constr tag <$> go_list args
+        | A.Elim cases target =>
                 go_list_pair cases >>= fun cases' =>
                 go target >>= fun target' =>
                 get_next >>= fun n' =>
                 emit cases' >>= fun _ =>
-                ret_state (N.ElimN n' cases' target')
-        | T.Close fname free => N.Close fname <$> go_list free
+                ret_state (B.ElimN n' cases' target')
+        | A.Close fname free => B.Close fname <$> go_list free
         end in go.
 
 Definition compile_list :=
     let go := compile in
-    let fix go_list es : compiler_monad (list N.expr) :=
+    let fix go_list es : compiler_monad (list B.expr) :=
         match es with
         | [] => ret_state []
-        | e :: es => @cons N.expr <$> go e <*> go_list es
+        | e :: es => @cons B.expr <$> go e <*> go_list es
         end in go_list.
 
 Definition compile_pair :=
     let go := compile in
-    let fix go_pair p : compiler_monad (N.expr * N.rec_info) :=
+    let fix go_pair p : compiler_monad (B.expr * B.rec_info) :=
         let '(e, r) := p in
         go e >>= fun e' => ret_state (e', r) in go_pair.
 
 Definition compile_list_pair :=
     let go_pair := compile_pair in
-    let fix go_list_pair ps : compiler_monad (list (N.expr * N.rec_info)) :=
+    let fix go_list_pair ps : compiler_monad (list (B.expr * B.rec_info)) :=
         match ps with
         | [] => ret_state []
         | p :: ps => cons <$> go_pair p <*> go_list_pair ps
@@ -81,7 +81,7 @@ Definition record_name name : state (nat * list String.string) unit :=
     let '(idx, names) := s in
     (tt, (idx, names ++ [name])).
 
-Definition gen_elim_names : String.string -> T.expr -> state (nat * list String.string) unit :=
+Definition gen_elim_names : String.string -> A.expr -> state (nat * list String.string) unit :=
     let fix go name e :=
         let fix go_list name es :=
             match es with
@@ -96,20 +96,20 @@ Definition gen_elim_names : String.string -> T.expr -> state (nat * list String.
             | p :: ps => go_pair name p >> go_list_pair name ps
             end in
         match e with
-        | T.Arg => ret_state tt
-        | T.UpVar n => ret_state tt
-        | T.Call f a => go name f >> go name a
-        | T.Constr tag args => go_list name args
-        | T.Elim cases target =>
+        | A.Arg => ret_state tt
+        | A.UpVar n => ret_state tt
+        | A.Call f a => go name f >> go name a
+        | A.Constr tag args => go_list name args
+        | A.Elim cases target =>
                 next_idx >>= fun idx =>
                 let name' := String.append (String.append name "_elim") (nat_to_string idx) in
                 go_list_pair name' cases >>
                 go name' target >>
                 record_name name'
-        | T.Close fname free => go_list name free
+        | A.Close fname free => go_list name free
         end in go.
 
-Fixpoint gen_elim_names_list (exprs : list T.expr) (metas : list metadata) :
+Fixpoint gen_elim_names_list (exprs : list A.expr) (metas : list metadata) :
         state (nat * list String.string) unit :=
     match exprs, metas with
     | [], _ => ret_state tt
@@ -122,9 +122,9 @@ Fixpoint gen_elim_names_list (exprs : list T.expr) (metas : list metadata) :
     end.
 
 
-Definition compile_cu (cu : list T.expr * list metadata) :
-        list N.expr * list metadata *
-        list (list (N.expr * N.rec_info)) * list String.string :=
+Definition compile_cu (cu : list A.expr * list metadata) :
+        list B.expr * list metadata *
+        list (list (B.expr * B.rec_info)) * list String.string :=
     let '(exprs, metas) := cu in
     let '(exprs', elims) := compile_list exprs [] in
     let '(tt, (_, elim_names)) := gen_elim_names_list exprs metas (0, []) in
@@ -152,24 +152,112 @@ Ltac break_bind_state :=
     end.
 
 
+
+Inductive I_expr : A.expr -> B.expr -> Prop :=
+| IArg : I_expr A.Arg B.Arg
+| IUpVar : forall n,
+        I_expr (A.UpVar n) (B.UpVar n)
+| ICall : forall af aa bf ba,
+        I_expr af bf ->
+        I_expr aa ba ->
+        I_expr (A.Call af aa) (B.Call bf ba)
+| IConstr : forall tag aargs bargs,
+        Forall2 I_expr aargs bargs ->
+        I_expr (A.Constr tag aargs) (B.Constr tag bargs)
+| IElim : forall acases atarget num bcases btarget,
+        Forall2 (fun ap bp => I_expr (fst ap) (fst bp) /\ snd ap = snd bp)
+            acases bcases ->
+        I_expr atarget btarget ->
+        I_expr (A.Elim acases atarget)
+               (B.ElimN num bcases btarget)
+| IClose : forall tag afree bfree,
+        Forall2 I_expr afree bfree ->
+        I_expr (A.Close tag afree) (B.Close tag bfree)
+.
+
+Inductive I : A.state -> B.state -> Prop :=
+| IRun : forall ae al ak be bl bk,
+        I_expr ae be ->
+        Forall A.value al ->
+        Forall B.value bl ->
+        Forall2 I_expr al bl ->
+        (forall av bv,
+            A.value av ->
+            B.value bv ->
+            I_expr av bv ->
+            I (ak av) (bk bv)) ->
+        I (A.Run ae al ak) (B.Run be bl bk)
+
+| IStop : forall ae be,
+        I_expr ae be ->
+        I (A.Stop ae) (B.Stop be).
+
+
+
+Lemma I_expr_value : forall a b,
+    I_expr a b ->
+    A.value a ->
+    B.value b.
+induction a using A.expr_ind''; intros0 II Aval; invc Aval; invc II.
+- constructor. list_magic_on (args, (bargs, tt)).
+- constructor. list_magic_on (free, (bfree, tt)).
+Qed.
+Hint Resolve I_expr_value.
+
+Lemma I_expr_value' : forall b a,
+    I_expr a b ->
+    B.value b ->
+    A.value a.
+induction b using B.expr_ind''; intros0 II Bval; invc Bval; invc II.
+- constructor. list_magic_on (args, (aargs, tt)).
+- constructor. list_magic_on (free, (afree, tt)).
+Qed.
+
+Lemma I_expr_not_value : forall a b,
+    I_expr a b ->
+    ~A.value a ->
+    ~B.value b.
+intros. intro. fwd eapply I_expr_value'; eauto.
+Qed.
+Hint Resolve I_expr_not_value.
+
+Lemma I_expr_not_value' : forall a b,
+    I_expr a b ->
+    ~B.value b ->
+    ~A.value a.
+intros. intro. fwd eapply I_expr_value; eauto.
+Qed.
+
+Lemma Forall_I_expr_value : forall aes bes,
+    Forall2 I_expr aes bes ->
+    Forall A.value aes ->
+    Forall B.value bes.
+intros. list_magic_on (aes, (bes, tt)).
+Qed.
+Hint Resolve Forall_I_expr_value.
+
+
+
+(* compile_elims_match *)
+
 Lemma emit_extend : forall x s x' s',
     emit x s = (x', s') ->
     exists s'', s' = s ++ s''.
 intros0 Hemit. unfold emit in *. invc Hemit.  eauto.
 Qed.
 
-Lemma compile_extend : forall te s ne' s',
-    compile te s = (ne', s') ->
+Lemma compile_extend : forall ae s be' s',
+    compile ae s = (be', s') ->
     exists s'', s' = s ++ s''.
-induction te using T.expr_ind''; intros0 Hcomp;
+induction ae using A.expr_ind''; intros0 Hcomp;
 simpl in Hcomp; refold_compile; break_bind_state.
 
 - exists []. eauto using app_nil_r.
 
 - exists []. eauto using app_nil_r.
 
-- destruct (IHte1 ?? ?? ?? **) as [s''1 ?].
-  destruct (IHte2 ?? ?? ?? **) as [s''2 ?].
+- destruct (IHae1 ?? ?? ?? **) as [s''1 ?].
+  destruct (IHae2 ?? ?? ?? **) as [s''2 ?].
   exists (s''1 ++ s''2). subst. eauto using app_assoc.
 
 - generalize dependent s'. generalize dependent x. generalize dependent s.
@@ -194,7 +282,7 @@ simpl in Hcomp; refold_compile; break_bind_state.
       exists (s''1 ++ s''2). subst. eauto using app_assoc.
   }
   destruct HH as [s''1 ?].
-  destruct (IHte ?? ?? ?? **) as [s''2 ?].
+  destruct (IHae ?? ?? ?? **) as [s''2 ?].
   on (get_next _ = _), invc.
   destruct (emit_extend ?? ?? ?? ?? **) as [s''3 ?].
   exists (s''1 ++ s''2 ++ s''3). subst. repeat rewrite app_assoc. reflexivity.
@@ -211,48 +299,48 @@ simpl in Hcomp; refold_compile; break_bind_state.
 
 Qed.
 
-Lemma compile_list_extend : forall tes s nes' s',
-    compile_list tes s = (nes', s') ->
+Lemma compile_list_extend : forall aes s bes' s',
+    compile_list aes s = (bes', s') ->
     exists s'', s' = s ++ s''.
-induction tes; intros0 Hcomp;
+induction aes; intros0 Hcomp;
 simpl in *; refold_compile; break_bind_state.
 - exists []. eauto using app_nil_r.
 - destruct (compile_extend ?? ?? ?? ?? **) as [s''1 ?].
-  destruct (IHtes ?? ?? ?? **) as [s''2 ?].
+  destruct (IHaes ?? ?? ?? **) as [s''2 ?].
   exists (s''1 ++ s''2). subst. eauto using app_assoc.
 Qed.
 
-Lemma compile_pair_extend : forall tp s np' s',
-    compile_pair tp s = (np', s') ->
+Lemma compile_pair_extend : forall ap s bp' s',
+    compile_pair ap s = (bp', s') ->
     exists s'', s' = s ++ s''.
-intros0 Hcomp. destruct tp. simpl in *. break_bind_state.
+intros0 Hcomp. destruct ap. simpl in *. break_bind_state.
 eapply compile_extend. eauto.
 Qed.
 
-Lemma compile_list_pair_extend : forall tps s nps' s',
-    compile_list_pair tps s = (nps', s') ->
+Lemma compile_list_pair_extend : forall aps s bps' s',
+    compile_list_pair aps s = (bps', s') ->
     exists s'', s' = s ++ s''.
-induction tps; intros0 Hcomp;
+induction aps; intros0 Hcomp;
 simpl in *; refold_compile; break_bind_state.
 - exists []. eauto using app_nil_r.
 - destruct (compile_pair_extend ?? ?? ?? ?? **) as [s''1 ?].
-  destruct (IHtps ?? ?? ?? **) as [s''2 ?].
+  destruct (IHaps ?? ?? ?? **) as [s''2 ?].
   exists (s''1 ++ s''2). subst. eauto using app_assoc.
 Qed.
 
-Theorem compile_elims_match : forall te ne elims elims',
-    compile te elims = (ne, elims') ->
-    N.elims_match elims' ne.
-induction te using T.expr_rect_mut with
-    (Pl := fun tes => forall nes elims elims',
-        compile_list tes elims = (nes, elims') ->
-        Forall (N.elims_match elims') nes)
-    (Pp := fun tp => forall np elims elims',
-        compile_pair tp elims = (np, elims') ->
-        N.elims_match elims' (fst np))
-    (Plp := fun tps => forall nps elims elims',
-        compile_list_pair tps elims = (nps, elims') ->
-        Forall (fun p => N.elims_match elims' (fst p)) nps);
+Theorem compile_elims_match : forall ae be elims elims',
+    compile ae elims = (be, elims') ->
+    B.elims_match elims' be.
+induction ae using A.expr_rect_mut with
+    (Pl := fun aes => forall bes elims elims',
+        compile_list aes elims = (bes, elims') ->
+        Forall (B.elims_match elims') bes)
+    (Pp := fun ap => forall bp elims elims',
+        compile_pair ap elims = (bp, elims') ->
+        B.elims_match elims' (fst bp))
+    (Plp := fun aps => forall bps elims elims',
+        compile_list_pair aps elims = (bps, elims') ->
+        Forall (fun p => B.elims_match elims' (fst p)) bps);
 intros0 Hcomp; simpl in Hcomp; refold_compile; break_bind_state.
 
 (* compile *)
@@ -261,15 +349,15 @@ intros0 Hcomp; simpl in Hcomp; refold_compile; break_bind_state.
 - constructor.
 
 - simpl.
-  fwd eapply compile_extend with (te := te2) as HH; eauto.  destruct HH.
+  fwd eapply compile_extend with (ae := ae2) as HH; eauto.  destruct HH.
   subst. split.
-  + eapply N.elims_match_extend. eauto.
+  + eapply B.elims_match_extend. eauto.
   + eauto.
 
-- simpl. N.refold_elims_match elims'.
-  rewrite N.elims_match_list_Forall. eauto.
+- simpl. B.refold_elims_match elims'.
+  rewrite B.elims_match_list_Forall. eauto.
 
-- simpl. N.refold_elims_match elims'.
+- simpl. B.refold_elims_match elims'.
   on (emit _ _ = _), invc.
   on (get_next _ = _), invc.
   fwd eapply compile_extend as HH; eauto.  destruct HH.
@@ -277,22 +365,22 @@ intros0 Hcomp; simpl in Hcomp; refold_compile; break_bind_state.
   + rewrite nth_error_app2 by eauto.
     replace (length _ - length _) with 0 by omega.
     reflexivity.
-  + rewrite N.elims_match_list_pair_Forall'.
-    specialize (IHte ?? ?? ?? **).
-    list_magic_on (x, tt).  eauto using N.elims_match_extend.
-  + specialize (IHte0 ?? ?? ?? **).
-    eauto using N.elims_match_extend.
+  + rewrite B.elims_match_list_pair_Forall'.
+    specialize (IHae ?? ?? ?? **).
+    list_magic_on (x, tt).  eauto using B.elims_match_extend.
+  + specialize (IHae0 ?? ?? ?? **).
+    eauto using B.elims_match_extend.
 
-- simpl. N.refold_elims_match elims'.
-  rewrite N.elims_match_list_Forall. eauto.
+- simpl. B.refold_elims_match elims'.
+  rewrite B.elims_match_list_Forall. eauto.
 
 (* compile_list *)
 
 - constructor.
 
-- fwd eapply compile_list_extend with (tes := es) as HH; eauto.  destruct HH.
+- fwd eapply compile_list_extend with (aes := es) as HH; eauto.  destruct HH.
   subst. constructor.
-  + eapply N.elims_match_extend. eauto.
+  + eapply B.elims_match_extend. eauto.
   + eauto.
 
 (* compile_pair *)
@@ -303,387 +391,136 @@ intros0 Hcomp; simpl in Hcomp; refold_compile; break_bind_state.
 
 - constructor.
 
-- fwd eapply compile_list_pair_extend with (tps := ps) as HH; eauto.  destruct HH.
+- fwd eapply compile_list_pair_extend with (aps := ps) as HH; eauto.  destruct HH.
   subst. constructor.
-  + eapply N.elims_match_extend. eauto.
+  + eapply B.elims_match_extend. eauto.
   + eauto.
 
 Qed.
 
 
-Definition strip : N.expr -> T.expr :=
-    let fix go e :=
-        let fix go_list es :=
-            match es with
-            | [] => []
-            | e :: es => go e :: go_list es
-            end in
-        let fix go_pair p :=
-            let '(e, r) := p in
-            (go e, r) in
-        let fix go_list_pair ps :=
-            match ps with
-            | [] => []
-            | p :: ps => go_pair p :: go_list_pair ps
-            end in
-        match e with
-        | N.Arg => T.Arg
-        | N.UpVar n => T.UpVar n
-        | N.Call f a => T.Call (go f) (go a)
-        | N.Constr tag args => T.Constr tag (go_list args)
-        | N.ElimN _ cases target => T.Elim (go_list_pair cases) (go target)
-        | N.Close fname free => T.Close fname (go_list free)
-        end in go.
 
-Definition strip_list :=
-    let go := strip in
-    let fix go_list es :=
-        match es with
-        | [] => []
-        | e :: es => go e :: go_list es
-        end in go_list.
+(* compile_I_expr *)
 
-Definition strip_pair :=
-    let go := strip in
-    let fix go_pair (p : N.expr * N.rec_info) :=
-        let '(e, r) := p in
-        (go e, r) in go_pair.
-
-Definition strip_list_pair :=
-    let go_pair := strip_pair in
-    let fix go_list_pair ps :=
-        match ps with
-        | [] => []
-        | p :: ps => go_pair p :: go_list_pair ps
-        end in go_list_pair.
-
-Ltac refold_strip :=
-    fold strip_list in *;
-    fold strip_pair in *;
-    fold strip_list_pair in *.
-
-Lemma strip_list_Forall : forall nes tes,
-    strip_list nes = tes <-> Forall2 (fun ne te => strip ne = te) nes tes.
-induction nes; intros; split; intro HH;
-simpl in *; refold_strip; subst.
-- constructor.
-- invc HH. reflexivity.
-- constructor; firstorder eauto.
-- invc HH. f_equal. firstorder eauto.
-Qed.
-
-Lemma strip_list_pair_Forall : forall nps tps,
-    strip_list_pair nps = tps <-> Forall2 (fun np tp => strip_pair np = tp) nps tps.
-induction nps; intros; split; intro HH;
-simpl in *; refold_strip; subst.
-- constructor.
-- invc HH. reflexivity.
-- constructor; firstorder eauto.
-- invc HH. f_equal. firstorder eauto.
-Qed.
-
-
-Definition I te ne := strip ne = te.
-
-Theorem compile_I : forall te elims ne elims',
-    compile te elims = (ne, elims') ->
-    I te ne.
-unfold I.
-induction te using T.expr_rect_mut with
-    (Pl := fun tes => forall elims nes elims',
-        compile_list tes elims = (nes, elims') ->
-        strip_list nes = tes)
-    (Pp := fun tp => forall elims np elims',
-        compile_pair tp elims = (np, elims') ->
-        strip_pair np = tp)
-    (Plp := fun tps => forall elims nps elims',
-        compile_list_pair tps elims = (nps, elims') ->
-        strip_list_pair nps = tps);
+Theorem compile_I_expr : forall ae be s s',
+    compile ae s = (be, s') ->
+    I_expr ae be.
+induction ae using A.expr_rect_mut with
+    (Pl := fun aes => forall bes s s',
+        compile_list aes s = (bes, s') ->
+        Forall2 I_expr aes bes)
+    (Pp := fun ap => forall bp s s',
+        compile_pair ap s = (bp, s') ->
+        I_expr (fst ap) (fst bp) /\ snd ap = snd bp)
+    (Plp := fun aps => forall bps s s',
+        compile_list_pair aps s = (bps, s') ->
+        Forall2 (fun ap bp => I_expr (fst ap) (fst bp) /\ snd ap = snd bp) aps bps);
 intros0 Hcomp;
-simpl in Hcomp; refold_compile; break_bind_state;
-simpl; refold_strip.
-
-(* expr *)
-
-- reflexivity.
-- reflexivity.
-- erewrite IHte1; eauto.
-  erewrite IHte2; eauto.
-- erewrite IHte; eauto.
-- erewrite IHte; eauto.
-  erewrite IHte0; eauto.
-- erewrite IHte; eauto.
-
-(* list *)
-
-- reflexivity.
-- erewrite IHte; eauto.
-  erewrite IHte0; eauto.
-
-(* pair *)
-
-- erewrite IHte; eauto.
-
-(* list pair *)
-
-- reflexivity.
-- erewrite IHte; eauto.
-  erewrite IHte0; eauto.
-
+simpl in Hcomp; refold_compile; try rewrite <- Hcomp in *;
+break_bind_state; try solve [eauto | econstructor; eauto].
 Qed.
 
-Lemma I_value : forall t n,
-    I t n ->
-    T.value t ->
-    N.value n.
-unfold I.
-induction t using T.expr_rect_mut with
-    (Pl := fun ts => forall ns,
-        strip_list ns = ts ->
-        Forall T.value ts ->
-        Forall N.value ns)
-    (Pp := fun tp => forall np,
-        strip_pair np = tp ->
-        T.value (fst tp) ->
-        N.value (fst np))
-    (Plp := fun tps => forall nps,
-        strip_list_pair nps = tps ->
-        Forall (fun p => T.value (fst p)) tps ->
-        Forall (fun p => N.value (fst p)) nps);
-intros0 II Tval.
 
-- invc Tval.
-- invc Tval.
-- invc Tval.
-- invc Tval. destruct n; invc II. refold_strip. constructor. eauto.
-- invc Tval.
-- invc Tval. destruct n; invc II. refold_strip. constructor. eauto.
 
-- destruct ns; invc II. constructor.
-- invc Tval. destruct ns; invc II. constructor; eauto.
+(* I_sim *)
 
-- destruct np; invc II. simpl in *. eauto.
+Ltac i_ctor := intros; constructor; eauto.
+Ltac i_lem H := intros; eapply H; eauto.
 
-- destruct nps; invc II. constructor.
-- invc Tval. destruct nps; invc II. constructor; eauto.
+Lemma unroll_sim : forall rec,
+    forall acase aargs amk_rec ae',
+    forall bcase bargs bmk_rec,
+    A.unroll_elim acase aargs rec amk_rec = Some ae' ->
+    I_expr acase bcase ->
+    Forall2 I_expr aargs bargs ->
+    (forall av bv,
+        I_expr av bv ->
+        I_expr (amk_rec av) (bmk_rec bv)) ->
+    exists be',
+        B.unroll_elim bcase bargs rec bmk_rec = Some be' /\
+        I_expr ae' be'.
+first_induction aargs; destruct rec; intros0 Aunroll IIcase IIargs IImk_rec;
+try discriminate; on (Forall2 _ _ bargs), invc.
+
+- simpl in *. inject_some.
+  eexists. eauto.
+
+- simpl in *. destruct b.
+  + eapply IHaargs; eauto.
+    i_ctor. i_ctor.
+  + eapply IHaargs; eauto.
+    i_ctor.
 Qed.
 
-Lemma I_value' : forall n,
-    T.value (strip n) ->
-    N.value n.
-intros. eapply I_value. 2:eassumption. constructor.
-Qed.
 
-Lemma I_value'_Forall : forall ns,
-    Forall T.value (strip_list ns) ->
-    Forall N.value ns.
-intros.
-remember (strip_list ns) as ts eqn:Heq.
-symmetry in Heq. rewrite strip_list_Forall in Heq.
-list_magic_on (ns, (ts, tt)). eauto using I_value.
-Qed.
+Theorem I_sim : forall AE BE a a' b,
+    Forall2 I_expr AE BE ->
+    I a b ->
+    A.sstep AE a a' ->
+    exists b',
+        B.sstep BE b b' /\
+        I a' b'.
 
-Lemma strip_list_3part : forall xs ys1 y2 ys3,
-    strip_list xs = ys1 ++ y2 :: ys3 ->
-    exists xs1 x2 xs3,
-        xs = xs1 ++ x2 :: xs3 /\
-        strip_list xs1 = ys1 /\
-        strip x2 = y2 /\
-        strip_list xs3 = ys3.
-intros0 Hstrip.
-rewrite strip_list_Forall in *.
-destruct (Forall2_app_inv_r _ _ **) as (xs1 & x2_xs3 & ? & ? & ?).
-invc H0. rename x into x2. rename l into xs3.
+destruct a as [ae al ak | ae];
+intros0 Henv II Astep; [ | solve [invc Astep] ].
 
-exists xs1, x2, xs3.
-do 2 rewrite strip_list_Forall.
-eauto.
-Qed.
+inv Astep; invc II; try on (I_expr _ _), invc.
 
-Lemma nth_error_strip_list : forall ns i t,
-    nth_error (strip_list ns) i = Some t ->
-    exists n,
-        nth_error ns i = Some n /\
-        strip n = t.
-intros0 Hnth.
-assert (strip_list ns = strip_list ns) by eauto.
-rewrite strip_list_Forall in *.
-fwd eapply Forall2_length as Hlen; eauto. symmetry in Hlen.
-fwd eapply length_nth_error_Some as HH; eauto. destruct HH.
-fwd eapply Forall2_nth_error; eauto.
-Qed.
+- fwd eapply Forall2_nth_error_ex with (xs := al) (ys := bl); eauto.
+    break_exists. break_and.
+  assert (A.value v).  { eapply Forall_nth_error; eauto. }
 
-Lemma nth_error_strip_list_pair : forall ns i t,
-    nth_error (strip_list_pair ns) i = Some t ->
-    exists n,
-        nth_error ns i = Some n /\
-        strip_pair n = t.
-intros0 Hnth.
-assert (strip_list_pair ns = strip_list_pair ns) by eauto.
-rewrite strip_list_pair_Forall in *.
-fwd eapply Forall2_length as Hlen; eauto. symmetry in Hlen.
-fwd eapply length_nth_error_Some as HH; eauto. destruct HH.
-fwd eapply Forall2_nth_error; eauto.
-Qed.
+  eexists. split. eapply B.SArg; eauto.
+  on _, eapply_; eauto.
 
-Lemma subst_strip : forall arg free ne te',
-    T.subst (strip arg) (strip_list free) (strip ne) = Some te' ->
-    exists ne',
-        te' = strip ne' /\
-        N.subst arg free ne = Some ne'.
-intros arg free.
-induction ne using N.expr_rect_mut with
-    (Pl := fun nes => forall tes',
-        T.subst_list (strip arg) (strip_list free) (strip_list nes) = Some tes' ->
-        exists nes',
-            tes' = strip_list nes' /\
-            N.subst_list arg free nes = Some nes')
-    (Pp := fun np => forall tp',
-        T.subst_pair (strip arg) (strip_list free) (strip_pair np) = Some tp' ->
-        exists np',
-            tp' = strip_pair np' /\
-            N.subst_pair arg free np = Some np')
-    (Plp := fun nps => forall tps',
-        T.subst_list_pair (strip arg) (strip_list free) (strip_list_pair nps) = Some tps' ->
-        exists nps',
-            tps' = strip_list_pair nps' /\
-            N.subst_list_pair arg free nps = Some nps');
-intros0 Hsub; simpl in *;
-T.refold_subst (strip arg) (strip_list free);
-N.refold_subst arg free;
-refold_strip;
-break_bind_option; inject_some.
+- fwd eapply Forall2_nth_error_ex with (xs := al) (ys := bl); eauto.
+    break_exists. break_and.
+  assert (A.value v).  { eapply Forall_nth_error; eauto. }
 
-- eauto.
+  eexists. split. eapply B.SUpVar; eauto.
+  on _, eapply_; eauto.
 
-- destruct (nth_error_strip_list _ _ _ **) as (? & ? & ?). eauto.
+- on _, invc_using Forall2_3part_inv.
 
-- destruct (IHne1 ?? ***) as (? & ? & Heq1). rewrite Heq1.
-  destruct (IHne2 ?? ***) as (? & ? & Heq2). rewrite Heq2.
-  subst. eexists. simpl. split; cycle 1; reflexivity.
+  eexists. split. eapply B.SCloseStep; eauto.
+  i_ctor. i_ctor. i_ctor. eauto using Forall2_app.
 
-- destruct (IHne ?? ***) as (? & ? & Heq). rewrite Heq.
-  subst. eexists. simpl. split; cycle 1; reflexivity.
+- eexists. split. eapply B.SCloseDone; eauto.
+  on _, eapply_; eauto.
+  all: constructor; eauto.
 
-- destruct (IHne ?? ***) as (? & ? & Heq). rewrite Heq.
-  destruct (IHne0 ?? ***) as (? & ? & Heq0). rewrite Heq0.
-  subst. eexists. simpl. split; cycle 1; reflexivity.
+- on _, invc_using Forall2_3part_inv.
 
-- destruct (IHne ?? ***) as (? & ? & Heq). rewrite Heq.
-  subst. eexists. simpl. split; cycle 1; reflexivity.
+  eexists. split. eapply B.SConstrStep; eauto.
+  i_ctor. i_ctor. i_ctor. eauto using Forall2_app.
 
+- eexists. split. eapply B.SConstrDone; eauto.
+  on _, eapply_; eauto.
+  all: constructor; eauto.
 
-- exists []. eauto.
+- eexists. split. eapply B.SCallL; eauto.
+  i_ctor. i_ctor. i_ctor.
 
-- destruct (IHne ?? ***) as (? & ? & Heq). rewrite Heq.
-  destruct (IHne0 ?? ***) as (? & ? & Heq0). rewrite Heq0.
-  subst. eexists. simpl. split; cycle 1; reflexivity.
+- eexists. split. eapply B.SCallR; eauto.
+  i_ctor. i_ctor. i_ctor.
 
+- fwd eapply Forall2_nth_error_ex with (xs := AE) (ys := BE) as HH; eauto.
+    destruct HH as (bbody & ? & ?).
+  on (I_expr (A.Close _ _) _), invc.
 
-- destruct (IHne ?? ***) as (? & ? & Heq). rewrite Heq.
-  subst. eexists. simpl. split; cycle 1; reflexivity.
+  eexists. split. eapply B.SMakeCall; eauto.
+  i_ctor.
 
+- eexists. split. eapply B.SElimNStep; eauto.
+  i_ctor. i_ctor. i_ctor.
 
-- exists []. eauto.
+- fwd eapply Forall2_nth_error_ex with (xs := cases) (ys := bcases) as HH; eauto.
+    destruct HH as ([bcase brec] & ? & ? & ?). simpl in *.
+    subst brec.
+  on (I_expr _ btarget), invc.
+  fwd eapply unroll_sim as HH; eauto.  { i_ctor. }
+    break_exists. break_and.
 
-- destruct (IHne ?? ***) as (? & ? & Heq). rewrite Heq.
-  destruct (IHne0 ?? ***) as (? & ? & Heq0). rewrite Heq0.
-  subst. eexists. simpl. split; cycle 1; reflexivity.
-
-Qed.
-
-Lemma roll_strip_Call : forall f a,
-    T.Call (strip f) (strip a) = strip (N.Call f a).
-intros. reflexivity.
-Qed.
-
-Lemma unroll_elim_strip : forall case args rec t_mk_rec n_mk_rec te,
-    T.unroll_elim (strip case) (strip_list args) rec t_mk_rec = Some te ->
-    (forall n, t_mk_rec (strip n) = strip (n_mk_rec n)) ->
-    exists ne,
-        N.unroll_elim case args rec n_mk_rec = Some ne /\
-        strip ne = te.
-first_induction args; intros0 Hunr Hmk; destruct rec; try discriminate Hunr;
-simpl in *; refold_strip.
-
-- inject_some. eauto.
-
-- rewrite Hmk in Hunr. do 2 rewrite roll_strip_Call in Hunr.
-  destruct b;
-  destruct (IHargs ?? ?? ?? ?? ?? ** **) as (? & ? & ?);
-  eauto.
-Qed.
-
-Theorem I_sim : forall TE NE t t' n,
-    Forall2 I TE NE ->
-    I t n ->
-    T.step TE t t' ->
-    exists n',
-        N.step NE n n' /\
-        I t' n'.
-unfold I.
-induction t using T.expr_ind''; intros0 Henv II Tstep;
-invc Tstep; simpl in *; refold_strip;
-destruct n; inversion II; clear II; refold_strip.
-
-- on (strip n1 = _), fun H => (destruct n1; simpl in *; refold_strip; invc H).
-  rename free0 into free.
-  assert (N.value n2) by (eauto using I_value').
-  assert (Forall N.value free) by (eauto using I_value'_Forall).
-  fwd eapply Forall2_length; eauto.
-  fwd eapply length_nth_error_Some as HH; eauto.  destruct HH as [ne ?].
-  replace e with (strip ne) in * by (fwd eapply Forall2_nth_error; eauto).
-
-  fwd eapply subst_strip as HH; eauto.  destruct HH as (? & ? & ?). subst.
-  eexists. split. eapply N.MakeCall; eauto.
-  + reflexivity.
-
-- destruct (IHt1 ?? ?? ** ** **) as (n1' & ? & ?).
-  eexists. split. eapply N.CallL; eauto.
-  + simpl. f_equal. assumption.
-
-- destruct (IHt2 ?? ?? ** ** **) as (n2' & ? & ?).
-  eexists. split. eapply N.CallR; eauto.
-  + eauto using I_value.
-  + simpl. f_equal. assumption.
-
-- subst c.
-  destruct (strip_list_3part _ _ _ _ **) as (nvs & ne & nes & ? & ? & ? & ?).
-  subst args.  rewrite strip_list_Forall in *.
-
-  inversion H using Forall_3part_inv. clear H. intros.
-  on _, fun H => (destruct (H ?? ?? ** *** **) as (ne' & ? & ?); clear H).
-
-  eexists. split. eapply N.ConstrStep; eauto.
-  + list_magic_on (nvs, (vs, tt)). firstorder eauto using I_value.
-  + simpl. refold_strip. f_equal.
-    rewrite strip_list_Forall. eapply Forall2_app; eauto.
-
-- destruct (IHt ?? ?? ** *** **) as (n' & ? & ?).
-  eexists. split. eapply N.ElimStep; eauto.
-  + simpl. f_equal. assumption.
-
-- destruct n0; inversion H4. refold_strip. subst tag0. clear H4.
-  rename cases0 into ncases.  rename args0 into nargs. rename n into num.
-  subst cases. subst args.
-  fwd eapply nth_error_strip_list_pair as HH; eauto.
-    destruct HH as ([ncase nrec] & ? & HH). simpl in HH. inject_pair.
-  fwd eapply unroll_elim_strip with (n_mk_rec := fun x => N.ElimN num ncases x) as HH; eauto.
-    destruct HH as (? & ? & ?).
-
-  eexists. split. eapply N.Eliminate; eauto.
-  + eauto using I_value'_Forall.
-  + assumption.
-
-- subst f0.
-  destruct (strip_list_3part _ _ _ _ **) as (nvs & ne & nes & ? & ? & ? & ?).
-  subst free.  rewrite strip_list_Forall in *.
-
-  inversion H using Forall_3part_inv. clear H. intros.
-  on _, fun H => (destruct (H ?? ?? ** *** **) as (ne' & ? & ?); clear H).
-
-  eexists. split. eapply N.CloseStep; eauto.
-  + list_magic_on (nvs, (vs, tt)). firstorder eauto using I_value.
-  + simpl. refold_strip. f_equal.
-    rewrite strip_list_Forall. eapply Forall2_app; eauto.
+  eexists. split. eapply B.SEliminate; eauto.
+  i_ctor.
 Qed.
