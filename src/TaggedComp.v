@@ -132,6 +132,15 @@ Lemma mk_tagged_cases_length : forall ty cases cases',
 intros. eapply mk_tagged_cases'_length; eauto.
 Qed.
 
+Lemma compile_list_Forall : forall aes bes,
+    compile_list aes = Some bes ->
+    Forall2 (fun ae be => compile ae = Some be) aes bes.
+induction aes; destruct bes; intros0 Hcomp;
+simpl in *; break_bind_option; inject_some; try discriminate.
+- constructor.
+- constructor; eauto.
+Qed.
+
 Lemma compile_list_length : forall aes bes,
     compile_list aes = Some bes ->
     length aes = length bes.
@@ -468,6 +477,47 @@ Inductive R (AE : A.env) (BE : B.env) : A.expr -> B.expr -> Prop :=
             (B.Close fn bfree)
 .
 
+Lemma I_expr_R : forall AE BE ae be,
+    compile_list AE = Some BE ->
+    A.value_ok AE ae ->
+    I_expr ae be ->
+    R AE BE ae be.
+induction ae using A.expr_ind'; intros0 Henv Avok II; invc Avok.
+- on (I_expr _ _), invc.
+  constructor; eauto. list_magic_on (args, (bargs, tt)).
+- on (I_expr _ _), invc.
+  pose proof Henv as Henv'. eapply compile_list_Forall in Henv'.
+  fwd eapply Forall2_nth_error_ex with (xs := AE) as HH; eauto.
+    destruct HH as (bbody & ? & ?).
+  econstructor; eauto. list_magic_on (free, (bfree, tt)).
+Qed.
+
+Lemma R_I_expr : forall AE BE ae be,
+    A.value ae ->
+    R AE BE ae be ->
+    I_expr ae be.
+induction ae using A.expr_ind'; intros0 Aval RR; invc Aval; invc RR.
+- constructor; eauto. list_magic_on (args, (bargs, tt)).
+- constructor; eauto. list_magic_on (free, (bfree, tt)).
+Qed.
+
+Lemma compile_list_I_expr : forall aes bes,
+    compile_list aes = Some bes ->
+    Forall2 I_expr aes bes.
+intros0 Hcomp. eapply compile_list_Forall in Hcomp.
+list_magic_on (aes, (bes, tt)). eauto using compile_I_expr.
+Qed.
+
+Lemma compile_cu_I_expr : forall acu bcu,
+    compile_cu acu = Some bcu ->
+    Forall2 I_expr (fst acu) (fst bcu).
+destruct acu as [aes amd]. destruct bcu as [bes bmd].
+intros0 Hcomp. unfold compile_cu in *. break_bind_option. inject_some.
+simpl. eauto using compile_list_I_expr.
+Qed.
+
+
+(*
 Section Preservation.
 
   (* Variable prog : list A.expr * list metadata. *)
@@ -492,3 +542,4 @@ Section Preservation.
   Admitted.
 
 End Preservation.
+*)
