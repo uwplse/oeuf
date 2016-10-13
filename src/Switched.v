@@ -41,9 +41,11 @@ Inductive sstep (E : env) : state -> state -> Prop :=
         sstep E (Run (Deref e off) l k)
                 (Run e l (fun v => Run (Deref v off) l k))
 | SDerefinateConstr : forall tag args off l k v,
+        Forall value args ->
         nth_error args off = Some v ->
         sstep E (Run (Deref (Constr tag args) off) l k) (k v)
 | SDerefinateClose : forall fname free off l k v,
+        Forall value free ->
         nth_error free off = Some v ->
         sstep E (Run (Deref (Close fname free) off) l k) (k v)
 

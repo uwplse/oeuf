@@ -313,6 +313,19 @@ induction xs; intros0 Hx Hy; simpl.
 - invc Hx. constructor; eauto.
 Qed.
 
+Lemma Forall2_nth_error_ex : forall A B (P : A -> B -> Prop) xs ys i x,
+    Forall2 P xs ys ->
+    nth_error xs i = Some x ->
+    exists y,
+        nth_error ys i = Some y /\
+        P x y.
+intros0 Hfa Hnth.
+fwd eapply length_nth_error_Some with (xs := xs) (ys := ys); eauto using Forall2_length.
+break_exists.
+eexists. split; eauto.
+eapply Forall2_nth_error; eauto.
+Qed.
+
 
 (* misc *)
 
