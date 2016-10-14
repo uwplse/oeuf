@@ -1,9 +1,9 @@
 Require Import Common Monads.
 Require Import Metadata.
-Require SelfClose Flattened.
+Require SelfNumbered Flattened.
 
-Module S := SelfClose.
-Module F := Flattened.
+Module A := SelfNumbered.
+Module B := Flattened.
 
 Section compile.
 
@@ -14,64 +14,65 @@ Section compile.
   Definition fresh : compiler_monad nat :=
     get >>= fun n => put (S n) >>= fun _ => ret_state n.
 
-  Fixpoint sequence (l : list F.stmt) : F.stmt :=
+  Fixpoint sequence (l : list B.stmt) : B.stmt :=
     match l with
-    | [] => F.Skip
-    | s :: l' => F.Seq s (sequence l')
+    | [] => B.Skip
+    | s :: l' => B.Seq s (sequence l')
     end.
 
-  Definition compile' (e : S.expr) : compiler_monad (F.stmt * F.expr) :=
-    let fix go (e : S.expr) : compiler_monad (F.stmt * F.expr) :=
-        let fix go_list (l : list S.expr) : compiler_monad (list (F.stmt * F.expr)) :=
+  Definition compile' (e : A.expr) : compiler_monad (B.stmt * B.expr) :=
+    let fix go (e : A.expr) : compiler_monad (B.stmt * B.expr) :=
+        let fix go_list (l : list A.expr) : compiler_monad (list (B.stmt * B.expr)) :=
             match l with
             | [] => ret_state []
             | e :: l' => cons <$> go e <*> go_list l'
             end
         in
         match e with
-        | S.Arg => ret_state (F.Skip, F.Arg)
-        | S.Self => ret_state (F.Skip, F.Self)
-        | S.Deref e' n =>
+        | A.Arg => ret_state (B.Skip, B.Arg)
+        | A.Self => ret_state (B.Skip, B.Self)
+        | A.Deref e' n =>
           go e' >>= fun p =>
           let (s', e') := p in
-          ret_state (s', F.Deref e' n)
-        | S.Call f a =>
+          ret_state (s', B.Deref e' n)
+        | A.Call _ f a =>
           go f >>= fun pf =>
           let (sf, f) := pf in
           go a >>= fun pa =>
           let (sa, a) := pa in
           fresh >>= fun dst =>
-          ret_state (F.Seq sf (F.Seq sa (F.Call dst f a)), F.Temp dst)
-        | S.Constr tag args =>
+          ret_state (B.Seq sf (B.Seq sa (B.Call dst f a)), B.Temp dst)
+        | A.Constr _ tag args =>
           go_list args >>= fun psargs =>
           let (sargs, args) := split psargs in
           fresh >>= fun dst =>
-          ret_state (F.Seq (sequence sargs) (F.MakeConstr dst tag args), F.Temp dst)
-        | S.Switch cases =>
+          ret_state (B.Seq (sequence sargs) (B.MakeConstr dst tag args), B.Temp dst)
+        | A.Switch cases =>
           go_list cases >>= fun pscases =>
-          (* target is implicitly S.Skip *)
-          let (starget, target) := (F.Skip, F.Arg) in
+          (* target is implicitly A.Skip *)
+          let (starget, target) := (B.Skip, B.Arg) in
           fresh >>= fun dst =>
-          ret_state (F.Seq starget (F.Switch (map (fun p => let (s, e) := p : _ * _ in F.Seq s (F.Assign dst e)) pscases) target), F.Temp dst)
-        | S.Close fn args =>
+          ret_state (B.Seq starget (B.Switch (map (fun p => let (s, e) := p : _ * _ in B.Seq s (B.Assign dst e)) pscases) target), B.Temp dst)
+        | A.Close _ fn args =>
           go_list args >>= fun psargs =>
           let (sargs, args) := split psargs in
           fresh >>= fun dst =>
-          ret_state (F.Seq (sequence sargs) (F.MakeClose dst fn args), F.Temp dst)
+          ret_state (B.Seq (sequence sargs) (B.MakeClose dst fn args), B.Temp dst)
+        | A.Copy _ e => go e
         end
     in go e.
 
-  Definition compile (e : S.expr) : F.stmt * F.expr := fst (compile' e 0).
+  Definition compile (e : A.expr) : B.stmt * B.expr := fst (compile' e 0).
 
-  Fixpoint compile_env' (l : list S.expr) : compiler_monad (list (F.stmt * F.expr)) :=
+  Fixpoint compile_env' (l : list A.expr) : compiler_monad (list (B.stmt * B.expr)) :=
     match l with
     | [] => ret_state []
     | e :: l' => cons <$> compile' e <*> compile_env' l'
     end.
 
-  Definition compile_env (l : list S.expr) : list (F.stmt * F.expr) := fst (compile_env' l 0).
+  Definition compile_env (l : list A.expr) : list (B.stmt * B.expr) := fst (compile_env' l 0).
 
-  Definition compile_cu (cu : list S.expr * list metadata) : list (F.stmt * F.expr) * list metadata :=
+  Definition compile_cu (cu : list A.expr * list metadata) : list (B.stmt * B.expr) * list metadata :=
     let '(exprs, metas) := cu in
     let exprs' := compile_env exprs in
     (exprs', metas).
@@ -79,3 +80,11 @@ Section compile.
 End compile.
 
 (* Eval compute in compile_prog Switched.add_prog2. *)
+
+
+(*
+Inductive I_expr : A.expr -> B.expr -> Prop :=
+| IArg : I_expr A.Arg B.Arg
+| ISelf : I_expr A.Self B.Self
+| IDeref : forall 
+        *)
