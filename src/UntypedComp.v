@@ -285,15 +285,6 @@ Proof.
     now rewrite nth_error_hmap_simple_hget.
 Qed.
 
-Theorem forward_simulation :
-  forall tys ty (e e' : S.expr tys ty),
-    S.step e e' ->
-    U.step (compile e) (compile e').
-Proof.
-Admitted.
-
-
-
 
 
 Lemma grab_expr_in :
