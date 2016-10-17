@@ -1,5 +1,6 @@
 Require Import List String HList SourceLang.
 Import ListNotations.
+Require Semantics.
 
 Record compilation_unit :=
   CompilationUnit {
@@ -46,3 +47,20 @@ Inductive initial_state (cu : compilation_unit) : forall tys ty, expr tys ty -> 
     forall ty expr,
       @grab_expr nil (types cu) ty (exprs cu) expr ->
       initial_state cu nil ty expr.
+
+
+Inductive final_state (cu : compilation_unit) : forall tys ty, expr tys ty -> Prop :=
+| final_intr :
+    forall ty expr,
+      SourceLang.value expr ->
+      final_state cu nil ty expr.
+      
+
+Definition source_semantics {ty : type} (cu : compilation_unit) : Semantics.semantics :=
+  @Semantics.Semantics_gen (@SourceLang.expr nil ty) unit
+                           (fun _ => @SourceLang.step nil ty)
+                           (initial_state cu nil ty)
+                           (final_state cu nil ty)
+                           (tt)
+                           (Globalenvs.Genv.to_senv (Globalenvs.Genv.empty_genv unit unit nil)).
+
