@@ -13,9 +13,8 @@ Inductive expr :=
 | Deref (e : expr) (off : nat)
 | Call (dst : nat) (f : expr) (a : expr)
 | Constr (dst : nat) (tag : nat) (args : list expr)
-| Switch (cases : list expr)
+| Switch (dst : nat) (cases : list expr)
 | Close (dst : nat) (f : function_name) (free : list expr)
-| Copy (dst : nat) (e : expr)
 .
 
 Definition env := list expr.
@@ -27,9 +26,19 @@ Definition renumber dst e :=
     | Deref e off => Deref e off
     | Call _ f a => Call dst f a
     | Constr _ tag args => Constr dst tag args
-    | Switch cases => Switch cases
+    | Switch _ cases => Switch dst cases
     | Close _ fname free => Close dst fname free
-    | Copy _ e => Copy dst e
+    end.
+
+Definition number e :=
+    match e with
+    | Arg => 0
+    | Self => 0
+    | Deref _ _ => 0
+    | Call dst _ _ => dst
+    | Constr dst _ _ => dst
+    | Switch dst _ => dst
+    | Close dst _ _ => dst
     end.
 
 Inductive value : expr -> Prop :=
@@ -47,10 +56,6 @@ Inductive sstep (E : env) : state -> state -> Prop :=
         sstep E (Run Arg a s k) (k a)
 | SSelf : forall a s k,
         sstep E (Run Self a s k) (k s)
-
-| SCopy : forall dst e a s k,
-        sstep E (Run (Copy dst e) a s k)
-                (Run e a s (fun v => k (renumber dst v)))
 
 | SDerefStep : forall e off a s k,
         ~ value e ->
@@ -99,10 +104,10 @@ Inductive sstep (E : env) : state -> state -> Prop :=
         sstep E (Run (Call dst (Close dst' fname free) arg) a s k)
                 (Run body arg (Close dst' fname free) (fun v => k (renumber dst v)))
 
-| SSwitchinate : forall dst cases tag args s k case,
+| SSwitchinate : forall dst dst' cases tag args s k case,
         nth_error cases tag = Some case ->
-        sstep E (Run (Switch cases) (Constr dst tag args) s k)
-                (Run case (Constr dst tag args) s k)
+        sstep E (Run (Switch dst cases) (Constr dst' tag args) s k)
+                (Run case (Constr dst tag args) s (fun v => k (renumber dst v)))
 .
 
 Definition sstar E := StepLib.sstar (sstep E).
@@ -127,9 +132,8 @@ Definition expr_rect_mut
     (HDeref :   forall e off, P e -> P (Deref e off))
     (HCall :    forall dst f a, P f -> P a -> P (Call dst f a))
     (HConstr :  forall dst tag args, Pl args -> P (Constr dst tag args))
-    (HSwitch :  forall cases, Pl cases -> P (Switch cases))
+    (HSwitch :  forall dst cases, Pl cases -> P (Switch dst cases))
     (HClose :   forall dst f free, Pl free -> P (Close dst f free))
-    (HCopy :    forall dst e, P e -> P (Copy dst e))
     (Hnil :     Pl [])
     (Hcons :    forall e es, P e -> Pl es -> Pl (e :: es))
     (e : expr) : P e :=
@@ -145,9 +149,8 @@ Definition expr_rect_mut
         | Deref e off => HDeref e off (go e)
         | Call dst f a => HCall dst f a (go f) (go a)
         | Constr dst tag args => HConstr dst tag args (go_list args)
-        | Switch cases => HSwitch cases (go_list cases)
+        | Switch dst cases => HSwitch dst cases (go_list cases)
         | Close dst f free => HClose dst f free (go_list free)
-        | Copy dst e => HCopy dst e (go e)
         end in go e.
 
 (* Useful wrapper for `expr_rect_mut with (Pl := Forall P)` *)
@@ -157,10 +160,9 @@ Definition expr_ind' (P : expr -> Prop)
     (HDeref :   forall e off, P e -> P (Deref e off))
     (HCall :    forall dst f a, P f -> P a -> P (Call dst f a))
     (HConstr :  forall dst tag args, Forall P args -> P (Constr dst tag args))
-    (HSwitch :  forall cases, Forall P cases -> P (Switch cases))
+    (HSwitch :  forall dst cases, Forall P cases -> P (Switch dst cases))
     (HClose :   forall dst f free, Forall P free -> P (Close dst f free))
-    (HCopy :    forall dst e, P e -> P (Copy dst e))
     (e : expr) : P e :=
     ltac:(refine (@expr_rect_mut P (Forall P)
-        HArg HSelf HDeref HCall HConstr HSwitch HClose HCopy _ _ e); eauto).
+        HArg HSelf HDeref HCall HConstr HSwitch HClose _ _ e); eauto).
 

@@ -25,10 +25,7 @@ Definition compile : A.expr -> compiler_monad B.expr :=
         | A.Deref e off => B.Deref <$> go e <*> ret_state off
         | A.Call f a => B.Call <$> next <*> go f <*> go a
         | A.Constr tag args => B.Constr <$> next <*> ret_state tag <*> go_list args
-        | A.Switch cases =>
-            next >>= fun dst =>
-            go_list cases >>= fun cases' =>
-            ret_state (B.Switch (map (B.Copy dst) cases'))
+        | A.Switch cases => B.Switch <$> next <*> go_list cases
         | A.Close fname free => B.Close <$> next <*> ret_state fname <*> go_list free
         end in go.
 
@@ -79,9 +76,8 @@ Inductive I_expr : A.expr -> B.expr -> Prop :=
         Forall2 I_expr aargs bargs ->
         I_expr (A.Constr tag aargs) (B.Constr dst tag bargs)
 | ISwitch : forall acases dst bcases,
-        Forall2 (fun ae be =>
-            exists be', be = B.Copy dst be' /\ I_expr ae be') acases bcases ->
-        I_expr (A.Switch acases) (B.Switch bcases)
+        Forall2 I_expr acases bcases ->
+        I_expr (A.Switch acases) (B.Switch dst bcases)
 | IClose : forall fname afree dst bfree,
         Forall2 I_expr afree bfree ->
         I_expr (A.Close fname afree) (B.Close dst fname bfree)
@@ -163,11 +159,6 @@ induction ae using A.expr_rect_mut with
 intros0 Hcomp;
 simpl in Hcomp; refold_compile; try rewrite <- Hcomp in *;
 break_bind_state; try solve [eauto | econstructor; eauto].
-
-- (* switch *)
-  econstructor. rewrite <- Forall2_map_r.
-  specialize (IHae ?? ?? ?? **).
-  list_magic_on (cases, (x0, tt)).
 Qed.
 
 
@@ -197,7 +188,7 @@ Theorem I_sim : forall AE BE a a' b,
     I a b ->
     A.sstep AE a a' ->
     exists b',
-        B.splus BE b b' /\
+        B.sstep BE b b' /\
         I a' b'.
 
 destruct a as [ae aa as_ ak | ae];
@@ -205,66 +196,65 @@ intros0 Henv II Astep; [ | solve [invc Astep] ].
 
 inv Astep; invc II; try on (I_expr _ be), invc.
 
-- eexists. split. eapply B.SPlusOne, B.SArg.
+- eexists. split. eapply B.SArg.
   on _, eapply_; eauto.
 
-- eexists. split. eapply B.SPlusOne, B.SSelf.
+- eexists. split. eapply B.SSelf.
   on _, eapply_; eauto.
 
-- eexists. split. eapply B.SPlusOne, B.SDerefStep; eauto.
+- eexists. split. eapply B.SDerefStep; eauto.
   i_ctor. i_ctor. i_ctor.
 
 - on (I_expr (A.Constr _ _) _), invc.
   fwd eapply Forall2_nth_error_ex as HH; eauto.  destruct HH as (bv & ? & ?).
   assert (A.value v).  { eapply Forall_nth_error; eauto. }
 
-  eexists. split. eapply B.SPlusOne, B.SDerefinateConstr; eauto.
+  eexists. split. eapply B.SDerefinateConstr; eauto.
   on _, eapply_; eauto.
 
 - on (I_expr (A.Close _ _) _), invc.
   fwd eapply Forall2_nth_error_ex as HH; eauto.  destruct HH as (bv & ? & ?).
   assert (A.value v).  { eapply Forall_nth_error; eauto. }
 
-  eexists. split. eapply B.SPlusOne, B.SDerefinateClose; eauto.
+  eexists. split. eapply B.SDerefinateClose; eauto.
   on _, eapply_; eauto.
 
 - on _, invc_using Forall2_3part_inv.
 
-  eexists. split. eapply B.SPlusOne, B.SConstrStep; eauto.
+  eexists. split. eapply B.SConstrStep; eauto.
   i_ctor. i_ctor. i_ctor. eauto using Forall2_app.
 
-- eexists. split. eapply B.SPlusOne, B.SConstrDone; eauto.
+- eexists. split. eapply B.SConstrDone; eauto.
   on _, eapply_; eauto.
   all: constructor; eauto.
 
 - on _, invc_using Forall2_3part_inv.
 
-  eexists. split. eapply B.SPlusOne, B.SCloseStep; eauto.
+  eexists. split. eapply B.SCloseStep; eauto.
   i_ctor. i_ctor. i_ctor. eauto using Forall2_app.
 
-- eexists. split. eapply B.SPlusOne, B.SCloseDone; eauto.
+- eexists. split. eapply B.SCloseDone; eauto.
   on _, eapply_; eauto.
   all: constructor; eauto.
 
-- eexists. split. eapply B.SPlusOne, B.SCallL; eauto.
+- eexists. split. eapply B.SCallL; eauto.
   i_ctor. i_ctor. i_ctor.
 
-- eexists. split. eapply B.SPlusOne, B.SCallR; eauto.
+- eexists. split. eapply B.SCallR; eauto.
   i_ctor. i_ctor. i_ctor.
 
 - on (I_expr (A.Close _ _) _), invc.
   fwd eapply Forall2_nth_error_ex with (xs := AE) (ys := BE) as HH; eauto.
     destruct HH as (bbody & ? & ?).
 
-  eexists. split. eapply B.SPlusOne, B.SMakeCall; eauto.
+  eexists. split. eapply B.SMakeCall; eauto.
   i_ctor; try solve [constructor; eauto].
 
 - fwd eapply Forall2_nth_error_ex with (xs := cases) (ys := bcases) as HH; eauto.
-    destruct HH as (bcase & ? & (bcase' & ? & ?)).
+    destruct HH as (bcase & ? & ?).
+  on (A.value (A.Constr _ _)), invc.
   on (I_expr (A.Constr _ _) _), invc.
 
-  eexists. split.
-    { eapply B.SPlusCons. eapply B.SSwitchinate; eauto. fold (B.splus BE).
-      eapply B.SPlusOne.  eapply B.SCopy; eauto. }
-  i_ctor. i_ctor.
+  eexists. split. eapply B.SSwitchinate; eauto.
+  i_ctor; try solve [constructor; eauto].
 Qed.
