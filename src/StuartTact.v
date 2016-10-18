@@ -2,6 +2,7 @@ Require Import List.
 Import ListNotations.
 Require Import Omega.
 Require Import StructTact.StructTactics.
+Require Import Forall3.
 
 
 Ltac generalize_all :=
@@ -154,6 +155,47 @@ rewrite nth_error_Some in *.
 omega.
 Qed.
 
+Lemma Forall3_length : forall X Y Z (P : X -> Y -> Z -> Prop) xs ys zs,
+    Forall3 P xs ys zs ->
+    length xs = length ys /\ length xs = length zs /\ length ys = length zs.
+induction xs; intros0 Hfa; invc Hfa; simpl; firstorder eauto.
+Qed.
+
+Lemma Forall3_nth_error : forall X Y Z (P : X -> Y -> Z -> Prop) xs ys zs,
+    Forall3 P xs ys zs ->
+    (forall i x y z,
+        nth_error xs i = Some x ->
+        nth_error ys i = Some y ->
+        nth_error zs i = Some z ->
+        P x y z).
+induction xs; intros0 Hfa; invc Hfa; intros0 Hnx Hny Hnz.
+- destruct i; discriminate Hnx.
+- destruct i; simpl in Hnx, Hny, Hnz.
+  + congruence.
+  + eapply IHxs; eauto.
+Qed.
+
+Lemma nth_error_Forall3 : forall X Y Z (P : X -> Y -> Z -> Prop) xs ys zs,
+    length xs = length ys ->
+    length xs = length zs ->
+    (forall i x y z,
+        nth_error xs i = Some x ->
+        nth_error ys i = Some y ->
+        nth_error zs i = Some z ->
+        P x y z) ->
+    Forall3 P xs ys zs.
+induction xs; intros0 Hlen1 Hlen2 Hnth;
+destruct ys; invc Hlen1;
+destruct zs; invc Hlen2.
+
+- constructor.
+- constructor.
+  + eapply Hnth with (i := 0); reflexivity.
+  + eapply IHxs; eauto.
+    intros. eapply Hnth with (i := S i); simpl; eauto.
+Qed.
+
+
 Lemma Forall2_nth_error_Some : forall X Y (P : X -> Y -> Prop) xs ys x i,
     Forall2 P xs ys ->
     nth_error xs i = Some x ->
@@ -190,6 +232,17 @@ Ltac collect_length_hyps :=
             | [ |- _ ] => 
                     fwd eapply Forall2_length with (xs := xs_) (ys := ys_) (1 := H)
             end
+    | [ H : Forall3 _ ?xs_ ?ys_ ?zs_ |- _ ] =>
+            lazymatch goal with
+            | [ H1 : length xs_ = length ys_,
+                H2 : length xs_ = length zs_,
+                H3 : length ys_ = length zs_ |- _ ] => fail (* already known *)
+            | [ |- _ ] =>
+                    let HH := fresh in
+                    fwd eapply Forall3_length
+                        with (xs := xs_) (ys := ys_) (zs := zs_) (1 := H) as HH;
+                    destruct HH as (? & ? & ?)
+            end
     end.
 
 Ltac find_matching_entries HH i :=
@@ -224,12 +277,22 @@ Ltac collect_entry_hyps i :=
             require_no_match (P x y);
             assert (P x y) by
                 (eapply Forall2_nth_error with (1 := Hfa) (2 := Hnx) (3 := Hny))
+    | [ Hfa : Forall3 ?P ?xs ?ys ?zs,
+        Hnx : nth_error ?xs i = Some ?x,
+        Hny : nth_error ?ys i = Some ?y,
+        Hnz : nth_error ?zs i = Some ?z |- _ ] =>
+            require_no_match (P x y z);
+            assert (P x y z) by
+                (eapply Forall3_nth_error
+                    with (1 := Hfa) (2 := Hnx) (3 := Hny) (4 := Hnz))
     end.
 
 Ltac list_magic_using HH :=
     let i := fresh "i" in
     collect_length_hyps;
-    (eapply nth_error_Forall || (eapply nth_error_Forall2; [congruence | ..]));
+    (eapply nth_error_Forall ||
+        (eapply nth_error_Forall2; [congruence | ..]) ||
+        (eapply nth_error_Forall3; [congruence | congruence | ..]));
     intro i; intros;
     specialize (HH i);
     collect_length_hyps; find_matching_entries HH i; collect_entry_hyps i;
@@ -266,6 +329,12 @@ Ltac build_list_magic_hyp_type_inner lists G :=
         Hnthy : nth_error ?ys i = Some ?y |- _ ] =>
             simple refine (P x y -> (_ : Prop));
             clear Hfa
+    | [ Hfa : Forall3 ?P ?xs ?ys,
+        Hnthx : nth_error ?xs i = Some ?x,
+        Hnthy : nth_error ?ys i = Some ?y,
+        Hnthz : nth_error ?zs i = Some ?z |- _ ] =>
+            simple refine (P x y z -> (_ : Prop));
+            clear Hfa
     end;
     lazymatch G with
     | Forall ?P ?xs =>
@@ -278,6 +347,13 @@ Ltac build_list_magic_hyp_type_inner lists G :=
             | [ Hnthx : nth_error xs i = Some ?x,
                 Hnthy : nth_error ys i = Some ?y |- _ ] =>
                     exact (P x y)
+            end
+    | Forall3 ?P ?xs ?ys ?zs =>
+            lazymatch goal with
+            | [ Hnthx : nth_error xs i = Some ?x,
+                Hnthy : nth_error ys i = Some ?y,
+                Hnthz : nth_error zs i = Some ?z |- _ ] =>
+                    exact (P x y z)
             end
     end.
 
