@@ -111,6 +111,11 @@ Inductive I_expr (l : list (nat * B.value)) : A.expr -> B.stmt -> B.expr -> Prop
                  (B.Temp dst)
 .
 
+        (*
+Inductive I (AE : A.env) (BE : B.genv) : A.state -> B.state -> Prop :=
+| IRun : forall ae as_ aa ak bl bs bk
+        *)
+
 
 
 Theorem compile_I_expr : forall l ae bs be,

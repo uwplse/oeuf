@@ -17,14 +17,12 @@ Require Import Arith.
 Require Import StructTact.StructTactics.
 Require Import StructTact.Util.
 
-Definition ident := nat.
-
-Definition function_name := ident.
+Definition function_name := nat.
 
 Inductive expr :=
 | Arg : expr
 | Self : expr
-| Temp : ident -> expr
+| Temp : nat -> expr
 | Deref : expr -> nat -> expr
 .
 
@@ -52,9 +50,9 @@ Record env := Env { tmps : list (nat * value);
                     self : value }.
 
 Inductive cont: Type :=
-  | Kstop: expr -> cont                (**r stop program execution *)
-  | Kseq: stmt -> cont -> cont          (**r execute stmt, then cont *)
-  | Kcall: ident (* dst *) -> expr (* return expr *) -> env -> cont -> cont. (**r return to caller *)
+  | Kstop                           (**r stop program execution *)
+  | Kseq (s : stmt) (k : cont)      (**r execute s, then k *)
+  | Kcall (dst : nat) (ret : expr) (old_E : env) (k : cont).    (**r return to caller *)
 
 Definition set_tmp (tmps : list (nat * value)) (n : nat) (v : value) : list (nat * value) := 
   assoc_set Nat.eq_dec tmps n v.
@@ -123,7 +121,8 @@ Definition initial_state
            (main_name : function_name) 
            (main_body : stmt) 
            (main_ret : expr) : state := 
-  (Env [] (Close main_name []) (Close main_name []), main_body, Kstop main_ret).
+  let E := Env [] (Close main_name []) (Close main_name []) in
+  (E, main_body, Kcall 0 main_ret E Kstop).
 (*
 Inductive initial_state (main_name : function_name)(main_body : stmt)(main_ret : expr) : state -> Prop :=
 | init_s :
