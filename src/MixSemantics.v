@@ -75,6 +75,23 @@ Proof.
   intuition. apply plus_star; auto.
 Qed.
 
+Lemma fsim_simulation' :
+  forall i (s1 : Semantics.state L1) 
+         (s1' : Semantics.state L1),
+    @Semantics.step L1 (@Semantics.globalenv L1)  s1 s1' ->
+    forall s2,
+      S i s1 s2 ->
+      (exists i' s2', Plus L2 s2 E0 s2' /\ S i' s1' s2') \/
+      (exists i', fsim_order L1 L2 S i' i /\ S i' s1' s2).
+Proof.
+  intros. exploit fsim_simulation; eauto.
+  intros [i' [s2' [A B]]]. intuition.
+  left; exists i'; exists s2'; auto.
+  inv H2.
+  right; exists i'; auto.
+  left; exists i'; exists s2'; split; auto. econstructor; eauto.
+Qed.
+
 
 Lemma simulation_plus:
   forall s1 s1',
@@ -85,35 +102,23 @@ Lemma simulation_plus:
 Proof.
   induction 1 using Semantics.plus_ind2; intros.
 (* base case *)
-  exploit Semantics.fsim_simulation'; eauto.
-Admitted.
-(*
+  exploit fsim_simulation'; eauto.
   intros [A | [i' A]].
   left; auto. 
   right; exists i'; intuition.
 (* inductive case *)
-  exploit fsim_simulation'; eauto. intros [[i' [s2' [A B]]] | [i' [A [B C]]]].
-  exploit simulation_star. apply plus_star; eauto. eauto.
+  exploit fsim_simulation'; eauto. intros [[i' [s2' [A B]]] | [i' [A B]]].
+  exploit simulation_star.
+  apply Semantics.plus_star; eauto. eauto.
   intros [i'' [s2'' [P Q]]].
   left; exists i''; exists s2''; split; auto. eapply plus_star_trans; eauto.
-  exploit IHplus; eauto. intros [[i'' [s2'' [P Q]]] | [i'' [P [Q R]]]].
+  exploit IHplus; eauto.
+  intros [[i'' [s2'' [P Q]]] | [i'' [P Q]]].
   subst. simpl. left; exists i''; exists s2''; auto.
   subst. simpl. right; exists i''; intuition.
   eapply t_trans; eauto. eapply t_step; eauto.
 Qed.
-*)
 
-
-Lemma fsim_simulation' :
-  forall i (s1 : Semantics.state L1) 
-         (s1' : Semantics.state L1),
-    @Semantics.step L1 (@Semantics.globalenv L1)  s1 s1' ->
-    forall s2,
-      S i s1 s2 ->
-      (exists i' s2', Plus L2 s2 E0 s2' /\ S i' s1' s2') \/
-      (exists i', fsim_order L1 L2 S i' i /\ S i' s1' s2).
-Proof.
-Admitted.
 
 End SIMULATION_SEQUENCES.
 
