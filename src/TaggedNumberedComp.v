@@ -534,10 +534,20 @@ Section Simulation.
 
   Hypothesis TRANSF : compile_cu prog = tprog.
 
-
   Theorem fsim :
     Semantics.forward_simulation (A.semantics prog) (TaggedNumbered.semantics tprog).
   Proof.
+    eapply Semantics.forward_simulation_step.
+    simpl. admit. (* flesh out defns *)
+    intros. admit. (* flesh out defns *)
+    intros. admit. (* flesh out defns *)
+
+    intros.
+    simpl in H.
+    instantiate (1 := I) in H0.
+    eapply I_sim in H; eauto.
+    admit. (* we'll need this *)
+    
   Admitted.
   
 End Simulation.
