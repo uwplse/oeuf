@@ -3,6 +3,7 @@ Require Import Metadata.
 Require String.
 Require SelfClose ValueFlag.
 Require Import ListLemmas.
+Require Import HigherValue.
 
 Require Import Psatz.
 
@@ -69,13 +70,13 @@ Qed.
 
 
 
-Inductive I_value : A.expr -> B.value -> Prop :=
+Inductive I_value : A.expr -> value -> Prop :=
 | IvConstr : forall tag aargs bargs,
         Forall2 I_value aargs bargs ->
-        I_value (A.Constr tag aargs) (B.Constr tag bargs)
+        I_value (A.Constr tag aargs) (Constr tag bargs)
 | IvClose : forall tag afree bfree,
         Forall2 I_value afree bfree ->
-        I_value (A.Close tag afree) (B.Close tag bfree).
+        I_value (A.Close tag afree) (Close tag bfree).
 
 Inductive I_expr : A.expr -> B.expr -> Prop :=
 | IArg : I_expr A.Arg B.Arg
@@ -94,14 +95,14 @@ Inductive I_expr : A.expr -> B.expr -> Prop :=
 
 | IConstrVal : forall tag aargs bargs,
         Forall2 I_value aargs bargs ->
-        I_expr (A.Constr tag aargs) (B.Value (B.Constr tag bargs))
+        I_expr (A.Constr tag aargs) (B.Value (Constr tag bargs))
 | IConstrMk : forall tag aargs bargs,
         Forall2 I_expr aargs bargs ->
         I_expr (A.Constr tag aargs) (B.MkConstr tag bargs)
 
 | ICloseVal : forall tag afree bfree,
         Forall2 I_value afree bfree ->
-        I_expr (A.Close tag afree) (B.Value (B.Close tag bfree))
+        I_expr (A.Close tag afree) (B.Value (Close tag bfree))
 | ICloseMk : forall tag afree bfree,
         Forall2 I_expr afree bfree ->
         I_expr (A.Close tag afree) (B.MkClose tag bfree)
@@ -180,7 +181,7 @@ Qed.
 Hint Resolve I_value_I_expr.
 
 
-Definition compile_value : A.expr -> B.value :=
+Definition compile_value : A.expr -> value :=
     let fix go e :=
         let fix go_list es :=
             match es with
@@ -188,12 +189,12 @@ Definition compile_value : A.expr -> B.value :=
             | e :: es => go e :: go_list es
             end in
         match e with
-        | A.Constr tag args => B.Constr tag (go_list args)
-        | A.Close fname free => B.Close fname (go_list free)
-        | _ => B.Constr 0 []
+        | A.Constr tag args => Constr tag (go_list args)
+        | A.Close fname free => Close fname (go_list free)
+        | _ => Constr 0 []
         end in go.
 
-Definition compile_value_list : list A.expr -> list B.value :=
+Definition compile_value_list : list A.expr -> list value :=
     let go := compile_value in
     let fix go_list es :=
         match es with
