@@ -44,6 +44,12 @@ Inductive state :=
 | Run (e : expr) (a : value) (s : value) (k : value -> state)
 | Stop (v : value).
 
+Definition state_expr s :=
+    match s with
+    | Run e _ _ _ => e
+    | Stop v => Value v
+    end.
+
 Inductive sstep (E : env) : state -> state -> Prop :=
 | SArg : forall a s k,
         sstep E (Run Arg a s k) (k a)
@@ -166,3 +172,45 @@ Definition expr_ind' (P : expr -> Prop)
     ltac:(refine (@expr_rect_mut P (Forall P)
         HValue HArg HSelf HDeref HCall HMkConstr HSwitch HMkClose _ _ e); eauto).
 
+
+
+Definition is_value_dec e : { is_value e } + { ~ is_value e }.
+destruct e; try solve [left; constructor | right; inversion 1].
+Defined.
+
+
+Definition cases_arent_values : expr -> Prop :=
+    let fix go e :=
+        let fix go_list es :=
+            match es with
+            | [] => True
+            | e :: es => go e /\ go_list es
+            end in
+        match e with
+        | Value _ => True
+        | Arg => True
+        | Self => True
+        | Deref e _ => go e
+        | Call f a => go f /\ go a
+        | MkConstr _ args => go_list args
+        | Switch cases =>
+                Forall (fun e => ~ is_value e) cases /\
+                go_list cases
+        | MkClose _ free => go_list free
+        end in go.
+
+Definition cases_arent_values_list : list expr -> Prop :=
+    let go := cases_arent_values in
+    let fix go_list es :=
+        match es with
+        | [] => True
+        | e :: es => go e /\ go_list es
+        end in go_list.
+
+Ltac refold_cases_arent_values :=
+    fold cases_arent_values_list in *.
+
+Lemma cases_arent_values_list_is_Forall : forall es,
+    cases_arent_values_list es <-> Forall cases_arent_values es.
+induction es; simpl; split; inversion 1; constructor; firstorder eauto.
+Qed.

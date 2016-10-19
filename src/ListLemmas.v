@@ -253,6 +253,11 @@ Lemma Forall2_Forall_exists : forall A B (P : A -> B -> Prop) xs ys,
 induction xs; destruct ys; intros0 Hfa; invc Hfa; eauto.
 Qed.
 
+Lemma Forall2_same : forall A (P : A -> A -> Prop) xs,
+    Forall2 P xs xs <-> Forall (fun x => P x x) xs.
+induction xs; split; intro; try on _, invc; firstorder eauto.
+Qed.
+
 Lemma Forall_app_inv : forall A (P : A -> Prop) xs1 xs2
         (Q : _ -> _ -> _ -> _ -> Prop),
     (Forall P xs1 -> Forall P xs2 -> Q A P xs1 xs2) ->
@@ -848,6 +853,45 @@ Lemma sliding_zero : forall A (xs1 xs2 : list A),
 intros. split.
 - simpl. reflexivity.
 - simpl. reflexivity.
+Qed.
+
+Lemma skipn_all : forall A n (xs : list A),
+    n >= length xs ->
+    skipn n xs = [].
+first_induction xs; intros0 Hlen.
+- destruct n; reflexivity.
+- destruct n; simpl in *.  { lia. }
+  eapply IHxs. lia.
+Qed.
+
+Lemma skipn_all' : forall A n (xs : list A),
+    skipn n xs = [] ->
+    n >= length xs.
+first_induction xs; intros0 Hlen.
+- destruct n; simpl in *; try discriminate; lia.
+- destruct n; simpl in *; try discriminate.
+  specialize (IHxs ?? **).
+  lia.
+Qed.
+
+Lemma sliding_all : forall A (xs1 xs2 : list A),
+    length xs1 >= length xs2 ->
+    sliding (length xs1) xs1 xs2 xs1.
+intros. split.
+- rewrite firstn_all; auto.
+- rewrite skipn_all, skipn_all; eauto.
+Qed.
+
+Lemma sliding_all_eq : forall A (xs1 xs2 xs3 : list A),
+    sliding (length xs1) xs1 xs2 xs3 ->
+    length xs1 >= length xs2 ->
+    xs3 = xs1.
+intros. fwd eapply sliding_all; eauto.
+on >@sliding, invc.
+on >@sliding, invc.
+rewrite <- firstn_skipn with (n := length xs1) (l := xs1).
+rewrite <- firstn_skipn with (n := length xs1) (l := xs3).
+congruence.
 Qed.
 
 
