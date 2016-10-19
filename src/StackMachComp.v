@@ -43,45 +43,39 @@ Ltac refold_compile :=
     fold compile_list in *.
 
 
-Inductive I_expr (stk : list value) : A.expr -> list B.insn -> Prop :=
-| IArg : I_expr stk A.Arg [B.Arg]
-| ISelf : I_expr stk A.Self [B.Self]
+Inductive I_expr : (* stk *) list value -> A.expr -> list B.insn -> Prop :=
+| IArg : I_expr [] A.Arg [B.Arg]
+| ISelf : I_expr [] A.Self [B.Self]
 
 | IDeref1 : forall e code off,
         I_expr [] e code ->
-        I_expr stk (A.Deref e off) [B.Block code; B.Deref off]
+        I_expr [] (A.Deref e off) [B.Block code; B.Deref off]
 | IDeref2 : forall v off,
-        nth_error stk 0 = Some v ->
-        I_expr stk (A.Deref (A.Value v) off) [B.Deref off]
+        I_expr [v] (A.Deref (A.Value v) off) [B.Deref off]
 
 | ICall1 : forall f fcode a acode,
         I_expr [] f fcode ->
         I_expr [] a acode ->
-        I_expr stk (A.Call f a) [B.Block fcode; B.Block acode; B.Call]
+        I_expr [] (A.Call f a) [B.Block fcode; B.Block acode; B.Call]
 | ICall2 : forall fv a acode,
-        nth_error stk 0 = Some fv ->
         I_expr [] a acode ->
-        I_expr stk (A.Call (A.Value fv) a) [B.Block acode; B.Call]
+        I_expr [fv] (A.Call (A.Value fv) a) [B.Block acode; B.Call]
 | ICall3 : forall fv av,
-        nth_error stk 1 = Some fv ->
-        nth_error stk 0 = Some av ->
-        I_expr stk (A.Call (A.Value fv) (A.Value av)) [B.Call]
+        I_expr [av; fv] (A.Call (A.Value fv) (A.Value av)) [B.Call]
 
 | IMkConstr : forall tag vs es codes,
-        rev (firstn (length vs) stk) = vs ->
         Forall2 (I_expr []) es codes ->
-        I_expr stk (A.MkConstr tag (map A.Value vs ++ es))
-                   (map B.Block codes ++ [B.MkConstr tag (length vs + length es)])
+        I_expr (rev vs) (A.MkConstr tag (map A.Value vs ++ es))
+                        (map B.Block codes ++ [B.MkConstr tag (length vs + length es)])
 
 | ISwitch : forall acases bcases,
         Forall2 (I_expr []) acases bcases ->
-        I_expr stk (A.Switch acases) [B.Switch bcases]
+        I_expr [] (A.Switch acases) [B.Switch bcases]
 
 | IMkClose : forall fname vs es codes,
-        rev (firstn (length vs) stk) = vs ->
         Forall2 (I_expr []) es codes ->
-        I_expr stk (A.MkClose fname (map A.Value vs ++ es))
-                   (map B.Block codes ++ [B.MkClose fname (length vs + length es)])
+        I_expr (rev vs) (A.MkClose fname (map A.Value vs ++ es))
+                        (map B.Block codes ++ [B.MkClose fname (length vs + length es)])
 .
 
 Inductive I : A.state -> B.state -> Prop :=
@@ -97,6 +91,7 @@ Inductive I : A.state -> B.state -> Prop :=
 
 
 
+(*
 Lemma stack_app_I_expr : forall stk stk' a b,
     I_expr stk a b ->
     I_expr (stk ++ stk') a b.
@@ -121,6 +116,7 @@ Lemma stack_nil_I_expr : forall stk a b,
 intros. change stk with ([] ++ stk). eapply stack_app_I_expr. auto.
 Qed.
 Hint Resolve stack_nil_I_expr.
+*)
 
 
 
@@ -230,6 +226,7 @@ Qed.
 
 Ltac i_ctor := intros; constructor; eauto.
 Ltac i_lem H := intros; eapply H; eauto.
+Ltac rw_stk := on (_ = B.stack _), fun H => rewrite <- H.
 
 Theorem I_sim : forall AE BE a a' b,
     Forall2 (I_expr []) AE BE ->
@@ -249,16 +246,18 @@ all: try solve [on (I_expr _ (A.Value _) _), inv].
 all: try solve [exfalso; eauto].
 
 - (* Arg *)
-  eexists. split. eapply B.SArg.
+  eexists. split. eapply B.SArg; eauto.
   on _, eapply_.
 
 - (* Self *)
-  eexists. split. eapply B.SSelf.
+  eexists. split. eapply B.SSelf; eauto.
   on _, eapply_.
 
 - (* DerefStep *)
   eexists. split. eapply B.SBlock.
-  i_ctor. i_ctor. i_ctor.
+  i_ctor.
+  i_ctor.  simpl. rw_stk.
+  i_ctor.
 
 - (* DerefinateConstr *)
   eexists. split. eapply B.SDerefinateConstr; eauto.
@@ -279,8 +278,8 @@ all: try solve [exfalso; eauto].
       rewrite app_assoc. rewrite <- map_app.
     replace (_ + S _) with (length (vs0 ++ [v]) + length es); cycle 1.
       { rewrite app_length. simpl. lia. }
+    simpl. rw_stk. change (v :: rev vs0) with (rev [v] ++ rev vs0). rewrite <- rev_app_distr.
   i_ctor.
-    rewrite app_length. simpl. rewrite Nat.add_comm. simpl. congruence.
 
 - (* ConstrDone *)
   assert (Forall (fun e => ~ A.is_value e) es0) by eauto.
@@ -292,7 +291,8 @@ all: try solve [exfalso; eauto].
   fwd eapply A_unwrap_list_map_value_eq; eauto. subst vs0.
 
   eexists. split. eapply B.SConstrDone.
-  remvar (rev _) as vs'. on _, eapply_. assumption.
+    { rw_stk. rewrite rev_length. reflexivity. }
+  rw_stk. rewrite rev_involutive.  on _, eapply_.
 
 - (* CloseStep *)
   assert (Forall (fun e => ~ A.is_value e) es0) by eauto.
@@ -305,10 +305,10 @@ all: try solve [exfalso; eauto].
       rewrite app_assoc. rewrite <- map_app.
     replace (_ + S _) with (length (vs0 ++ [v]) + length es); cycle 1.
       { rewrite app_length. simpl. lia. }
+    simpl. rw_stk. change (v :: rev vs0) with (rev [v] ++ rev vs0). rewrite <- rev_app_distr.
   i_ctor.
-    rewrite app_length. simpl. rewrite Nat.add_comm. simpl. congruence.
 
-- (* ConstrDone *)
+- (* CloseDone *)
   assert (Forall (fun e => ~ A.is_value e) es0) by eauto.
   fwd eapply A_unwrap_list_is_value as HH; eauto.  invc_using Forall_app_inv HH.
   destruct es0; cycle 1.
@@ -318,15 +318,16 @@ all: try solve [exfalso; eauto].
   fwd eapply A_unwrap_list_map_value_eq; eauto. subst vs0.
 
   eexists. split. eapply B.SCloseDone.
-  remvar (rev _) as vs'. on _, eapply_. assumption.
+    { rw_stk. rewrite rev_length. reflexivity. }
+  rw_stk. rewrite rev_involutive.  on _, eapply_.
 
 - (* CallL *)
   eexists. split. eapply B.SBlock.
-  i_ctor. i_ctor. i_ctor.
+  i_ctor. i_ctor. simpl. rw_stk. i_ctor.
 
 - (* CallR *)
   eexists. split. eapply B.SBlock.
-  i_ctor. i_ctor. i_ctor.
+  i_ctor. i_ctor. simpl. rw_stk. i_ctor.
 
 - (* MakeCall *)
   fwd eapply Forall2_nth_error_ex as HH; eauto.  destruct HH as (bbody & ? & ?).
