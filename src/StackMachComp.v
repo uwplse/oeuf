@@ -153,6 +153,13 @@ inversion 1; inversion 1.
 Qed.
 Hint Resolve I_expr_not_value.
 
+Lemma Forall_I_expr_not_value : forall stk a b,
+    Forall2 (I_expr stk) a b ->
+    Forall (fun a => ~ A.is_value a) a.
+intros. list_magic_on (a, (b, tt)).
+Qed.
+Hint Resolve Forall_I_expr_not_value.
+
 Lemma I_expr_not_value' : forall stk a b,
     I_expr stk a b ->
     A.is_value a ->
@@ -160,6 +167,66 @@ Lemma I_expr_not_value' : forall stk a b,
 intros. eapply I_expr_not_value; eauto.
 Qed.
 Hint Resolve I_expr_not_value'.
+
+Lemma A_unwrap_list_is_value : forall es vs,
+    A.unwrap_list es = Some vs ->
+    Forall A.is_value es.
+induction es; intros; unfold A.unwrap_list in *; simpl in *.
+- constructor.
+- repeat (break_match; try discriminate). inject_some. constructor; eauto.
+  destruct a; try discriminate. constructor.
+Qed.
+
+Lemma A_unwrap_list_map_value : forall es vs,
+    A.unwrap_list es = Some vs ->
+    es = map A.Value vs.
+induction es; destruct vs; unfold A.unwrap_list; intros; simpl in *;
+repeat (break_match; try discriminate); try discriminate.
+- reflexivity.
+- inject_some. f_equal; eauto.
+  destruct a; try discriminate; simpl in *. congruence.
+Qed.
+
+Lemma A_unwrap_list_map_value_eq : forall vs vs',
+    A.unwrap_list (map A.Value vs) = Some vs' ->
+    vs = vs'.
+induction vs; destruct vs'; unfold A.unwrap_list; intros; simpl in *;
+repeat (break_match; try discriminate); try discriminate.
+- reflexivity.
+- inject_some. f_equal; eauto.
+Qed.
+
+Lemma A_map_value_is_value : forall vs,
+    Forall A.is_value (map A.Value vs).
+induction vs; simpl; constructor; eauto.  constructor.
+Qed.
+Hint Resolve A_map_value_is_value.
+
+Lemma annoying_list_lemma : forall A P (xs1 xs2 : list A) ys1 y2 ys3,
+    xs1 ++ xs2 = ys1 ++ y2 :: ys3 ->
+    Forall P xs1 ->
+    Forall (fun x => ~ P x) xs2 ->
+    Forall P ys1 ->
+    ~ P y2 ->
+    xs1 = ys1 /\ xs2 = y2 :: ys3.
+induction xs1; intros0 Happ Hxs1 Hxs2 Hys1 Hy2; simpl in *.
+
+- destruct ys1; eauto.
+  destruct xs2; try discriminate.
+  do 2 on (Forall _ (_ :: _)), invc.
+  simpl in *. invc Happ.
+  exfalso. eauto.
+
+- on (Forall _ (_ :: _)), invc.
+  destruct ys1; simpl in *.
+    { invc Happ. exfalso. eauto. }
+  on (Forall _ (_ :: _)), invc.
+  injection Happ; intros.
+  fwd eapply IHxs1; eauto. break_and.
+  subst a. split; congruence.
+Qed.
+
+
 
 Ltac i_ctor := intros; constructor; eauto.
 Ltac i_lem H := intros; eapply H; eauto.
@@ -202,16 +269,56 @@ all: try solve [exfalso; eauto].
   on _, eapply_.
 
 - (* ConstrStep *)
-  admit.
+  assert (Forall (fun e => ~ A.is_value e) es0) by eauto.
+  fwd eapply annoying_list_lemma; eauto.  break_and.
+  subst es0.  on (Forall2 _ (_ :: _) _), invc.  simpl in *.
+
+  eexists. split. eapply B.SBlock.
+  i_ctor. i_ctor.
+    change (A.Value v :: es) with (map A.Value [v] ++ es).
+      rewrite app_assoc. rewrite <- map_app.
+    replace (_ + S _) with (length (vs0 ++ [v]) + length es); cycle 1.
+      { rewrite app_length. simpl. lia. }
+  i_ctor.
+    rewrite app_length. simpl. rewrite Nat.add_comm. simpl. congruence.
 
 - (* ConstrDone *)
-  admit.
+  assert (Forall (fun e => ~ A.is_value e) es0) by eauto.
+  fwd eapply A_unwrap_list_is_value as HH; eauto.  invc_using Forall_app_inv HH.
+  destruct es0; cycle 1.
+    { repeat on (Forall _ (_ :: _)), invc. exfalso. eauto. }
+  on (Forall2 _ [] _), invc.
+  simpl in *.  rewrite Nat.add_0_r in *.  rewrite app_nil_r in *.
+  fwd eapply A_unwrap_list_map_value_eq; eauto. subst vs0.
+
+  eexists. split. eapply B.SConstrDone.
+  remvar (rev _) as vs'. on _, eapply_. assumption.
 
 - (* CloseStep *)
-  admit.
+  assert (Forall (fun e => ~ A.is_value e) es0) by eauto.
+  fwd eapply annoying_list_lemma; eauto.  break_and.
+  subst es0.  on (Forall2 _ (_ :: _) _), invc.  simpl in *.
 
-- (* CloseDone *)
-  admit.
+  eexists. split. eapply B.SBlock.
+  i_ctor. i_ctor.
+    change (A.Value v :: es) with (map A.Value [v] ++ es).
+      rewrite app_assoc. rewrite <- map_app.
+    replace (_ + S _) with (length (vs0 ++ [v]) + length es); cycle 1.
+      { rewrite app_length. simpl. lia. }
+  i_ctor.
+    rewrite app_length. simpl. rewrite Nat.add_comm. simpl. congruence.
+
+- (* ConstrDone *)
+  assert (Forall (fun e => ~ A.is_value e) es0) by eauto.
+  fwd eapply A_unwrap_list_is_value as HH; eauto.  invc_using Forall_app_inv HH.
+  destruct es0; cycle 1.
+    { repeat on (Forall _ (_ :: _)), invc. exfalso. eauto. }
+  on (Forall2 _ [] _), invc.
+  simpl in *.  rewrite Nat.add_0_r in *.  rewrite app_nil_r in *.
+  fwd eapply A_unwrap_list_map_value_eq; eauto. subst vs0.
+
+  eexists. split. eapply B.SCloseDone.
+  remvar (rev _) as vs'. on _, eapply_. assumption.
 
 - (* CallL *)
   eexists. split. eapply B.SBlock.
@@ -230,4 +337,4 @@ all: try solve [exfalso; eauto].
   fwd eapply Forall2_nth_error_ex as HH; eauto.  destruct HH as (bcase & ? & ?).
   eexists. split. eapply B.SSwitchinate; eauto.
   i_ctor.
-Admitted.
+Qed.
