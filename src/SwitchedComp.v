@@ -252,11 +252,6 @@ Inductive I (AE : AS.env) (BE : B.env) : A.state -> B.state -> Prop :=
 
 
 
-Lemma Forall2_same : forall A (P : A -> A -> Prop) xs,
-    Forall2 P xs xs <-> Forall (fun x => P x x) xs.
-induction xs; split; intro; try on _, invc; firstorder eauto.
-Qed.
-
 Theorem compile_I_expr : forall AE BE ae be,
     compile ae = be ->
     I_expr AE BE ae be.

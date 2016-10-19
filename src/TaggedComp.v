@@ -303,25 +303,6 @@ Qed.
 Ltac i_ctor := intros; constructor; eauto.
 Ltac i_lem H := intros; eapply H; eauto.
 
-Lemma skipn_all : forall A n (xs : list A),
-    n >= length xs ->
-    skipn n xs = [].
-first_induction xs; intros0 Hlen.
-- destruct n; reflexivity.
-- destruct n; simpl in *.  { lia. }
-  eapply IHxs. lia.
-Qed.
-
-Lemma skipn_all' : forall A n (xs : list A),
-    skipn n xs = [] ->
-    n >= length xs.
-first_induction xs; intros0 Hlen.
-- destruct n; simpl in *; try discriminate; lia.
-- destruct n; simpl in *; try discriminate.
-  specialize (IHxs ?? **).
-  lia.
-Qed.
-
 Lemma unroll'_sim :
     forall acase actor aargs amk_rec aidx ae',
     forall bcase bargs brec bmk_rec,
