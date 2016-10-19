@@ -42,8 +42,8 @@ Inductive state :=
 | Stop (v : value).
 
 Inductive sstep (E : env) : state -> state -> Prop :=
-| SReturn : forall f k  v,
-        stack f = [v] ->
+| SReturn : forall f k  v vs,
+        stack f = v :: vs ->
         sstep E (Run [] f k)
                 (k v)
 
