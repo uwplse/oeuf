@@ -656,7 +656,7 @@ Lemma compile_not_value : forall a b,
 induction a using A.expr_ind'; intros0 Hcomp; simpl in *; refold_compile; subst; inversion 1.
 Qed.
 
-Theorem compile_cases_arent_values : forall a b,
+Lemma compile_cases_arent_values : forall a b,
     compile a = b ->
     B.cases_arent_values b.
 induction a using A.expr_rect_mut with
@@ -671,6 +671,17 @@ simpl; B.refold_cases_arent_values; eauto.
   rewrite compile_list_is_map.
   rewrite <- Forall_map.
   list_magic_on (cases, tt). eauto using compile_not_value.
+Qed.
+
+Theorem compile_cases_no_values : forall a b,
+    compile a = b ->
+    B.no_values b.
+induction a using A.expr_rect_mut with
+    (Pl := fun as_ => forall bs,
+        compile_list as_ = bs ->
+        B.no_values_list bs);
+intros0 Hcomp; simpl in *; refold_compile; subst;
+simpl; B.refold_no_values; eauto.
 Qed.
 
 
