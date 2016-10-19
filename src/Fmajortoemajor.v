@@ -279,6 +279,10 @@ Proof.
   subst t.
   eapply step_sim_nil_trace; eauto.
 Qed.
-  
+
+Theorem fsim :
+  forward_simulation (Fmajor.semantics prog) (Emajor.semantics tprog).
+Proof.
+Admitted.
   
 End PRESERVATION.

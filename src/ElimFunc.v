@@ -330,6 +330,27 @@ Inductive sstep (E : env) : state -> state -> Prop :=
                 (Run e' l k)
 .
 
+Require Import Metadata.
+
+Definition prog_type : Type := list expr * list metadata.
+
+Require Semantics.
+
+Inductive initial_state (prog : prog_type) : state -> Prop :=.
+
+Inductive final_state (prog : prog_type) : state -> Prop :=.
+
+Definition initial_env (prog : prog_type) : env := nil. (* TODO: write this *)
+
+Definition semantics (prog : prog_type) : Semantics.semantics :=
+  @Semantics.Semantics_gen state env
+                 (sstep)
+                 (initial_state prog)
+                 (final_state prog)
+                 (initial_env prog)
+                 (Globalenvs.Genv.to_senv (Globalenvs.Genv.empty_genv unit unit nil)).
+
+
 Inductive sstar (E : env) : state -> state -> Prop :=
 | SStarNil : forall e, sstar E e e
 | SStarCons : forall e e' e'',

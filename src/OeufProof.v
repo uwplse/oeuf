@@ -7,6 +7,24 @@ Require Import MixSemantics.
 
 Require Import SourceLang.
 
+Require UntypedComp.
+Require LiftedComp.
+Require TaggedComp.
+Require TaggedNumberedComp.
+Require ElimFuncComp.
+Require ElimFuncComp2.
+Require ElimFuncComp3.
+Require SwitchedComp.
+Require SelfCloseComp.
+Require SelfNumberedComp.
+Require FlattenedComp.
+(* HERE *)
+Require Fmajortoemajor.
+Require Emajortodmajor.
+Require Dmajortodflatmajor.
+Require Dflatmajortocmajor.
+Require Cmajortominor.
+
 
 Require Import compcert.lib.Coqlib.
 Require Import compcert.ia32.Asm.
@@ -15,6 +33,7 @@ Require Import compcert.common.Smallstep.
 Require Import compcert.common.Errors.
 Require Import compcert.common.Events.
 Require Import compcert.common.Globalenvs.
+Require Import compcert.driver.Compiler.
 
 Require Import StructTact.StructTactics.
 Require Import StructTact.Util.
@@ -31,6 +50,109 @@ Section Simulation.
     forall ty,
       mix_forward_simulation (@CompilationUnit.source_semantics ty prog) (Asm.semantics tprog).
   Proof.
+    (* SourceLang to Untyped *)
+    unfold transf_to_asm in TRANSF.
+    unfold Compiler.apply_partial in *.
+    break_match_hyp; try congruence.
+    simpl in Heqr. inversion Heqr. clear Heqr.
+    intro.
+    eapply compose_notrace_mix_forward_simulation.
+    eapply UntypedComp.fsim; try eassumption.
+
+
+    (* Break down structure of compiler *)
+    unfold transf_untyped_to_asm in *.
+    unfold Compiler.apply_partial in *.
+    repeat (break_match_hyp; try congruence).
+    unfold transf_untyped_to_cminor in *.
+    unfold Compiler.apply_partial in *.
+    unfold Compiler.apply_total in *.
+    repeat (break_match_hyp; try congruence).
+    repeat match goal with
+           | [ H : OK _ = OK _ |- _ ] => inversion H; clear H
+           end.
+    unfold option_to_res in *.
+    repeat (break_match_hyp; try congruence).
+    repeat match goal with
+           | [ H : OK _ = OK _ |- _ ] => inversion H; clear H
+           end.
+    subst p16 p17 p18 p19.
+
+    (* Untyped to Lifted *)
+    eapply compose_notrace_mix_forward_simulation.
+    set (p1' := LiftedComp.compile_cu p1).
+
+    eapply LiftedComp.fsim; try eassumption.
+    instantiate (1 := p1'). subst p1'. reflexivity.
+
+    (* Lifted to Tagged *)
+    eapply compose_notrace_mix_forward_simulation.
+    eapply TaggedComp.fsim; try eassumption.
+
+    (* Tagged to TaggedNumbered *)
+    eapply compose_notrace_mix_forward_simulation.
+    eapply TaggedNumberedComp.fsim; try eassumption.
+    
+    (* TaggedNumbered to ElimFunc *)
+    eapply compose_notrace_mix_forward_simulation.
+    eapply ElimFuncComp.fsim; try eassumption.
+
+    (* ElimFunc to ElimFunc2 *)
+    eapply compose_notrace_mix_forward_simulation.
+    eapply ElimFuncComp2.fsim; try eassumption.
+
+    (* ElimFunc2 to ElimFunc3 *)
+    eapply compose_notrace_mix_forward_simulation.
+    eapply ElimFuncComp3.fsim; try eassumption.
+
+    (* ElimFunc3 to Switched *)
+    eapply compose_notrace_mix_forward_simulation.
+    eapply SwitchedComp.fsim; try eassumption.
+    
+    (* Switched to SelfClose *)
+    eapply compose_notrace_mix_forward_simulation.
+    eapply SelfCloseComp.fsim; try eassumption.
+
+    (* SelfClose to SelfNumbered *)
+    eapply compose_notrace_mix_forward_simulation.
+    eapply SelfNumberedComp.fsim; try eassumption.
+
+    (* SelfNumbered to Flattened *)
+    eapply compose_notrace_mix_forward_simulation.
+    eapply FlattenedComp.fsim; try eassumption.
+    
+    (* Flattened to Fmajor *)
+    eapply compose_mix_trace_forward_simulation.
+    eapply FmajorComp.fsim; try eassumption.
+
+    (* Fmajor to Emajor *)
+    eapply compose_forward_simulation.
+    eapply Fmajortoemajor.fsim; try eassumption.
+
+    (* Emajor to Dmajor *)
+    eapply compose_forward_simulation.
+    eapply Emajortodmajor.fsim; try eassumption.
+    
+    (* Dmajor to Dflatmajor *)
+    eapply compose_forward_simulation.
+    eapply Dmajortodflatmajor.fsim; try eassumption.
+
+    admit.
+    (* Dflatmajor to Cmajor *)
+    eapply compose_forward_simulation.
+    eapply Dflatmajortocmajor.fsim; try eassumption.
+
+    admit. admit.
+
+    (* Cmajor to Cminor *)
+    eapply compose_forward_simulation.
+    eapply Cmajortominor.fsim; try eassumption.
+
+    (* Cminor to Asm *)
+    rewrite print_identity in *. subst p0.
+    eapply transf_cminor_program_correct in TRANSF.
+    destruct TRANSF. eassumption.
+    
   Admitted.
 
   Theorem Oeuf_step_sim :

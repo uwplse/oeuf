@@ -516,30 +516,36 @@ intros0 Hcomp. unfold compile_cu in *. break_bind_option. inject_some.
 simpl. eauto using compile_list_I_expr.
 Qed.
 
+Require Import Semantics.
 
-(*
 Section Preservation.
 
-  (* Variable prog : list A.expr * list metadata. *)
-  (* Variable tprog : list B.expr * list metadata. *)
+  Variable prog : list A.expr * list metadata.
+  Variable tprog : list B.expr * list metadata.
 
-  (* Hypothesis TRANSF : compile_cu prog = Some tprog. *)
+  Hypothesis TRANSF : compile_cu prog = Some tprog.
 
-  Inductive match_states (AE : A.env) (BE : B.env) : A.expr -> B.expr -> Prop :=
-  | match_st :
-      forall a b,
-        R AE BE a b ->
-        match_states AE BE a b.
+  
+  (* Inductive match_states (AE : A.env) (BE : B.env) : A.expr -> B.expr -> Prop := *)
+  (* | match_st : *)
+  (*     forall a b, *)
+  (*       R AE BE a b -> *)
+  (*       match_states AE BE a b. *)
 
-  Lemma step_sim :
-    forall AE BE a b,
-      match_states AE BE a b ->
-      forall a',
-        A.step AE a a' ->
-        exists b',
-          splus (B.step BE) b b'.
+  (* Lemma step_sim : *)
+  (*   forall AE BE a b, *)
+  (*     match_states AE BE a b -> *)
+  (*     forall a', *)
+  (*       A.step AE a a' -> *)
+  (*       exists b', *)
+  (*         splus (B.step BE) b b'. *)
+  (* Proof. *)
+  (* Admitted. *)
+
+  Theorem fsim :
+    forward_simulation (Lifted.semantics prog) (Tagged.semantics tprog).
   Proof.
   Admitted.
 
 End Preservation.
-*)
+

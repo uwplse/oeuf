@@ -231,11 +231,24 @@ first_induction args; destruct rec; intros0 Hlen; simpl in Hlen; try discriminat
 Qed.
 
 
+Require Semantics.
 
-(* ??? *)
 
-Inductive initial_state (prog : list expr * list metadata) : expr -> Prop :=
-| initial_intro :
-    forall expr,
-      In expr (fst prog) ->
-      initial_state prog expr.
+Inductive initial_state (prog : list expr * list metadata) : state -> Prop :=.
+(* | initial_intro : *)
+(*     forall expr, *)
+(*       In expr (fst prog) -> *)
+(*       initial_state prog expr. *)
+
+Inductive final_state (prog : list expr * list metadata) : state -> Prop :=.
+
+Definition initial_env (prog : list expr * list metadata) : env := nil. (* TODO: write this *)
+
+Definition semantics (prog : list expr * list metadata) : Semantics.semantics :=
+  @Semantics.Semantics_gen state env
+                 (sstep)
+                 (initial_state prog)
+                 (final_state prog)
+                 (initial_env prog)
+                 (Globalenvs.Genv.to_senv (Globalenvs.Genv.empty_genv unit unit nil)).
+

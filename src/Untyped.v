@@ -5,6 +5,8 @@ Require Import Utopia.
 
 Require Import Metadata.
 
+Require Import Semantics.
+
 Inductive expr :=
 | Var (n : nat)
 | Lam (body : expr)
@@ -161,6 +163,16 @@ Inductive initial_state (prog : list expr * list metadata) : expr -> Prop :=
       In expr (fst prog) ->
       initial_state prog expr.
 
+Inductive final_state (prog : list expr * list metadata) : expr -> Prop :=.
+
+
+Definition semantics (prog : list expr * list metadata) : semantics :=
+  @Semantics_gen expr unit
+                 (fun _ => step)
+                 (initial_state prog)
+                 (final_state prog)
+                 (tt)
+                 (Globalenvs.Genv.to_senv (Globalenvs.Genv.empty_genv unit unit nil)).
 
 
 (* Demo *)
