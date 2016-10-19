@@ -1126,6 +1126,28 @@ induction e using expr_ind''; intros0 II.
   list_magic_on (free, (free', tt)).
 Qed.
 
+Require Import Metadata.
+
+(* ugly return type of compile_cu *)
+Definition prog_type : Type := list expr * list metadata * list (list (expr * rec_info)) * list String.string.
+
+Require Semantics.
+
+Inductive initial_state (prog : prog_type) : state -> Prop :=.
+
+Inductive final_state (prog : prog_type) : state -> Prop :=.
+
+Definition initial_env (prog : prog_type) : env := nil. (* TODO: write this *)
+
+Definition semantics (prog : prog_type) : Semantics.semantics :=
+  @Semantics.Semantics_gen state env
+                 (sstep)
+                 (initial_state prog)
+                 (final_state prog)
+                 (initial_env prog)
+                 (Globalenvs.Genv.to_senv (Globalenvs.Genv.empty_genv unit unit nil)).
+
+
 (*
 Theorem step_sstep : forall E e e' s,
     step E e e' ->

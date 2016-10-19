@@ -1334,4 +1334,10 @@ Proof.
     repeat (econstructor; eauto).
 Qed.
 
+Theorem fsim :
+  forward_simulation (Dmajor.semantics prog) (Dflatmajor.semantics prog).
+Proof.
+Admitted.
+
+
 End PRESERVATION.

@@ -6,6 +6,7 @@ Require Import Program.
 
 Require Import HList.
 Require Import CompilationUnit.
+Require Import Semantics.
 
 Require SourceLang.
 Require Untyped.
@@ -330,6 +331,12 @@ Proof.
 
   eapply grab_expr_in; eauto.
 Qed.
+
+Theorem fsim:
+  forall cu tprog,
+    @compile_cu nil (types cu) (Metadata.init_metadata cu) = tprog ->
+    forall ty,
+      forward_simulation (@CompilationUnit.source_semantics ty cu) (Untyped.semantics tprog).
+Proof.
+Admitted.
   
-    
-      

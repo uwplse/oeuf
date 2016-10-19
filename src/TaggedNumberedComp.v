@@ -524,3 +524,20 @@ inv Astep; invc II; try on (I_expr _ _), invc.
   eexists. split. eapply B.SEliminate; eauto.
   i_ctor.
 Qed.
+
+Require Semantics.
+
+Section Simulation.
+
+  Variable prog : list A.expr * list metadata.
+  Variable tprog : list B.expr * list metadata * list (list (B.expr * B.rec_info)) * list String.string.
+
+  Hypothesis TRANSF : compile_cu prog = tprog.
+
+
+  Theorem fsim :
+    Semantics.forward_simulation (A.semantics prog) (TaggedNumbered.semantics tprog).
+  Proof.
+  Admitted.
+  
+End Simulation.

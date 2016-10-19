@@ -454,6 +454,11 @@ Proof.
   erewrite funsig_transf; eauto.  
 Qed.  
 
+Theorem fsim :
+  forward_simulation (Cmajor.semantics prog) (Cminor.semantics tprog).
+Proof.
+Admitted.
+
 End PRESERVATION.
 
 Theorem transf_program_correct:

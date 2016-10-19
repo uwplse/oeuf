@@ -6,6 +6,7 @@ Require Import Monads.
 Require Import StuartTact.
 Require Import ListLemmas.
 Require Import Metadata.
+Require Import Semantics.
 
 Definition function_name := nat.
 
@@ -450,3 +451,15 @@ Inductive initial_state (prog : list expr * list metadata) : expr -> Prop :=
     forall expr,
       In expr (fst prog) ->
       initial_state prog expr.
+
+Inductive final_state (prog : list expr * list metadata) : expr -> Prop :=.
+
+Definition initial_env (prog : list expr * list metadata) : env := nil. (* TODO: write this *)
+
+Definition semantics (prog : list expr * list metadata) : semantics :=
+  @Semantics_gen expr env
+                 (step)
+                 (initial_state prog)
+                 (final_state prog)
+                 (initial_env prog)
+                 (Globalenvs.Genv.to_senv (Globalenvs.Genv.empty_genv unit unit nil)).

@@ -1538,6 +1538,11 @@ Proof.
   eauto.
 Qed.
 
+Theorem fsim :
+  forward_simulation (Emajor.semantics prog) (Dmajor.semantics tprog).
+Proof.
+Admitted.
+
 (* We're going to have to solve one problem: *)
 (* How do we compose a forward simulation with what we currently have? *)
 
