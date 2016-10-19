@@ -5,12 +5,7 @@ Require Import ListLemmas.
 Require Import Utopia.
 Require Import Monads.
 
-Definition function_name := nat.
-
-Inductive value :=
-| Constr (tag : nat) (args : list value)
-| Close (f : function_name) (free : list value)
-.
+Require Export HigherValue.
 
 Inductive expr :=
 | Value (v : value)
