@@ -4,7 +4,7 @@ Require Import Psatz.
 Require Import Utopia.
 Require Import Monads.
 
-Definition function_name := nat.
+Require Export HigherValue.
 
 Inductive insn :=
 | Block (code : list insn)
@@ -18,11 +18,6 @@ Inductive insn :=
 .
 
 Definition env := list (list insn).
-
-Inductive value :=
-| Constr (tag : nat) (args : list value)
-| Close (f : function_name) (free : list value)
-.
 
 
 (* Continuation-based step relation *)

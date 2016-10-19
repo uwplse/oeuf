@@ -209,3 +209,38 @@ Lemma cases_arent_values_list_is_Forall : forall es,
     cases_arent_values_list es <-> Forall cases_arent_values es.
 induction es; simpl; split; inversion 1; constructor; firstorder eauto.
 Qed.
+
+
+Definition no_values : expr -> Prop :=
+    let fix go e :=
+        let fix go_list es :=
+            match es with
+            | [] => True
+            | e :: es => go e /\ go_list es
+            end in
+        match e with
+        | Value _ => False
+        | Arg => True
+        | Self => True
+        | Deref e _ => go e
+        | Call f a => go f /\ go a
+        | MkConstr _ args => go_list args
+        | Switch cases => go_list cases
+        | MkClose _ free => go_list free
+        end in go.
+
+Definition no_values_list : list expr -> Prop :=
+    let go := no_values in
+    let fix go_list es :=
+        match es with
+        | [] => True
+        | e :: es => go e /\ go_list es
+        end in go_list.
+
+Ltac refold_no_values :=
+    fold no_values_list in *.
+
+Lemma no_values_list_is_Forall : forall es,
+    no_values_list es <-> Forall no_values es.
+induction es; simpl; split; inversion 1; constructor; firstorder eauto.
+Qed.
