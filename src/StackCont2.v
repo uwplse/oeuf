@@ -46,8 +46,8 @@ Definition top f :=
 
 
 Inductive cont :=
-| Ktail (code : list insn) (k : cont)
-| Kret (code : list insn) (f : frame) (k : cont)
+| Ktail (code : list insn) (stk : list value) (k : cont)
+| Kret (arg : value) (self : value) (k : cont)
 | Kstop.
 
 Inductive state :=
@@ -57,61 +57,64 @@ Inductive state :=
 Inductive sstep (E : env) : state -> state -> Prop :=
 | SBlock : forall code is f k,
         sstep E (Run (Block code :: is) f k)
-                (Run code f (Ktail is k))
+                (Run code (Frame (arg f) (self f) []) (Ktail is (stack f) k))
 
 | SArg : forall f k,
+        stack f = [] ->
         sstep E (Run [Arg] f k)
                 (Run [] (push f (arg f)) k)
 | SSelf : forall f k,
+        stack f = [] ->
         sstep E (Run [Self] f k)
                 (Run [] (push f (self f)) k)
 
 | SDerefinateConstr : forall off f k  tag args v,
-        length (stack f) >= 1 ->
-        top f = Constr tag args ->
+        stack f = [Constr tag args] ->
         nth_error args off = Some v ->
         sstep E (Run [Deref off] f k)
                 (Run [] (pop_push f 1 v) k)
 | SDerefinateClose : forall off f k  fname free v,
-        length (stack f) >= 1 ->
-        top f = Close fname free ->
+        stack f = [Close fname free] ->
         nth_error free off = Some v ->
         sstep E (Run [Deref off] f k)
                 (Run [] (pop_push f 1 v) k)
 
 | SConstrDone : forall tag nargs f k,
-        length (stack f) >= nargs ->
+        length (stack f) = nargs ->
         sstep E (Run [MkConstr tag nargs] f k)
-                (Run [] (pop_push f nargs (Constr tag (rev (firstn nargs (stack f))))) k)
+                (Run [] (pop_push f nargs (Constr tag (rev (stack f)))) k)
 | SCloseDone : forall fname nfree f k,
-        length (stack f) >= nfree ->
+        length (stack f) = nfree ->
         sstep E (Run [MkClose fname nfree] f k)
-                (Run [] (pop_push f nfree (Close fname (rev (firstn nfree (stack f))))) k)
+                (Run [] (pop_push f nfree (Close fname (rev (stack f)))) k)
 
-| SMakeCall : forall f k  fname free body,
-        length (stack f) >= 2 ->
-        nth_error (stack f) 1 = Some (Close fname free) ->
+| SMakeCall : forall f k  fname free body argv,
+        stack f = [argv; Close fname free] ->
         nth_error E fname = Some body ->
         sstep E (Run [Call] f k)
-                (Run body (Frame (top f) (Close fname free) [])
-                    (Kret [] (pop f 2) k))
+                (Run body (Frame argv (Close fname free) [])
+                    (Kret (arg f) (self f) k))
 
 (* NB: `Switch` still has an implicit target of `Arg` *)
 | SSwitchinate : forall cases f k  tag args case,
+        stack f = [] ->
         arg f = Constr tag args ->
         nth_error cases tag = Some case ->
         sstep E (Run [Switch cases] f k)
                 (Run case f k)
 
-| SContTail : forall code f k,
-        sstep E (Run [] f (Ktail code k))
-                (Run code f k)
-| SContRet : forall code f f' k,
-        sstep E (Run [] f (Kret code f' k))
-                (Run code (push f' (top f)) k)
-| SContStop : forall f,
+| SContTail : forall code f stk k v,
+        stack f = [v] ->
+        sstep E (Run [] f (Ktail code stk k))
+                (Run code (Frame (arg f) (self f) (v :: stk)) k)
+| SContRet : forall f a s k v,
+        stack f = [v] ->
+        sstep E (Run [] f (Kret a s k))
+                (Run [] (Frame a s [v]) k)
+| SContStop : forall f v,
+        stack f = [v] ->
         sstep E (Run [] f Kstop)
-                (Stop (top f))
+                (Stop v)
 .
 
 Inductive sstar (E : env) : state -> state -> Prop :=

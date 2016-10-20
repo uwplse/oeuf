@@ -1,14 +1,14 @@
 Require Import Common Monads.
 Require Import Metadata.
 Require String.
-Require StackCont StackFlat.
+Require StackCont StackCont2.
 Require Import ListLemmas.
 Require Import HigherValue.
 
 Require Import Psatz.
 
 Module A := StackCont.
-Module B := StackFlat.
+Module B := StackCont2.
 
 
 Definition compile_one : A.insn -> B.insn :=
@@ -73,38 +73,42 @@ Inductive I_insn : A.insn -> B.insn -> Prop :=
 | IMkClose : forall fname nfree, I_insn (A.MkClose fname nfree) (B.MkClose fname nfree)
 .
 
-Inductive I_cont : A.frame -> A.cont -> B.frame -> B.cont -> Prop :=
-| IkStop : forall arg self stk,
-        I_cont (A.Frame arg self stk)
-               A.Kstop
-               (B.Frame arg self stk)
-               B.Kstop
+Inductive I_frame : A.frame -> B.frame -> Prop :=
+| IFrame : forall arg self stack,
+        I_frame (A.Frame arg self stack) (B.Frame arg self stack).
+Hint Constructors I_frame.
 
-| IkTail : forall arg self stk1 stk2 stk3  acode ak  bcode bk,
+(* Summary of the cumulative effect of several Kret's followed by a Ktail or Kstop *)
+Inductive B_flat_cont :=
+| BKfRet (code : list B.insn) (f : B.frame) (k : B_flat_cont)
+| BKfStop.
+
+Fixpoint B_cont_flatten f k :=
+    match k with
+    | B.Ktail code stk k' =>
+            let f' := B.Frame (B.arg f) (B.self f) stk in
+            BKfRet code f' (B_cont_flatten f' k')
+    | B.Kret a s k' =>
+            let f' := B.Frame a s (B.stack f) in
+            B_cont_flatten f' k'
+    | B.Kstop =>
+            BKfStop
+    end.
+
+Inductive I_cont : A.cont -> B_flat_cont -> Prop :=
+| IkRet : forall acode af ak  bcode bf bk,
         Forall2 I_insn acode bcode ->
-        I_cont (A.Frame arg self stk2)
-               ak
-               (B.Frame arg self (stk2 ++ stk3))
-               bk ->
-        I_cont (A.Frame arg self stk1)
-               (A.Kret acode (A.Frame arg self stk2) ak)
-               (B.Frame arg self (stk1 ++ stk2 ++ stk3))
-               (B.Ktail bcode bk)
-
-| IkRet : forall arg arg' self self' stk1 stk2 stk3  ak  bk,
-        I_cont (A.Frame arg self stk2)
-               ak
-               (B.Frame arg self (stk2 ++ stk3))
-               bk ->
-        I_cont (A.Frame arg' self' stk1)
-               ak
-               (B.Frame arg' self' stk1)
-               (B.Kret [] (B.Frame arg self (stk2 ++ stk3)) bk).
+        I_frame af bf ->
+        I_cont ak bk ->
+        I_cont (A.Kret acode af ak)
+               (BKfRet bcode bf bk)
+| IkStop : I_cont A.Kstop BKfStop.
 
 Inductive I : A.state -> B.state -> Prop :=
 | IRun : forall acode af ak  bcode bf bk,
         Forall2 I_insn acode bcode ->
-        I_cont af ak bf bk ->
+        I_frame af bf ->
+        I_cont ak (B_cont_flatten bf bk) ->
         I (A.Run acode af ak)
           (B.Run bcode bf bk)
 
@@ -130,6 +134,56 @@ intros0 Hcomp; simpl in Hcomp; refold_compile; try (rewrite <- Hcomp; clear Hcom
 try solve [econstructor; eauto].
 Qed.
 
+
+
+Lemma B_cont_flatten_stack_irrel : forall arg self stk stk' bk,
+    B_cont_flatten (B.Frame arg self stk) bk =
+    B_cont_flatten (B.Frame arg self stk') bk.
+first_induction bk; intros; simpl in *.
+- reflexivity.
+- eapply IHbk.
+- reflexivity.
+Qed.
+
+Lemma B_cont_flatten_push : forall bf bk v,
+    B_cont_flatten (B.push bf v) bk = B_cont_flatten bf bk.
+intros.  destruct bf.
+unfold B.push. simpl. eapply B_cont_flatten_stack_irrel.
+Qed.
+
+Lemma B_cont_flatten_pop : forall bf bk n,
+    B_cont_flatten (B.pop bf n) bk = B_cont_flatten bf bk.
+intros.  destruct bf.
+unfold B.pop. simpl. eapply B_cont_flatten_stack_irrel.
+Qed.
+
+Lemma B_cont_flatten_pop_push : forall bf bk n v,
+    B_cont_flatten (B.pop_push bf n v) bk = B_cont_flatten bf bk.
+intros. unfold B.pop_push.
+rewrite B_cont_flatten_push.
+apply B_cont_flatten_pop.
+Qed.
+
+Lemma I_cont_push : forall ak bf bk v,
+    I_cont ak (B_cont_flatten bf bk) ->
+    I_cont ak (B_cont_flatten (B.push bf v) bk).
+intros. rewrite B_cont_flatten_push. auto.
+Qed.
+Hint Resolve I_cont_push.
+
+Lemma I_cont_pop : forall ak bf bk n,
+    I_cont ak (B_cont_flatten bf bk) ->
+    I_cont ak (B_cont_flatten (B.pop bf n) bk).
+intros. rewrite B_cont_flatten_pop. auto.
+Qed.
+Hint Resolve I_cont_pop.
+
+Lemma I_cont_pop_push : forall ak bf bk n v,
+    I_cont ak (B_cont_flatten bf bk) ->
+    I_cont ak (B_cont_flatten (B.pop_push bf n v) bk).
+intros. rewrite B_cont_flatten_pop_push. auto.
+Qed.
+Hint Resolve I_cont_pop_push.
 
 
 Lemma B_sstar_snoc : forall E s s' s'',
@@ -281,146 +335,50 @@ Ltac stk_simpl' := compute [
     B.pop B.push B.pop_push  B.arg B.self B.stack
     ] in *.
 
-Lemma I_cont_useful_inv : forall af ak bf bk
-        (P : _ -> _ -> _ -> _ -> Prop),
-    (forall arg self stk1 stk2,
-        af = A.Frame arg self stk1 ->
-        bf = B.Frame arg self (stk1 ++ stk2) ->
-        P af ak bf bk) ->
-    I_cont af ak bf bk -> P af ak bf bk.
-intros0 HP II. invc II; simpl in *.
-- eapply HP; simpl; eauto.
-  erewrite app_nil_r. reflexivity.
-- eapply HP; simpl; eauto.
-- eapply HP; simpl; eauto.
-  erewrite app_nil_r. reflexivity.
-Qed.
-
-Lemma I_cont_tail_nil : forall acode af ak bcode bf bk,
-    Forall2 I_insn acode bcode ->
-    I_cont af ak bf bk ->
-    I_cont (A.Frame (A.arg af) (A.self af) []) (A.Kret acode af ak) 
-           bf (B.Ktail bcode bk).
-intros.
-on >I_cont, inv_using I_cont_useful_inv; simpl.
-change (stk1 ++ stk2) with ([] ++ stk1 ++ stk2).
-i_ctor.
-Qed.
-
-Lemma IkTail_nil : forall arg self stk2 stk3  acode ak  bcode bk,
-    Forall2 I_insn acode bcode ->
-    I_cont (A.Frame arg self stk2) ak
-           (B.Frame arg self (stk2 ++ stk3)) bk ->
-    I_cont (A.Frame arg self [])
-           (A.Kret acode (A.Frame arg self stk2) ak) 
-           (B.Frame arg self (stk2 ++ stk3))
-           (B.Ktail bcode bk).
-intros.
-change (stk2 ++ stk3) with ([] ++ stk2 ++ stk3).
-i_ctor.
-Qed.
-
-Lemma I_cont_cons' : forall af ak bf bk v,
-    I_cont af ak bf bk ->
-    I_cont (A.Frame (A.arg af) (A.self af) (v :: A.stack af)) ak
-           (B.Frame (B.arg bf) (B.self bf) (v :: B.stack bf)) bk.
-intros.
-on >I_cont, inv; stk_simpl.
-- econstructor.
-- rewrite app_comm_cons. econstructor; eauto.
-- econstructor; eauto.
-Qed.
-Hint Resolve I_cont_cons'.
-
-Lemma Ik_cons : forall arg self v stk1 stk2  ak bk,
-    I_cont (A.Frame arg self stk1) ak
-           (B.Frame arg self (stk1 ++ stk2)) bk ->
-    I_cont (A.Frame arg self (v :: stk1)) ak
-           (B.Frame arg self (v :: stk1 ++ stk2)) bk.
-intros.
-on >I_cont, fun H => inversion H; stk_simpl.
-- on (stk1 = stk1 ++ _), fun H => rename H into HH.
-  rewrite <- app_nil_r in HH at 1. apply app_inv_head in HH.
-  subst stk2. repeat rewrite app_nil_r in *. constructor.
-- subst. rewrite app_comm_cons. econstructor; eauto.
-- on (stk1 = stk1 ++ _), fun H => rename H into HH.
-  rewrite <- app_nil_r in HH at 1. apply app_inv_head in HH.
-  subst stk2. repeat rewrite app_nil_r in *. constructor; auto.
-Qed.
-
-Lemma Ik_push : forall af ak bf bk v,
-    I_cont af ak bf bk ->
-    I_cont (A.push af v) ak (B.push bf v) bk.
-intros.
-on >I_cont, inv_using I_cont_useful_inv.
-stk_simpl'. eapply Ik_cons. auto.
-Qed.
-
-Lemma Ik_skipn : forall arg self n stk1 stk2  ak bk,
-    I_cont (A.Frame arg self stk1) ak
-           (B.Frame arg self (stk1 ++ stk2)) bk ->
-    I_cont (A.Frame arg self (skipn n stk1)) ak
-           (B.Frame arg self (skipn n stk1 ++ stk2)) bk.
-intros.
-on >I_cont, fun H => inversion H; stk_simpl.
-- on (stk1 = stk1 ++ _), fun H => rename H into HH.
-  rewrite <- app_nil_r in HH at 1. apply app_inv_head in HH.
-  subst stk2. repeat rewrite app_nil_r in *. constructor.
-- subst. on _, apply_lem app_inv_head. subst. constructor; auto.
-- on (stk1 = stk1 ++ _), fun H => rename H into HH.
-  rewrite <- app_nil_r in HH at 1. apply app_inv_head in HH.
-  subst stk2. repeat rewrite app_nil_r in *. constructor; auto.
-Qed.
-
-Lemma Ik_pop : forall af ak bf bk n,
-    n <= length (A.stack af) ->
-    I_cont af ak bf bk ->
-    I_cont (A.pop af n) ak (B.pop bf n) bk.
-intros.
-on >I_cont, inv_using I_cont_useful_inv.
-stk_simpl'. simpl in *. rewrite skipn_app_l by lia. eapply Ik_skipn. auto.
-Qed.
-
-Lemma Ik_pop_push : forall af ak bf bk n v,
-    n <= length (A.stack af) ->
-    I_cont af ak bf bk ->
-    I_cont (A.pop_push af n v) ak (B.pop_push bf n v) bk.
-intros.  eauto using Ik_push, Ik_pop.
-Qed.
-
-(*
-Lemma I_cont_sim : forall AE BE af ak a' bf bk,
-    I_cont af ak bf bk ->
+Lemma I_cont_sim : forall AE BE af ak a' bf bk v,
+    I_cont ak (B_cont_flatten bf bk) ->
+    A.stack af = B.stack bf ->
+    B.stack bf = [v] ->
     A.sstep AE (A.Run [] af ak) a' ->
     exists b',
         B.splus BE (B.Run [] bf bk) b' /\
         I a' b'.
-first_induction bk; intros0 II Astep;
-inv Astep; inv II;
-stk_simpl; subst.
+first_induction bk; intros0 IIcont Hstack Hv Astep.
 
-- B_start HS.
-  B_step HS. { eapply B.SContTail. }
-  eexists. split. exact HS.
-  i_ctor. simpl. i_lem Ik_cons.
+- inv Astep; inv IIcont.
 
-- B_start HS.
-  B_step HS. { eapply B.SContRet. }
+  B_start HS.
+  B_step HS.
+    { eapply B.SContTail. eassumption. }
   eexists. split. exact HS.
-  i_ctora
-  unfold S1.
-  stk_simpl. unfold B.top in *. simpl in *.
-  fwd eapply IHbk with
-      (af := A.Frame arg self (v :: stk2))
-      (bf := B.Frame arg self (v :: stk2 ++ stk3)).
-    { i_lem Ik_cons. }
-    { econstructor.
-    { i_ctor.
-  eexists. split. exact HS.
-  unfold S1. rewrite app_assoc. i_ctor.
+  i_ctor.
+  + on (I_frame f' _), invc. unfold A.push. simpl. replace v0 with v by congruence. i_ctor.
+  + erewrite B_cont_flatten_stack_irrel. eauto.
 
-- 
-*)
+- simpl in *.
+
+  fwd eapply IHbk as HH.
+    { eassumption. }
+    { simpl. eassumption. }
+    { eassumption. }
+    { eassumption. }
+  destruct HH as (b' & Hb' & IIb').
+
+  B_start HS.
+  B_step HS.
+    { eapply B.SContRet. eassumption. }
+  B_plus HS.
+    { rewrite Hv in Hb'. exact Hb'. }
+  eexists. split. exact HS.
+  assumption.
+
+- inv Astep; inv IIcont.
+
+  B_start HS.
+  B_step HS. { eapply B.SContStop. eassumption. }
+  eexists. split. exact HS.
+  replace v0 with v by congruence. i_ctor.
+Qed.
 
 Theorem I_sim : forall AE BE a a' b,
     Forall2 (Forall2 I_insn) AE BE ->
@@ -437,68 +395,70 @@ inv Astep; inv II;
 try on (Forall2 I_insn _ _), invc;
 try on (Forall2 _ [] _), invc;
 try on (I_insn _ _), invc;
-try (on >I_cont, inv_using I_cont_useful_inv; subst);
+try on >I_frame, invc;
 simpl in *.
-
 
 - (* Block *)
   B_start HS.
-  B_step HS. { eapply B.SBlock. }
+  B_step HS. { eapply B.SBlock. }  simpl in *.
   eexists. split. exact HS.
-  i_ctor. i_lem IkTail_nil.
+  i_ctor. i_ctor.
 
 - (* Arg *)
   B_start HS.
-  B_step HS. { eapply B.SArg. }  stk_simpl.
+  B_step HS. { eapply B.SArg; eauto. }  simpl in *.
   eexists. split. exact HS.
-  i_ctor. i_lem Ik_cons.
+  i_ctor. stk_simpl'. i_ctor.
 
 - (* Self *)
-  admit.
+  B_start HS.
+  B_step HS. { eapply B.SSelf; eauto. }  simpl in *.
+  eexists. split. exact HS.
+  i_ctor. stk_simpl'. i_ctor.
 
 - (* DerefinateConstr *)
   B_start HS.
-  B_step HS.
-    { eapply B.SDerefinateConstr; eauto.
-      - subst stk1. simpl. lia.
-      - subst stk1. simpl. reflexivity. }
+  B_step HS.  { eapply B.SDerefinateConstr; eauto. }
   eexists. split. exact HS.
-  i_ctor. i_lem Ik_pop_push. subst stk1. simpl in *. lia.
+  i_ctor. stk_simpl'. i_ctor.
 
 - (* DerefinateClose *)
-  admit.
+  B_start HS.
+  B_step HS.  { eapply B.SDerefinateClose; eauto. }
+  eexists. split. exact HS.
+  i_ctor. stk_simpl'. i_ctor.
 
 - (* MkConstr *)
   B_start HS.
-  B_step HS. { eapply B.SConstrDone; eauto. simpl. rewrite app_length. lia. }
+  B_step HS. { eapply B.SConstrDone; eauto. }
   eexists. split. exact HS.
-  i_ctor.
-    simpl. rewrite firstn_app, firstn_all by lia.
-  i_lem Ik_pop_push.
+  i_ctor. stk_simpl'. i_ctor.
 
 - (* MkClose *)
-  admit.
+  B_start HS.
+  B_step HS. { eapply B.SCloseDone; eauto. }
+  eexists. split. exact HS.
+  i_ctor. stk_simpl'. i_ctor.
 
 - (* MakeCall *)
   fwd eapply Forall2_nth_error_ex as HH; eauto.  destruct HH as (bbody & ? & ?).
 
   B_start HS.
-  B_step HS.
-    { eapply B.SMakeCall; eauto.
-      - subst stk1. simpl in *. omega.
-      - subst stk1. simpl. reflexivity. }
+  B_step HS. { eapply B.SMakeCall; eauto. }  simpl in *.
   eexists. split. exact HS.
-  i_ctor.
-    stk_simpl'. subst stk1. unfold B.top in *; simpl in *.
-    change stk2 with ([] ++ stk2). econstructor.
-    change [] with (skipn 2 [argv; Close fname free]). eauto using Ik_skipn.
+  i_ctor. simpl. erewrite B_cont_flatten_stack_irrel. eauto.
 
 - (* Switchinate *)
-  admit.
+  fwd eapply Forall2_nth_error_ex as HH; eauto.  destruct HH as (bcase & ? & ?).
+
+  B_start HS.
+  B_step HS. { eapply B.SSwitchinate; eauto. }  simpl in *.
+  eexists. split. exact HS.
+  i_ctor.
 
 - (* ContRet *)
-  admit.
+  eapply I_cont_sim; eauto. simpl. reflexivity.
 
 - (* ContStop *)
-  admit.
-Admitted.
+  eapply I_cont_sim; eauto. simpl. reflexivity.
+Qed.
