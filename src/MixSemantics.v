@@ -47,9 +47,9 @@ Record mix_forward_simulation (L1 : notrace_semantics) (L2 : trace_semantics) : 
       forall i s2, fsim_match_states i s1 s2 ->
       exists i', exists s2',
          (Plus L2 s2 Events.E0 s2' \/ (Star L2 s2 Events.E0 s2' /\ fsim_order i' i))
-      /\ fsim_match_states i' s1' s2';
-    fsim_public_preserved:
-      forall id, Senv.public_symbol (symbolenv L2) id = Senv.public_symbol (Semantics.symbolenv L1) id
+      /\ fsim_match_states i' s1' s2'
+    (* fsim_public_preserved:
+      forall id, Senv.public_symbol (symbolenv L2) id = Senv.public_symbol (Semantics.symbolenv L1) id *)
     }.
 
 
@@ -172,9 +172,9 @@ Proof.
   right; split. apply star_refl. red. right. auto.
   exists s3; auto.
 (* symbols *)
-  intros. transitivity (Senv.public_symbol (Semantics.symbolenv L2) id);
+(*  intros. transitivity (Senv.public_symbol (Semantics.symbolenv L2) id);
   try apply fsim_public_preserved; auto;
-  try apply Semantics.fsim_public_preserved; auto.
+  try apply Semantics.fsim_public_preserved; auto. *)
 Qed.
 
 End COMPOSE_NOTRACE_MIX.
@@ -228,10 +228,10 @@ Proof.
   right; split. apply star_refl. red. right. auto.
   exists s3; auto.
 (* symbols *)
-  intros.
+(*  intros.
   transitivity (Senv.public_symbol (symbolenv L2) id);
   try apply fsim_public_preserved; auto;
-  try apply Smallstep.fsim_public_preserved; auto.
+  try apply Smallstep.fsim_public_preserved; auto. *)
 Qed.
   
 End COMPOSE_MIX_TRACE.

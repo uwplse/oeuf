@@ -173,8 +173,8 @@ Definition semantics (prog : list expr * list metadata) : semantics :=
                  (fun _ => step)
                  (initial_state prog)
                  (final_state prog)
-                 (tt)
-                 (Globalenvs.Genv.to_senv (Globalenvs.Genv.empty_genv unit unit nil)).
+                 (tt).
+
 
 
 (* Demo *)

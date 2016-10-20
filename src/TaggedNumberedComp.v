@@ -420,6 +420,24 @@ simpl in Hcomp; refold_compile; try rewrite <- Hcomp in *;
 break_bind_state; try solve [eauto | econstructor; eauto].
 Qed.
 
+Lemma compile_list_I_expr :
+  forall l i1 l' i2,
+    compile_list l i1 = (l',i2) ->
+    Forall2 I_expr l l'.
+Proof.
+  induction l; intros; simpl in *.
+  unfold ret_state in H. inv H. econstructor; eauto.
+  unfold seq in *.
+  unfold bind_state in *.
+  break_match_hyp; try congruence.
+  unfold fmap in *.
+  break_match_hyp; try congruence.
+  break_match_hyp; try congruence.
+  unfold ret_state in *. inv Heqp.
+  inv H.
+  econstructor; eauto.
+  eapply compile_I_expr; eauto.
+Qed.
 
 
 (* I_sim *)
@@ -534,20 +552,98 @@ Section Simulation.
 
   Hypothesis TRANSF : compile_cu prog = tprog.
 
+  
+  (* This lemma was harder to prove than was necessary *)
+  Lemma prog_init_expr :
+    forall expr,
+      In expr (A.initial_env prog) ->
+      exists expr',
+        In expr' (B.initial_env tprog) /\ I_expr expr expr'.
+  Proof.
+    destruct prog. generalize dependent tprog.
+    clear TRANSF.
+    unfold compile_cu.
+    remember [] as l2. clear Heql2.
+    remember [] as l1. clear Heql1.
+    remember 0 as n. clear Heqn.
+    unfold gen_elim_names_list.
+    remember [] as l3. clear Heql3.
+    unfold bind_state. unfold ret_state.
+    generalize dependent l2.
+    induction l; intros.
+    solve [simpl in H; inv H].
+    simpl in IHl.
+    repeat (break_match_hyp; try congruence; [idtac]).
+    repeat (break_inner_match_hyp; try congruence; [idtac]).
+    subst. simpl in H. unfold B.initial_env. simpl.
+    clear -Heqp H IHl. simpl in Heqp.
+    unfold seq in *. unfold bind_state in *.
+    unfold fmap in *.
+    repeat break_match_hyp; try congruence.
+    unfold ret_state in *. inv Heqp. inv Heqp0.
+    destruct H.
+    * subst. eapply compile_I_expr in Heqp2. simpl.
+      eexists. split. left. reflexivity. eauto.
+    * edestruct IHl; eauto. unfold B.initial_env in *.
+      simpl in *. erewrite Heqp1 in H0. simpl in *. break_and.
+      exists x. split. right. assumption. assumption.
+  Qed.
+
+  
+  Lemma match_initial_env :
+    Forall2 I_expr (A.initial_env prog) (TaggedNumbered.initial_env tprog).
+  Proof.
+    unfold A.initial_env.
+    unfold TaggedNumbered.initial_env.
+    unfold compile_cu in *.
+    repeat (break_match_hyp; try congruence). subst.
+    simpl.
+    eapply compile_list_I_expr; eauto.
+  Qed.
+    
+      
+  
+  Lemma match_initial_state :
+    forall s,
+      Semantics.initial_state (A.semantics prog) s ->
+      exists s',
+        Semantics.initial_state (B.semantics tprog) s' /\ I s s'.
+  Proof.
+    intros.
+    inversion H.
+    eapply prog_init_expr in H0.
+    break_exists. break_and.
+    eexists. split.
+    econstructor; eauto.
+    econstructor; eauto.
+    intros. econstructor; eauto.
+  Qed.
+
+  Lemma final_state_match :
+    forall s s',
+      Semantics.final_state (A.semantics prog) s ->
+      I s s' ->
+      Semantics.final_state (B.semantics tprog) s'.
+  Proof.
+    intros. inv H. inv H0.
+    econstructor; eauto.
+  Qed.
+  
   Theorem fsim :
     Semantics.forward_simulation (A.semantics prog) (TaggedNumbered.semantics tprog).
   Proof.
     eapply Semantics.forward_simulation_step.
-    simpl. admit. (* flesh out defns *)
-    intros. admit. (* flesh out defns *)
-    intros. admit. (* flesh out defns *)
+
+    intros. eapply match_initial_state; eauto.
+    
+    intros. eapply final_state_match; eauto.
 
     intros.
     simpl in H.
-    instantiate (1 := I) in H0.
+
     eapply I_sim in H; eauto.
-    admit. (* we'll need this *)
-    
-  Admitted.
+    simpl. eapply match_initial_env.    
+  Qed.
   
 End Simulation.
+

@@ -233,22 +233,24 @@ Qed.
 
 Require Semantics.
 
+Definition initial_env (prog : list expr * list metadata) : env := fst prog.
 
-Inductive initial_state (prog : list expr * list metadata) : state -> Prop :=.
-(* | initial_intro : *)
-(*     forall expr, *)
-(*       In expr (fst prog) -> *)
-(*       initial_state prog expr. *)
+Inductive initial_state (prog : list expr * list metadata) : state -> Prop :=
+| init :
+    forall expr,
+      In expr (initial_env prog) ->
+      initial_state prog (Run expr nil (fun x => Stop x)).
 
-Inductive final_state (prog : list expr * list metadata) : state -> Prop :=.
-
-Definition initial_env (prog : list expr * list metadata) : env := nil. (* TODO: write this *)
+Inductive final_state (prog : list expr * list metadata) : state -> Prop :=
+| fine :
+    forall expr,
+      value expr ->
+      final_state prog (Stop expr).
 
 Definition semantics (prog : list expr * list metadata) : Semantics.semantics :=
   @Semantics.Semantics_gen state env
                  (sstep)
                  (initial_state prog)
                  (final_state prog)
-                 (initial_env prog)
-                 (Globalenvs.Genv.to_senv (Globalenvs.Genv.empty_genv unit unit nil)).
+                 (initial_env prog).
 

@@ -311,5 +311,4 @@ Definition semantics (prog : prog_type) : Semantics.semantics :=
                  (step)
                  (init_state prog)
                  (final_state prog)
-                 (initial_env prog)
-                 (Globalenvs.Genv.to_senv (Globalenvs.Genv.empty_genv unit unit nil)).
+                 (initial_env prog).
