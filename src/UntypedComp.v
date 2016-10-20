@@ -338,5 +338,7 @@ Theorem fsim:
     forall ty,
       forward_simulation (@CompilationUnit.source_semantics ty cu) (Untyped.semantics tprog).
 Proof.
+  intros.
+  eapply forward_simulation_plus.
 Admitted.
   
