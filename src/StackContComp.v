@@ -270,11 +270,18 @@ Definition B_cont_eval f k :=
     end.
 
 Lemma B_step_cont : forall E f k,
+    length (B.stack f) = 1 ->
     B.sstep E (B.Run [] f k)
               (B_cont_eval f k).
+intros0 Hlen.
+assert (HH : exists v, B.stack f = [v]).
+  { destruct (B.stack f) as [ | v vs ]; try discriminate.
+    destruct vs; try discriminate.  eauto. }
+destruct HH as [v Hstk].
+
 destruct k.
-- eapply B.SContRet.
-- eapply B.SContStop.
+- eapply B.SContRet. unfold B.top. rewrite Hstk. reflexivity.
+- eapply B.SContStop. unfold B.top. rewrite Hstk. reflexivity.
 Qed.
 
 Lemma I_cont_sim : forall v ak bf bk,
@@ -315,37 +322,37 @@ stk_simpl; try subst stack.
 - (* Arg *)
   B_start HS.
   B_step HS. { eapply B.SArg; eauto. }
-  B_step HS. { eapply B_step_cont. }
+  B_step HS. { eapply B_step_cont. simpl. auto. }
   eexists. split. exact HS. eapply I_cont_sim; eauto.
 
 - (* Self *)
   B_start HS.
   B_step HS. { eapply B.SSelf; eauto. }
-  B_step HS. { eapply B_step_cont. }
+  B_step HS. { eapply B_step_cont. simpl. auto. }
   eexists. split. exact HS. eapply I_cont_sim; eauto.
 
 - (* DerefinateConstr *)
   B_start HS.
   B_step HS. { eapply B.SDerefinateConstr; eauto. reflexivity. }
-  B_step HS. { eapply B_step_cont. }
+  B_step HS. { eapply B_step_cont. simpl. auto. }
   eexists. split. exact HS. eapply I_cont_sim; eauto.
 
 - (* DerefinateClose *)
   B_start HS.
   B_step HS. { eapply B.SDerefinateClose; eauto. reflexivity. }
-  B_step HS. { eapply B_step_cont. }
+  B_step HS. { eapply B_step_cont. simpl. auto. }
   eexists. split. exact HS. eapply I_cont_sim; eauto.
 
 - (* MkConstr *)
   B_start HS.
   B_step HS. { eapply B.SConstrDone; eauto. }
-  B_step HS. { eapply B_step_cont. }
+  B_step HS. { eapply B_step_cont. simpl. rewrite skipn_all by lia. simpl. auto. }
   eexists. split. exact HS. eapply I_cont_sim; eauto.
 
 - (* MkClose *)
   B_start HS.
   B_step HS. { eapply B.SCloseDone; eauto. }
-  B_step HS. { eapply B_step_cont. }
+  B_step HS. { eapply B_step_cont. simpl. rewrite skipn_all by lia. simpl. auto. }
   eexists. split. exact HS. eapply I_cont_sim; eauto.
 
 - (* MakeCall *)
