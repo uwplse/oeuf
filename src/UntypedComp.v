@@ -353,7 +353,6 @@ Theorem fsim:
 Proof.
   intros.
   apply forward_simulation_step with (match_states := fun a b => compile a = b); simpl; intros.
-  - auto.
   - eapply initial_state_exists in H0; eauto.
   - eauto using final_states_match.
   - subst. eexists. split; eauto.
