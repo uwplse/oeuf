@@ -1133,19 +1133,26 @@ Definition prog_type : Type := list expr * list metadata * list (list (expr * re
 
 Require Semantics.
 
-Inductive initial_state (prog : prog_type) : state -> Prop :=.
+Definition initial_env (prog : prog_type) : env := fst (fst (fst prog)).
 
-Inductive final_state (prog : prog_type) : state -> Prop :=.
+Inductive initial_state (prog : prog_type) : state -> Prop :=
+| init :
+    forall expr,
+      In expr (initial_env prog) ->
+      initial_state prog (Run expr nil (fun x => Stop x)).
 
-Definition initial_env (prog : prog_type) : env := nil. (* TODO: write this *)
+Inductive final_state (prog : prog_type) : state -> Prop :=
+| fine :
+    forall expr,
+      value expr ->
+      final_state prog (Stop expr).
 
 Definition semantics (prog : prog_type) : Semantics.semantics :=
   @Semantics.Semantics_gen state env
                  (sstep)
                  (initial_state prog)
                  (final_state prog)
-                 (initial_env prog)
-                 (Globalenvs.Genv.to_senv (Globalenvs.Genv.empty_genv unit unit nil)).
+                 (initial_env prog).
 
 
 (*

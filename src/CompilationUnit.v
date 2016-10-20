@@ -61,6 +61,6 @@ Definition source_semantics {ty : type} (cu : compilation_unit) : Semantics.sema
                            (fun _ => @SourceLang.step nil ty)
                            (initial_state cu nil ty)
                            (final_state cu nil ty)
-                           (tt)
-                           (Globalenvs.Genv.to_senv (Globalenvs.Genv.empty_genv unit unit nil)).
+                           (tt).
+
 

@@ -477,7 +477,7 @@ Record semantics : Type := Semantics_gen {
   initial_state: state -> Prop;
   final_state: state -> Prop;
   globalenv: genvtype;
-  symbolenv: Senv.t
+(*  symbolenv: Senv.t *)
 }.
 
 Notation " 'Step' L " := (step L (globalenv L)) (at level 1).
@@ -501,9 +501,9 @@ Record forward_simulation (L1 L2: semantics) : Type :=
       forall i s2, fsim_match_states i s1 s2 ->
       exists i', exists s2',
          (Plus L2 s2 s2' \/ (Star L2 s2 s2' /\ fsim_order i' i))
-      /\ fsim_match_states i' s1' s2';
-    fsim_public_preserved:
-      forall id, Senv.public_symbol (symbolenv L2) id = Senv.public_symbol (symbolenv L1) id
+      /\ fsim_match_states i' s1' s2'
+(*    fsim_public_preserved:
+      forall id, Senv.public_symbol (symbolenv L2) id = Senv.public_symbol (symbolenv L1) id *)
     }.
 
 (** An alternate form of the simulation diagram *)
@@ -528,8 +528,8 @@ Section FORWARD_SIMU_DIAGRAMS.
 Variable L1: semantics.
 Variable L2: semantics.
 
-Hypothesis public_preserved:
-  forall id, Senv.public_symbol (symbolenv L2) id = Senv.public_symbol (symbolenv L1) id.
+(*Hypothesis public_preserved:
+  forall id, Senv.public_symbol (symbolenv L2) id = Senv.public_symbol (symbolenv L1) id. *)
 
 Variable match_states: state L1 -> state L2 -> Prop.
 
@@ -791,7 +791,7 @@ Proof.
   right; split. apply star_refl. red. right. auto.
   exists s3; auto.
 (* symbols *)
-  intros. transitivity (Senv.public_symbol (symbolenv L2) id); apply fsim_public_preserved; auto.
+(*  intros. transitivity (Senv.public_symbol (symbolenv L2) id); apply fsim_public_preserved; auto. *)
 Qed.
 
 End COMPOSE_SIMULATIONS.

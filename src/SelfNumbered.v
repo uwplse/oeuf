@@ -183,5 +183,4 @@ Definition semantics (prog : prog_type) : Semantics.semantics :=
                  (sstep)
                  (initial_state prog)
                  (final_state prog)
-                 (initial_env prog)
-                 (Globalenvs.Genv.to_senv (Globalenvs.Genv.empty_genv unit unit nil)).
+                 (initial_env prog).
