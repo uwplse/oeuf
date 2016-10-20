@@ -163,8 +163,10 @@ Inductive initial_state (prog : list expr * list metadata) : expr -> Prop :=
       In expr (fst prog) ->
       initial_state prog expr.
 
-Inductive final_state (prog : list expr * list metadata) : expr -> Prop :=.
-
+Inductive final_state (prog : list expr * list metadata) : expr -> Prop :=
+| final_intro : forall e,
+      value e ->
+      final_state prog e.
 
 Definition semantics (prog : list expr * list metadata) : semantics :=
   @Semantics_gen expr unit
