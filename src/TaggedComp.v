@@ -525,27 +525,82 @@ Section Preservation.
 
   Hypothesis TRANSF : compile_cu prog = Some tprog.
 
+  Lemma prog_init_expr :
+    forall expr,
+      In expr (A.initial_env prog) ->
+      exists expr',
+        In expr' (B.initial_env tprog) /\ I_expr expr expr'.
+  Proof.
+    destruct prog. generalize dependent tprog.
+    clear TRANSF.
+    unfold compile_cu.
+    unfold bind_option.
+    induction l; intros.
+    solve [simpl in H; inv H].
+    simpl in IHl.
+    repeat (break_match_hyp; try congruence; [idtac]).
+    repeat (break_inner_match_hyp; try congruence; [idtac]).
+    subst. simpl in H. unfold B.initial_env. inv TRANSF. simpl.
+    simpl in Heqo.
+    unfold seq in *. unfold bind_option in *.
+    unfold fmap in *.
+    repeat (break_match_hyp; try congruence; [idtac]).
+    inv Heqo. inv Heqo2. inv Heqo0.
+    destruct H.
+    * subst. eapply compile_I_expr in H1. simpl.
+      eexists. split. left. reflexivity. eauto.
+    * edestruct IHl; eauto. unfold B.initial_env in *.
+      simpl in *. break_and.
+      exists x. split. right. assumption. assumption.
+  Qed.
   
-  (* Inductive match_states (AE : A.env) (BE : B.env) : A.expr -> B.expr -> Prop := *)
-  (* | match_st : *)
-  (*     forall a b, *)
-  (*       R AE BE a b -> *)
-  (*       match_states AE BE a b. *)
+  Lemma initial_state_match :
+    forall s,
+      initial_state (A.semantics prog) s ->
+      exists s',
+        initial_state (B.semantics tprog) s' /\ I s s'.
+  Proof.
+    intros. inv H.
+    eapply prog_init_expr in H0.
+    break_exists. break_and.
+    eexists. split. econstructor; eauto.
+    econstructor; eauto. intros.
+    econstructor; eauto.
+  Qed.
 
-  (* Lemma step_sim : *)
-  (*   forall AE BE a b, *)
-  (*     match_states AE BE a b -> *)
-  (*     forall a', *)
-  (*       A.step AE a a' -> *)
-  (*       exists b', *)
-  (*         splus (B.step BE) b b'. *)
-  (* Proof. *)
-  (* Admitted. *)
+  Lemma match_final_state :
+    forall s s',
+      I s s' ->
+      final_state (A.semantics prog) s ->
+      final_state (B.semantics tprog) s'.
+  Proof.
+    intros. inv H0. inv H.
+    econstructor; eauto.
+  Qed.
+
+  Lemma match_initial_env :
+    Forall2 I_expr (A.initial_env prog) (B.initial_env tprog).
+  Proof.
+    unfold A.initial_env.
+    unfold B.initial_env.
+    unfold compile_cu in *.
+    repeat (break_match_hyp; try congruence). subst.
+    simpl.
+    eapply compile_list_I_expr; eauto.
+    unfold bind_option in *. break_match_hyp; try congruence. inv TRANSF. reflexivity.
+  Qed.
 
   Theorem fsim :
     forward_simulation (Lifted.semantics prog) (Tagged.semantics tprog).
   Proof.
-  Admitted.
+    eapply forward_simulation_step.
+    eapply initial_state_match; eauto.
+    eapply match_final_state; eauto.
+    intros.
+    unfold Lifted.semantics in *. simpl in *.
+    eapply I_sim; eauto.
+    eapply match_initial_env.
+  Qed.
 
 End Preservation.
 
