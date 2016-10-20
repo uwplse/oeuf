@@ -332,6 +332,19 @@ Proof.
   eapply grab_expr_in; eauto.
 Qed.
 
+Lemma final_states_match:
+  forall (cu : compilation_unit) (tprog : list U.expr * list metadata)
+    (ty : SourceLang.type) (s1 : SourceLang.expr [] ty) (s2 : Untyped.expr),
+    compile s1 = s2 -> CompilationUnit.final_state cu [] ty s1 -> Untyped.final_state tprog s2.
+Proof.
+  intros.
+  destruct cu; simpl in *.
+  destruct H0.
+  subst.
+  constructor.
+  eauto using compile_value.
+Qed.
+
 Theorem fsim:
   forall cu tprog,
     @compile_cu nil (types cu) (Metadata.init_metadata cu) = tprog ->
@@ -339,6 +352,10 @@ Theorem fsim:
       forward_simulation (@CompilationUnit.source_semantics ty cu) (Untyped.semantics tprog).
 Proof.
   intros.
-  eapply forward_simulation_plus.
-Admitted.
-  
+  apply forward_simulation_step with (match_states := fun a b => compile a = b); simpl; intros.
+  - auto.
+  - eapply initial_state_exists in H0; eauto.
+  - eauto using final_states_match.
+  - subst. eexists. split; eauto.
+    eauto using forward_simulation_closed.
+Qed.
