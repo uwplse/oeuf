@@ -879,9 +879,7 @@ Definition A_matchable s := ~ is_close_dyn_zero_state s.
 Lemma A_splus_sstar : forall E s s',
     A.splus E s s' ->
     A.sstar E s s'.
-induction 1; intros.
-- econstructor; try eassumption. constructor.
-- econstructor; eauto.
+  eapply Semantics.plus_star.
 Qed.
 
 Lemma A_splus_inv : forall AE a_ a''_
@@ -893,14 +891,10 @@ Lemma A_splus_inv : forall AE a_ a''_
         forall Asteps : A.sstar AE a' a'',
         P a a'') ->
     A.splus AE a_ a''_ -> P a_ a''_.
+  
 intros0 HP Hstep.
 invc Hstep; eapply HP; eauto.
-- constructor.
-- eauto using A_splus_sstar.
 Qed.
-
-
-
 
 Lemma compile_num_locals : forall a b,
     compile a = b ->
@@ -1160,7 +1154,7 @@ destruct ae; inv Astep; invc II; [ try on (I_expr _ _ _ _), invc.. | | ].
   B_start HS.
   B_step HS. { eapply B.SArg. eassumption. }
 
-  eexists. split; eauto using A.SPlusOne.
+  eexists. split; eauto. 
   eapply H10. (* TODO - need a structtact for this *)
   + eapply Forall_nth_error; eauto.
   + eapply Forall_nth_error; eauto.
@@ -1176,7 +1170,7 @@ destruct ae; inv Astep; invc II; [ try on (I_expr _ _ _ _), invc.. | | ].
   B_start HS.
   B_step HS. { eapply B.SUpVar. eassumption. }
 
-  eexists. split; eauto using A.SPlusOne.
+  eexists. split; eauto.
   eapply H10. (* TODO - need a structtact for this *)
   + eapply Forall_nth_error; eauto.
   + eapply Forall_nth_error; eauto.

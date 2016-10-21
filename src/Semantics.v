@@ -198,38 +198,34 @@ Proof.
   intros. inversion H; subst.
   econstructor; eauto. eapply star_trans; eauto.
 Qed.
-(*
+
 Lemma star_plus_trans:
-  forall ge s1 t1 s2 t2 s3 t,
-  star ge s1 t1 s2 -> plus ge s2 t2 s3 -> t = t1 ** t2 -> plus ge s1 t s3.
+  forall ge s1 s2 s3,
+  star ge s1 s2 -> plus ge s2 s3 -> plus ge s1 s3.
 Proof.
   intros. inversion H; subst.
   simpl; auto.
-  rewrite Eapp_assoc.
   econstructor. eauto. eapply star_trans. eauto.
-  apply plus_star. eauto. eauto. auto.
+  apply plus_star. eauto. 
 Qed.
 
 Lemma plus_trans:
-  forall ge s1 t1 s2 t2 s3 t,
-  plus ge s1 t1 s2 -> plus ge s2 t2 s3 -> t = t1 ** t2 -> plus ge s1 t s3.
+  forall ge s1 s2 s3,
+  plus ge s1 s2 -> plus ge s2 s3 -> plus ge s1 s3.
 Proof.
-  intros. eapply plus_star_trans. eauto. apply plus_star. eauto. auto.
+  intros. eapply plus_star_trans. eauto. apply plus_star. eauto. 
 Qed.
-
-
 
 Lemma plus_inv:
-  forall ge s1 t s2,
-  plus ge s1 t s2 ->
-  step ge s1 t s2 \/ exists s', exists t1, exists t2, step ge s1 t1 s' /\ plus ge s' t2 s2 /\ t = t1 ** t2.
+  forall ge s1 s2,
+  plus ge s1 s2 ->
+  step ge s1 s2 \/ exists s', step ge s1 s' /\ plus ge s' s2.
 Proof.
   intros. inversion H; subst. inversion H1; subst.
-  left. rewrite E0_right. auto.
-  right. exists s3; exists t1; exists (t0 ** t3); split. auto.
-  split. econstructor; eauto. auto.
+  left. auto.
+  right. exists s3; split. auto.
+  econstructor; eauto.
 Qed.
- *)
 
 Lemma star_inv:
   forall ge s1 s2,
