@@ -926,6 +926,9 @@ Section Preservation.
     forall expr,
       In expr (T.initial_env prog) ->
       T.elims_match elims expr.
+
+  Definition match_states TE EE ts es : Prop :=
+    I TE EE ts es /\ T_state_ok elims ts.
   
   Lemma env_ok_compile :
     env_ok (T.initial_env prog) (E.initial_env tprog) elims.
@@ -964,36 +967,51 @@ Section Preservation.
     forall s,
       Semantics.initial_state (T.semantics prog) s ->
       exists s',
-        Semantics.initial_state (E.semantics tprog) s' /\ I (T.initial_env prog) (E.initial_env tprog) s s'.
+        Semantics.initial_state (E.semantics tprog) s' /\ match_states (T.initial_env prog) (E.initial_env tprog) s s'.
   Proof.
     intros.
     inversion H.
+    remember H0 as HIn.
+    clear HeqHIn.
     eapply prog_init_expr in H0.
     break_exists. break_and.
     eexists. split. econstructor; eauto.
+    econstructor.
     econstructor; eauto. intros.
     econstructor; eauto.
+    econstructor. econstructor; eauto.
+    eapply T_elims_match; eauto.
+    intros.
+    econstructor.
+    eapply T.value_elims_match; eauto.
   Qed.
 
   Lemma match_final_state :
     forall s s',
-      I (T.initial_env prog) (E.initial_env tprog) s s' ->
+      match_states (T.initial_env prog) (E.initial_env tprog) s s' ->
       Semantics.final_state (T.semantics prog) s ->
       Semantics.final_state (E.semantics tprog) s'.
   Proof.
     intros. inv H0. inv H.
+    inv H2.
     econstructor; eauto.
-    inv H1; inv H3;
+    inv H1; inv H5;
       eapply I_expr_value; eauto.
   Qed.
 
-  Theorem fsim :
-    Semantics.forward_simulation (T.semantics prog) (E.semantics tprog).
+  Check T.step.
+  Check E.splus.
+  
+  Lemma step_sim :
+    forall t t' e,
+      match_states (T.initial_env prog) (E.initial_env tprog) t e ->
+      T.sstep (T.initial_env prog) t t' ->
+      exists e',
+        E.splus (E.initial_env tprog) e e' /\ match_states (T.initial_env prog) (E.initial_env tprog) t' e'.
   Proof.
+    intros.
     remember env_ok_compile as Henv_ok. clear HeqHenv_ok.
-    eapply Semantics.forward_simulation_plus.
-    eapply initial_state_match; eauto.
-    eapply match_final_state; eauto.
+    inversion H. clear H.
     intros.
     unfold compile_cu in *.
     destruct prog. destruct tprog. destruct p. destruct p.
@@ -1004,12 +1022,26 @@ Section Preservation.
     rewrite T.elims_match_list_Forall.
     rewrite Forall_forall.
     intros. eapply T_elims_match; eauto.
-
-    (* wrap up in I *)
-    admit.
-      
-  Admitted.
-
+    repeat break_and.
+    eexists. split; eauto. 
+    econstructor; eauto.
+    eapply T_state_ok_sim in H0; eauto.
+    unfold T.initial_env. simpl.
+    rewrite Forall_forall.
+    intros. eapply T_elims_match; eauto.
+  Qed.
+    
+  
+  Theorem fsim :
+    Semantics.forward_simulation (T.semantics prog) (E.semantics tprog).
+  Proof.
+    remember env_ok_compile as Henv_ok. clear HeqHenv_ok.
+    eapply Semantics.forward_simulation_plus.
+    eapply initial_state_match; eauto.
+    eapply match_final_state; eauto.
+    intros.
+    eapply step_sim; eauto.
+  Qed.
 
 End Preservation.
             
