@@ -836,36 +836,48 @@ Section Preservation.
   Variable prog : T.prog_type.
   Variable tprog : E.prog_type.
 
+  Definition elims := snd (fst prog).
+  
   Hypothesis TRANSF : compile_cu prog = tprog.
 
-  
-  Lemma prog_init_expr :
+  Hypothesis T_elims_match :
     forall expr,
       In expr (T.initial_env prog) ->
-      exists expr',
-        In expr' (E.initial_env tprog) /\ I_expr (T.initial_env prog) (E.initial_env tprog) nil expr expr'.
-  Proof.
-    destruct prog. destruct p. destruct p.
-    generalize dependent tprog.
-    clear TRANSF.
-    unfold compile_cu.
-    generalize dependent l2. generalize dependent l0. generalize dependent l.
-    induction l1; intros.
-    solve [simpl in H; inv H].
-    
-    simpl in IHl1.
-    simpl in H. simpl in TRANSF.
-    
-    destruct H.
-    * subst. simpl. eexists. split. left. reflexivity.
-      admit.
-    * edestruct IHl1; eauto. 
-      simpl in *. break_and.
-      exists x. split.
-      rewrite Coqlib.in_app in *.
-      admit. admit.
-  Admitted.
+      T.elims_match elims expr.
   
+  Lemma env_ok_compile :
+    env_ok (T.initial_env prog) (E.initial_env tprog) elims.
+  Proof.
+    unfold env_ok.
+    unfold compile_env.
+    unfold E.initial_env.
+    unfold T.initial_env.
+    unfold compile_cu in *.
+    break_match_hyp. unfold elims.
+    subst. simpl.
+    destruct p. simpl. destruct p. simpl. reflexivity.
+  Qed.
+  
+  Lemma prog_init_expr :
+    forall expr el,
+      In expr (T.initial_env prog) ->
+      exists expr',
+        In expr' (E.initial_env tprog) /\ I_expr (T.initial_env prog) (E.initial_env tprog) el expr expr'.
+  Proof.
+    intros.
+    remember H as HIn.
+    clear HeqHIn.
+    eapply In_nth_error in H.
+    break_exists.
+    eapply env_ok_nth_error in H;
+      try eapply env_ok_compile.
+    break_exists. break_and.
+    eapply nth_error_In in H.
+    symmetry in H0.
+    eapply compile_I_expr in H0; eauto;
+      try eapply env_ok_compile.
+  Qed.
+
   Lemma initial_state_match :
     forall s,
       Semantics.initial_state (T.semantics prog) s ->
@@ -896,6 +908,7 @@ Section Preservation.
   Theorem fsim :
     Semantics.forward_simulation (T.semantics prog) (E.semantics tprog).
   Proof.
+    remember env_ok_compile as Henv_ok. clear HeqHenv_ok.
     eapply Semantics.forward_simulation_plus.
     eapply initial_state_match; eauto.
     eapply match_final_state; eauto.
@@ -903,15 +916,14 @@ Section Preservation.
     unfold compile_cu in *.
     destruct prog. destruct tprog. destruct p. destruct p.
     inv TRANSF.
-    edestruct I_sim; eauto.
-    unfold E.initial_env.
-    unfold T.initial_env.
-    simpl. unfold env_ok.
-    unfold compile_env. simpl.
-    f_equal.
-    unfold T.initial_env.
-    simpl.
-    admit.
+    edestruct I_sim; eauto; simpl.
+
+    unfold T.initial_env. simpl.
+    rewrite T.elims_match_list_Forall.
+    rewrite Forall_forall.
+    intros. eapply T_elims_match; eauto.
+
+    (* wrap up in I *)
     admit.
       
   Admitted.
