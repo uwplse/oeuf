@@ -628,20 +628,102 @@ intros0 Hlval Hfunc. destruct Hfunc; subst func.
 - eapply Semantics.star_refl.
 Qed.
 
-Inductive T_elims_match_state ELIMS : T.state -> Prop :=
-| EmsRun : forall e l k,
+
+Inductive T_state_ok ELIMS : T.state -> Prop :=
+| SokRun : forall e l k,
+        Forall T.value l ->
         T.elims_match ELIMS e ->
-        (forall v, T.value v -> T_elims_match_state ELIMS (k v)) ->
-        T_elims_match_state ELIMS (T.Run e l k)
-| EmsStop : forall e,
+        (forall v, T.value v -> T_state_ok ELIMS (k v)) ->
+        T_state_ok ELIMS (T.Run e l k)
+| SokStop : forall e,
         T.elims_match ELIMS e ->
-        T_elims_match_state ELIMS (T.Stop e)
+        T_state_ok ELIMS (T.Stop e)
 .
+
+Lemma T_state_ok_sim : forall TE ELIMS t t',
+    Forall (T.elims_match ELIMS) TE ->
+    T_state_ok ELIMS t ->
+    T.sstep TE t t' ->
+    T_state_ok ELIMS t'.
+intros0 Henv Hok Hstep; invc Hok; invc Hstep.
+
+- on _, eapply_. eapply Forall_nth_error; eauto.
+- on _, eapply_. eapply Forall_nth_error; eauto.
+
+- (* CloseStep *)
+  econstructor; eauto.
+
+  + simpl in *. T.refold_elims_match ELIMS.
+    rewrite T.elims_match_list_Forall in *.
+    on _, invc_using Forall_3part_inv.
+    assumption.
+
+  + intros. constructor; eauto.
+    simpl in *. T.refold_elims_match ELIMS.
+    rewrite T.elims_match_list_Forall in *.
+    on _, invc_using Forall_3part_inv.
+    eapply Forall_app; eauto. constructor; eauto.
+    eapply T.value_elims_match; eauto.
+
+- (* CloseDone *) on _, eapply_. constructor. auto.
+
+- (* ConstrStep *)
+  econstructor; eauto.
+
+  + simpl in *. T.refold_elims_match ELIMS.
+    rewrite T.elims_match_list_Forall in *.
+    on _, invc_using Forall_3part_inv.
+    assumption.
+
+  + intros. constructor; eauto.
+    simpl in *. T.refold_elims_match ELIMS.
+    rewrite T.elims_match_list_Forall in *.
+    on _, invc_using Forall_3part_inv.
+    eapply Forall_app; eauto. constructor; eauto.
+    eapply T.value_elims_match; eauto.
+
+- (* ConstrDone *) on _, eapply_. constructor. auto.
+
+- (* CallL *)
+  constructor; eauto.
+  + simpl in *. T.refold_elims_match ELIMS.  firstorder.
+  + intros. constructor; eauto.
+    simpl in *. T.refold_elims_match ELIMS.
+    firstorder eauto using T.value_elims_match.
+
+- (* CallR *)
+  constructor; eauto.
+  + simpl in *. T.refold_elims_match ELIMS.  firstorder.
+  + intros. constructor; eauto.
+    simpl in *. T.refold_elims_match ELIMS.
+    firstorder eauto using T.value_elims_match.
+
+- (* MakeCall *)
+  constructor; eauto.
+  eapply Forall_nth_error; eauto.
+
+- (* ElimNStep *)
+  constructor; eauto.
+  + simpl in *. T.refold_elims_match ELIMS.  firstorder.
+  + intros. constructor; eauto.
+    simpl in *. T.refold_elims_match ELIMS.
+    firstorder eauto using T.value_elims_match.
+
+- (* Eliminate *)
+  constructor; eauto.
+  simpl in *. T.refold_elims_match ELIMS. do 2 break_and.
+  cut (T.elims_match_pair ELIMS (case, rec)).
+  + simpl. intro. eapply T.unroll_elim_elims_match; eauto.
+    * rewrite <- T.elims_match_list_Forall. auto.
+    * intros. simpl. T.refold_elims_match ELIMS. firstorder.
+  + rewrite T.elims_match_list_pair_Forall in *.
+    eapply Forall_nth_error; eauto.
+Qed.
 
 Theorem I_sim : forall TE EE ELIMS t t' e,
     env_ok TE EE ELIMS ->
     T.elims_match_list ELIMS TE ->
-    T_elims_match_state ELIMS t ->
+    T_state_ok ELIMS t ->
     I TE EE t e ->
     T.sstep TE t t' ->
     exists e',
