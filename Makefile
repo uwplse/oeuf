@@ -3,7 +3,11 @@ DRIVER=OeufDriver.native
 all: proof driver test
 
 proof: Makefile.coq
-	$(MAKE) -j $(NPAR) -f Makefile.coq
+ifeq ($(NPAR),)
+	$(MAKE) -j2 -f Makefile.coq
+else
+	$(MAKE) -j$(NPAR) -f Makefile.coq
+endif
 
 Makefile.coq: _CoqProject
 	coq_makefile -f _CoqProject -o Makefile.coq
