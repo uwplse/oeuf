@@ -97,6 +97,8 @@ Section Simulation.
     eapply compose_notrace_mix_forward_simulation.
     eapply ElimFuncComp.fsim; try eassumption.
 
+    admit. 
+
     (* ElimFunc to ElimFunc2 *)
     eapply compose_notrace_mix_forward_simulation.
     eapply ElimFuncComp2.fsim; try eassumption.
