@@ -287,21 +287,6 @@ Proof.
 Qed.
 
 
-
-Lemma grab_expr_in :
-  forall {ty tys l} (exprs : hlist (SourceLang.expr l) tys) (expr : SourceLang.expr l ty),
-    grab_expr l tys ty exprs expr ->
-    In (compile expr) (compile_hlist exprs).
-Proof.
-  induction exprs; intros.
-  simpl in H. inversion H.
-  simpl in H. break_match_hyp. subst.
-  unfold eq_rect_r in *.
-  simpl in *. break_match_hyp. left. congruence.
-  right. eapply IHexprs; eauto.
-  simpl. right. eapply IHexprs; eauto.
-Qed.
-
 Lemma initial_state_exists :
   forall cu tprog,
     @compile_cu nil (types cu) (Metadata.init_metadata cu) = tprog ->
@@ -310,26 +295,15 @@ Lemma initial_state_exists :
       Untyped.initial_state tprog (compile expr).
 Proof.
   intros.
-  inv H0. subst.
-  destruct cu. simpl in *.
-  econstructor; eauto. simpl.
-
-  assert (expr = expr0).
-  {
-    eapply EqdepFacts.eq_sigT_eq_dep in H5.
-    eapply Eqdep_dec.eq_dep_eq_dec in H5.
-    eapply EqdepFacts.eq_sigT_eq_dep in H5.
-    eapply Eqdep_dec.eq_dep_eq_dec in H5.
-
-    congruence.
-
-    intros. eapply SourceLang.type_eq_dec.
-    eapply list_eq_dec. eapply SourceLang.type_eq_dec.
-  }
-
-  clear H5. subst expr0.
-
-  eapply grab_expr_in; eauto.
+  invc H0.
+  repeat (find_apply_lem_hyp Eqdep_dec.inj_pair2_eq_dec;
+          auto using list_eq_dec, SourceLang.type_eq_dec).
+  constructor.
+  subst expr.
+  unfold compile_cu.
+  simpl.
+  rewrite compile_hlist_hmap_simple.
+  apply In_hget_hmap_simple.
 Qed.
 
 Lemma final_states_match:
