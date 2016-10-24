@@ -48,6 +48,7 @@ Definition top f :=
 Inductive cont :=
 | Ktail (code : list insn) (stk : list value) (k : cont)
 | Kret (arg : value) (self : value) (k : cont)
+| Kswitch (k : cont)
 | Kstop.
 
 Inductive state :=
@@ -101,7 +102,7 @@ Inductive sstep (E : env) : state -> state -> Prop :=
         arg f = Constr tag args ->
         nth_error cases tag = Some case ->
         sstep E (Run [Switch cases] f k)
-                (Run case f k)
+                (Run case f (Kswitch k))
 
 | SContTail : forall code f stk k v,
         stack f = [v] ->
@@ -111,6 +112,10 @@ Inductive sstep (E : env) : state -> state -> Prop :=
         stack f = [v] ->
         sstep E (Run [] f (Kret a s k))
                 (Run [] (Frame a s [v]) k)
+| SContSwitch : forall f k v,
+        stack f = [v] ->
+        sstep E (Run [] f (Kswitch k))
+                (Run [] (Frame (arg f) (self f) [v]) k)
 | SContStop : forall f v,
         stack f = [v] ->
         sstep E (Run [] f Kstop)

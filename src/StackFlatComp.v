@@ -92,6 +92,15 @@ Inductive I_cont : list value -> A.cont -> list value -> B.cont -> Prop :=
         I_cont (A.stack af) ak (B.stack bf) bk ->
         I_cont stk (A.Kret acode af ak)
                stk (B.Kret bcode bf bk)
+(* NB: assumes the A stack is [] on entry to each Switch. *)
+| IkSwitch : forall stk1 stk2  acode af ak bcode bf bk,
+        Forall2 I_insn acode bcode ->
+        I_frame af bf ->
+        I_cont stk1 ak (stk1 ++ stk2) bk ->
+        I_cont stk1
+               (A.Kswitch acode [] ak)
+               (stk1 ++ stk2)
+               (B.Kswitch bcode stk2 bk)
 | IkStop : forall stk, I_cont stk A.Kstop stk B.Kstop.
 
 Inductive I : A.state -> B.state -> Prop :=
@@ -146,6 +155,7 @@ Lemma I_cont_stk_inv : forall astk ak bstk bk
 intros0 HP II. invc II; simpl in *.
 - eapply HP; simpl; eauto.
 - eapply HP; simpl; eauto. rewrite app_nil_r. reflexivity.
+- eapply HP; simpl; eauto.
 - eapply HP; simpl; eauto. rewrite app_nil_r. reflexivity.
 Qed.
 
@@ -163,9 +173,10 @@ Qed.
 Lemma cons_I_cont : forall astk ak  bstk bk  v,
     I_cont astk ak bstk bk ->
     I_cont (v :: astk) ak (v :: bstk) bk.
-intros0 II. invc II.
+first_induction ak; intros0 II; invc II.
 - rewrite app_comm_cons. constructor; auto.
 - constructor; auto.
+- rewrite app_comm_cons. econstructor; eauto.
 - constructor; auto.
 Qed.
 
@@ -179,9 +190,11 @@ Lemma skipn_I_cont : forall astk ak  bstk bk  n,
     n <= length astk ->
     I_cont astk ak bstk bk ->
     I_cont (skipn n astk) ak (skipn n bstk) bk.
-intros0 Hlen II. invc II.
+first_induction ak; intros0 Hlen II; invc II.
 - rewrite skipn_app_l by auto. constructor; auto.
 - constructor; auto.
+- specialize (IHak ?? ?? ?? ?? ** **).
+  rewrite skipn_app_l in * by auto. econstructor; eauto.
 - constructor; auto.
 Qed.
 
@@ -270,6 +283,7 @@ simpl in *; try subst.
 
   eexists. split. eapply B.SSwitchinate; eauto using eq_refl.
   i_ctor.
+  simpl. remvar stk2 as stk. econstructor; eauto. reflexivity.
 
 - (* ContTail *)
   on >I_cont, invc.
@@ -282,6 +296,11 @@ simpl in *; try subst.
   i_ctor.
     { on (I_frame f' bf), invc. i_ctor. }
   i_lem push_I_cont.
+
+- (* ContSwitch *)
+  on >I_cont, invc.
+  eexists. split. eapply B.SContSwitch; eauto using eq_refl.
+  i_ctor.
 
 - (* ContStop *)
   on >I_cont, invc.

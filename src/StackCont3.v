@@ -48,6 +48,9 @@ Definition top f :=
 Inductive cont :=
 | Ktail (code : list insn) (stk : list value) (k : cont)
 | Kret (code : list insn) (f : frame) (k : cont)
+(* keeping the original `stk` lets us enforce that each branch pushes
+ * exactly one value before running SContSwitch *)
+| Kswitch (code : list insn) (stk : list value) (k : cont)
 | Kstop.
 
 Inductive state :=
@@ -101,7 +104,7 @@ Inductive sstep (E : env) : state -> state -> Prop :=
         arg f = Constr tag args ->
         nth_error cases tag = Some case ->
         sstep E (Run [Switch cases] f k)
-                (Run case f k)
+                (Run case f (Kswitch [] (stack f) k))
 
 | SContTail : forall code f stk k v,
         stack f = [v] ->
@@ -111,6 +114,10 @@ Inductive sstep (E : env) : state -> state -> Prop :=
         stack f = [v] ->
         sstep E (Run [] f (Kret code f' k))
                 (Run code (push f' v) k)
+| SContSwitch : forall code f stk k v,
+        stack f = v :: stk ->
+        sstep E (Run [] f (Kswitch code stk k))
+                (Run code f k)
 | SContStop : forall f v,
         stack f = [v] ->
         sstep E (Run [] f Kstop)
