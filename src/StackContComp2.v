@@ -91,6 +91,8 @@ Fixpoint B_cont_flatten f k :=
     | B.Kret a s k' =>
             let f' := B.Frame a s (B.stack f) in
             B_cont_flatten f' k'
+    | B.Kswitch k' =>
+            B_cont_flatten f k'
     | B.Kstop =>
             BKfStop
     end.
@@ -141,6 +143,7 @@ Lemma B_cont_flatten_stack_irrel : forall arg self stk stk' bk,
     B_cont_flatten (B.Frame arg self stk') bk.
 first_induction bk; intros; simpl in *.
 - reflexivity.
+- eapply IHbk.
 - eapply IHbk.
 - reflexivity.
 Qed.
@@ -369,6 +372,23 @@ first_induction bk; intros0 IIcont Hstack Hv Astep.
     { eapply B.SContRet. eassumption. }
   B_plus HS.
     { rewrite Hv in Hb'. exact Hb'. }
+  eexists. split. exact HS.
+  assumption.
+
+- simpl in *.
+
+  fwd eapply IHbk as HH.
+    { eassumption. }
+    { simpl. eassumption. }
+    { eassumption. }
+    { eassumption. }
+  destruct HH as (b' & Hb' & IIb').
+
+  B_start HS.
+  B_step HS.
+    { eapply B.SContSwitch. eassumption. }
+  B_plus HS.
+    { unfold S1. rewrite <- Hv. destruct bf. exact Hb'. }
   eexists. split. exact HS.
   assumption.
 

@@ -88,6 +88,10 @@ Inductive I_cont : A.cont -> B.cont -> Prop :=
         I_cont ak bk ->
         I_cont (A.Kret arg self ak)
                (B.Kret [] (B.Frame arg self []) bk)
+| IkSwitch : forall ak  bk,
+        I_cont ak bk ->
+        I_cont (A.Kswitch ak)
+               (B.Kswitch [] [] bk)
 | IkStop : I_cont A.Kstop B.Kstop.
 
 Inductive I : A.state -> B.state -> Prop :=
@@ -327,7 +331,7 @@ simpl in *; try subst stack.
   fwd eapply Forall2_nth_error_ex as HH; eauto.  destruct HH as (bcase & ? & ?).
 
   eexists. split. eapply B.SSwitchinate; eauto using eq_refl.
-  i_ctor.
+  i_ctor. i_ctor.
 
 - (* ContTail *)
   on >I_cont, invc.
@@ -338,6 +342,11 @@ simpl in *; try subst stack.
   on >I_cont, invc.
   eexists. split. eapply B.SContRet; eauto using eq_refl.
   i_ctor. i_ctor.
+
+- (* ContSwitch *)
+  on >I_cont, invc.
+  eexists. split. eapply B.SContSwitch; eauto using eq_refl.
+  i_ctor.
 
 - (* ContStop *)
   on >I_cont, invc.
