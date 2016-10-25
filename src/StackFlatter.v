@@ -106,6 +106,7 @@ Inductive sstep (E : env) : state -> state -> Prop :=
                 (Run case f (Kswitch is (stack f) k))
 
 | SContRet : forall code f f' k,
+        length (stack f) >= 1 ->
         sstep E (Run [] f (Kret code f' k))
                 (Run code (push f' (top f)) k)
 | SContSwitch : forall code f stk k v,
@@ -113,6 +114,7 @@ Inductive sstep (E : env) : state -> state -> Prop :=
         sstep E (Run [] f (Kswitch code stk k))
                 (Run code f k)
 | SContStop : forall f,
+        length (stack f) >= 1 ->
         sstep E (Run [] f Kstop)
                 (Stop (top f))
 .
