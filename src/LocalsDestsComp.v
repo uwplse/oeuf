@@ -104,25 +104,24 @@ Fixpoint collect_keys k :=
     | _ => []
     end.
 
-Inductive I_cont : A.cont -> list (nat * value) -> B.cont -> Prop :=
-| IkRet : forall acode af ak locals bcode bdst bf bk,
+Inductive I_cont : A.cont -> B.cont -> Prop :=
+| IkRet : forall acode af ak bcode bdst bf bk,
         Forall2 I_insn acode bcode ->
         I_frame af bf ->
-        I_cont ak (B.locals bf) bk ->
+        I_cont ak bk ->
         I_keys (keys (B.locals bf)) (bdst :: B.dests_list bcode ++ collect_keys bk) ->
-        I_cont (A.Kret acode af ak) locals (B.Kret bcode bdst bf bk)
-| IkSwitch : forall acode astk ak locals bcode bdst bstk bk,
+        I_cont (A.Kret acode af ak) (B.Kret bcode bdst bf bk)
+| IkSwitch : forall stk_vals acode ak bcode bdst bk,
         Forall2 I_insn acode bcode ->
-        Forall2 (fun av bl => lookup locals bl = Some av) astk bstk ->
-        I_cont ak locals bk ->
-        I_cont (A.Kswitch acode astk ak) locals (B.Kswitch bcode bdst bstk bk)
-| IkStop : forall locals, I_cont A.Kstop locals B.Kstop.
+        I_cont ak bk ->
+        I_cont (A.Kswitch acode stk_vals ak) (B.Kswitch bcode bdst stk_vals bk)
+| IkStop : I_cont A.Kstop B.Kstop.
 
 Inductive I : A.state -> B.state -> Prop :=
 | IRun : forall acode af ak  bcode bf bk,
         Forall2 I_insn acode bcode ->
         I_frame af bf ->
-        I_cont ak (B.locals bf) bk ->
+        I_cont ak bk ->
         I_keys (keys (B.locals bf)) (B.dests_list bcode ++ collect_keys bk) ->
         I (A.Run acode af ak)
           (B.Run bcode bf bk)
@@ -283,18 +282,6 @@ constructor; eauto.
 Qed.
 Hint Resolve cons_I_keys_r.
 
-Lemma cons_I_cont : forall ak locals bk  k v,
-    ~ In k (keys locals) ->
-    I_cont ak locals bk ->
-    I_cont ak ((k, v) :: locals) bk.
-first_induction ak; intros0 Hin II; invc II.
-- constructor; eauto.
-- constructor; eauto. list_magic_on (stk, (bstk, tt)).
-  eapply lookup_some_same; eauto.
-- constructor.
-Qed.
-Hint Resolve cons_I_cont.
-
 Lemma I_frame_stack_local : forall af bf idx v,
     nth_error (A.stack af) idx = Some v ->
     I_frame af bf ->
@@ -454,9 +441,6 @@ intros0 Henv Bdt II Astep; [ | solve [invc Astep] ].
 inv Astep; inv II;
 try on (Forall2 I_insn _ _), invc;
 try on (I_insn _ _), invc;
-(*
-try on (Forall2 _ [] _), invc;
-*)
 try on >I_frame, inv;
 try on _, invc_using I_keys_cons_r_inv;
 simpl in *; B.refold_dests; try subst.
@@ -508,6 +492,7 @@ simpl in *; B.refold_dests; try subst.
   fwd eapply Forall2_nth_error_ex with (xs := cases) as HH; eauto.  destruct HH as (bcase & ? & ?).
 
   eexists. split. eapply B.SSwitchinate; eauto using eq_refl.
+    { unfold B.local. simpl. instantiate (1 := astk). list_magic_on (astk, (bstk, tt)). }
   i_ctor. i_ctor.
   fwd eapply B_nth_error_dests_list_app as HH; eauto.
     destruct HH as (before & after & Heq). rewrite Heq in *.
@@ -525,9 +510,9 @@ simpl in *; B.refold_dests; try subst.
   on (Forall2 _ (_ :: _) _), invc. rename y into bv. rename l' into bstk.
   on >I_cont, inv.
   fwd eapply I_keys_r_not_in_l; eauto.
-  assert (bstk0 = bstk) by admit. (* need to fix I_cont *) subst bstk0.
 
   eexists. split. eapply B.SContSwitch; eauto using eq_refl.
+  { unfold B.local. simpl. constructor; eauto. list_magic_on (stk, (bstk, tt)). }
   i_ctor.
   change (A.Frame _ _ _) with (A.pop_push (A.Frame arg self (v :: stk)) 1 v).
   eauto using pop_push_I_frame.
@@ -537,4 +522,4 @@ simpl in *; B.refold_dests; try subst.
   eexists. split. eapply B.SContStop; eauto using eq_refl.
     { eapply I_frame_stack_local; eauto. eapply A_top_nth_error; eauto. }
   i_ctor.
-Admitted.
+Qed.
