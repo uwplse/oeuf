@@ -895,3 +895,185 @@ congruence.
 Qed.
 
 
+
+(* distinctness and disjointness *)
+
+Inductive distinct {A} : list A -> Prop :=
+| DistinctNil : distinct []
+| DistinctCons : forall x xs,
+        ~ In x xs ->
+        distinct xs ->
+        distinct (x :: xs).
+
+Inductive disjoint {A} : list A -> list A -> Prop :=
+| Disjoint : forall xs ys,
+        Forall (fun x => ~ In x ys) xs ->
+        disjoint xs ys.
+
+Lemma app_distinct : forall A (xs ys : list A),
+    distinct xs ->
+    distinct ys ->
+    disjoint xs ys ->
+    distinct (xs ++ ys).
+induction xs; intros0 Hx Hy Hxy.
+- simpl. assumption.
+- invc Hx. invc Hxy. on >Forall, invc.
+  rewrite <- app_comm_cons.
+  constructor; eauto.
+  + rewrite in_app_iff. firstorder.
+  + eapply IHxs; eauto. constructor; eauto.
+Qed.
+
+Lemma cons_disjoint_l : forall A (xs ys : list A) x,
+    ~ In x ys ->
+    disjoint xs ys ->
+    disjoint (x :: xs) ys.
+intros0 Hin Hxy. invc Hxy. constructor.
+constructor; eauto.
+Qed.
+Hint Resolve cons_disjoint_l.
+
+Lemma cons_disjoint_r : forall A (xs ys : list A) y,
+    ~ In y xs ->
+    disjoint xs ys ->
+    disjoint xs (y :: ys).
+intros0 Hin Hxy; invc Hxy; constructor; eauto.
+rewrite Forall_forall in *. intros.
+on >In, contradict. simpl in *. on (_ \/ _), invc; eauto.
+intro. firstorder.
+Qed.
+Hint Resolve cons_disjoint_r.
+
+Lemma tail_disjoint_l : forall A (xs ys : list A) x,
+    disjoint (x :: xs) ys ->
+    disjoint xs ys.
+intros0 Hxy. invc Hxy. on >Forall, invc.
+constructor. eauto.
+Qed.
+Hint Resolve tail_disjoint_l.
+
+Lemma tail_disjoint_r : forall A (xs ys : list A) y,
+    disjoint xs (y :: ys) ->
+    disjoint xs ys.
+intros0 Hxy. invc Hxy. constructor.
+rewrite Forall_forall in *. intros.
+simpl in *. firstorder.
+Qed.
+Hint Resolve tail_disjoint_r.
+
+Lemma nil_disjoint_l : forall A (ys : list A),
+    disjoint [] ys.
+intros. constructor. constructor.
+Qed.
+Hint Resolve nil_disjoint_l.
+
+Lemma nil_disjoint_r : forall A (xs : list A),
+    disjoint xs [].
+intros. constructor. rewrite Forall_forall. intros. inversion 1.
+Qed.
+Hint Resolve nil_disjoint_r.
+
+
+Lemma disjoint_sym : forall A (xs ys : list A),
+    disjoint xs ys ->
+    disjoint ys xs.
+intros0 Hxy. invc Hxy. constructor.
+rewrite Forall_forall in *. intros.
+firstorder.
+Qed.
+
+Lemma distinct_disjoint : forall A (xs ys : list A),
+    distinct (xs ++ ys) ->
+    disjoint xs ys.
+induction xs; intros0 Hxy.
+- eapply nil_disjoint_l.
+- rewrite <- app_comm_cons in *. invc Hxy.
+  eapply cons_disjoint_l; eauto.
+  rewrite in_app_iff in *. firstorder.
+Qed.
+
+Lemma distinct_app_inv' : forall A (xs ys : list A)
+        (P : _ -> _ -> Prop),
+    (distinct xs ->
+        distinct ys ->
+        P xs ys) ->
+    distinct (xs ++ ys) -> P xs ys.
+induction xs; intros0 HP Hxy.
+- eapply HP; eauto. constructor.
+- rewrite <- app_comm_cons in *. invc Hxy.
+  rewrite in_app_iff in *.
+  on >@distinct, invc_using IHxs.
+  eapply HP; eauto.
+  constructor; eauto.
+Qed.
+
+Lemma distinct_app_inv : forall A (xs ys : list A)
+        (P : _ -> _ -> Prop),
+    (distinct xs ->
+        distinct ys ->
+        disjoint xs ys ->
+        P xs ys) ->
+    distinct (xs ++ ys) -> P xs ys.
+intros0 HP Hxy. inv_using distinct_app_inv' Hxy.
+eapply HP; eauto using distinct_disjoint.
+Qed.
+
+
+
+(* association list lookups *)
+
+Fixpoint lookup {A} (xs : list (nat * A)) (k : nat) : option A :=
+    match xs with
+    | [] => None
+    | (k', x) :: xs =>
+            if eq_nat_dec k k'
+                then Some x
+                else lookup xs k
+    end.
+
+Definition keys {A} (xs : list (nat * A)) : list nat := map fst xs.
+
+Lemma cons_lookup_ne : forall A k (x : A) k' xs,
+    ~ In k (keys xs) ->
+    k' <> k ->
+    lookup ((k, x) :: xs) k' = lookup xs k'.
+destruct xs; intros0 Hin Hk; simpl in *;
+break_if; congruence.
+Qed.
+
+Lemma lookup_some_in_keys : forall A xs k (x : A),
+    lookup xs k = Some x ->
+    In k (keys xs).
+first_induction xs; intros0 Hlook; simpl in *.
+- discriminate.
+- destruct a. break_if; eauto.
+Qed.
+
+Lemma in_keys_lookup_some_ex : forall A xs k,
+    In k (keys xs) ->
+    exists x : A, lookup xs k = Some x.
+first_induction xs; intros0 Hin; simpl in *.
+- exfalso. auto.
+- destruct a. simpl in *. break_if; eauto.
+  destruct Hin; eauto. congruence.
+Qed.
+
+Lemma lookup_none_in_keys : forall A (xs : list (nat * A)) k,
+    lookup xs k = None ->
+    ~ In k (keys xs).
+induction xs; intros0 Hlook; simpl in *.
+- eauto.
+- destruct a. simpl in *. break_if.
+  + discriminate.
+  + inversion 1; eauto.
+    eapply IHxs; eauto.
+Qed.
+
+Lemma in_keys_lookup_none : forall A (xs : list (nat * A)) k,
+    ~ In k (keys xs) ->
+    lookup xs k = None.
+induction xs; intros0 Hin; simpl in *.
+- reflexivity.
+- destruct a. simpl in *. break_if; eauto.
+  contradict Hin. eauto.
+Qed.

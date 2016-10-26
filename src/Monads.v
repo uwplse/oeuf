@@ -1,5 +1,6 @@
 Require Import List.
 Import ListNotations.
+Require Import StructTact.StructTactics.
 
 
 
@@ -76,6 +77,21 @@ Ltac break_bind_option :=
     | [ H : bind_option ?x _ = Some _ |- _ ] =>
             destruct x eqn:?; [ simpl in H | discriminate H ]
     end.
+
+Ltac break_bind_state :=
+    unfold seq, fmap in *;
+    repeat match goal with
+    | [ H : @bind_state ?A ?B ?S ?x_ ?k_ ?s_ = (_, _) |- _ ] =>
+            (* unfold the top-level bind_state, then destruct *)
+            let orig := constr:(@bind_state A B S x_ k_ s_) in
+            let bind := eval unfold bind_state in (fun x k s => @bind_state A B S x k s) in
+            let repl := eval cbv beta in (bind x_ k_ s_) in
+            change orig with repl in H;
+            destruct (x_ s_) as [?x ?s] eqn:?
+    | [ H : ret_state _ _ = (_, _) |- _ ] => invc H
+    end.
+
+
 
 Section zip_error.
   Local Open Scope option_monad.
