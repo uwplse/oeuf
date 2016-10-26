@@ -224,7 +224,7 @@ Definition transf_fundef (f : Fmajor.function) : Emajor.fundef :=
                     
 Definition transf_program (p : Fmajor.program) : Emajor.program :=
   AST.transform_program transf_fundef p.
-
+(*
 Lemma transf_switch :
   forall targid cases target,
     transf_stmt (Fmajor.Sswitch targid cases target) =
@@ -241,7 +241,7 @@ Lemma transf_cases_ind_defns :
 Proof.
   intros. unfold transf_cases. fold mk_blocks. fold mk_cases. subst. reflexivity.
 Qed.
-
+*)
 
 Section PRESERVATION.
 
