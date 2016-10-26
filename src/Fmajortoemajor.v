@@ -37,7 +37,7 @@ let transf_cases (targid : ident) (cases : list (Z * Fmajor.stmt)) (target_d : E
       | [] => []
       | (v, s) :: cases => (v, i) :: mk_cases (S i) cases
       end in
-    let switch := Emajor.Sswitch targid target_d (mk_cases 0%nat (rev cases)) (length cases) in
+    let switch := Emajor.Sswitch targid target_d (mk_cases 0%nat cases) (length cases) in
     let swblock := Emajor.Sblock switch in
     let fix mk_blocks (acc : Emajor.stmt) (i : nat) (cases : list (Z * Fmajor.stmt))  :=
         match cases with
