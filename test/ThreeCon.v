@@ -41,7 +41,23 @@ Definition pos_constr_ty : type :=
 Definition pos_constr_0_reflect {l} : expr l pos_constr_ty :=
   ltac:(let x := eval unfold pos_constr_0 in pos_constr_0 in reflect x).
 
+Definition pos_constr_1_reflect {l} : expr l pos_constr_ty :=
+  ltac:(let x := eval unfold pos_constr_1 in pos_constr_1 in reflect x).
+
+Definition pos_constr_2_reflect {l} : expr l pos_constr_ty :=
+  ltac:(let x := eval unfold pos_constr_2 in pos_constr_2 in reflect x).
+
 Definition pos_constr_test_reflect {l} : expr l pos_constr_test_ty :=
   ltac:(let x := eval unfold pos_constr_test_elim in pos_constr_test_elim in reflect x).
 
+Import HList.
+Require Import String.
+
+Oeuf Eval lazy Then Write To File "threecon.oeuf"
+     (Pretty.compilation_unit.pretty 75
+       (CompilationUnit.CompilationUnit _ (hcons (@pos_constr_test_reflect [])
+                                          (hcons (@pos_constr_0_reflect [])
+                                          (hcons (@pos_constr_1_reflect [])
+                                          (hcons (@pos_constr_2_reflect []) hnil))))
+                                        ["pos_constr_test"; "pos_constr_0"; "pos_constr_1"; "pos_constr_2"]%list%string)).
 
