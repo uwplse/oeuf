@@ -39,16 +39,17 @@ let transf_cases (targid : ident) (cases : list (Z * Fmajor.stmt)) (target_d : E
       end in
     let switch := Emajor.Sswitch targid target_d (mk_cases 0%nat (rev cases)) (length cases) in
     let swblock := Emajor.Sblock switch in
-    let fix mk_blocks (base : Emajor.stmt) (cases : list (Z * Fmajor.stmt)) (i : nat) :=
+    let fix mk_blocks (acc : Emajor.stmt) (i : nat) (cases : list (Z * Fmajor.stmt))  :=
         match cases with
-        | [] => base
-        | (v,s) :: cases =>
-          let r := mk_blocks base cases (S i) in
-          Emajor.Sblock (Emajor.Sseq r
-                                     (Emajor.Sseq (transf_stmt s)
-                                                  (Emajor.Sexit i)))
+        | [] => acc
+        | (v, s) :: cases =>
+          let acc' :=
+              Emajor.Sblock (Emajor.Sseq acc
+                                         (Emajor.Sseq (transf_stmt s)
+                                                      (Emajor.Sexit (length cases - i)))) in (* does this actually work? *)
+          mk_blocks acc' (S i) cases
         end in
-    mk_blocks swblock cases O in
+    mk_blocks swblock O cases in
   match s with
   | Fmajor.Sskip => Sskip
   | Fmajor.Scall dst fn arg => Scall dst (transf_expr fn) (transf_expr arg)
@@ -85,6 +86,8 @@ Fixpoint mk_cases (i : nat) (cases : list (Z * Fmajor.stmt)) : list (Z * nat) :=
   | (v, s) :: cases => (v, i) :: mk_cases (S i) cases
   end.
 
+
+NEW
 Fixpoint mk_blocks
          (base : Emajor.stmt) (* What to stick in the center of the switch *)
          (cases : list (Z * Fmajor.stmt)) (* list of cases to recurse down *)
