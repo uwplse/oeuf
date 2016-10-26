@@ -1,13 +1,13 @@
 #include "shim.h"
 
 
-extern void* pos_constr_test_elim(void*, void*);
+extern void* pos_constr_test(void*, void*);
 extern void* pos_constr_0(void*, void*);
 extern void* pos_constr_1(void*, void*);
 extern void* pos_constr_2(void*, void*);
 
 int main() {
-    void* pos_constr_closure = pos_constr_test_elim(NULL,NULL);
+    void* pos_constr_closure = pos_constr_test(NULL,NULL);
     void* n0 = VCALL(pos_constr_closure, pos_constr_0(NULL,NULL));
     void* n1 = VCALL(pos_constr_closure, pos_constr_1(NULL,NULL));
     void* n2 = VCALL(pos_constr_closure, pos_constr_2(NULL,NULL));
