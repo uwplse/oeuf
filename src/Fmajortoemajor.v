@@ -30,6 +30,10 @@ Fixpoint transf_expr (f : Fmajor.expr) : Emajor.expr :=
   | Fmajor.Deref e n => Deref (transf_expr e) n
   end.
 
+
+
+
+
 Fixpoint transf_stmt (s : Fmajor.stmt) : Emajor.stmt :=
 let transf_cases (targid : ident) (cases : list (Z * Fmajor.stmt)) (target_d : Emajor.expr) :=
   let fix mk_cases (i : nat) (cases : list (Z * Fmajor.stmt)) : list (Z * nat) :=
@@ -39,6 +43,29 @@ let transf_cases (targid : ident) (cases : list (Z * Fmajor.stmt)) (target_d : E
       end in
     let switch := Emajor.Sswitch targid target_d (mk_cases 0%nat cases) (length cases) in
     let swblock := Emajor.Sblock switch in
+    let fix mk_blocks_new (base : Emajor.stmt) (cases : list (Z * Fmajor.stmt)) (i : nat)  :=
+        match cases with
+        | [] => base
+        | (v,s) :: c =>
+          let r := mk_blocks_new base c (S i) in
+          Emajor.Sblock (Emajor.Sseq r
+                                     (Emajor.Sseq (transf_stmt s)
+                                                  (Emajor.Sexit i)))
+        end in
+    mk_blocks_new swblock cases O in
+  match s with
+  | Fmajor.Sskip => Sskip
+  | Fmajor.Scall dst fn arg => Scall dst (transf_expr fn) (transf_expr arg)
+  | Fmajor.Sassign dst exp => Sassign dst (transf_expr exp)
+  | Fmajor.SmakeConstr dst tag args => SmakeConstr dst tag (map transf_expr args)
+  | Fmajor.SmakeClose dst fname args => SmakeClose dst fname (map transf_expr args) 
+  | Fmajor.Sseq s1 s2 => Sseq (transf_stmt s1) (transf_stmt s2)
+  | Fmajor.Sswitch targid cases target => transf_cases targid cases (transf_expr target)
+  end.
+
+
+(*
+
     let fix mk_blocks (acc : Emajor.stmt) (i : nat) (cases : list (Z * Fmajor.stmt))  :=
         match cases with
         | [] => acc
@@ -50,17 +77,54 @@ let transf_cases (targid : ident) (cases : list (Z * Fmajor.stmt)) (target_d : E
           mk_blocks acc' (S i) cases
         end in
     mk_blocks swblock O cases in
-  match s with
-  | Fmajor.Sskip => Sskip
-  | Fmajor.Scall dst fn arg => Scall dst (transf_expr fn) (transf_expr arg)
-  | Fmajor.Sassign dst exp => Sassign dst (transf_expr exp)
-  | Fmajor.SmakeConstr dst tag args => SmakeConstr dst tag (map transf_expr args)
-  | Fmajor.SmakeClose dst fname args => SmakeClose dst fname (map transf_expr args) 
-  | Fmajor.Sseq s1 s2 => Sseq (transf_stmt s1) (transf_stmt s2)
-  | Fmajor.Sswitch targid cases target => transf_cases targid cases (transf_expr target)
+
+
+    let fix mk_blocks_new (base : Emajor.stmt) (cases : list (Z * Fmajor.stmt)) (i : nat)  :=
+        match cases with
+        | [] => base
+        | (v,s) :: cases' =>
+          let r := mk_blocks_new base cases' (S i) in
+          Emajor.Sblock (Emajor.Sseq r
+                                     (Emajor.Sseq (transf_stmt s)
+                                                  (Emajor.Sexit i)))
+        end in
+    mk_blocks_new swblock (rev cases) O in
+
+*)
+
+  
+(*
+
+(* NEW*)
+Fixpoint mk_blocks_new
+         (base : Emajor.stmt) (* What to stick in the center of the switch *)
+         (cases : list (Z * Fmajor.stmt)) (* list of cases to recurse down *)
+         (i : nat) (* current case number (innermost is total cases, outermost will be 0) *)
+  :=
+  match cases with
+  | [] => base
+  | (v,s) :: cases =>
+    let r := mk_blocks_new base cases (S i) in
+    Emajor.Sblock (Emajor.Sseq r
+                                 (Emajor.Sseq (transf_stmt s)
+                                              (Emajor.Sexit i)))
   end.
 
-(*
+
+(* OLD *)
+Fixpoint mk_blocks (acc : Emajor.stmt) (i : nat) (cases : list (Z * Fmajor.stmt)) :=
+  match cases with
+  | [] => acc
+  | (v, s) :: cases =>
+    let acc' :=
+        Emajor.Sblock (Emajor.Sseq acc
+                                   (Emajor.Sseq (transf_stmt s)
+                                                (Emajor.Sexit (length cases - i)))) in (* does this actually work? *)
+    mk_blocks acc' (S i) cases
+  end.
+
+
+
 Definition transf_cases (targid : ident) (cases : list (Z * Fmajor.stmt)) (target_d : Emajor.expr) :=
   let fix mk_cases (i : nat) (cases : list (Z * Fmajor.stmt)) : list (Z * nat) :=
       match cases with
@@ -85,51 +149,25 @@ Fixpoint mk_cases (i : nat) (cases : list (Z * Fmajor.stmt)) : list (Z * nat) :=
   | [] => []
   | (v, s) :: cases => (v, i) :: mk_cases (S i) cases
   end.
-
-
-NEW
-Fixpoint mk_blocks
-         (base : Emajor.stmt) (* What to stick in the center of the switch *)
-         (cases : list (Z * Fmajor.stmt)) (* list of cases to recurse down *)
-         (i : nat) (* current case number (innermost is total cases, outermost will be 0) *)
-  :=
-  match cases with
-  | [] => base
-  | (v,s) :: cases =>
-    let r := mk_blocks base cases (S i) in
-    Emajor.Sblock (Emajor.Sseq r
-                                 (Emajor.Sseq (transf_stmt s)
-                                              (Emajor.Sexit i)))
-  end.
 *)
 
-(* OLD
-Fixpoint mk_blocks (acc : Emajor.stmt) (i : nat) (cases : list (Z * Fmajor.stmt)) :=
-  match cases with
-  | [] => acc
-  | (v, s) :: cases =>
-    let acc' :=
-        Emajor.Sblock (Emajor.Sseq acc
-                                   (Emajor.Sseq (transf_stmt s)
-                                                (Emajor.Sexit (length cases - i)))) in (* does this actually work? *)
-    mk_blocks acc' (S i) cases
-  end.
-*)
+
 (* Here is the base problem *)
 (* We need to rewrite all the transformations to not be tail recursive *)
 (* Just mk_blocks then *)
 
-
 (*
 Definition base := Emajor.SmakeConstr xH Int.zero nil.
+Definition two := [(12,Fmajor.Sassign xH (Fmajor.Var xH));(24,Fmajor.Sseq Fmajor.Sskip Fmajor.Sskip)].
 Definition cases := [(12,Fmajor.Sassign xH (Fmajor.Var xH));(24,Fmajor.Sseq Fmajor.Sskip Fmajor.Sskip);(18, Fmajor.Sskip);(3, Fmajor.Sskip);(6, Fmajor.Sskip)].
 
-Definition mb := mk_blocks base cases O.
+Definition mb_old := mk_blocks base O cases.
+Definition mb_new := mk_blocks_new base (rev cases) O.
 
 Lemma x :
-  mb = Emajor.Sskip.
+  mb_old = mb_new.
 Proof.
-  unfold mb, base.
+  unfold mb_old, mb_new.
   simpl.
   repeat f_equal.
 Qed.
