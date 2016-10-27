@@ -33,8 +33,38 @@ Fixpoint transf_expr (f : Fmajor.expr) : Emajor.expr :=
 
 
 
-
 Fixpoint transf_stmt (s : Fmajor.stmt) : Emajor.stmt :=
+let transf_cases (targid : ident) (cases : list (Z * Fmajor.stmt)) (target_d : Emajor.expr) :=
+  let fix mk_cases (i : nat) (cases : list (Z * Fmajor.stmt)) : list (Z * nat) :=
+      match cases with
+      | [] => []
+      | (v, s) :: cases => (v, i) :: mk_cases (S i) cases
+      end in
+    let switch := Emajor.Sswitch targid target_d (mk_cases 0%nat cases) (length cases) in
+    let swblock := Emajor.Sblock switch in
+    let fix mk_blocks (acc : Emajor.stmt) (i : nat) (cases : list (Z * Fmajor.stmt))  :=
+        match cases with
+        | [] => acc
+        | (v, s) :: cases =>
+          let acc' :=
+              Emajor.Sblock (Emajor.Sseq acc
+                                         (Emajor.Sseq (transf_stmt s)
+                                                      (Emajor.Sexit (length cases - i)))) in (* does this actually work? *)
+          mk_blocks acc' (S i) cases
+        end in
+    mk_blocks swblock O cases in
+  match s with
+  | Fmajor.Sskip => Sskip
+  | Fmajor.Scall dst fn arg => Scall dst (transf_expr fn) (transf_expr arg)
+  | Fmajor.Sassign dst exp => Sassign dst (transf_expr exp)
+  | Fmajor.SmakeConstr dst tag args => SmakeConstr dst tag (map transf_expr args)
+  | Fmajor.SmakeClose dst fname args => SmakeClose dst fname (map transf_expr args) 
+  | Fmajor.Sseq s1 s2 => Sseq (transf_stmt s1) (transf_stmt s2)
+  | Fmajor.Sswitch targid cases target => transf_cases targid cases (transf_expr target)
+  end.
+
+
+Fixpoint transf_stmt_new (s : Fmajor.stmt) : Emajor.stmt :=
 let transf_cases (targid : ident) (cases : list (Z * Fmajor.stmt)) (target_d : Emajor.expr) :=
   let fix mk_cases (i : nat) (cases : list (Z * Fmajor.stmt)) : list (Z * nat) :=
       match cases with
@@ -49,7 +79,7 @@ let transf_cases (targid : ident) (cases : list (Z * Fmajor.stmt)) (target_d : E
         | (v,s) :: c =>
           let r := mk_blocks_new base c (S i) in
           Emajor.Sblock (Emajor.Sseq r
-                                     (Emajor.Sseq (transf_stmt s)
+                                     (Emajor.Sseq (transf_stmt_new s)
                                                   (Emajor.Sexit i)))
         end in
     mk_blocks_new swblock cases O in
@@ -59,24 +89,13 @@ let transf_cases (targid : ident) (cases : list (Z * Fmajor.stmt)) (target_d : E
   | Fmajor.Sassign dst exp => Sassign dst (transf_expr exp)
   | Fmajor.SmakeConstr dst tag args => SmakeConstr dst tag (map transf_expr args)
   | Fmajor.SmakeClose dst fname args => SmakeClose dst fname (map transf_expr args) 
-  | Fmajor.Sseq s1 s2 => Sseq (transf_stmt s1) (transf_stmt s2)
+  | Fmajor.Sseq s1 s2 => Sseq (transf_stmt_new s1) (transf_stmt_new s2)
   | Fmajor.Sswitch targid cases target => transf_cases targid cases (transf_expr target)
   end.
 
 
 (*
 
-    let fix mk_blocks (acc : Emajor.stmt) (i : nat) (cases : list (Z * Fmajor.stmt))  :=
-        match cases with
-        | [] => acc
-        | (v, s) :: cases =>
-          let acc' :=
-              Emajor.Sblock (Emajor.Sseq acc
-                                         (Emajor.Sseq (transf_stmt s)
-                                                      (Emajor.Sexit (length cases - i)))) in (* does this actually work? *)
-          mk_blocks acc' (S i) cases
-        end in
-    mk_blocks swblock O cases in
 
 
     let fix mk_blocks_new (base : Emajor.stmt) (cases : list (Z * Fmajor.stmt)) (i : nat)  :=
