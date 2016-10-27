@@ -251,7 +251,7 @@ Definition switch_dest_ok :=
             match cases with
             | [] => True
             | case :: cases =>
-                    last_dest 0 case = dst /\
+                    (forall dummy, last_dest dummy case = dst) /\
                     go_list case /\ go_case_list dst cases
             end in
         match i with
@@ -279,7 +279,7 @@ Definition switch_dest_ok_case_list :=
         match cases with
         | [] => True
         | case :: cases =>
-                last_dest 0 case = dst /\
+                (forall dummy, last_dest dummy case = dst) /\
                 go_list case /\ go_case_list dst cases
         end in go_case_list.
 
@@ -297,7 +297,8 @@ Qed.
 
 Lemma switch_dest_ok_case_list_Forall : forall dst cases,
     switch_dest_ok_case_list dst cases <->
-    Forall (fun case => last_dest 0 case = dst /\ switch_dest_ok_list case) cases.
+    Forall (fun case => (forall dummy, last_dest dummy case = dst) /\
+        switch_dest_ok_list case) cases.
 induction cases; simpl; split; intro; eauto.
 - do 2 break_and. constructor; eauto. firstorder.
 - on >Forall, invc. firstorder.

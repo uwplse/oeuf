@@ -90,27 +90,24 @@ Inductive I_frame : A.frame -> B.frame -> Prop :=
         I_frame (A.Frame arg self stk locals) (B.Frame arg self stk locals).
 Hint Constructors I_frame.
 
-Inductive I_cont : list A.insn -> A.cont -> list B.insn -> B.cont -> Prop :=
-| IkRet : forall acode acode' dst af ak bcode bcode' ret bf bk,
-        Forall2 I_insn acode bcode ->
-        Forall2 I_insn acode' bcode' ->
-        I_frame af bf ->
-        I_cont acode' ak bcode' bk ->
-        ret = A.last_dest ret acode ->
-        I_cont acode (A.Kret acode' dst af ak)
-               bcode (B.Kret bcode' ret dst bf bk)
-| IkStop : forall acode bcode ret,
-        Forall2 I_insn acode bcode ->
-        ret = A.last_dest ret acode ->
-        I_cont acode A.Kstop
-               bcode (B.Kstop ret).
+Definition dummy := Constr 0 [].
 
 Inductive I : A.state -> B.state -> Prop :=
-| IRun : forall acode af ak  bcode bf bk,
+| IRunRet : forall dst  acode af acode' af' ak'    bcode bf bcode' ret bf' bk',
+        Forall2 I_insn acode bcode ->
         I_frame af bf ->
-        I_cont acode ak bcode bk ->
-        I (A.Run acode af ak)
-          (B.Run bcode bf bk)
+        ret = A.last_dest (hd 0 (A.stack af)) acode ->
+        I (A.Run acode' (A.push af' dst dummy) ak')
+          (B.Run bcode' (B.push bf' dst dummy) bk') ->
+        I (A.Run acode af (A.Kret acode' dst af' ak'))
+          (B.Run bcode bf (B.Kret bcode' ret dst bf' bk'))
+
+| IRunStop : forall acode af  bcode bf ret,
+        Forall2 I_insn acode bcode ->
+        I_frame af bf ->
+        ret = A.last_dest (hd 0 (A.stack af)) acode ->
+        I (A.Run acode af (A.Kstop))
+          (B.Run bcode bf (B.Kstop ret))
 
 | IStop : forall v,
         I (A.Stop v) (B.Stop v).
@@ -149,12 +146,6 @@ Ltac stk_simpl := compute [
     B.pop B.push B.pop_push  B.arg B.self B.stack B.locals
     ] in *.
 
-Definition cont_ret k :=
-    match k with
-    | B.Kret _ ret _ _ _ => ret
-    | B.Kstop ret => ret
-    end.
-
 Lemma A_last_dest_spec : forall default code ret,
     ret = A.last_dest default code <->
     (code = [] /\ ret = default) \/
@@ -175,16 +166,37 @@ intros. rewrite A_last_dest_spec. destruct code.
   simpl in *. auto.
 Qed.
 
-Lemma I_cont_cons_inv : forall ai acode ak bcode bk
-        (P : _ -> _ -> _ -> _ -> _ -> Prop),
-    (forall bi bcode',
+Definition cont_ret k :=
+    match k with
+    | B.Kret _ ret _ _ _ => ret
+    | B.Kstop ret => ret
+    end.
+
+Lemma I_run_common_inv : forall acode af ak b
+        (P : _ -> _ -> _ -> _ -> Prop),
+    (forall bcode bf bk,
+        b = B.Run bcode bf bk ->
+        Forall2 I_insn acode bcode ->
+        I_frame af bf ->
+        cont_ret bk = A.last_dest (hd 0 (A.stack af)) acode ->
+        P acode af ak b) ->
+    I (A.Run acode af ak) b -> P acode af ak b.
+intros0 HP II. invc II.
+- eapply HP; eauto.
+- eapply HP; eauto.
+Qed.
+
+(*
+Lemma I_cont_cons_inv : forall ai acode ak bcode top bk
+        (P : _ -> _ -> _ -> _ -> _ -> _ -> Prop),
+    (forall bi bcode' top',
         bcode = bi :: bcode' ->
         I_insn ai bi ->
         Forall2 I_insn acode bcode' ->
-        I_cont acode ak bcode' bk ->
-        cont_ret bk = A.last_dest (cont_ret bk) (ai :: acode) ->
-        P ai acode ak bcode bk) ->
-    I_cont (ai :: acode) ak bcode bk -> P ai acode ak bcode bk.
+        I_cont acode ak bcode' top' bk ->
+        cont_ret bk = A.last_dest top (ai :: acode) ->
+        P ai acode ak bcode top bk) ->
+    I_cont (ai :: acode) ak bcode top bk -> P ai acode ak bcode top bk.
 intros0 HP II. invc II.
 
 - on (Forall2 _ (_ :: _) _), invc.
@@ -197,6 +209,7 @@ intros0 HP II. invc II.
   constructor; eauto.
   destruct acode; simpl; eauto.
 Qed.
+*)
 
 Lemma app_last_dest' : forall ret ret' xs ys,
     ret = A.last_dest ret' xs ->
@@ -212,6 +225,7 @@ Lemma app_last_dest : forall ret xs ys,
 intros. eapply app_last_dest'; eauto.
 Qed.
 
+(*
 Lemma app_I_cont : forall acode acode' ak bcode bcode' bk ret,
     I_cont acode ak bcode bk ->
     Forall2 I_insn acode' bcode' ->
@@ -221,6 +235,7 @@ Lemma app_I_cont : forall acode acode' ak bcode bcode' bk ret,
 intros0 II Hfa Hdest Hret; invc II; simpl in *;
 constructor; eauto using Forall2_app, app_last_dest.
 Qed.
+*)
 
 Lemma push_I_frame : forall af bf dst v,
     I_frame af bf ->
@@ -251,6 +266,7 @@ Lemma app_last_dest_eq : forall default xs ys,
 first_induction xs; simpl in *; eauto.
 Qed.
 
+(*
 Lemma switch_I_cont : forall tag dst acases acase acode ak bcases bcase bcode bk,
     nth_error acases tag = Some acase ->
     nth_error bcases tag = Some bcase ->
@@ -285,9 +301,65 @@ all: simpl in *; break_and.
       destruct acase; simpl in *; congruence.
     * rewrite app_last_dest_eq. simpl in *. auto.
 Qed.
+*)
+
+Lemma switch_I_cont : forall tag dst acases acase acode af ak bcases bcase bcode bf bk,
+    nth_error acases tag = Some acase ->
+    nth_error bcases tag = Some bcase ->
+    A.switch_dest_ok (A.Switch dst acases) ->
+    I (A.Run (A.Switch dst acases :: acode) af ak)
+      (B.Run (B.Switch dst bcases :: bcode) bf bk) ->
+    I (A.Run (acase ++ acode) af ak)
+      (B.Run (bcase ++ bcode) bf bk).
+intros0 Ha Hb Hok II; invc II;
+on (Forall2 _ (_ :: _) _), invc;
+on >I_insn, invc.
+
+(* get facts about the case *)
+all: simpl in *; A.refold_switch_dest_ok;
+     rewrite A.switch_dest_ok_case_list_Forall in *.
+all: fwd eapply Forall_nth_error; try eassumption.
+all: simpl in *; break_and.
+
+- constructor; eauto.
+  + eapply Forall2_app; eauto.
+    eapply Forall2_nth_error; eauto.
+  + rewrite app_last_dest_eq. f_equal. eauto.
+
+- constructor; eauto.
+  + eapply Forall2_app; eauto.
+    eapply Forall2_nth_error; eauto.
+  + rewrite app_last_dest_eq. f_equal. eauto.
+Qed.
 
 
 
+
+Lemma I_tail : forall ai acode af af' ak bi bcode bf bf' bk,
+    I_frame af' bf' ->
+    hd 0 (A.stack af') = A.dest ai ->
+    I (A.Run (ai :: acode) af ak)
+      (B.Run (bi :: bcode) bf bk) ->
+    I (A.Run acode af' ak)
+      (B.Run bcode bf' bk).
+intros0 IIframe Hhd II; invc II; on >Forall2, invc.
+- constructor; eauto.
+  simpl. find_rewrite. auto.
+- constructor; eauto.
+  simpl. find_rewrite. auto.
+Qed.
+
+Lemma I_push_push : forall dst v1 v2  acode af ak  bcode bf bk,
+    I (A.Run acode (A.push af dst v1) ak)
+      (B.Run bcode (B.push bf dst v1) bk) ->
+    I (A.Run acode (A.push af dst v2) ak)
+      (B.Run bcode (B.push bf dst v2) bk).
+intros0 II. invc II.
+- constructor; eauto. on >I_frame, invc. eapply push_I_frame.
+  destruct af, bf. simpl in *. subst. constructor.
+- constructor; eauto. on >I_frame, invc. eapply push_I_frame.
+  destruct af, bf. simpl in *. subst. constructor.
+Qed.
 
 Theorem I_sim : forall AE BE a a' b,
     label_func_list AE = BE ->
@@ -301,8 +373,8 @@ Theorem I_sim : forall AE BE a a' b,
 destruct a as [ae al ak | ae];
 intros0 Henv Adest II Astep; [ | solve [invc Astep] ].
 
-inv Astep; inv II;
-try on _, inv_using I_cont_cons_inv;
+inv Astep; inv_using I_run_common_inv II;
+try on (Forall2 _ (_ :: _) _), invc;
 try on >I_insn, invc;
 try on >I_frame, inv;
 simpl in *; try subst.
@@ -310,55 +382,59 @@ simpl in *; try subst.
 
 - (* Arg *)
   eexists. split. eapply B.SArg; stk_simpl. simpl.
-  i_ctor.
+  i_lem I_tail. auto.
 
 - (* Self *)
   eexists. split. eapply B.SSelf; stk_simpl. simpl.
-  i_ctor.
+  i_lem I_tail. auto.
 
 - (* DerefinateConstr *)
   eexists. split. eapply B.SDerefinateConstr; simpl; eauto.
-  i_ctor.
+  i_lem I_tail. auto.
 
 - (* DerefinateClose *)
   eexists. split. eapply B.SDerefinateClose; simpl; eauto.
-  i_ctor.
+  i_lem I_tail. auto.
 
 - (* MkConstr *)
   eexists. split. eapply B.SConstrDone; simpl; eauto.
-  i_ctor.
+  i_lem I_tail. auto.
 
 - (* MkClose *)
   eexists. split. eapply B.SCloseDone; simpl; eauto.
-  i_ctor.
+  i_lem I_tail. auto.
 
 - (* MakeCall *)
   fwd eapply map_nth_error with (f := label_func); eauto.
   eexists. split. eapply B.SMakeCall; simpl; eauto.
-  i_ctor. i_ctor.
-  destruct body; reflexivity.
+  i_ctor. i_lem I_tail. auto.
 
 - (* Switchinate *)
   fwd eapply Forall2_nth_error_ex with (xs := cases) as HH; eauto.  destruct HH as (bcase & ? & ?).
-
   eexists. split. eapply B.SSwitchinate; eauto using eq_refl.
-  i_ctor. i_lem switch_I_cont. A.refold_switch_dest_ok.
+  i_lem switch_I_cont. A.refold_switch_dest_ok.
     { invc_using A.state_switch_dest_ok_run_inv Adest.
       simpl in *. A.refold_switch_dest_ok. break_and. auto. }
 
 - (* Copy *)
   eexists. split. eapply B.SCopy; simpl; eauto.
-  i_ctor.
+  i_lem I_tail. auto.
 
 - (* ContRet *)
-  on >I_cont, inv. on (Forall2 _ [] _), invc.
+  inv II. on (Forall2 _ [] _), invc.
+  unfold A.stack_local in *. break_match; try discriminate.
+
   eexists. split. eapply B.SContRet; eauto using eq_refl.
-    { admit. }
-  i_ctor.
+    { destruct stk as [|top stk]; try discriminate.
+      unfold A.local, B.local in *. simpl in *. inject_some. eauto. }
+  i_lem I_push_push.
 
 - (* ContStop *)
-  on >I_cont, inv. on >Forall2, invc.
+  inv II. on (Forall2 _ [] _), invc.
+  unfold A.stack_local in *. break_match; try discriminate.
+
   eexists. split. eapply B.SContStop; eauto using eq_refl.
-    { admit. }
+    { destruct stk as [|top stk]; try discriminate.
+      unfold A.local, B.local in *. simpl in *. inject_some. eauto. }
   i_ctor.
-Admitted.
+Qed.
