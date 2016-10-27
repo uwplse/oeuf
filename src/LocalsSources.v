@@ -10,12 +10,12 @@ Require Import ListLemmas.
 Inductive insn :=
 | Arg (dst : nat)
 | Self (dst : nat)
-| Deref (dst : nat) (off : nat)
-| Call (dst : nat)
-| MkConstr (dst : nat) (tag : nat) (nargs : nat)
+| Deref (dst : nat) (e : nat) (off : nat)
+| Call (dst : nat) (f : nat) (a : nat)
+| MkConstr (dst : nat) (tag : nat) (args : list nat)
 | Switch (dst : nat) (cases : list (list insn))
-| MkClose (dst : nat) (f : function_name) (nfree : nat)
-| Copy (dst : nat)
+| MkClose (dst : nat) (f : function_name) (free : list nat)
+| Copy (dst : nat) (src : nat)
 .
 
 Definition env := list (list insn * nat).
@@ -65,35 +65,31 @@ Inductive sstep (E : env) : state -> state -> Prop :=
         sstep E (Run (Self dst :: is) f k)
                 (Run is (push f dst (self f)) k)
 
-| SDerefinateConstr : forall dst off is f k  tag args v,
-        stack_local f 0 = Some (Constr tag args) ->
+| SDerefinateConstr : forall dst e off is f k  tag args v,
+        local f e = Some (Constr tag args) ->
         nth_error args off = Some v ->
-        sstep E (Run (Deref dst off :: is) f k)
+        sstep E (Run (Deref dst e off :: is) f k)
                 (Run is (pop_push f 1 dst v) k)
-| SDerefinateClose : forall dst off is f k  fname free v,
-        stack_local f 0 = Some (Close fname free) ->
+| SDerefinateClose : forall dst e off is f k  fname free v,
+        local f e = Some (Close fname free) ->
         nth_error free off = Some v ->
-        sstep E (Run (Deref dst off :: is) f k)
+        sstep E (Run (Deref dst e off :: is) f k)
                 (Run is (pop_push f 1 dst v) k)
 
-| SConstrDone : forall dst tag nargs is f k ls vs,
-        length (stack f) >= nargs ->
-        ls = rev (firstn nargs (stack f)) ->
-        Forall2 (fun l v => local f l = Some v) ls vs ->
-        sstep E (Run (MkConstr dst tag nargs :: is) f k)
-                (Run is (pop_push f nargs dst (Constr tag vs)) k)
-| SCloseDone : forall dst fname nfree is f k ls vs,
-        length (stack f) >= nfree ->
-        ls = rev (firstn nfree (stack f)) ->
-        Forall2 (fun l v => local f l = Some v) ls vs ->
-        sstep E (Run (MkClose dst fname nfree :: is) f k)
-                (Run is (pop_push f nfree dst (Close fname vs)) k)
+| SConstrDone : forall dst tag args is f k vs,
+        Forall2 (fun l v => local f l = Some v) args vs ->
+        sstep E (Run (MkConstr dst tag args :: is) f k)
+                (Run is (pop_push f (length args) dst (Constr tag vs)) k)
+| SCloseDone : forall dst fname free is f k vs,
+        Forall2 (fun l v => local f l = Some v) free vs ->
+        sstep E (Run (MkClose dst fname free :: is) f k)
+                (Run is (pop_push f (length free) dst (Close fname vs)) k)
 
-| SMakeCall : forall dst is f k  fname free arg body ret,
-        stack_local f 0 = Some arg ->
-        stack_local f 1 = Some (Close fname free) ->
+| SMakeCall : forall dst fl a is f k  fname free arg body ret,
+        local f fl = Some (Close fname free) ->
+        local f a = Some arg ->
         nth_error E fname = Some (body, ret) ->
-        sstep E (Run (Call dst :: is) f k)
+        sstep E (Run (Call dst fl a :: is) f k)
                 (Run body (Frame arg (Close fname free) [] [])
                     (Kret is ret dst (pop f 2) k))
 
@@ -105,9 +101,9 @@ Inductive sstep (E : env) : state -> state -> Prop :=
         sstep E (Run (Switch dst cases :: is) f k)
                 (Run (case ++ is) f k)
 
-| SCopy : forall dst is f k v,
-        stack_local f 0 = Some v ->
-        sstep E (Run (Copy dst :: is) f k)
+| SCopy : forall dst src is f k v,
+        local f src = Some v ->
+        sstep E (Run (Copy dst src :: is) f k)
                 (Run is (pop_push f 1 dst v) k)
 
 | SContRet : forall code f ret dst f' k v,
@@ -150,12 +146,12 @@ Definition insn_rect_mut
         (Pll : list (list insn) -> Type)
     (HArg :     forall dst, P (Arg dst))
     (HSelf :    forall dst, P (Self dst))
-    (HDeref :   forall dst off, P (Deref dst off))
-    (HCall :    forall dst, P (Call dst))
-    (HConstr :  forall dst tag nargs, P (MkConstr dst tag nargs))
+    (HDeref :   forall dst e off, P (Deref dst e off))
+    (HCall :    forall dst f a, P (Call dst f a))
+    (HConstr :  forall dst tag args, P (MkConstr dst tag args))
     (HSwitch :  forall dst cases, Pll cases -> P (Switch dst cases))
-    (HClose :   forall dst fname nfree, P (MkClose dst fname nfree))
-    (HCopy :    forall dst, P (Copy dst))
+    (HClose :   forall dst fname free, P (MkClose dst fname free))
+    (HCopy :    forall dst src, P (Copy dst src))
     (Hnil :     Pl [])
     (Hcons :    forall i is, P i -> Pl is -> Pl (i :: is))
     (Hnil2 :    Pll [])
@@ -175,52 +171,27 @@ Definition insn_rect_mut
         match i as i_ return P i_ with
         | Arg dst => HArg dst
         | Self dst => HSelf dst
-        | Deref dst off => HDeref dst off
-        | Call dst => HCall dst
-        | MkConstr dst tag nargs => HConstr dst tag nargs
+        | Deref dst e off => HDeref dst e off
+        | Call dst f a => HCall dst f a
+        | MkConstr dst tag args => HConstr dst tag args
         | Switch dst cases => HSwitch dst cases (go_list_list cases)
-        | MkClose dst fname nfree => HClose dst fname nfree
-        | Copy dst => HCopy dst
+        | MkClose dst fname free => HClose dst fname free
+        | Copy dst src => HCopy dst src
         end in go i.
 
 (* Useful wrapper for `expr_rect_mut with (Pl := Forall P)` *)
 Definition insn_ind' (P : insn -> Prop)
     (HArg :     forall dst, P (Arg dst))
     (HSelf :    forall dst, P (Self dst))
-    (HDeref :   forall dst off, P (Deref dst off))
-    (HCall :    forall dst, P (Call dst))
-    (HConstr :  forall dst tag nargs, P (MkConstr dst tag nargs))
+    (HDeref :   forall dst e off, P (Deref dst e off))
+    (HCall :    forall dst f a, P (Call dst f a))
+    (HConstr :  forall dst tag args, P (MkConstr dst tag args))
     (HSwitch :  forall dst cases, Forall (Forall P) cases -> P (Switch dst cases))
-    (HClose :   forall dst fname nfree, P (MkClose dst fname nfree))
-    (HCopy :    forall dst, P (Copy dst))
+    (HClose :   forall dst fname free, P (MkClose dst fname free))
+    (HCopy :    forall dst src, P (Copy dst src))
     (i : insn) : P i :=
     ltac:(refine (@insn_rect_mut P (Forall P) (Forall (Forall P))
         HArg HSelf HDeref HCall HConstr HSwitch HClose HCopy _ _ _ _ i); eauto).
-
-Definition insn_list_rect_mut
-        (P : insn -> Type)
-        (Pl : list insn -> Type)
-        (Pll : list (list insn) -> Type)
-    (HArg :     forall dst, P (Arg dst))
-    (HSelf :    forall dst, P (Self dst))
-    (HDeref :   forall dst off, P (Deref dst off))
-    (HCall :    forall dst, P (Call dst))
-    (HConstr :  forall dst tag nargs, P (MkConstr dst tag nargs))
-    (HSwitch :  forall dst cases, Pll cases -> P (Switch dst cases))
-    (HClose :   forall dst fname nfree, P (MkClose dst fname nfree))
-    (HCopy :    forall dst, P (Copy dst))
-    (Hnil :     Pl [])
-    (Hcons :    forall i is, P i -> Pl is -> Pl (i :: is))
-    (Hnil2 :    Pll [])
-    (Hcons2 :   forall is iss, Pl is -> Pll iss -> Pll (is :: iss))
-    (is : list insn) : Pl is :=
-    let go := insn_rect_mut P Pl Pll
-            HArg HSelf HDeref HCall HConstr HSwitch HClose HCopy Hnil Hcons Hnil2 Hcons2 in
-    let fix go_list is :=
-        match is as is_ return Pl is_ with
-        | [] => Hnil
-        | i :: is => Hcons i is (go i) (go_list is)
-        end in go_list is.
 
 
 
@@ -228,22 +199,22 @@ Definition dest e :=
     match e with
     | Arg dst => dst
     | Self dst => dst
-    | Deref dst _ => dst
-    | Call dst => dst
+    | Deref dst _ _ => dst
+    | Call dst _ _ => dst
     | MkConstr dst _ _ => dst
     | Switch dst _ => dst
     | MkClose dst _ _ => dst
-    | Copy dst => dst
+    | Copy dst _ => dst
     end.
 
 Definition pop_count e :=
     match e with
     | Arg _ => 0
     | Self _ => 0
-    | Deref _ _ => 1
-    | Call _ => 2
-    | MkConstr _ _ nargs => nargs
+    | Deref _ _ _ => 1
+    | Call _ _ _ => 2
+    | MkConstr _ _ args => length args
     | Switch _ _ => 0
-    | MkClose _ _ nfree => nfree
-    | Copy _ => 1
+    | MkClose _ _ free => length free
+    | Copy _ _ => 1
     end.

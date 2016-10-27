@@ -247,6 +247,18 @@ induction xs; destruct ys; intros0 Hfa; invc Hfa; eauto.
 simpl. specialize (IHxs ?? **). repeat find_rewrite. reflexivity.
 Qed.
 
+Lemma Forall2_rev : forall A B P (xs : list A) (ys : list B),
+    Forall2 P xs ys ->
+    Forall2 P (rev xs) (rev ys).
+induction xs; intros0 Hfa; invc Hfa.
+- simpl. constructor.
+- change (a :: xs) with ([a] ++ xs).
+  change (y :: l') with ([y] ++ l').
+  do 2 rewrite rev_app_distr.
+  eapply Forall2_app; eauto.
+  simpl. eauto.
+Qed.
+
 Lemma Forall2_Forall_exists : forall A B (P : A -> B -> Prop) xs ys,
     Forall2 P xs ys ->
     Forall (fun x => exists y, P x y) xs.
