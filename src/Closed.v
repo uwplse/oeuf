@@ -41,6 +41,58 @@ Fixpoint unroll_elim' (case : expr)
 Definition unroll_elim case ctor args mk_rec :=
     unroll_elim' case ctor args mk_rec 0.
 
+Section subst.
+Open Scope option_monad.
+
+Definition subst (arg : expr) (vals : list expr) (e : expr) : option expr :=
+    let fix go e :=
+        let fix go_list es : option (list expr) :=
+            match es with
+            | [] => Some []
+            | e :: es => cons <$> go e <*> go_list es
+            end in
+        match e with
+        | Arg => Some arg
+        | UpVar n => nth_error vals n
+        | Call f a => Call <$> go f <*> go a
+        | Constr c es => Constr c <$> go_list es
+        | Elim ty cases target => Elim ty <$> go_list cases <*> go target
+        | Close f free => Close f <$> go_list free
+        end in
+    go e.
+End subst.
+
+Inductive step : expr -> expr -> Prop :=
+| CloseStep : forall body vs e e' es,
+        Forall value vs ->
+        step e e' ->
+        step (Close body (vs ++ [e] ++ es))
+             (Close body (vs ++ [e'] ++ es))
+| CallL : forall e1 e1' e2,
+    step e1 e1' ->
+    step (Call e1 e2) (Call e1' e2)
+| CallR : forall v e2 e2',
+    value v ->
+    step e2 e2' ->
+    step (Call v e2) (Call v e2')
+| MakeCall : forall body free arg e',
+    Forall value free ->
+    value arg ->
+    subst arg free body = Some e' ->
+    step (Call (Close body free) arg)
+         e'
+| ConstrStep : forall c pre e e' post,
+        Forall value pre ->
+        step e e' ->
+        step (Constr c (pre ++ [e] ++ post))
+            (Constr c (pre ++ [e'] ++ post))
+| ElimStep : forall t t' ty cases, step t t' -> step (Elim ty cases t) (Elim ty cases t')
+| Eliminate : forall c args ty cases case,
+    nth_error cases (constructor_index c) = Some case ->
+    Forall value args ->
+    step (Elim ty cases (Constr c args))
+        (unroll_elim case c args (Elim ty cases)).
+
 
 Inductive state :=
 | Run (e : expr) (l : list expr) (k : expr -> state)
