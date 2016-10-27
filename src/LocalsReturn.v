@@ -18,7 +18,7 @@ Inductive insn :=
 | Copy (dst : nat)
 .
 
-Definition env := list (list insn).
+Definition env := list (list insn * nat).
 
 
 (* Continuation-based step relation *)
@@ -50,8 +50,8 @@ Definition stack_local f idx :=
 
 
 Inductive cont :=
-| Kret (code : list insn) (dst : nat) (f : frame) (k : cont)
-| Kstop.
+| Kret (code : list insn) (ret : nat) (dst : nat) (f : frame) (k : cont)
+| Kstop (ret : nat).
 
 Inductive state :=
 | Run (i : list insn) (f : frame) (k : cont)
@@ -89,13 +89,13 @@ Inductive sstep (E : env) : state -> state -> Prop :=
         sstep E (Run (MkClose dst fname nfree :: is) f k)
                 (Run is (pop_push f nfree dst (Close fname vs)) k)
 
-| SMakeCall : forall dst is f k  fname free arg body,
+| SMakeCall : forall dst is f k  fname free arg body ret,
         stack_local f 0 = Some arg ->
         stack_local f 1 = Some (Close fname free) ->
-        nth_error E fname = Some body ->
+        nth_error E fname = Some (body, ret) ->
         sstep E (Run (Call dst :: is) f k)
                 (Run body (Frame arg (Close fname free) [] [])
-                    (Kret is dst (pop f 2) k))
+                    (Kret is ret dst (pop f 2) k))
 
 (* NB: `Switch` still has an implicit target of `Arg` *)
 | SSwitchinate : forall dst cases is f k  tag args case stk_vals,
@@ -110,13 +110,13 @@ Inductive sstep (E : env) : state -> state -> Prop :=
         sstep E (Run (Copy dst :: is) f k)
                 (Run is (pop_push f 1 dst v) k)
 
-| SContRet : forall code f dst f' k v,
-        stack_local f 0 = Some v ->
-        sstep E (Run [] f (Kret code dst f' k))
+| SContRet : forall code f ret dst f' k v,
+        local f ret = Some v ->
+        sstep E (Run [] f (Kret code ret dst f' k))
                 (Run code (push f' dst v) k)
-| SContStop : forall f v,
-        stack_local f 0 = Some v ->
-        sstep E (Run [] f Kstop)
+| SContStop : forall ret f v,
+        local f ret = Some v ->
+        sstep E (Run [] f (Kstop ret))
                 (Stop v)
 .
 
@@ -219,155 +219,3 @@ Definition insn_list_rect_mut
         | [] => Hnil
         | i :: is => Hcons i is (go i) (go_list is)
         end in go_list is.
-
-
-
-Definition dest e :=
-    match e with
-    | Arg dst => dst
-    | Self dst => dst
-    | Deref dst _ => dst
-    | Call dst => dst
-    | MkConstr dst _ _ => dst
-    | Switch dst _ => dst
-    | MkClose dst _ _ => dst
-    | Copy dst => dst
-    end.
-
-Fixpoint last_dest (dst : nat) (is : list insn) : nat :=
-    match is with
-    | [] => dst
-    | i :: is => last_dest (dest i) is
-    end.
-
-Definition switch_dest_ok :=
-    let fix go i :=
-        let fix go_list is :=
-            match is with
-            | [] => True
-            | i :: is => go i /\ go_list is
-            end in
-        let fix go_case_list dst cases :=
-            match cases with
-            | [] => True
-            | case :: cases =>
-                    last_dest 0 case = dst /\
-                    go_list case /\ go_case_list dst cases
-            end in
-        match i with
-        | Arg _ => True
-        | Self _ => True
-        | Deref _ _ => True
-        | Call _ => True
-        | MkConstr _ _ _ => True
-        | Switch dst cases => go_case_list dst cases
-        | MkClose _ _ _ => True
-        | Copy _ => True
-        end in go.
-
-Definition switch_dest_ok_list :=
-    let go := switch_dest_ok in
-    let fix go_list is :=
-        match is with
-        | [] => True
-        | i :: is => go i /\ go_list is
-        end in go_list.
-
-Definition switch_dest_ok_case_list :=
-    let go_list := switch_dest_ok_list in
-    let fix go_case_list dst cases :=
-        match cases with
-        | [] => True
-        | case :: cases =>
-                last_dest 0 case = dst /\
-                go_list case /\ go_case_list dst cases
-        end in go_case_list.
-
-Ltac refold_switch_dest_ok :=
-    fold switch_dest_ok_list in *;
-    fold switch_dest_ok_case_list in *.
-
-Lemma switch_dest_ok_list_Forall : forall is,
-    switch_dest_ok_list is <->
-    Forall switch_dest_ok is.
-induction is; simpl; split; intro; eauto.
-- constructor; firstorder.
-- on >Forall, invc. firstorder.
-Qed.
-
-Lemma switch_dest_ok_case_list_Forall : forall dst cases,
-    switch_dest_ok_case_list dst cases <->
-    Forall (fun case => last_dest 0 case = dst /\ switch_dest_ok_list case) cases.
-induction cases; simpl; split; intro; eauto.
-- do 2 break_and. constructor; eauto. firstorder.
-- on >Forall, invc. firstorder.
-Qed.
-
-
-Inductive state_switch_dest_ok : state -> Prop :=
-| SsdRet : forall is f code dst f' k',
-        switch_dest_ok_list is ->
-        state_switch_dest_ok (Run code f' k') ->
-        state_switch_dest_ok (Run is f (Kret code dst f' k'))
-| SsdStop : forall is f,
-        switch_dest_ok_list is ->
-        state_switch_dest_ok (Run is f Kstop)
-| SsdStopped : forall v,
-        state_switch_dest_ok (Stop v).
-
-Lemma state_switch_dest_ok_run_inv : forall is f k (P : _ -> Prop),
-    (switch_dest_ok_list is -> P (Run is f k)) ->
-    state_switch_dest_ok (Run is f k) -> P (Run is f k).
-intros0 HP Hok. invc Hok.
-- eapply HP; eauto.
-- eapply HP; eauto.
-Qed.
-
-Theorem state_switch_dest_ok_inductive : forall E s s',
-    Forall switch_dest_ok_list E ->
-    state_switch_dest_ok s ->
-    sstep E s s' ->
-    state_switch_dest_ok s'.
-destruct s as [e f k | e];
-intros0 Henv Hok Hstep; [ | solve [invc Hstep] ].
-
-inv Hstep;
-simpl in *; try on (Forall _ (_ :: _)), invc;
-simpl in *; refold_switch_dest_ok.
-
-(* Destruct continuation, and try to solve *)
-
-all: invc Hok; simpl in *; repeat break_and; try solve [constructor; eauto].
-all: refold_switch_dest_ok.
-
-- (* MakeCall, Kret *)
-  fwd eapply Forall_nth_error with (P := switch_dest_ok_list); eauto.
-  constructor; auto.
-  constructor; auto.
-
-- (* MakeCall, Kstop *)
-  fwd eapply Forall_nth_error with (P := switch_dest_ok_list); eauto.
-  constructor; auto.
-  constructor; auto.
-
-- (* Switchinate, Kret *)
-  constructor; eauto.
-
-  rewrite switch_dest_ok_case_list_Forall in *.
-  fwd eapply Forall_nth_error with (xs := cases); eauto.
-    simpl in *. break_and.
-
-  rewrite switch_dest_ok_list_Forall in *. auto using Forall_app.
-
-- (* Switchinate, Kstop *)
-  constructor; eauto.
-
-  rewrite switch_dest_ok_case_list_Forall in *.
-  fwd eapply Forall_nth_error with (xs := cases); eauto.
-    simpl in *. break_and.
-
-  rewrite switch_dest_ok_list_Forall in *. auto using Forall_app.
-
-- (* ContRet *)
-  on >state_switch_dest_ok, invc; constructor; eauto.
-Qed.
