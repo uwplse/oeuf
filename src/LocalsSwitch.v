@@ -111,10 +111,12 @@ Inductive sstep (E : env) : state -> state -> Prop :=
                 (Run is (pop_push f 1 dst v) k)
 
 | SContRet : forall code f dst f' k v,
+        length (stack f) = 1 ->
         stack_local f 0 = Some v ->
         sstep E (Run [] f (Kret code dst f' k))
                 (Run code (push f' dst v) k)
 | SContStop : forall f v,
+        length (stack f) = 1 ->
         stack_local f 0 = Some v ->
         sstep E (Run [] f Kstop)
                 (Stop v)
