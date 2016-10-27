@@ -503,7 +503,8 @@ simpl in *; B.refold_dests; try subst.
   fwd eapply I_keys_r_not_in_l; eauto.
 
   eexists. split. eapply B.SContRet; eauto using eq_refl.
-    { eapply I_frame_stack_local; eauto. eapply A_top_nth_error; eauto. }
+    { simpl. erewrite <- Forall2_length; eauto. }
+    { eapply I_frame_stack_local; eauto. eapply A_top_nth_error; eauto. simpl. omega. }
   i_ctor.
 
 - (* ContSwitch *)
@@ -512,7 +513,7 @@ simpl in *; B.refold_dests; try subst.
   fwd eapply I_keys_r_not_in_l; eauto.
 
   eexists. split. eapply B.SContSwitch; eauto using eq_refl.
-  { unfold B.local. simpl. constructor; eauto. list_magic_on (stk, (bstk, tt)). }
+    { unfold B.local. simpl. constructor; eauto. list_magic_on (stk, (bstk, tt)). }
   i_ctor.
   change (A.Frame _ _ _) with (A.pop_push (A.Frame arg self (v :: stk)) 1 v).
   eauto using pop_push_I_frame.
@@ -520,6 +521,7 @@ simpl in *; B.refold_dests; try subst.
 - (* ContStop *)
   on >I_cont, invc.
   eexists. split. eapply B.SContStop; eauto using eq_refl.
-    { eapply I_frame_stack_local; eauto. eapply A_top_nth_error; eauto. }
+    { simpl. erewrite <- Forall2_length; eauto. }
+    { eapply I_frame_stack_local; eauto. eapply A_top_nth_error; eauto. simpl. omega. }
   i_ctor.
 Qed.
