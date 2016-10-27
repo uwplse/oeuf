@@ -32,7 +32,6 @@ Fixpoint transf_expr (f : Fmajor.expr) : Emajor.expr :=
 
 
 
-
 Fixpoint transf_stmt (s : Fmajor.stmt) : Emajor.stmt :=
 let transf_cases (targid : ident) (cases : list (Z * Fmajor.stmt)) (target_d : Emajor.expr) :=
   let fix mk_cases (i : nat) (cases : list (Z * Fmajor.stmt)) : list (Z * nat) :=
@@ -63,15 +62,26 @@ let transf_cases (targid : ident) (cases : list (Z * Fmajor.stmt)) (target_d : E
   | Fmajor.Sswitch targid cases target => transf_cases targid cases (transf_expr target)
   end.
 
+Fixpoint mk_cases (i : nat) (cases : list (Z * Fmajor.stmt)) : list (Z * nat) :=
+      match cases,i with
+      | [],_ => []
+      | (v,s) :: nil, O => (v,O) :: nil
+      | (v, s) :: cases,S i' => (v, i) :: mk_cases i' cases
+      | _,_ => nil
+      end.
 
+(*
+Fixpoint reverse_cases (e : Emajor.stmt) : Emajor.stmt :=
+  match e with
+  | Sswitch id exp l n => Sswitch id exp (rev l) n
+  | Sseq s1 s2 => Sseq (reverse_cases s1) (reverse_cases s2)
+  | Sblock s => Sblock (reverse_cases s)
+  | _ => e
+  end.
+*)
 Fixpoint transf_stmt_new (s : Fmajor.stmt) : Emajor.stmt :=
 let transf_cases (targid : ident) (cases : list (Z * Fmajor.stmt)) (target_d : Emajor.expr) :=
-  let fix mk_cases (i : nat) (cases : list (Z * Fmajor.stmt)) : list (Z * nat) :=
-      match cases with
-      | [] => []
-      | (v, s) :: cases => (v, i) :: mk_cases (S i) cases
-      end in
-    let switch := Emajor.Sswitch targid target_d (mk_cases 0%nat cases) (length cases) in
+    let switch := Emajor.Sswitch targid target_d (mk_cases (length cases - 1) cases) (length cases) in
     let swblock := Emajor.Sblock switch in
     let fix mk_blocks_new (base : Emajor.stmt) (cases : list (Z * Fmajor.stmt)) (i : nat)  :=
         match cases with
@@ -92,7 +102,39 @@ let transf_cases (targid : ident) (cases : list (Z * Fmajor.stmt)) (target_d : E
   | Fmajor.Sseq s1 s2 => Sseq (transf_stmt_new s1) (transf_stmt_new s2)
   | Fmajor.Sswitch targid cases target => transf_cases targid cases (transf_expr target)
   end.
+(*
+Definition transf_stmt_n (s : Fmajor.stmt) : Emajor.stmt :=
+  reverse_cases (transf_stmt_new s).
+ *)
+(*
+Definition base : Emajor.stmt. Admitted.
+Definition base' := Emajor.SmakeConstr xH Int.zero nil.
+Definition s1 : Fmajor.stmt. Admitted.
+Definition s1' := Fmajor.Sassign xH (Fmajor.Var xH).
+Definition s2 : Fmajor.stmt. Admitted.
+Definition s2' := Fmajor.Sseq Fmajor.Sskip Fmajor.Sskip.
+Definition s3 : Fmajor.stmt. Admitted.
+Definition s4 : Fmajor.stmt. Admitted.
+Definition two := [(12,s1);(24,s2)].
+Definition four := [(1,s1);(2,s2);(3,s3);(4,s4)].
+Definition cases := [(12,Fmajor.Sassign xH (Fmajor.Var xH));(24,Fmajor.Sseq Fmajor.Sskip Fmajor.Sskip);(18, Fmajor.Sskip);(3, Fmajor.Sskip);(6, Fmajor.Sskip)].
 
+Definition target' := Fmajor.Var xH.
+Definition target : Fmajor.expr. Admitted.
+
+Definition switch_two := Fmajor.Sswitch xH two target.
+Definition switch_four := Fmajor.Sswitch xH four target.
+Definition switch_many := Fmajor.Sswitch xH cases target.
+
+
+Lemma four_same :
+  transf_stmt switch_four = transf_stmt_new switch_four.
+Proof.
+  unfold switch_four; simpl.
+  remember (transf_expr target) as targ.
+  
+  
+*)
 
 (*
 
@@ -175,22 +217,6 @@ Fixpoint mk_cases (i : nat) (cases : list (Z * Fmajor.stmt)) : list (Z * nat) :=
 (* We need to rewrite all the transformations to not be tail recursive *)
 (* Just mk_blocks then *)
 
-(*
-Definition base := Emajor.SmakeConstr xH Int.zero nil.
-Definition two := [(12,Fmajor.Sassign xH (Fmajor.Var xH));(24,Fmajor.Sseq Fmajor.Sskip Fmajor.Sskip)].
-Definition cases := [(12,Fmajor.Sassign xH (Fmajor.Var xH));(24,Fmajor.Sseq Fmajor.Sskip Fmajor.Sskip);(18, Fmajor.Sskip);(3, Fmajor.Sskip);(6, Fmajor.Sskip)].
-
-Definition mb_old := mk_blocks base O cases.
-Definition mb_new := mk_blocks_new base (rev cases) O.
-
-Lemma x :
-  mb_old = mb_new.
-Proof.
-  unfold mb_old, mb_new.
-  simpl.
-  repeat f_equal.
-Qed.
-*)
 
 (* Lemma mk_blocks_rev_ind_case_succ : *)
 (*   forall l b n z s, *)
@@ -276,7 +302,7 @@ Proof.
   
 Definition transf_fun_body (f : (Fmajor.stmt * Fmajor.expr)) : Emajor.stmt :=
   let (s,e) := f in
-  Sseq (transf_stmt s) (Sreturn (transf_expr e)).
+  Sseq (transf_stmt_new s) (Sreturn (transf_expr e)).
 
 Definition transf_fundef (f : Fmajor.function) : Emajor.fundef :=
   Emajor.mkfunction (Fmajor.fn_params f) (Fmajor.fn_sig f) (Fmajor.fn_stackspace f)
