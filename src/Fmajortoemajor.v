@@ -24,6 +24,15 @@ Require Import EricTact.
 Require Import Fmajor.
 Require Import Emajor.
 
+(* Refactor strategy: *)
+(* Turn functions into just statements first *)
+(* Then get rid of switch *)
+(* getting rid of switch can become 2 passes: one to get to same number of steps, *)
+(* and one to change structure of steps *)
+
+(* Middle can have a stack of lists as part of the state which is the current switch cases *)
+
+
 Fixpoint transf_expr (f : Fmajor.expr) : Emajor.expr :=
   match f with
   | Fmajor.Var id => Var id
@@ -31,27 +40,28 @@ Fixpoint transf_expr (f : Fmajor.expr) : Emajor.expr :=
   end.
 
 
+Fixpoint mk_cases (i : nat) (cases : list (Z * Fmajor.stmt)) : list (Z * nat) :=
+      match cases,i with
+      | [],_ => []
+      | (v,s) :: nil, O => (v,O) :: nil
+      | (v, s) :: cases,S i' => (v, i) :: mk_cases i' cases
+      | _,_ => nil
+      end.
 
 Fixpoint transf_stmt (s : Fmajor.stmt) : Emajor.stmt :=
 let transf_cases (targid : ident) (cases : list (Z * Fmajor.stmt)) (target_d : Emajor.expr) :=
-  let fix mk_cases (i : nat) (cases : list (Z * Fmajor.stmt)) : list (Z * nat) :=
-      match cases with
-      | [] => []
-      | (v, s) :: cases => (v, i) :: mk_cases (S i) cases
-      end in
-    let switch := Emajor.Sswitch targid target_d (mk_cases 0%nat cases) (length cases) in
+    let switch := Emajor.Sswitch targid target_d (mk_cases (length cases - 1) cases) (length cases) in
     let swblock := Emajor.Sblock switch in
-    let fix mk_blocks (acc : Emajor.stmt) (i : nat) (cases : list (Z * Fmajor.stmt))  :=
+    let fix mk_blocks (base : Emajor.stmt) (cases : list (Z * Fmajor.stmt)) (i : nat)  :=
         match cases with
-        | [] => acc
-        | (v, s) :: cases =>
-          let acc' :=
-              Emajor.Sblock (Emajor.Sseq acc
-                                         (Emajor.Sseq (transf_stmt s)
-                                                      (Emajor.Sexit (length cases - i)))) in (* does this actually work? *)
-          mk_blocks acc' (S i) cases
+        | [] => base
+        | (v,s) :: c =>
+          let r := mk_blocks base c (S i) in
+          Emajor.Sblock (Emajor.Sseq r
+                                     (Emajor.Sseq (transf_stmt s)
+                                                  (Emajor.Sexit i)))
         end in
-    mk_blocks swblock O cases in
+    mk_blocks swblock cases O in
   match s with
   | Fmajor.Sskip => Sskip
   | Fmajor.Scall dst fn arg => Scall dst (transf_expr fn) (transf_expr arg)
@@ -62,247 +72,35 @@ let transf_cases (targid : ident) (cases : list (Z * Fmajor.stmt)) (target_d : E
   | Fmajor.Sswitch targid cases target => transf_cases targid cases (transf_expr target)
   end.
 
-Fixpoint mk_cases (i : nat) (cases : list (Z * Fmajor.stmt)) : list (Z * nat) :=
-      match cases,i with
-      | [],_ => []
-      | (v,s) :: nil, O => (v,O) :: nil
-      | (v, s) :: cases,S i' => (v, i) :: mk_cases i' cases
-      | _,_ => nil
-      end.
-
-(*
-Fixpoint reverse_cases (e : Emajor.stmt) : Emajor.stmt :=
-  match e with
-  | Sswitch id exp l n => Sswitch id exp (rev l) n
-  | Sseq s1 s2 => Sseq (reverse_cases s1) (reverse_cases s2)
-  | Sblock s => Sblock (reverse_cases s)
-  | _ => e
+(* Dummy definition so we can refer to this function later *)
+Fixpoint mk_blocks (base : Emajor.stmt) (cases : list (Z * Fmajor.stmt)) (i : nat)  :=
+  match cases with
+  | [] => base
+  | (v,s) :: c =>
+    let r := mk_blocks base c (S i) in
+    Emajor.Sblock (Emajor.Sseq r
+                               (Emajor.Sseq (transf_stmt s)
+                                            (Emajor.Sexit i)))
   end.
-*)
-Fixpoint transf_stmt_new (s : Fmajor.stmt) : Emajor.stmt :=
-let transf_cases (targid : ident) (cases : list (Z * Fmajor.stmt)) (target_d : Emajor.expr) :=
+
+(* Dummy definition so we can refer to this later *)
+Definition transf_cases (targid : ident) (cases : list (Z * Fmajor.stmt)) (target_d : Emajor.expr) :=
     let switch := Emajor.Sswitch targid target_d (mk_cases (length cases - 1) cases) (length cases) in
     let swblock := Emajor.Sblock switch in
-    let fix mk_blocks_new (base : Emajor.stmt) (cases : list (Z * Fmajor.stmt)) (i : nat)  :=
+    let fix mk_blocks (base : Emajor.stmt) (cases : list (Z * Fmajor.stmt)) (i : nat)  :=
         match cases with
         | [] => base
         | (v,s) :: c =>
-          let r := mk_blocks_new base c (S i) in
-          Emajor.Sblock (Emajor.Sseq r
-                                     (Emajor.Sseq (transf_stmt_new s)
-                                                  (Emajor.Sexit i)))
-        end in
-    mk_blocks_new swblock cases O in
-  match s with
-  | Fmajor.Sskip => Sskip
-  | Fmajor.Scall dst fn arg => Scall dst (transf_expr fn) (transf_expr arg)
-  | Fmajor.Sassign dst exp => Sassign dst (transf_expr exp)
-  | Fmajor.SmakeConstr dst tag args => SmakeConstr dst tag (map transf_expr args)
-  | Fmajor.SmakeClose dst fname args => SmakeClose dst fname (map transf_expr args) 
-  | Fmajor.Sseq s1 s2 => Sseq (transf_stmt_new s1) (transf_stmt_new s2)
-  | Fmajor.Sswitch targid cases target => transf_cases targid cases (transf_expr target)
-  end.
-(*
-Definition transf_stmt_n (s : Fmajor.stmt) : Emajor.stmt :=
-  reverse_cases (transf_stmt_new s).
- *)
-(*
-Definition base : Emajor.stmt. Admitted.
-Definition base' := Emajor.SmakeConstr xH Int.zero nil.
-Definition s1 : Fmajor.stmt. Admitted.
-Definition s1' := Fmajor.Sassign xH (Fmajor.Var xH).
-Definition s2 : Fmajor.stmt. Admitted.
-Definition s2' := Fmajor.Sseq Fmajor.Sskip Fmajor.Sskip.
-Definition s3 : Fmajor.stmt. Admitted.
-Definition s4 : Fmajor.stmt. Admitted.
-Definition two := [(12,s1);(24,s2)].
-Definition four := [(1,s1);(2,s2);(3,s3);(4,s4)].
-Definition cases := [(12,Fmajor.Sassign xH (Fmajor.Var xH));(24,Fmajor.Sseq Fmajor.Sskip Fmajor.Sskip);(18, Fmajor.Sskip);(3, Fmajor.Sskip);(6, Fmajor.Sskip)].
-
-Definition target' := Fmajor.Var xH.
-Definition target : Fmajor.expr. Admitted.
-
-Definition switch_two := Fmajor.Sswitch xH two target.
-Definition switch_four := Fmajor.Sswitch xH four target.
-Definition switch_many := Fmajor.Sswitch xH cases target.
-
-
-Lemma four_same :
-  transf_stmt switch_four = transf_stmt_new switch_four.
-Proof.
-  unfold switch_four; simpl.
-  remember (transf_expr target) as targ.
-  
-  
-*)
-
-(*
-
-
-
-    let fix mk_blocks_new (base : Emajor.stmt) (cases : list (Z * Fmajor.stmt)) (i : nat)  :=
-        match cases with
-        | [] => base
-        | (v,s) :: cases' =>
-          let r := mk_blocks_new base cases' (S i) in
-          Emajor.Sblock (Emajor.Sseq r
-                                     (Emajor.Sseq (transf_stmt s)
-                                                  (Emajor.Sexit i)))
-        end in
-    mk_blocks_new swblock (rev cases) O in
-
-*)
-
-  
-(*
-
-(* NEW*)
-Fixpoint mk_blocks_new
-         (base : Emajor.stmt) (* What to stick in the center of the switch *)
-         (cases : list (Z * Fmajor.stmt)) (* list of cases to recurse down *)
-         (i : nat) (* current case number (innermost is total cases, outermost will be 0) *)
-  :=
-  match cases with
-  | [] => base
-  | (v,s) :: cases =>
-    let r := mk_blocks_new base cases (S i) in
-    Emajor.Sblock (Emajor.Sseq r
-                                 (Emajor.Sseq (transf_stmt s)
-                                              (Emajor.Sexit i)))
-  end.
-
-
-(* OLD *)
-Fixpoint mk_blocks (acc : Emajor.stmt) (i : nat) (cases : list (Z * Fmajor.stmt)) :=
-  match cases with
-  | [] => acc
-  | (v, s) :: cases =>
-    let acc' :=
-        Emajor.Sblock (Emajor.Sseq acc
-                                   (Emajor.Sseq (transf_stmt s)
-                                                (Emajor.Sexit (length cases - i)))) in (* does this actually work? *)
-    mk_blocks acc' (S i) cases
-  end.
-
-
-
-Definition transf_cases (targid : ident) (cases : list (Z * Fmajor.stmt)) (target_d : Emajor.expr) :=
-  let fix mk_cases (i : nat) (cases : list (Z * Fmajor.stmt)) : list (Z * nat) :=
-      match cases with
-      | [] => []
-      | (v, s) :: cases => (v, i) :: mk_cases (S i) cases
-      end in
-    let switch := Emajor.Sswitch targid target_d (mk_cases 0%nat cases) (length cases) in
-    let swblock := Emajor.Sblock switch in
-    let fix mk_blocks (base : Emajor.stmt) (cases : list (Z * Fmajor.stmt)) (i : nat) :=
-        match cases with
-        | [] => base
-        | (v,s) :: cases =>
-          let r := mk_blocks base cases (S i) in
+          let r := mk_blocks base c (S i) in
           Emajor.Sblock (Emajor.Sseq r
                                      (Emajor.Sseq (transf_stmt s)
                                                   (Emajor.Sexit i)))
         end in
     mk_blocks swblock cases O.
 
-Fixpoint mk_cases (i : nat) (cases : list (Z * Fmajor.stmt)) : list (Z * nat) :=
-  match cases with
-  | [] => []
-  | (v, s) :: cases => (v, i) :: mk_cases (S i) cases
-  end.
-*)
-
-
-(* Here is the base problem *)
-(* We need to rewrite all the transformations to not be tail recursive *)
-(* Just mk_blocks then *)
-
-
-(* Lemma mk_blocks_rev_ind_case_succ : *)
-(*   forall l b n z s, *)
-(*     mk_blocks b (S n) (l ++ [(z,s)]) = Sblock (Sseq (mk_blocks b n l) (Sseq (transf_stmt s) (Sexit 0))). *)
-(* Proof. *)
-(*   induction l; intros; simpl; *)
-(*     try reflexivity.  *)
-(*   destruct a. simpl. rewrite IHl. rewrite app_length. simpl. *)
-(*   replace (length l + 1 - S n)%nat with (length l - n)%nat  by omega. *)
-(*   reflexivity. *)
-(* Qed. *)
-
-(* Lemma mk_blocks_ind_case : *)
-(*   forall cases b n z s, *)
-(*     (n <= length cases)%nat -> *)
-(*     mk_blocks b n (cases ++ [(z, s)]) = *)
-(*     Sblock (Sseq (mk_blocks b (S n) cases) (Sseq (transf_stmt s) (Sexit (n - length cases)))). *)
-(* Proof. *)
-(*   induction cases; intros; simpl. simpl in H. *)
-(*   replace n with O by omega. simpl. *)
-(*   reflexivity. *)
-(*   simpl in H. *)
-(*   assert ((n = S (length cases) \/ n <= length cases)%nat) by omega. *)
-(*   destruct H0. *)
-(*   subst n. rewrite app_length in *. simpl. *)
-(*   replace ((length cases + 1 - S (length cases)))%nat with O by omega. *)
-(*   destruct a. *)
-(*   simpl. *)
-
-(* Lemma mk_blocks_no_acc_spec : *)
-(*   forall cases b n, *)
-(*     mk_blocks b n (rev cases) = mk_blocks_no_acc b n cases. *)
-(* Proof. *)
-(*   induction cases; intros. *)
-(*   simpl. reflexivity. *)
-(*   simpl. destruct a. *)
-(*   rewrite <- IHcases. *)
-(* Admitted. *)
-
-(*
-Lemma mk_blocks_rev_ind_case_zero :
-  forall l b n z s,
-    mk_blocks b O (l ++ [(z,s)]) = Sblock (Sseq (mk_blocks b n l) (Sseq (transf_stmt s) (Sexit 0))).
-Proof.
-  induction l; intros; simpl;
-    try reflexivity. 
-  destruct a. simpl.
-  rewrite IHl. rewrite app_length. simpl.
-  replace (length l + 1 - S n)%nat with (length l - n)%nat  by omega.
-  reflexivity.
-
-  
-
-Lemma mk_blocks_acc_rev :
-  forall cases base n,
-    mk_blocks base n (rev cases) = mk_blocks_no_acc base n cases.
-Proof.
-  induction cases; intros; try solve [unfold mk_blocks, mk_blocks_no_acc; simpl; reflexivity].
-  simpl.
-  
-  destruct a.
-  destruct n; simpl. rewrite <- IHcases.
-  
-  rewrite mk_blocks_rev_ind_case.
-  
-  rewrite IHcases.
-  simpl.
-
-
-Lemma mk_blocks_acc_rev :
-  forall cases s n,
-    mk_blocks s n cases = mk_blocks_no_acc s (length cases - n) (rev cases).
-Proof.
-  induction cases; intros.
-  simpl; reflexivity.
-  simpl. destruct a.
-  intros. replace (mk_blocks s n cases) with (mk_blocks s n (rev (rev cases))) by (rewrite rev_involutive; eauto).
-  generalize dependent n.
-  generalize dependent s.
-*)  
-
-
-  
 Definition transf_fun_body (f : (Fmajor.stmt * Fmajor.expr)) : Emajor.stmt :=
   let (s,e) := f in
-  Sseq (transf_stmt_new s) (Sreturn (transf_expr e)).
+  Sseq (transf_stmt s) (Sreturn (transf_expr e)).
 
 Definition transf_fundef (f : Fmajor.function) : Emajor.fundef :=
   Emajor.mkfunction (Fmajor.fn_params f) (Fmajor.fn_sig f) (Fmajor.fn_stackspace f)
@@ -310,7 +108,7 @@ Definition transf_fundef (f : Fmajor.function) : Emajor.fundef :=
                     
 Definition transf_program (p : Fmajor.program) : Emajor.program :=
   AST.transform_program transf_fundef p.
-(*
+
 Lemma transf_switch :
   forall targid cases target,
     transf_stmt (Fmajor.Sswitch targid cases target) =
@@ -321,13 +119,14 @@ Qed.
 
 Lemma transf_cases_ind_defns :
   forall targid cases target swblock ncases,
-    ncases = mk_cases O cases ->
+    ncases = mk_cases (length cases - 1) cases ->
     swblock = Emajor.Sblock (Emajor.Sswitch targid target ncases (length cases)) ->
     transf_cases targid cases target = mk_blocks swblock cases O.
 Proof.
-  intros. unfold transf_cases. fold mk_blocks. fold mk_cases. subst. reflexivity.
+  intros. unfold transf_cases. fold mk_blocks. fold mk_cases. subst.
+  reflexivity.
 Qed.
-*)
+
 
 Section PRESERVATION.
 
@@ -362,14 +161,6 @@ Inductive match_cont: Fmajor.cont -> Emajor.cont -> Prop :=
       match_cont k k' ->
       match_cont (Fmajor.Kcall id exp f env k) (Emajor.Kcall id (transf_fundef f) env k').
 
-
-Inductive wf_cont : list Fmajor.stmt -> Fmajor.cont -> Emajor.cont -> Prop :=
-| wf_zero : forall k k',
-    match_cont k k' -> wf_cont nil k k'
-| wf_succ : forall k k' l s,
-    wf_cont l k k' ->
-    wf_cont (s :: l) k (Emajor.Kblock (Emajor.Kseq (transf_stmt s) k')).
-
 Inductive match_states: Fmajor.state -> Emajor.state -> Prop :=
 | match_state :
     forall f f' s s' k k' e env,
@@ -382,32 +173,100 @@ Inductive match_states: Fmajor.state -> Emajor.state -> Prop :=
       match_cont k k' ->
       match_states (Fmajor.Returnstate v k) (Emajor.Returnstate v k').
 
+Lemma eval_expr_transf :
+  forall env exp v,
+    Fmajor.eval_expr env exp v ->
+    Emajor.eval_expr env (transf_expr exp) v.
+Proof.
+  induction 1; intros.
+  simpl. econstructor; eauto.
+  econstructor; eauto.
+  eapply eval_deref_constr; eauto.
+Qed.
+
+(* first lemma, construct plus steps out of mk_blocks *)
+Lemma plus_step_mk_blocks :
+  forall cases env' k' base f n,
+    exists k0,
+      star step tge
+           (State f
+                  (mk_blocks base cases n)
+                  k'
+                  env') E0
+           (State f
+                  base
+                  k0
+                  env').
+Proof.
+  induction cases; intros.
+  + simpl. eexists. eapply star_refl.
+  + destruct a.
+    remember (State f (mk_blocks base ((z, s) :: cases) n) k' env') as st.
+    remember (State f (mk_blocks base cases (S n)) (Kseq (Sseq (transf_stmt s) (Sexit n)) (Kblock k')) env') as st'.
+    assert (star step tge st E0 st').
+    subst.
+    eapply star_left; nil_trace.
+    econstructor; eauto.
+    fold mk_blocks.
+    eapply star_one; nil_trace. econstructor.
+    remember (Kseq (Sseq (transf_stmt s) (Sexit n)) (Kblock k')) as k0.
+    destruct (IHcases env' k0 base f (S n)). break_and.
+    eexists.
+    eapply star_trans; nil_trace. apply H.
+    subst st'. eapply H0.
+Qed.
+
+
+(* We need a different, more subtle defn of match_states and match_cont *)
+(*   *)
+
+Inductive wf_cont : list Fmajor.stmt -> Fmajor.cont -> Emajor.cont -> Prop :=
+| wf_zero : forall k k',
+    wf_cont nil k k'
+| wf_succ : forall k k' l s,
+    wf_cont l k k' ->
+    wf_cont (s :: l) k (Emajor.Kblock (Emajor.Kseq (transf_stmt s) k')).
+
+
+
 (*
 Lemma step_wf_cont :
   forall targid cases target f sw e k env k' env' sF sE sF',
     sw = (Fmajor.Sswitch targid cases target) ->
     sF = (Fmajor.State f sw e k env) ->
     sE = (Emajor.State (transf_fundef f) (transf_stmt sw) k' env') ->
-    match_states sF sE ->
-    Fmajor.step ge sF E0 sF' ->
+    match_states sF sE -> (* This is the wrong thing here *)
+    Fmajor.step ge sF E0 sF' -> (* this is wrong here too *)
     exists sE',
       plus Emajor.step tge sE E0 sE' /\ wf_cont (map snd cases) k k'.
 Proof.
+  intros.
+  subst. inv H2. inv H3.
+  fold mk_blocks in H11.
+  rewrite H11.
+  app eval_expr_transf Fmajor.eval_expr.
+  
+
+
+
+  
   induction cases; intros; subst.
   inv H3. simpl in H10. congruence.
   inversion H2. subst. clear H11.
   rewrite transf_switch.
-  remember (mk_cases O cases) as ncases.
+  remember (mk_cases (length cases - 1) cases) as ncases.
   remember (Emajor.Sblock (Emajor.Sswitch targid (transf_expr target) ncases (length cases))) as swblock.
   erewrite transf_cases_ind_defns; eauto.
   simpl. destruct a.
+  edestruct IHcases; eauto.
+  econstructor; eauto. econstructor; eauto.
   eexists; split.
   eapply plus_left; nil_trace.
-  
+  econstructor; eauto.
   
 Qed.
-  
-
+*)  
+(*
 (* *)
 Lemma step_transf_switch :
   forall cases targid target f k env tag vargs s,
@@ -426,6 +285,7 @@ Proof.
     (* This is not near strong enough *)
 Qed.
 *)
+
 Lemma step_switch :
   forall targid cases target f sw e k env k' env' sF sE sF',
     sw = (Fmajor.Sswitch targid cases target) ->
@@ -439,16 +299,6 @@ Proof.
   
 Admitted.
 
-Lemma eval_expr_transf :
-  forall env exp v,
-    Fmajor.eval_expr env exp v ->
-    Emajor.eval_expr env (transf_expr exp) v.
-Proof.
-  induction 1; intros.
-  simpl. econstructor; eauto.
-  econstructor; eauto.
-  eapply eval_deref_constr; eauto.
-Qed.
 
 Lemma eval_exprlist_transf :
   forall env expl vs,
@@ -482,7 +332,7 @@ Proof.
   erewrite Genv.find_funct_ptr_transf; eauto.
 Qed.
 
-(*  
+
 Lemma step_sim_nil_trace :
   forall (s1 s1' : Fmajor.state) (s2 : Emajor.state),
     match_states s1 s2 ->
@@ -593,7 +443,7 @@ Proof.
     econstructor; eauto.
     
 Qed.
-*)
+
 Lemma step_sim :
   forall (s1 s1' : Fmajor.state) (s2 : Emajor.state) t,
     match_states s1 s2 ->
@@ -601,20 +451,27 @@ Lemma step_sim :
     exists s2',
       plus Emajor.step tge s2 t s2' /\ match_states s1' s2'.
 Proof.
-Admitted.
-(*
   intros.
   assert (t = E0) by (inv H0; congruence).
   subst t.
   eapply step_sim_nil_trace; eauto.
 Qed.
-*)
+
 Lemma initial_states_match :
   forall s1,
     Fmajor.initial_state prog s1 ->
     exists s2, Emajor.initial_state tprog s2 /\ match_states s1 s2.
 Proof.
+  intros.
+  inv H. eexists; split.
+  econstructor; eauto.
+  unfold transf_program.
+  erewrite Genv.find_symbol_transf; eauto.
+  unfold transf_program.
+  erewrite Genv.find_funct_ptr_transf; eauto.
+  
 Admitted.
+
 
 Lemma match_final_states :
   forall s1 s2 r,

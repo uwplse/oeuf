@@ -40,6 +40,8 @@ Require Import StructTact.Util.
 
 Require Import EricTact.
 
+(* Theorem: given 2 x86 level values and their matching high level values, we can build a call out of them and establish matching with it *)
+
 Section Simulation.
 
   Variable prog : compilation_unit.
