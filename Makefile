@@ -49,7 +49,7 @@ test:
 demo :
 	./compile_demo.sh
 
-clean: Makefile.coq 
+clean: Makefile.coq
 	$(MAKE) -f Makefile.coq clean
 	rm -rf Makefile.coq _build/
 	rm -f compcert.ini $(DRIVER)
