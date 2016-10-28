@@ -177,6 +177,31 @@ Definition insn_ind' (P : insn -> Prop)
     ltac:(refine (@insn_rect_mut P (Forall P) (Forall (Forall P))
         HArg HSelf HDeref HCall HConstr HSwitch HClose HCopy _ _ _ _ i); eauto).
 
+Definition insn_list_rect_mut
+        (P : insn -> Type)
+        (Pl : list insn -> Type)
+        (Pll : list (list insn) -> Type)
+    (HArg :     forall dst, P (Arg dst))
+    (HSelf :    forall dst, P (Self dst))
+    (HDeref :   forall dst e off, P (Deref dst e off))
+    (HCall :    forall dst f a, P (Call dst f a))
+    (HConstr :  forall dst tag args, P (MkConstr dst tag args))
+    (HSwitch :  forall dst cases, Pll cases -> P (Switch dst cases))
+    (HClose :   forall dst fname free, P (MkClose dst fname free))
+    (HCopy :    forall dst src, P (Copy dst src))
+    (Hnil :     Pl [])
+    (Hcons :    forall i is, P i -> Pl is -> Pl (i :: is))
+    (Hnil2 :    Pll [])
+    (Hcons2 :   forall is iss, Pl is -> Pll iss -> Pll (is :: iss))
+    (is : list insn) : Pl is :=
+    let go := insn_rect_mut P Pl Pll
+            HArg HSelf HDeref HCall HConstr HSwitch HClose HCopy Hnil Hcons Hnil2 Hcons2 in
+    let fix go_list is :=
+        match is as is_ return Pl is_ with
+        | [] => Hnil
+        | i :: is => Hcons i is (go i) (go_list is)
+        end in go_list is.
+
 
 
 Definition dest e :=
