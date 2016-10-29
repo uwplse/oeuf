@@ -32,6 +32,7 @@ Inductive stmt : Type :=
 | Sswitch (targid : ident) (cases : list (Z * stmt)) (target : expr)
 | SmakeClose (dst : ident) (f : function_name) (free : list expr)
 | Sseq (s1 : stmt) (s2 : stmt)
+| Sreturn (e : expr)
 .
 
 Record function : Type := mkfunction {
@@ -39,7 +40,7 @@ Record function : Type := mkfunction {
   (* fn_vars will always be nil *) (* not sure about this *)
   fn_sig : signature;
   fn_stackspace: Z;
-  fn_body: stmt * expr
+  fn_body: stmt
 }.
 
 Definition fundef := function.
@@ -55,24 +56,25 @@ Definition env := PTree.t value.
 Inductive cont: Type :=
   | Kstop: cont                (**r stop program execution *)
   | Kseq: stmt -> cont -> cont          (**r execute stmt, then cont *)
-  | Kreturn: expr -> cont -> cont (**r return the result of expr *)
-  | Kswitch: cont -> cont (**r in a switch statement *)
-  | Kcall: ident -> expr -> function -> env -> cont -> cont.
-                                        (**r return to caller *)
+  | Kswitch: cont -> cont (**r in a switch *)
+  | Kcall: ident -> function -> env -> cont -> cont. (**r return to caller *)
 
 Inductive state: Type :=
   | State:                      (**r Execution within a function *)
       forall (f: function)              (**r currently executing function  *)
              (s: stmt)                  (**r statement under consideration *)
-             (e: expr)                  (**r expression for return val *)
              (k: cont)                  (**r its continuation -- what to do next *)
              (e: env),                   (**r current local environment *)
+      state
+  | Callstate:                  (**r Invocation of a function *)
+      forall (f: function)                (**r function to invoke *)
+             (args: list value)           (**r arguments provided by caller *)
+             (k: cont),                  (**r what to do next  *)
       state
   | Returnstate:                (**r Return from a function *)
       forall (v: value)                   (**r Return value *)
              (k: cont),                  (**r what to do next *)
       state.
-
 
 Section RELSEM.
   
@@ -116,7 +118,7 @@ Fixpoint call_cont (k: cont) : cont :=
 Definition is_call_cont (k: cont) : Prop :=
   match k with
   | Kstop => True
-  | Kcall _ _ _ _ _ => True
+  | Kcall _ _ _ _ => True
   | _ => False
   end.
 
@@ -136,57 +138,60 @@ Fixpoint find_case (tag : Z) (cases : list (Z * stmt)) : option stmt :=
 Definition call_sig := mksignature (Tint::Tint::nil) (Some Tint) cc_default.
 
 Inductive step : state -> trace -> state -> Prop :=
-  | step_assign: forall f lhs rhs exp k e v,
+  | step_assign: forall f lhs rhs k e v,
       eval_expr e rhs v ->
       e ! lhs = None ->
-      step (State f (Sassign lhs rhs) exp k e)
-        E0 (State f Sskip exp k (PTree.set lhs v e))
-  | step_skip_seq: forall f s k e exp,
-      step (State f Sskip exp (Kseq s k) e)
-        E0 (State f s exp k e)
-  | step_skip_return: forall f k e v exp nonsense,
+      step (State f (Sassign lhs rhs) k e)
+        E0 (State f Sskip k (PTree.set lhs v e))
+  | step_skip_seq: forall f s k e, 
+      step (State f Sskip (Kseq s k) e)
+        E0 (State f s k e)
+  | step_return_statement : forall f k e v exp, 
       is_call_cont k ->
       eval_expr e exp v ->
-      step (State f Sskip nonsense (Kreturn exp k) e)
+      step (State f (Sreturn exp) k e)
            E0 (Returnstate v k)
-  | step_call: forall f k (e : env) id efunc earg varg fname cargs fn exp bcode,
+  | step_call: forall f k (e : env) id efunc earg varg fname cargs fn bcode,
       eval_expr e earg varg -> (* the argument *)
       eval_expr e efunc (Close fname cargs) -> (* the function itself *)
       Genv.find_symbol ge fname = Some bcode ->
       Genv.find_funct_ptr ge bcode = Some fn ->
       length fn.(fn_params) = 2%nat ->
       fn.(fn_sig) = call_sig ->
-      step (State f (Scall id efunc earg) exp k e) E0
-           (State fn (fst fn.(fn_body)) (snd fn.(fn_body)) (Kreturn (snd fn.(fn_body)) (Kcall id exp f e k)) (set_params ((Close fname cargs) :: varg :: nil) fn.(fn_params)))
-  | step_return: forall v f id e k exp,
+      step (State f (Scall id efunc earg) k e) E0
+           (Callstate fn ((Close fname cargs) :: varg :: nil) (Kcall id f e k))
+  | step_into_call: forall fn args k,
+      step (Callstate fn args k) E0
+           (State fn (fn.(fn_body)) k (set_params args fn.(fn_params)))
+  | step_return: forall v f id e k,
       e ! id = None ->
-      step (Returnstate v (Kcall id exp f e k))
-        E0 (State f Sskip exp k (PTree.set id v e))
-  | step_seq: forall f s1 s2 k exp e,
-      step (State f (Sseq s1 s2) exp k e)
-        E0 (State f s1 exp (Kseq s2 k) e)
-  | step_make_constr: forall id tag l f exp k e vargs,
+      step (Returnstate v (Kcall id f e k))
+        E0 (State f Sskip k (PTree.set id v e))
+  | step_seq: forall f s1 s2 k e,
+      step (State f (Sseq s1 s2) k e)
+        E0 (State f s1 (Kseq s2 k) e)
+  | step_make_constr: forall id tag l f k e vargs,
       eval_exprlist e l vargs ->
       e ! id = None ->
-      step (State f (SmakeConstr id tag l) exp k e)
-        E0 (State f Sskip exp k (PTree.set id (Constr tag vargs) e))
-  | step_make_close: forall id fname l f exp k e vargs bcode fn,
+      step (State f (SmakeConstr id tag l) k e)
+        E0 (State f Sskip k (PTree.set id (Constr tag vargs) e))
+  | step_make_close: forall id fname l f k e vargs bcode fn,
       eval_exprlist e l vargs ->
       e ! id = None ->
       Genv.find_symbol ge fname = Some bcode ->
       Genv.find_funct_ptr ge bcode = Some fn ->
-      step (State f (SmakeClose id fname l) exp k e)
-        E0 (State f Sskip exp k (PTree.set id (Close fname vargs) e))
-  | step_switch: forall e target targid tag vargs cases s k exp f,
+      step (State f (SmakeClose id fname l) k e)
+        E0 (State f Sskip k (PTree.set id (Close fname vargs) e))
+  | step_switch: forall e target targid tag vargs cases s k f,
       eval_expr e target (Constr tag vargs) -> (* eval match target *)
       find_case (Int.unsigned tag) cases = Some s -> (* find the right case *) 
       e ! targid = None ->
-      step (State f (Sswitch targid cases target) exp k e)
-        E0 (State f s exp (Kswitch k) (PTree.set targid (Constr tag vargs) e))
-  | step_kswitch: forall f exp k e,
-      step (State f Sskip exp (Kswitch k) e)
-        E0 (State f Sskip exp k e).
-
+      step (State f (Sswitch targid cases target) k e)
+        E0 (State f s (Kswitch k) (PTree.set targid (Constr tag vargs) e))
+  | step_kswitch: forall f k e,
+      step (State f Sskip (Kswitch k) e)
+        E0 (State f Sskip k e).
+        
 End RELSEM.
 
 Inductive initial_state (p: program): state -> Prop :=
@@ -194,8 +199,7 @@ Inductive initial_state (p: program): state -> Prop :=
       let ge := Genv.globalenv p in
       Genv.find_symbol ge p.(prog_main) = Some b ->
       Genv.find_funct_ptr ge b = Some f ->
-      let retexp := snd (fn_body f) in
-      initial_state p (State f (fst (fn_body f)) retexp (Kreturn retexp Kstop) (PTree.empty value)).
+      initial_state p (State f (fn_body f) Kstop (PTree.empty value)).
 
 Inductive final_state: state -> int -> Prop :=
   | final_state_intro: forall r v,
