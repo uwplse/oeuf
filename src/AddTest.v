@@ -21,7 +21,7 @@ Require Import Ring.
 Require Import StructTact.StructTactics.
 Require Import StructTact.Util.
 
-Require Import Fmajortoemajor.
+(*Require Import Fmajortoemajor.*)
 Require Import Emajortodmajor.
 Require Import Dflatmajortocmajor.
 Require Import Cmajortominor.
