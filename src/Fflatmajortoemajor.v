@@ -330,7 +330,7 @@ Inductive match_cont: Fflatmajor.cont -> Emajor.cont -> Prop :=
     forall k k' k0 n,
       match_cont k k' ->
       exit_cont n k' k0 ->
-      match_cont (Fflatmajor.Kswitch k) (Kseq (Sexit n) k0).
+      match_cont (Fflatmajor.Kswitch k) (Kseq (Sexit n) (Kblock k0)).
 
 Lemma match_call_cont :
   forall k k',
@@ -379,23 +379,58 @@ Proof.
   eapply eval_expr_transf; eauto.
 Qed.
 
-
+Lemma switch_cases_succ_cont :
+  forall n l k x,
+    switch_cases (S n) l k x ->
+    exists k' s,
+      x = Kseq (Sseq s (Sexit n)) (Kblock k').
+Proof.
+  intros. inv H.
+  eexists. eexists. reflexivity.
+Qed.
+  
 Lemma star_step_exit_case_index :
   forall cases tge k' x tag s0 f env,
+    find_case (Int.unsigned tag) cases = Some s0 ->
     switch_cases (length cases) (rev (map transf_stmt (map snd cases))) k' x ->
     exists k0 n,
       star step tge (State f (Sexit (case_index (Int.unsigned tag) cases)) (Kblock x) env)
-           E0 (State f s0 (Kseq (Sexit n) k0) env) /\ exit_cont n k' k0.
+           E0 (State f (transf_stmt s0) (Kseq (Sexit n) (Kblock k0)) env) /\ exit_cont n k' k0.
 Proof.
+  induction cases using rev_ind; intros.
+  simpl in H. inv H.
 Admitted.
+
+Lemma plus_step_exit_cont_ind :
+  forall tge n k k_exit f env,
+    exit_cont n k k_exit ->
+    plus step tge (State f (Sexit n) (Kblock k_exit) env)
+         E0 (State f Sskip k env).
+Proof.
+  induction 1; intros.
+  eapply plus_left; nil_trace.
+  econstructor; eauto.
+  eapply star_refl.
+  eapply plus_trans; nil_trace; [ | eassumption].
+  eapply plus_left; nil_trace.
+  econstructor; eauto.
+  eapply star_left; nil_trace.
+  econstructor; eauto.
+  eapply star_refl.
+Qed.
 
 Lemma plus_step_exit_cont :
   forall tge n k k_exit f env,
     exit_cont n k k_exit ->
-    plus step tge (State f Sskip (Kseq (Sexit n) k_exit) env)
+    plus step tge (State f Sskip (Kseq (Sexit n) (Kblock k_exit)) env)
          E0 (State f Sskip k env).
 Proof.
-Admitted.
+  intros.
+  eapply plus_left; nil_trace.
+  econstructor; eauto.
+  eapply plus_star.
+  eapply plus_step_exit_cont_ind; eauto.
+Qed.
 
 Section PRESERVATION.
 
@@ -463,7 +498,7 @@ Proof.
     edestruct (star_step_mk_blocks tge cases env k' (switch targid cases (transf_expr target)) (transf_fundef f)); eauto.
     break_and.
     app (plus_step_inner_switch tge targid cases (transf_expr target) (transf_fundef f) x env tag vargs s0) find_case.
-    eapply star_step_exit_case_index in H2.
+    eapply star_step_exit_case_index in H2; eauto.
     repeat break_exists. break_and.
     eexists. split.
     eapply star_plus_trans; nil_trace.
@@ -471,12 +506,14 @@ Proof.
     eapply plus_star_trans; nil_trace.
     eassumption. 
     eassumption.
-    econstructor; eauto. econstructor; eauto.
-
+    econstructor; eauto.
+    econstructor; eauto.
+    
   (* Kswitch *)
   * invp match_cont.
     app plus_step_exit_cont exit_cont.
-    eexists. split. eassumption.
+    eexists. split.
+    eassumption.
     econstructor; eauto.
 
   (* Returnstate *)
