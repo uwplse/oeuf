@@ -388,7 +388,36 @@ Proof.
   intros. inv H.
   eexists. eexists. reflexivity.
 Qed.
-  
+
+Lemma switch_cases_exit_cont :
+  forall n l k x,
+    switch_cases n l k x ->
+    exit_cont n k x.
+Proof.
+  induction 1; intros;
+    econstructor; eauto.
+Qed.
+
+Inductive switch_cases_rev : nat -> list Emajor.stmt -> Emajor.cont -> Emajor.cont -> Prop :=
+| switch_lin :
+    forall k,
+      switch_cases_rev O nil k k
+| switch_snoc :
+    forall n l k k',
+      switch_cases n l k k' ->
+      forall s,
+        switch_cases_rev (S n) (l ++ [s]) k (Kseq (Sseq s (Sexit n)) (Kblock k')).
+
+(*
+Lemma switch_cases_to_rev :
+  forall l n k k',
+    switch_cases n l k k' ->
+    switch_cases_rev n (rev l) k k'.
+Proof.
+  induction 1; intros. econstructor; eauto.
+  simpl. econstructor; eauto. 
+ *)
+
 Lemma star_step_exit_case_index :
   forall cases tge k' x tag s0 f env,
     find_case (Int.unsigned tag) cases = Some s0 ->
@@ -399,6 +428,16 @@ Lemma star_step_exit_case_index :
 Proof.
   induction cases using rev_ind; intros.
   simpl in H. inv H.
+
+  repeat rewrite map_app in *.
+  rewrite rev_app_distr in *.
+  simpl in *.
+  rewrite app_length in *. simpl in *.
+  replace (length cases + 1)%nat with (S (length cases)) in * by omega.
+  inv H0.
+
+
+  
 Admitted.
 
 Lemma plus_step_exit_cont_ind :
