@@ -18,8 +18,8 @@ Require SwitchedComp.
 Require SelfCloseComp.
 Require SelfNumberedComp.
 Require FlattenedComp.
-(* HERE *)
-Require Fmajortoemajor.
+Require Fmajortofflatmajor.
+Require Fflatmajortoemajor.
 Require Emajortodmajor.
 Require Dmajortodflatmajor.
 Require Dflatmajortocmajor.
@@ -78,7 +78,7 @@ Section Simulation.
     repeat match goal with
            | [ H : OK _ = OK _ |- _ ] => inversion H; clear H
            end.
-    subst p16 p17 p18 p19.
+    subst p16 p17 p18 p20.
 
     (* Untyped to Lifted *)
     eapply compose_notrace_mix_forward_simulation.
@@ -129,9 +129,13 @@ Section Simulation.
     eapply compose_mix_trace_forward_simulation.
     eapply FmajorComp.fsim; try eassumption.
 
-    (* Fmajor to Emajor *)
+    (* Fmajor to Fflatmajor *)
     eapply compose_forward_simulation.
-    eapply Fmajortoemajor.fsim; try eassumption.
+    eapply Fmajortofflatmajor.fsim; try eassumption.
+
+    (* Fflatmajor to Emajor *)
+    eapply compose_forward_simulation.
+    eapply Fflatmajortoemajor.fsim; try eassumption.
 
     (* Emajor to Dmajor *)
     eapply compose_forward_simulation.
