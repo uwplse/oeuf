@@ -563,5 +563,58 @@ Proof.
 
 Qed.    
 
+Lemma step_sim :
+  forall (s1 s1' : Fflatmajor.state) (s2 : Emajor.state) t,
+    match_states s1 s2 ->
+    Fflatmajor.step ge s1 t s1' ->
+    exists s2',
+      plus Emajor.step tge s2 t s2' /\ match_states s1' s2'.
+Proof.
+  intros.
+  assert (t = E0) by (inv H0; congruence).
+  subst t.
+  eapply step_sim_nil_trace; eauto.
+Qed.
+
+(* maybe don't need? *)
+Lemma initial_states_match :
+  forall s1,
+    Fflatmajor.initial_state prog s1 ->
+    exists s2, Emajor.initial_state tprog s2 /\ match_states s1 s2.
+Proof.
+  intros.
+  inv H. eexists; split.
+  econstructor; eauto.
+  unfold transf_program.
+  erewrite Genv.find_symbol_transf; eauto.
+  unfold transf_program.
+  erewrite Genv.find_funct_ptr_transf; eauto.
+
+  
+Admitted.
+
+
+Lemma match_final_states :
+  forall s1 s2 r,
+    match_states s1 s2 ->
+    Fflatmajor.final_state s1 r ->
+    Emajor.final_state s2 r.
+Proof.
+Admitted.
+
+Theorem fsim :
+  forward_simulation (Fflatmajor.semantics prog) (Emajor.semantics tprog).
+Proof.
+  eapply forward_simulation_plus.
+  intros. simpl.
+  unfold transf_program in *. subst tprog.
+  solve [eapply Genv.public_symbol_transf].
+
+  solve [eapply initial_states_match; eauto].
+  solve [eapply match_final_states; eauto].
+
+  intros. eapply step_sim; eauto.
+  
+Qed.
 
 End PRESERVATION.
