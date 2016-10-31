@@ -1,27 +1,28 @@
 Require Import Common Monads.
 Require Import Metadata.
 Require String.
-Require FlatSeq FlatSeq2.
+Require FlatSeq2 FlatSeqStmt.
 Require Import ListLemmas.
 Require Import HigherValue.
 
 Require Import Psatz.
 
-Module A := FlatSeq.
-Module B := FlatSeq2.
+Module A := FlatSeq2.
+Module B := FlatSeqStmt.
 
 Add Printing Constructor A.frame.
 Add Printing Constructor B.frame.
 
 
-Definition compile : A.insn -> B.insn :=
+Definition compile : A.insn -> B.stmt :=
     let fix go e :=
-        let fix go_list (es : list A.insn) : list B.insn :=
+        let fix go_list (es : list A.insn) : B.stmt :=
             match es with
-            | [] => []
-            | e :: es => go e :: go_list es
+            | [e] => go e
+            | e :: es => B.Seq (go e) (go_list es)
+            | [] => B.Skip
             end in
-        let fix go_list_list (es : list (list A.insn)) : list (list B.insn) :=
+        let fix go_list_list (es : list (list A.insn)) : list B.stmt :=
             match es with
             | [] => []
             | e :: es => go_list e :: go_list_list es
@@ -41,8 +42,9 @@ Definition compile_list :=
     let go := compile in
     let fix go_list es :=
         match es with
-        | [] => []
-        | e :: es => go e :: go_list es
+        | [e] => go e
+        | e :: es => B.Seq (go e) (go_list es)
+        | [] => B.Skip
         end in go_list.
 
 Definition compile_list_list :=
@@ -59,7 +61,7 @@ Ltac refold_compile :=
 
 
 
-Inductive I_insn : A.insn -> B.insn -> Prop :=
+Inductive I_insn : A.insn -> B.stmt -> Prop :=
 | IArg : forall dst,
         I_insn (A.Arg dst) (B.Arg dst)
 | ISelf : forall dst,
@@ -71,17 +73,28 @@ Inductive I_insn : A.insn -> B.insn -> Prop :=
 | IMkConstr : forall dst tag args,
         I_insn (A.MkConstr dst tag args) (B.MkConstr dst tag args)
 | ISwitch : forall dst acases bcases,
-        Forall2 (Forall2 I_insn) acases bcases ->
+        Forall2 I_insns acases bcases ->
         I_insn (A.Switch dst acases) (B.Switch dst bcases)
 | IMkClose : forall dst fname free,
         I_insn (A.MkClose dst fname free) (B.MkClose dst fname free)
 | ICopy : forall dst src,
         I_insn (A.Copy dst src) (B.Copy dst src)
+with I_insns : list A.insn -> B.stmt -> Prop :=
+| INil : I_insns [] B.Skip
+| IOne : forall i s,
+        I_insn i s ->
+        I_insns [i] s
+| ICons : forall i is s1 s2,
+        I_insn i s1 ->
+        I_insns is s2 ->
+        is <> [] ->
+        I_insns (i :: is) (B.Seq s1 s2)
 .
+Hint Constructors I_insns.
 
-Inductive I_func : (list A.insn * nat) -> (list B.insn * nat) -> Prop :=
+Inductive I_func : (list A.insn * nat) -> (B.stmt * nat) -> Prop :=
 | IFunc : forall ret acode bcode,
-        Forall2 I_insn acode bcode ->
+        I_insns acode bcode ->
         I_func (acode, ret) (bcode, ret).
 
 Inductive I_frame : A.frame -> B.frame -> Prop :=
@@ -91,18 +104,18 @@ Hint Constructors I_frame.
 
 Inductive I_cont : A.cont -> B.cont -> Prop :=
 | IkSeq : forall acode ak bcode bk,
-        Forall2 I_insn acode bcode ->
+        I_insns acode bcode ->
         I_cont ak bk ->
         I_cont (A.Kseq acode ak)
                (B.Kseq bcode bk)
 | IkSwitch : forall ak bk,
         I_cont ak bk ->
-        I_cont (A.Kswitch [] ak)
+        I_cont (A.Kswitch ak)
                (B.Kswitch bk)
 | IkRet : forall ret dst af ak bf bk,
         I_frame af bf ->
         I_cont ak bk ->
-        I_cont (A.Kret [] ret dst af ak)
+        I_cont (A.Kret ret dst af ak)
                (B.Kret ret dst bf bk)
 | IkStop : forall ret,
         I_cont (A.Kstop ret)
@@ -110,7 +123,7 @@ Inductive I_cont : A.cont -> B.cont -> Prop :=
 
 Inductive I : A.state -> B.state -> Prop :=
 | IRun : forall acode af ak  bcode bf bk,
-        Forall2 I_insn acode bcode ->
+        I_insns acode bcode ->
         I_frame af bf ->
         I_cont ak bk ->
         I (A.Run acode af ak)
@@ -127,12 +140,28 @@ Theorem compile_I_expr : forall a b,
 induction a using A.insn_rect_mut with
     (Pl := fun a => forall b,
         compile_list a = b ->
-        Forall2 I_insn a b)
+        I_insns a b)
     (Pll := fun a => forall b,
         compile_list_list a = b ->
-        Forall2 (Forall2 I_insn) a b);
+        Forall2 I_insns a b);
 intros0 Hcomp; simpl in Hcomp; try rewrite <- Hcomp; refold_compile;
 try solve [econstructor; eauto].
+
+- destruct is.
+  + constructor. eauto.
+  + constructor; eauto. discriminate.
+Qed.
+
+Theorem compile_list_I_expr : forall a b,
+    compile_list a = b ->
+    I_insns a b.
+induction a; 
+intros0 Hcomp; simpl in Hcomp; try rewrite <- Hcomp; refold_compile;
+try solve [econstructor; eauto using compile_I_expr].
+
+break_match.
+- constructor. eauto using compile_I_expr.
+- constructor; eauto using compile_I_expr. discriminate.
 Qed.
 
 
@@ -153,15 +182,6 @@ stk_simpl. constructor.
 Qed.
 Hint Resolve set_I_frame.
 
-Lemma Forall2_not_nil : forall A B P (xs : list A) (ys : list B),
-    xs <> [] ->
-    Forall2 P xs ys ->
-    ys <> [].
-intros. on >Forall2, invc; eauto.
-discriminate.
-Qed.
-Hint Resolve Forall2_not_nil.
-
 Theorem I_sim : forall AE BE a a' b,
     Forall2 I_func AE BE ->
     I a b ->
@@ -173,11 +193,11 @@ destruct a as [ae af ak | ae];
 intros0 Henv II Astep; [ | solve [invc Astep] ].
 
 inv Astep; inv II;
-try on (Forall2 _ (_ :: _) _), invc;
+try on >I_insns, invc; try solve [exfalso; congruence];
 [ | try on >I_insn, invc.. ];
-try on (Forall2 _ [] _), invc;
 try on >I_frame, invc;
 simpl in *.
+
 
 - (* Seq *)
   eexists. split. eapply B.SSeq; eauto.
@@ -250,3 +270,4 @@ simpl in *.
   eexists. split. eapply B.SContStop; eauto.
   i_ctor.
 Qed.
+
