@@ -233,6 +233,8 @@ Fixpoint nat_reflect n : value :=
     | S n => Constr 1 [nat_reflect n]
     end%nat.
 
+
+
 Theorem add_1_2 : { x | star add_env
                              (initial_state main_name main_body main_ret)
                              x}.
@@ -317,3 +319,22 @@ Defined.
 
 (* Eval compute in proj1_sig compiled_add_1_2. *)
 *)
+
+Require Import Metadata.
+
+Definition prog_type : Type := list (stmt * expr) * list metadata.
+
+Require Semantics.
+
+Inductive init_state (prog : prog_type) : state -> Prop :=.
+
+Inductive final_state (prog : prog_type) : state -> Prop :=.
+
+Definition initial_env (prog : prog_type) : genv := nil. (* TODO: write this *)
+
+Definition semantics (prog : prog_type) : Semantics.semantics :=
+  @Semantics.Semantics_gen state genv
+                 (step)
+                 (init_state prog)
+                 (final_state prog)
+                 (initial_env prog).

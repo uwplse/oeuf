@@ -6,6 +6,7 @@ Require Import Program.
 
 Require Import HList.
 Require Import CompilationUnit.
+Require Import Semantics.
 
 Require SourceLang.
 Require Untyped.
@@ -285,30 +286,6 @@ Proof.
     now rewrite nth_error_hmap_simple_hget.
 Qed.
 
-Theorem forward_simulation :
-  forall tys ty (e e' : S.expr tys ty),
-    S.step e e' ->
-    U.step (compile e) (compile e').
-Proof.
-Admitted.
-
-
-
-
-
-Lemma grab_expr_in :
-  forall {ty tys l} (exprs : hlist (SourceLang.expr l) tys) (expr : SourceLang.expr l ty),
-    grab_expr l tys ty exprs expr ->
-    In (compile expr) (compile_hlist exprs).
-Proof.
-  induction exprs; intros.
-  simpl in H. inversion H.
-  simpl in H. break_match_hyp. subst.
-  unfold eq_rect_r in *.
-  simpl in *. break_match_hyp. left. congruence.
-  right. eapply IHexprs; eauto.
-  simpl. right. eapply IHexprs; eauto.
-Qed.
 
 Lemma initial_state_exists :
   forall cu tprog,
@@ -318,27 +295,40 @@ Lemma initial_state_exists :
       Untyped.initial_state tprog (compile expr).
 Proof.
   intros.
-  inv H0. subst.
-  destruct cu. simpl in *.
-  econstructor; eauto. simpl.
-
-  assert (expr = expr0).
-  {
-    eapply EqdepFacts.eq_sigT_eq_dep in H5.
-    eapply Eqdep_dec.eq_dep_eq_dec in H5.
-    eapply EqdepFacts.eq_sigT_eq_dep in H5.
-    eapply Eqdep_dec.eq_dep_eq_dec in H5.
-
-    congruence.
-
-    intros. eapply SourceLang.type_eq_dec.
-    eapply list_eq_dec. eapply SourceLang.type_eq_dec.
-  }
-
-  clear H5. subst expr0.
-
-  eapply grab_expr_in; eauto.
+  invc H0.
+  repeat (find_apply_lem_hyp Eqdep_dec.inj_pair2_eq_dec;
+          auto using list_eq_dec, SourceLang.type_eq_dec).
+  constructor.
+  subst expr.
+  unfold compile_cu.
+  simpl.
+  rewrite compile_hlist_hmap_simple.
+  apply In_hget_hmap_simple.
 Qed.
-  
-    
-      
+
+Lemma final_states_match:
+  forall (cu : compilation_unit) (tprog : list U.expr * list metadata)
+    (ty : SourceLang.type) (s1 : SourceLang.expr [] ty) (s2 : Untyped.expr),
+    compile s1 = s2 -> CompilationUnit.final_state cu [] ty s1 -> Untyped.final_state tprog s2.
+Proof.
+  intros.
+  destruct cu; simpl in *.
+  destruct H0.
+  subst.
+  constructor.
+  eauto using compile_value.
+Qed.
+
+Theorem fsim:
+  forall cu tprog,
+    @compile_cu nil (types cu) (Metadata.init_metadata cu) = tprog ->
+    forall ty,
+      forward_simulation (@CompilationUnit.source_semantics ty cu) (Untyped.semantics tprog).
+Proof.
+  intros.
+  apply forward_simulation_step with (match_states := fun a b => compile a = b); simpl; intros.
+  - eapply initial_state_exists in H0; eauto.
+  - eauto using final_states_match.
+  - subst. eexists. split; eauto.
+    eauto using forward_simulation_closed.
+Qed.

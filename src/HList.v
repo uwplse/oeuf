@@ -552,3 +552,12 @@ Definition member_eq_dec {A} (A_eq_dec : forall x y : A, {x = y} + {x <> y})
     apply Eqdep_dec.inj_pair2_eq_dec in H0; auto.
   - congruence.
 Defined.
+
+Lemma In_hget_hmap_simple :
+  forall A (B : A -> Type) C (f : forall a, B a -> C) a l (h : hlist B l) (m : member a l),
+    In (f a (hget h m)) (hmap_simple f h).
+Proof.
+  induction h; intros.
+  - destruct m using case_member_nil.
+  - destruct a0, l, m using case_member_cons; simpl; auto.
+Qed.
