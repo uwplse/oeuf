@@ -436,6 +436,49 @@ Proof.
 Qed.
 
 
+Lemma find_case_inv :
+  forall l t z x s,
+    find_case t (l ++ [(z,x)]) = Some s ->
+    find_case t l = Some s \/ (find_case t l = None /\ t = z /\ x = s /\ case_index t (l ++ [(z,x)]) = O).
+Proof.
+  induction l; intros.
+  simpl in H. break_match_hyp; try congruence.
+  right. repeat split; try congruence. simpl.
+  break_match; reflexivity.
+  simpl in H. destruct a.
+  break_match_hyp. inv H.
+  left. simpl. rewrite zeq_true. reflexivity.
+
+  simpl. repeat rewrite zeq_false by congruence.
+  eapply IHl in H. 
+  destruct H. left. assumption.
+  right. repeat break_and.
+  subst.
+
+  repeat split; assumption.
+Qed.
+
+Lemma find_case_case_index_append_tail :
+  forall l l' t s,
+    find_case t l = Some s ->
+    case_index t (l ++ l') = (case_index t l + length l')%nat.
+Proof.
+  induction l; intros; simpl in H; try solve [inv H].
+  destruct a.
+  break_match_hyp; try congruence. inv H.
+  simpl. repeat rewrite zeq_true.
+  solve [eapply app_length].
+  simpl.
+  repeat rewrite zeq_false by congruence.
+  eauto.
+Qed.
+
+Lemma plus_1_r :
+  forall (n : nat),
+    (n + 1 = S n)%nat.
+Proof.
+  intros. omega.
+Qed.
 
 Lemma star_step_exit_case_index :
   forall cases tge k' x tag s0 f env,
@@ -445,21 +488,48 @@ Lemma star_step_exit_case_index :
       star step tge (State f (Sexit (case_index (Int.unsigned tag) cases)) (Kblock x) env)
            E0 (State f (transf_stmt s0) (Kseq (Sexit n) (Kblock k0)) env) /\ exit_cont n k' k0.
 Proof.
-  induction cases; intros.
-  
   induction cases using rev_ind; intros.
   simpl in H. inv H.
-
-  repeat rewrite map_app in *.
-  rewrite rev_app_distr in *.
-  simpl in *.
-  rewrite app_length in *. simpl in *.
-  replace (length cases + 1)%nat with (S (length cases)) in * by omega.
+  rewrite app_length in H0.
+  simpl in H0. rewrite plus_1_r in *.
   inv H0.
+  repeat rewrite list_append_map in *.
+  simpl in *.
+  eapply app_inj_tail in H2; break_and; subst.
+  destruct x.
+  eapply find_case_inv in H.
+  destruct H.
+  + (* our case wasn't the last one *)
+    (* Thus we use the IH *)
+    copy H.
+    eapply IHcases in H; eauto. repeat break_exists; break_and.
+    erewrite find_case_case_index_append_tail; eauto.
+    simpl.
+    rewrite plus_1_r in *.
+    eexists; eexists; split.
+    
+    eapply star_left; nil_trace.
+    econstructor; eauto.
+    eapply star_left; nil_trace.
+    econstructor; eauto.
+    eassumption.
+    assumption.
 
-
-  
-Admitted.
+  + repeat break_and.
+    subst. rewrite H4.
+    eexists. eexists. split.
+    eapply star_left; nil_trace.
+    econstructor; eauto.
+    eapply star_left; nil_trace.
+    econstructor; eauto.
+    simpl.
+    eapply star_left; nil_trace.
+    econstructor; eauto.
+    eapply star_refl.
+    replace (map transf_stmt (map snd cases)) with (rev (rev (map transf_stmt (map snd cases)))) in H3 by (eapply rev_involutive; eauto).
+    rewrite <- switch_cases_to_rev in H3.
+    eapply switch_cases_exit_cont; eauto.
+Qed.
 
 Lemma plus_step_exit_cont_ind :
   forall tge n k k_exit f env,
