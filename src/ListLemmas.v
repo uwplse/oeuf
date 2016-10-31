@@ -1,5 +1,6 @@
 (* Boring stuff, including but not limited to list lemmas *)
 Require Import Arith List Omega StructTact.StructTactics StuartTact.
+Require Import ZArith.
 Import ListNotations.
 Require Import Psatz.
 
@@ -1089,3 +1090,16 @@ induction xs; intros0 Hin; simpl in *.
 - destruct a. simpl in *. break_if; eauto.
   contradict Hin. eauto.
 Qed.
+
+
+(* association list lookups (Z keys) *)
+
+Fixpoint zlookup {A} (xs : list (Z * A)) (k : Z) : option A :=
+    match xs with
+    | [] => None
+    | (k', x) :: xs =>
+            if Z.eq_dec k k'
+                then Some x
+                else zlookup xs k
+    end.
+
