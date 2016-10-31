@@ -191,3 +191,174 @@ Definition stmt_ind' (P : stmt -> Prop)
     (i : stmt) : P i :=
     ltac:(refine (@stmt_rect_mut P (Forall (fun p => P (snd p)))
         HSkip HSeq HCall HConstr HSwitch HClose HAssign _ _ i); eauto).
+
+
+
+
+Definition dests_below n :=
+    let fix go s :=
+        let fix go_list ps :=
+            match ps with
+            | [] => True
+            | (_, s) :: ps => go s /\ go_list ps
+            end in
+        match s with
+        | Skip => True
+        | Seq s1 s2 => go s1 /\ go s2
+        | Call dst _ _ => dst < n
+        | MkConstr dst _ _ => dst < n
+        | Switch _ cases => go_list cases
+        | MkClose dst _ _ => dst < n
+        | Assign dst _ => dst < n
+        end in go.
+
+Definition dests_below_list n :=
+    let go := dests_below n in
+    let fix go_list (ps : list (Z * stmt)) :=
+        match ps with
+        | [] => True
+        | (_, s) :: ps => go s /\ go_list ps
+        end in go_list.
+
+Ltac refold_dests_below n :=
+    fold (dests_below_list n) in *.
+
+
+Definition max_dest :=
+    let fix go s :=
+        let fix go_list ps :=
+            match ps with
+            | [] => 0
+            | (_, s) :: ps => max (go s) (go_list ps)
+            end in
+        match s with
+        | Skip => 0
+        | Seq s1 s2 => max (go s1) (go s2)
+        | Call dst _ _ => dst
+        | MkConstr dst _ _ => dst
+        | Switch _ cases => go_list cases
+        | MkClose dst _ _ => dst
+        | Assign dst _ => dst
+        end in go.
+
+Definition max_dest_list :=
+    let go := max_dest in
+    let fix go_list (ps : list (Z * stmt)) :=
+        match ps with
+        | [] => 0
+        | (_, s) :: ps => max (go s) (go_list ps)
+        end in go_list.
+
+Ltac refold_max_dest :=
+    fold max_dest_list in *.
+
+
+Lemma dests_below_le : forall n m s,
+    dests_below n s ->
+    n <= m ->
+    dests_below m s.
+intros n m;
+induction s using stmt_rect_mut with
+    (Pl := fun ps =>
+        dests_below_list n ps ->
+        n <= m ->
+        dests_below_list m ps);
+intros0 Hdb Hle; simpl in *; refold_dests_below n; refold_dests_below m.
+
+- auto.
+- firstorder.
+- lia.
+- lia.
+- firstorder.
+- lia.
+- lia.
+
+- auto.
+- firstorder.
+Qed.
+
+Lemma dests_below_list_le : forall n m ps,
+    dests_below_list n ps ->
+    n <= m ->
+    dests_below_list m ps.
+induction ps;
+intros0 Hdb Hle; simpl in *; refold_dests_below n; refold_dests_below m.
+- auto.
+- destruct a. firstorder using dests_below_le.
+Qed.
+
+Lemma dests_below_max : forall s,
+    dests_below (S (max_dest s)) s.
+induction s using stmt_rect_mut with
+    (Pl := fun ps =>
+        dests_below_list (S (max_dest_list ps)) ps);
+simpl in *; refold_max_dest.
+
+- auto.
+- split; eapply dests_below_le; eauto; lia.
+- lia.
+- lia.
+- refold_dests_below (S (max_dest_list cases)). auto.
+- lia.
+- lia.
+
+- auto.
+- split.
+  + eapply dests_below_le; eauto. lia.
+  + eapply dests_below_list_le; eauto. lia.
+Qed.
+
+
+
+
+Definition no_switch :=
+    let fix go s :=
+        match s with
+        | Skip => True
+        | Seq s1 s2 => go s1 /\ go s2
+        | Call dst _ _ => True
+        | MkConstr dst _ _ => True
+        | Switch _ cases => False
+        | MkClose dst _ _ => True
+        | Assign dst _ => True
+        end in go.
+
+Definition no_switch_list :=
+    let go := no_switch in
+    let fix go_list (ps : list (Z * stmt)) :=
+        match ps with
+        | [] => True
+        | (_, s) :: ps => go s /\ go_list ps
+        end in go_list.
+
+Ltac refold_no_switch :=
+    fold no_switch_list in *.
+
+Definition switch_placement s :=
+    match s with
+    | Switch _ cases => no_switch_list cases
+    | _ => no_switch s
+    end.
+
+Definition check_no_switch s : { no_switch s } + { ~ no_switch s }.
+induction s; try solve [left; constructor | right; inversion 1].
+
+- (* Seq *)
+  destruct IHs1; [ | right; inversion 1; eauto ].
+  destruct IHs2; [ | right; inversion 1; eauto ].
+  left. constructor; eauto.
+Defined.
+
+Definition check_no_switch_list ps : { no_switch_list ps } + { ~ no_switch_list ps }.
+induction ps.
+- left. constructor.
+- destruct a as [? s]. destruct (check_no_switch s); [ | right; inversion 1; eauto ].
+  destruct IHps; [ | right; inversion 1; eauto ].
+  left. constructor; eauto.
+Defined.
+
+Definition check_switch_placement s : { switch_placement s } + { ~ switch_placement s }.
+destruct s; try solve [unfold switch_placement; eapply check_no_switch].
+- (* Switch *)
+  simpl. eapply check_no_switch_list.
+Defined.
