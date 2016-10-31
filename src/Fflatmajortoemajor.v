@@ -404,28 +404,49 @@ Inductive switch_cases_rev : nat -> list Emajor.stmt -> Emajor.cont -> Emajor.co
       switch_cases_rev O nil k k
 | switch_snoc :
     forall n l k k',
-      switch_cases n l k k' ->
+      switch_cases_rev n l k k' ->
       forall s,
         switch_cases_rev (S n) (l ++ [s]) k (Kseq (Sseq s (Sexit n)) (Kblock k')).
 
-(*
+Lemma app_singleton_not_nil :
+  forall {A} (l : list A) x,
+    nil <> l ++ [x].
+Proof.
+  induction l; intros; simpl; try congruence.
+Qed.
+
 Lemma switch_cases_to_rev :
   forall l n k k',
-    switch_cases n l k k' ->
+    switch_cases n l k k' <->
     switch_cases_rev n (rev l) k k'.
 Proof.
-  induction 1; intros. econstructor; eauto.
-  simpl. econstructor; eauto. 
- *)
+  induction l; split; intros.
+  inv H. simpl. econstructor; eauto.
+  simpl in H. inv H. econstructor; eauto.
+  destruct l; simpl in H0; inversion H0.
+  simpl in H. simpl. inv H. eapply IHl in H5.
+  econstructor; eauto.
+  simpl in H. assert (n <> O).
+  inv H; try congruence.
+  apply app_singleton_not_nil in H2. inversion H2.
+  destruct n; try congruence. clear H0.
+  inv H.
+  eapply app_inj_tail in H1. break_and. subst.
+  erewrite <- IHl in H2. econstructor; eauto.
+Qed.
+
+
 
 Lemma star_step_exit_case_index :
   forall cases tge k' x tag s0 f env,
     find_case (Int.unsigned tag) cases = Some s0 ->
-    switch_cases (length cases) (rev (map transf_stmt (map snd cases))) k' x ->
+    switch_cases_rev (length cases) (map transf_stmt (map snd cases)) k' x ->
     exists k0 n,
       star step tge (State f (Sexit (case_index (Int.unsigned tag) cases)) (Kblock x) env)
            E0 (State f (transf_stmt s0) (Kseq (Sexit n) (Kblock k0)) env) /\ exit_cont n k' k0.
 Proof.
+  induction cases; intros.
+  
   induction cases using rev_ind; intros.
   simpl in H. inv H.
 
