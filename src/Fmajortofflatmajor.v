@@ -93,17 +93,17 @@ Inductive match_cont: Fmajor.cont -> Fflatmajor.cont -> Prop :=
       transf_stmt s = s' ->
       match_cont (Fmajor.Kseq s k) (Fflatmajor.Kseq s' k')
 | match_call :
-    forall id f env k k' exp,
+    forall id f env k k',
       match_cont k k' ->
-      match_cont (Fmajor.Kcall id exp f env k) (Fflatmajor.Kcall id (transf_fundef f) env k').
+      match_cont (Fmajor.Kcall id f env k) (Fflatmajor.Kcall id (transf_fundef f) env k').
 
 Inductive match_states: Fmajor.state -> Fflatmajor.state -> Prop :=
 | match_state :
-    forall f f' s s' k k' e env,
+    forall f f' s s' k k' env,
       transf_fundef f = f' ->
       transf_stmt s = s' ->
       match_cont k k' ->
-      match_states (Fmajor.State f s e k env) (Fflatmajor.State f' s' k' env)
+      match_states (Fmajor.State f s k env) (Fflatmajor.State f' s' k' env)
 | match_returnstate :
     forall v k k',
       match_cont k k' ->
@@ -178,7 +178,7 @@ Proof.
   intros.
   inversion H; inversion H0; remember tprog; subst;
   repeat match goal with
-             | [ H : Fmajor.State _ _ _ _ _ = Fmajor.State _ _ _ _ _ |- _ ] => inversion H; remember tprog; subst
+             | [ H : Fmajor.State _ _ _ _ = Fmajor.State _ _ _ _ |- _ ] => inversion H; remember tprog; subst
   end; try congruence.
   (* assign stmt *)
   + eexists. split. eapply plus_one.
