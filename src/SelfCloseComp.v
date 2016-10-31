@@ -262,3 +262,36 @@ inv Astep; invc II; try on (I_expr _ _), invc.
   + i_ctor. i_ctor.
   + i_ctor. i_ctor.
 Qed.
+
+Require Semantics.
+
+Section Preservation.
+
+  Variable prog : A.prog_type.
+  Variable tprog : B.prog_type.
+
+  Hypothesis TRANSF : compile_cu prog = tprog.
+
+  
+  (* Inductive match_states (AE : A.env) (BE : B.env) : A.expr -> B.expr -> Prop := *)
+  (* | match_st : *)
+  (*     forall a b, *)
+  (*       R AE BE a b -> *)
+  (*       match_states AE BE a b. *)
+
+  (* Lemma step_sim : *)
+  (*   forall AE BE a b, *)
+  (*     match_states AE BE a b -> *)
+  (*     forall a', *)
+  (*       A.step AE a a' -> *)
+  (*       exists b', *)
+  (*         splus (B.step BE) b b'. *)
+  (* Proof. *)
+  (* Admitted. *)
+
+  Theorem fsim :
+    Semantics.forward_simulation (A.semantics prog) (B.semantics tprog).
+  Proof.
+  Admitted.
+
+End Preservation.

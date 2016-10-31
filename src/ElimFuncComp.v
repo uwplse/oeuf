@@ -383,6 +383,7 @@ Lemma I_expr_not_value' : forall TE EE le t e,
 intros. intro. fwd eapply I_expr_value; eauto.
 Qed.
 
+(*
 Lemma E_sstar_snoc : forall E s s' s'',
     E.sstar E s s' ->
     E.sstep E s' s'' ->
@@ -391,50 +392,46 @@ induction 1; intros.
 - econstructor; try eassumption. econstructor.
 - econstructor; eauto.
 Qed.
+ *)
 
 Lemma E_splus_snoc : forall E s s' s'',
     E.splus E s s' ->
     E.sstep E s' s'' ->
     E.splus E s s''.
-induction 1; intros.
-- econstructor 2; try eassumption.
-  econstructor 1; eassumption.
-- econstructor; solve [eauto].
+  induction 1; intros.
+  eapply Semantics.plus_left; eauto.
+  eapply Semantics.star_right; eauto.
 Qed.
 
 Lemma E_splus_sstar : forall E s s',
     E.splus E s s' ->
     E.sstar E s s'.
-induction 1; intros.
-- econstructor; try eassumption. constructor.
-- econstructor; eauto.
+  induction 1; intros.
+  eapply Semantics.star_left; eauto.
 Qed.
 
 Lemma E_sstar_then_sstar : forall E s s' s'',
     E.sstar E s s' ->
     E.sstar E s' s'' ->
     E.sstar E s s''.
-induction 1; intros.
-- assumption.
-- econstructor; solve [eauto].
+  intros.
+  eapply Semantics.star_trans; eauto.
 Qed.
 
 Lemma E_sstar_then_splus : forall E s s' s'',
     E.sstar E s s' ->
     E.splus E s' s'' ->
     E.splus E s s''.
-induction 1; intros.
-- assumption.
-- econstructor; solve [eauto].
+  intros.
+  eapply Semantics.star_plus_trans; eauto.
 Qed.
 
 Lemma E_splus_then_sstar' : forall E s s' s'',
     E.sstar E s' s'' ->
     E.splus E s s' ->
     E.splus E s s''.
-induction 1; intros.
-- assumption.
-- eapply IHsstar. eapply E_splus_snoc; eauto.
+  intros.
+  eapply Semantics.plus_star_trans; eauto.
 Qed.
 
 Lemma E_splus_then_sstar : forall E s s' s'',
@@ -448,9 +445,10 @@ Lemma E_splus_then_splus : forall E s s' s'',
     E.splus E s s' ->
     E.splus E s' s'' ->
     E.splus E s s''.
-induction 1; intros; eauto using E.SPlusCons.
+  eapply Semantics.plus_trans; eauto.
 Qed.
 
+(*
 Lemma E_call_sstar_inner : forall E e v arg l k,
     ~E.value e ->
     E.value v ->
@@ -458,12 +456,12 @@ Lemma E_call_sstar_inner : forall E e v arg l k,
                           (k' v)) ->
     E.sstar E (E.Run (E.Call e arg) l k)
               (E.Run (E.Call v arg) l k).
-intros0 He Hv Hrun.
+  intros0 He Hv Hrun.
+  simpl. 
 eapply E.SStarCons.
 - eapply E.SCallL. eauto.
-- eapply Hrun.
-Qed.
-
+- eapply Hrun. 
+Qed.*)
 
 
 Lemma E_sstar_neq_splus : forall E s s',
@@ -473,7 +471,7 @@ Lemma E_sstar_neq_splus : forall E s s',
 intros0 Hne Hstar. invc Hstar.
 - congruence.
 - eapply E_splus_then_sstar.
-  + eapply E.SPlusOne. eassumption.
+  + eapply Semantics.plus_one. eassumption.
   + assumption.
 Qed.
 
@@ -490,7 +488,7 @@ Ltac E_start HS :=
             let S0 := fresh "S" in
             set (S0 := s);
             change s with S0;
-            assert (HS : E.sstar E S0 S0) by (eapply E.SStarNil)
+            assert (HS : E.sstar E S0 S0) by (eapply Semantics.star_refl)
     end.
 
 Ltac E_step HS :=
@@ -506,7 +504,7 @@ Ltac E_step HS :=
     match type of HS with
     | E.sstar ?E ?s0 ?s1 => go E s0 s1 E.splus
             ltac:(eapply E_sstar_then_splus with (1 := HS');
-                  eapply E.SPlusOne)
+                  eapply Semantics.plus_one)
     | E.splus ?E ?s0 ?s1 => go E s0 s1 E.splus
             ltac:(eapply E_splus_snoc with (1 := HS'))
     end.
@@ -627,23 +625,105 @@ intros0 Hlval Hfunc. destruct Hfunc; subst func.
     { eapply E.SCloseDyn. }
   eapply E_splus_sstar. assumption.
 
-- eapply E.SStarNil.
+- eapply Semantics.star_refl.
 Qed.
 
-Inductive T_elims_match_state ELIMS : T.state -> Prop :=
-| EmsRun : forall e l k,
+
+Inductive T_state_ok ELIMS : T.state -> Prop :=
+| SokRun : forall e l k,
+        Forall T.value l ->
         T.elims_match ELIMS e ->
-        (forall v, T.value v -> T_elims_match_state ELIMS (k v)) ->
-        T_elims_match_state ELIMS (T.Run e l k)
-| EmsStop : forall e,
+        (forall v, T.value v -> T_state_ok ELIMS (k v)) ->
+        T_state_ok ELIMS (T.Run e l k)
+| SokStop : forall e,
         T.elims_match ELIMS e ->
-        T_elims_match_state ELIMS (T.Stop e)
+        T_state_ok ELIMS (T.Stop e)
 .
+
+Lemma T_state_ok_sim : forall TE ELIMS t t',
+    Forall (T.elims_match ELIMS) TE ->
+    T_state_ok ELIMS t ->
+    T.sstep TE t t' ->
+    T_state_ok ELIMS t'.
+intros0 Henv Hok Hstep; invc Hok; invc Hstep.
+
+- on _, eapply_. eapply Forall_nth_error; eauto.
+- on _, eapply_. eapply Forall_nth_error; eauto.
+
+- (* CloseStep *)
+  econstructor; eauto.
+
+  + simpl in *. T.refold_elims_match ELIMS.
+    rewrite T.elims_match_list_Forall in *.
+    on _, invc_using Forall_3part_inv.
+    assumption.
+
+  + intros. constructor; eauto.
+    simpl in *. T.refold_elims_match ELIMS.
+    rewrite T.elims_match_list_Forall in *.
+    on _, invc_using Forall_3part_inv.
+    eapply Forall_app; eauto. constructor; eauto.
+    eapply T.value_elims_match; eauto.
+
+- (* CloseDone *) on _, eapply_. constructor. auto.
+
+- (* ConstrStep *)
+  econstructor; eauto.
+
+  + simpl in *. T.refold_elims_match ELIMS.
+    rewrite T.elims_match_list_Forall in *.
+    on _, invc_using Forall_3part_inv.
+    assumption.
+
+  + intros. constructor; eauto.
+    simpl in *. T.refold_elims_match ELIMS.
+    rewrite T.elims_match_list_Forall in *.
+    on _, invc_using Forall_3part_inv.
+    eapply Forall_app; eauto. constructor; eauto.
+    eapply T.value_elims_match; eauto.
+
+- (* ConstrDone *) on _, eapply_. constructor. auto.
+
+- (* CallL *)
+  constructor; eauto.
+  + simpl in *. T.refold_elims_match ELIMS.  firstorder.
+  + intros. constructor; eauto.
+    simpl in *. T.refold_elims_match ELIMS.
+    firstorder eauto using T.value_elims_match.
+
+- (* CallR *)
+  constructor; eauto.
+  + simpl in *. T.refold_elims_match ELIMS.  firstorder.
+  + intros. constructor; eauto.
+    simpl in *. T.refold_elims_match ELIMS.
+    firstorder eauto using T.value_elims_match.
+
+- (* MakeCall *)
+  constructor; eauto.
+  eapply Forall_nth_error; eauto.
+
+- (* ElimNStep *)
+  constructor; eauto.
+  + simpl in *. T.refold_elims_match ELIMS.  firstorder.
+  + intros. constructor; eauto.
+    simpl in *. T.refold_elims_match ELIMS.
+    firstorder eauto using T.value_elims_match.
+
+- (* Eliminate *)
+  constructor; eauto.
+  simpl in *. T.refold_elims_match ELIMS. do 2 break_and.
+  cut (T.elims_match_pair ELIMS (case, rec)).
+  + simpl. intro. eapply T.unroll_elim_elims_match; eauto.
+    * rewrite <- T.elims_match_list_Forall. auto.
+    * intros. simpl. T.refold_elims_match ELIMS. firstorder.
+  + rewrite T.elims_match_list_pair_Forall in *.
+    eapply Forall_nth_error; eauto.
+Qed.
 
 Theorem I_sim : forall TE EE ELIMS t t' e,
     env_ok TE EE ELIMS ->
     T.elims_match_list ELIMS TE ->
-    T_elims_match_state ELIMS t ->
+    T_state_ok ELIMS t ->
     I TE EE t e ->
     T.sstep TE t t' ->
     exists e',
@@ -660,7 +740,7 @@ simpl in *; refold_compile (length TE).
   break_match; try discriminate. inject_some.
   on (Forall2 _ _ _), invc.
 
-  eexists. split. eapply E.SPlusOne, E.SArg.
+  eexists. split. eapply Semantics.plus_one, E.SArg.
   + reflexivity.
   + on (Forall T.value _), invc.
     on (Forall E.value _), invc.
@@ -674,7 +754,7 @@ simpl in *; refold_compile (length TE).
     { eassumption. }
   break_exists.
 
-  eexists. split. eapply E.SPlusOne, E.SUpVar.
+  eexists. split. eapply Semantics.plus_one, E.SUpVar.
   + simpl. eassumption.
   + fwd eapply Forall2_nth_error; try eassumption.
     on (Forall T.value _), invc.
@@ -683,14 +763,14 @@ simpl in *; refold_compile (length TE).
     fwd eapply Forall_nth_error with (xs := l'); eauto.
 
 - (* SCallL *)
-  eexists. split. eapply E.SPlusOne, E.SCallL.
+  eexists. split. eapply Semantics.plus_one, E.SCallL.
   + eauto using I_expr_value'.
   + constructor; eauto.
     intros. constructor; eauto.
     constructor; eauto using T_value_I_expr_locals.
 
 - (* SCallR *)
-  eexists. split. eapply E.SPlusOne, E.SCallR.
+  eexists. split. eapply Semantics.plus_one, E.SCallR.
   + eauto using I_expr_value.
   + eauto using I_expr_value'.
   + constructor; eauto.
@@ -700,7 +780,7 @@ simpl in *; refold_compile (length TE).
 - fwd eapply env_ok_nth_error; eauto. break_exists. break_and.
 
   on (I_expr _ _ _ (T.Close _ _) _), invc.
-  eexists. split. eapply E.SPlusOne, E.SMakeCall.
+  eexists. split. eapply Semantics.plus_one, E.SMakeCall.
   + list_magic_on (free, (efree, tt)). eauto using I_expr_value.
   + eauto using I_expr_value.
   + eassumption.
@@ -715,14 +795,14 @@ simpl in *; refold_compile (length TE).
   on (Forall2 _ (_ :: _) _), invc.
   rename x into e_vs. rename y into e_e. rename l' into e_es.
 
-  eexists. split. eapply E.SPlusOne, E.SConstrStep.
+  eexists. split. eapply Semantics.plus_one, E.SConstrStep.
   + list_magic_on (vs, (e_vs, tt)). eauto using I_expr_value.
   + eauto using I_expr_value'.
   + constructor; eauto.
     intros. constructor; eauto.
     constructor. eapply Forall2_app; eauto. constructor; eauto using T_value_I_expr_locals.
 
-- eexists. split. eapply E.SPlusOne, E.SConstrDone.
+- eexists. split. eapply Semantics.plus_one, E.SConstrDone.
   + list_magic_on (args, (eargs, tt)). eauto using I_expr_value.
   + assert (Forall E.value eargs).
       { list_magic_on (args, (eargs, tt)). eauto using I_expr_value. }
@@ -816,14 +896,14 @@ simpl in *; refold_compile (length TE).
   on (Forall2 _ (_ :: _) _), invc.
   rename x into e_vs. rename y into e_e. rename l' into e_es.
 
-  eexists. split. eapply E.SPlusOne, E.SCloseStep.
+  eexists. split. eapply Semantics.plus_one, E.SCloseStep.
   + list_magic_on (vs, (e_vs, tt)). eauto using I_expr_value.
   + eauto using I_expr_value'.
   + constructor; eauto.
     intros. constructor; eauto.
     constructor. eapply Forall2_app; eauto. constructor; eauto using T_value_I_expr_locals.
 
-- eexists. split. eapply E.SPlusOne, E.SCloseDone.
+- eexists. split. eapply Semantics.plus_one, E.SCloseDone.
   + list_magic_on (free, (efree, tt)). eauto using I_expr_value.
   + assert (Forall E.value efree).
       { list_magic_on (free, (efree, tt)). eauto using I_expr_value. }
@@ -832,3 +912,136 @@ simpl in *; refold_compile (length TE).
     eauto using IClose, T.VClose, E.VClose.
 
 Qed.
+
+Section Preservation.
+
+  Variable prog : T.prog_type.
+  Variable tprog : E.prog_type.
+
+  Definition elims := snd (fst prog).
+  
+  Hypothesis TRANSF : compile_cu prog = tprog.
+
+  Hypothesis T_elims_match :
+    forall expr,
+      In expr (T.initial_env prog) ->
+      T.elims_match elims expr.
+
+  Definition match_states TE EE ts es : Prop :=
+    I TE EE ts es /\ T_state_ok elims ts.
+  
+  Lemma env_ok_compile :
+    env_ok (T.initial_env prog) (E.initial_env tprog) elims.
+  Proof.
+    unfold env_ok.
+    unfold compile_env.
+    unfold E.initial_env.
+    unfold T.initial_env.
+    unfold compile_cu in *.
+    break_match_hyp. unfold elims.
+    subst. simpl.
+    destruct p. simpl. destruct p. simpl. reflexivity.
+  Qed.
+  
+  Lemma prog_init_expr :
+    forall expr el,
+      In expr (T.initial_env prog) ->
+      exists expr',
+        In expr' (E.initial_env tprog) /\ I_expr (T.initial_env prog) (E.initial_env tprog) el expr expr'.
+  Proof.
+    intros.
+    remember H as HIn.
+    clear HeqHIn.
+    eapply In_nth_error in H.
+    break_exists.
+    eapply env_ok_nth_error in H;
+      try eapply env_ok_compile.
+    break_exists. break_and.
+    eapply nth_error_In in H.
+    symmetry in H0.
+    eapply compile_I_expr in H0; eauto;
+      try eapply env_ok_compile.
+  Qed.
+
+  Lemma initial_state_match :
+    forall s,
+      Semantics.initial_state (T.semantics prog) s ->
+      exists s',
+        Semantics.initial_state (E.semantics tprog) s' /\ match_states (T.initial_env prog) (E.initial_env tprog) s s'.
+  Proof.
+    intros.
+    inversion H.
+    remember H0 as HIn.
+    clear HeqHIn.
+    eapply prog_init_expr in H0.
+    break_exists. break_and.
+    eexists. split. econstructor; eauto.
+    econstructor.
+    econstructor; eauto. intros.
+    econstructor; eauto.
+    econstructor. econstructor; eauto.
+    eapply T_elims_match; eauto.
+    intros.
+    econstructor.
+    eapply T.value_elims_match; eauto.
+  Qed.
+
+  Lemma match_final_state :
+    forall s s',
+      match_states (T.initial_env prog) (E.initial_env tprog) s s' ->
+      Semantics.final_state (T.semantics prog) s ->
+      Semantics.final_state (E.semantics tprog) s'.
+  Proof.
+    intros. inv H0. inv H.
+    inv H2.
+    econstructor; eauto.
+    inv H1; inv H5;
+      eapply I_expr_value; eauto.
+  Qed.
+
+  Check T.step.
+  Check E.splus.
+  
+  Lemma step_sim :
+    forall t t' e,
+      match_states (T.initial_env prog) (E.initial_env tprog) t e ->
+      T.sstep (T.initial_env prog) t t' ->
+      exists e',
+        E.splus (E.initial_env tprog) e e' /\ match_states (T.initial_env prog) (E.initial_env tprog) t' e'.
+  Proof.
+    intros.
+    remember env_ok_compile as Henv_ok. clear HeqHenv_ok.
+    inversion H. clear H.
+    intros.
+    unfold compile_cu in *.
+    destruct prog. destruct tprog. destruct p. destruct p.
+    inv TRANSF.
+    edestruct I_sim; eauto; simpl.
+
+    unfold T.initial_env. simpl.
+    rewrite T.elims_match_list_Forall.
+    rewrite Forall_forall.
+    intros. eapply T_elims_match; eauto.
+    repeat break_and.
+    eexists. split; eauto. 
+    econstructor; eauto.
+    eapply T_state_ok_sim in H0; eauto.
+    unfold T.initial_env. simpl.
+    rewrite Forall_forall.
+    intros. eapply T_elims_match; eauto.
+  Qed.
+    
+  
+  Theorem fsim :
+    Semantics.forward_simulation (T.semantics prog) (E.semantics tprog).
+  Proof.
+    remember env_ok_compile as Henv_ok. clear HeqHenv_ok.
+    eapply Semantics.forward_simulation_plus.
+    eapply initial_state_match; eauto.
+    eapply match_final_state; eauto.
+    intros.
+    eapply step_sim; eauto.
+  Qed.
+
+End Preservation.
+            

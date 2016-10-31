@@ -774,6 +774,12 @@ Proof.
   eauto.
 Qed.  
 
+Theorem fsim :
+  forward_simulation (Dflatmajor.semantics prog) (Cmajor.semantics tprog).
+Proof.
+Admitted.
+
+
 End PRESERVATION.
 
 

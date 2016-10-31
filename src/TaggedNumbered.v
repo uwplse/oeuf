@@ -752,6 +752,36 @@ intros0 Helim. rewrite elims_match_list_pair_Forall in *.
 list_magic_on (es, tt). eauto using elims_match_pair_extend.
 Qed.
 
+Lemma value_elims_match : forall elims v,
+    value v ->
+    elims_match elims v.
+induction v using expr_ind''; inversion 1; subst.
+- simpl. refold_elims_match elims. rewrite elims_match_list_Forall.
+  list_magic_on (args, tt).
+- simpl. refold_elims_match elims. rewrite elims_match_list_Forall.
+  list_magic_on (free, tt).
+Qed.
+
+Lemma unroll_elim_elims_match : forall elims case args rec mk_rec e',
+    unroll_elim case args rec mk_rec = Some e' ->
+    elims_match elims case ->
+    Forall (elims_match elims) args ->
+    (forall e, elims_match elims e -> elims_match elims (mk_rec e)) ->
+    elims_match elims e'.
+first_induction args; destruct rec; intros0 Hunroll Hcase Hargs Hmk_rec;
+try discriminate; simpl in *.
+
+- inject_some. auto.
+
+- destruct b.
+  + on (Forall _ (_ :: _)), invc.
+    eapply IHargs; eauto.
+    simpl. firstorder.
+  + on (Forall _ (_ :: _)), invc.
+    eapply IHargs; eauto.
+    simpl. firstorder.
+Qed.
+
 
 
 (* Well-formedness *)
@@ -1125,6 +1155,35 @@ induction e using expr_ind''; intros0 II.
 - invc II; constructor; eauto.
   list_magic_on (free, (free', tt)).
 Qed.
+
+Require Import Metadata.
+
+(* ugly return type of compile_cu *)
+Definition prog_type : Type := list expr * list metadata * list (list (expr * rec_info)) * list String.string.
+
+Require Semantics.
+
+Definition initial_env (prog : prog_type) : env := fst (fst (fst prog)).
+
+Inductive initial_state (prog : prog_type) : state -> Prop :=
+| init :
+    forall expr,
+      In expr (initial_env prog) ->
+      initial_state prog (Run expr nil (fun x => Stop x)).
+
+Inductive final_state (prog : prog_type) : state -> Prop :=
+| fine :
+    forall expr,
+      value expr ->
+      final_state prog (Stop expr).
+
+Definition semantics (prog : prog_type) : Semantics.semantics :=
+  @Semantics.Semantics_gen state env
+                 (sstep)
+                 (initial_state prog)
+                 (final_state prog)
+                 (initial_env prog).
+
 
 (*
 Theorem step_sstep : forall E e e' s,

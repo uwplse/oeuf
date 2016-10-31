@@ -22,34 +22,21 @@ Require Import HighValues.
 Require Import EricTact.
 
 Require Import Fmajor.
-Require Import Emajor.
+Require Import Fflatmajor.
 
-Fixpoint transf_expr (f : Fmajor.expr) : Emajor.expr :=
+
+Fixpoint transf_expr (f : Fmajor.expr) : Fflatmajor.expr :=
   match f with
   | Fmajor.Var id => Var id
   | Fmajor.Deref e n => Deref (transf_expr e) n
   end.
 
-Fixpoint transf_stmt (s : Fmajor.stmt) : Emajor.stmt :=
-let transf_cases (targid : ident) (cases : list (Z * Fmajor.stmt)) (target_d : Emajor.expr) :=
-  let fix mk_cases (i : nat) (cases : list (Z * Fmajor.stmt)) : list (Z * nat) :=
+Fixpoint transf_stmt (s : Fmajor.stmt) : Fflatmajor.stmt :=
+  let fix transf_cases (cases : list (Z * Fmajor.stmt)) :=
       match cases with
-      | [] => []
-      | (v, s) :: cases => (v, i) :: mk_cases (S i) cases
+      | (z,s) :: cases' => (z,transf_stmt s) :: transf_cases cases'
+      | nil => nil
       end in
-    let switch := Emajor.Sswitch targid target_d (mk_cases 0%nat cases) (length cases) in
-    let swblock := Emajor.Sblock switch in
-    let fix mk_blocks (acc : Emajor.stmt) (i : nat) (cases : list (Z * Fmajor.stmt)) :=
-        match cases with
-        | [] => acc
-        | (v, s) :: cases =>
-                let acc' :=
-                    Emajor.Sblock (Emajor.Sseq acc
-                                  (Emajor.Sseq (transf_stmt s)
-                                               (Emajor.Sexit (length cases - i)))) in
-                mk_blocks acc' (S i) cases
-        end in
-    mk_blocks swblock 0%nat cases in
   match s with
   | Fmajor.Sskip => Sskip
   | Fmajor.Scall dst fn arg => Scall dst (transf_expr fn) (transf_expr arg)
@@ -57,66 +44,75 @@ let transf_cases (targid : ident) (cases : list (Z * Fmajor.stmt)) (target_d : E
   | Fmajor.SmakeConstr dst tag args => SmakeConstr dst tag (map transf_expr args)
   | Fmajor.SmakeClose dst fname args => SmakeClose dst fname (map transf_expr args) 
   | Fmajor.Sseq s1 s2 => Sseq (transf_stmt s1) (transf_stmt s2)
-  | Fmajor.Sswitch targid cases target => transf_cases targid cases (transf_expr target)
+  | Fmajor.Sswitch targid cases target => Fflatmajor.Sswitch targid (transf_cases cases) (transf_expr target)
   end.
 
-Definition transf_fun_body (f : (Fmajor.stmt * Fmajor.expr)) : Emajor.stmt :=
+Fixpoint transf_cases (cases : list (Z * Fmajor.stmt)) :=
+  match cases with
+  | (z,s) :: cases' => (z,transf_stmt s) :: transf_cases cases'
+  | nil => nil
+  end.
+
+Definition transf_fun_body (f : (Fmajor.stmt * Fmajor.expr)) : Fflatmajor.stmt :=
   let (s,e) := f in
   Sseq (transf_stmt s) (Sreturn (transf_expr e)).
 
-Definition transf_fundef (f : Fmajor.function) : Emajor.fundef :=
-  Emajor.mkfunction (Fmajor.fn_params f) (Fmajor.fn_sig f) (Fmajor.fn_stackspace f)
+Definition transf_fundef (f : Fmajor.function) : Fflatmajor.fundef :=
+  Fflatmajor.mkfunction (Fmajor.fn_params f) (Fmajor.fn_sig f) (Fmajor.fn_stackspace f)
                     (transf_fun_body (Fmajor.fn_body f)).
                     
-Definition transf_program (p : Fmajor.program) : Emajor.program :=
+Definition transf_program (p : Fmajor.program) : Fflatmajor.program :=
   AST.transform_program transf_fundef p.
+
 
 Section PRESERVATION.
 
 Variable prog: Fmajor.program.
-Variable tprog: Emajor.program.
+Variable tprog: Fflatmajor.program.
 Let ge := Genv.globalenv prog.
 Let tge := Genv.globalenv tprog.
 Hypothesis TRANSF : transf_program prog = tprog.
 
-(* We need to wrap up which thing is getting returned in the match_cont? *)
-(* We need to wrap that up somewhere *)
+(* The Fflatmajor continuation will have a lot more going on *)
+(* It could have arbitrarily many Kblocks stuck in whenever *)
+(* Somewhere we need to record more precise info *)
 
-
-Inductive match_cont: Fmajor.cont -> Emajor.cont -> Prop :=
+Inductive match_cont: Fmajor.cont -> Fflatmajor.cont -> Prop :=
 | match_stop :
-    match_cont Fmajor.Kstop Emajor.Kstop
+    match_cont Fmajor.Kstop Fflatmajor.Kstop
+| match_switch : forall k k',
+    match_cont k k' ->
+    match_cont (Fmajor.Kswitch k) (Fflatmajor.Kswitch k')
 | match_return :
     forall k k' exp,
       match_cont k k' ->
-      match_cont (Fmajor.Kreturn exp k) (Emajor.Kseq (Sreturn (transf_expr exp)) k')
+      match_cont (Fmajor.Kreturn exp k) (Fflatmajor.Kseq (Sreturn (transf_expr exp)) k')
 | match_seq :
     forall k k' s s',
       match_cont k k' ->
       transf_stmt s = s' ->
-      match_cont (Fmajor.Kseq s k) (Emajor.Kseq s' k')
+      match_cont (Fmajor.Kseq s k) (Fflatmajor.Kseq s' k')
 | match_call :
     forall id f env k k' exp,
       match_cont k k' ->
-      match_cont (Fmajor.Kcall id exp f env k) (Emajor.Kcall id (transf_fundef f) env k').
+      match_cont (Fmajor.Kcall id exp f env k) (Fflatmajor.Kcall id (transf_fundef f) env k').
 
-  
-Inductive match_states: Fmajor.state -> Emajor.state -> Prop :=
+Inductive match_states: Fmajor.state -> Fflatmajor.state -> Prop :=
 | match_state :
     forall f f' s s' k k' e env,
       transf_fundef f = f' ->
       transf_stmt s = s' ->
       match_cont k k' ->
-      match_states (Fmajor.State f s e k env) (Emajor.State f' s' k' env)
+      match_states (Fmajor.State f s e k env) (Fflatmajor.State f' s' k' env)
 | match_returnstate :
     forall v k k',
       match_cont k k' ->
-      match_states (Fmajor.Returnstate v k) (Emajor.Returnstate v k').
+      match_states (Fmajor.Returnstate v k) (Fflatmajor.Returnstate v k').
 
 Lemma eval_expr_transf :
   forall env exp v,
     Fmajor.eval_expr env exp v ->
-    Emajor.eval_expr env (transf_expr exp) v.
+    Fflatmajor.eval_expr env (transf_expr exp) v.
 Proof.
   induction 1; intros.
   simpl. econstructor; eauto.
@@ -127,7 +123,7 @@ Qed.
 Lemma eval_exprlist_transf :
   forall env expl vs,
     Fmajor.eval_exprlist env expl vs ->
-    Emajor.eval_exprlist env (map transf_expr expl) vs.
+    Fflatmajor.eval_exprlist env (map transf_expr expl) vs.
 Proof.
   induction 1; intros;
     econstructor; eauto.
@@ -156,12 +152,28 @@ Proof.
   erewrite Genv.find_funct_ptr_transf; eauto.
 Qed.
 
+
+Lemma find_case_transf :
+  forall cases z s,
+    Fmajor.find_case z cases = Some s ->
+    find_case z (transf_cases cases) = Some (transf_stmt s).
+Proof.
+  induction cases; intros.
+  simpl in *. inv H.
+  simpl in *.
+  break_match_hyp. subst a.
+  break_match_hyp. subst.
+  simpl. rewrite zeq_true. congruence.
+  simpl. rewrite zeq_false by congruence.
+  eapply IHcases; eauto.
+Qed.
+
 Lemma step_sim_nil_trace :
-  forall (s1 s1' : Fmajor.state) (s2 : Emajor.state),
+  forall (s1 s1' : Fmajor.state) (s2 : Fflatmajor.state),
     match_states s1 s2 ->
     Fmajor.step ge s1 E0 s1' ->
     exists s2',
-      plus Emajor.step tge s2 E0 s2' /\ match_states s1' s2'.
+      plus Fflatmajor.step tge s2 E0 s2' /\ match_states s1' s2'.
 Proof.
   intros.
   inversion H; inversion H0; remember tprog; subst;
@@ -184,6 +196,8 @@ Proof.
     econstructor; eauto.
     econstructor; eauto.
 
+    
+    
   (* skip/return *)
   + destruct k0; simpl in H6;
       try solve [inv H6].
@@ -197,6 +211,7 @@ Proof.
     econstructor; eauto.
     econstructor; eauto.
 
+    
     (* Kcall case: end of function *)
     inv H3. inv H5.
     app eval_expr_transf Fmajor.eval_expr.
@@ -217,6 +232,7 @@ Proof.
     eapply find_symbol_transf; eauto.
     eapply find_funct_ptr_transf; eauto.
     simpl. find_rewrite. reflexivity.
+    simpl. rewrite H11. reflexivity.
     eapply star_left; nil_trace.
     econstructor; eauto.
     eapply star_one.
@@ -254,8 +270,21 @@ Proof.
     econstructor; eauto.
 
   (* switch *)
-  + admit.
+  + app eval_expr_transf Fmajor.eval_expr.
+    eexists. split.
+    eapply plus_one.
+    simpl. fold transf_cases. econstructor; eauto.
+    eapply find_case_transf; eauto.
+    econstructor; eauto.
+    econstructor; eauto.
 
+  (* kswitch *)
+  + inv H3.
+    eexists; split.
+    eapply plus_one.
+    econstructor; eauto.
+    econstructor; eauto.
+    
   (* Returnstate *)
   + inv H5.
     invp match_cont.
@@ -264,21 +293,61 @@ Proof.
     eapply plus_one.
     econstructor; eauto.
     econstructor; eauto.
-    
-Admitted.
+Qed.    
 
 Lemma step_sim :
-  forall (s1 s1' : Fmajor.state) (s2 : Emajor.state) t,
+  forall (s1 s1' : Fmajor.state) (s2 : Fflatmajor.state) t,
     match_states s1 s2 ->
     Fmajor.step ge s1 t s1' ->
     exists s2',
-      plus Emajor.step tge s2 t s2' /\ match_states s1' s2'.
+      plus Fflatmajor.step tge s2 t s2' /\ match_states s1' s2'.
 Proof.
   intros.
   assert (t = E0) by (inv H0; congruence).
   subst t.
   eapply step_sim_nil_trace; eauto.
 Qed.
+
+(* maybe don't need? *)
+Lemma initial_states_match :
+  forall s1,
+    Fmajor.initial_state prog s1 ->
+    exists s2, Fflatmajor.initial_state tprog s2 /\ match_states s1 s2.
+Proof.
+  intros.
+  inv H. eexists; split.
+  econstructor; eauto.
+  unfold transf_program.
+  erewrite Genv.find_symbol_transf; eauto.
+  unfold transf_program.
+  erewrite Genv.find_funct_ptr_transf; eauto.
+  econstructor; eauto.
+
   
+Admitted.
+
+
+Lemma match_final_states :
+  forall s1 s2 r,
+    match_states s1 s2 ->
+    Fmajor.final_state s1 r ->
+    Fflatmajor.final_state s2 r.
+Proof.
+Admitted.
+
+Theorem fsim :
+  forward_simulation (Fmajor.semantics prog) (Fflatmajor.semantics tprog).
+Proof.
+  eapply forward_simulation_plus.
+  intros. simpl.
+  unfold transf_program in *. subst tprog.
+  solve [eapply Genv.public_symbol_transf].
+
+  solve [eapply initial_states_match; eauto].
+  solve [eapply match_final_states; eauto].
+
+  intros. eapply step_sim; eauto.
+  
+Qed.
   
 End PRESERVATION.

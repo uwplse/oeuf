@@ -166,3 +166,23 @@ Definition expr_ind' (P : expr -> Prop)
     ltac:(refine (@expr_rect_mut P (Forall P)
         HArg HSelf HDeref HCall HConstr HSwitch HClose _ _ e); eauto).
 
+
+
+Require Import Metadata.
+
+Definition prog_type : Type := list expr * list metadata.
+
+Require Semantics.
+
+Inductive initial_state (prog : prog_type) : state -> Prop :=.
+
+Inductive final_state (prog : prog_type) : state -> Prop :=.
+
+Definition initial_env (prog : prog_type) : env := nil. (* TODO: write this *)
+
+Definition semantics (prog : prog_type) : Semantics.semantics :=
+  @Semantics.Semantics_gen state env
+                 (sstep)
+                 (initial_state prog)
+                 (final_state prog)
+                 (initial_env prog).

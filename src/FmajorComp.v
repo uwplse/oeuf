@@ -125,3 +125,37 @@ Definition compile_cu (cu : list (F.stmt * F.expr) * list metadata) : option E.p
 
 End compile.
 Extract Inlined Constant register_ident => "Camlcoq.register_ident_coq".
+
+
+Require MixSemantics.
+
+Section Preservation.
+
+  Variable prog : F.prog_type.
+  Variable tprog : E.program.
+
+  Hypothesis TRANSF : compile_cu prog = Some tprog.
+
+  
+  (* Inductive match_states (AE : A.env) (BE : B.env) : A.expr -> B.expr -> Prop := *)
+  (* | match_st : *)
+  (*     forall a b, *)
+  (*       R AE BE a b -> *)
+  (*       match_states AE BE a b. *)
+
+  (* Lemma step_sim : *)
+  (*   forall AE BE a b, *)
+  (*     match_states AE BE a b -> *)
+  (*     forall a', *)
+  (*       A.step AE a a' -> *)
+  (*       exists b', *)
+  (*         splus (B.step BE) b b'. *)
+  (* Proof. *)
+  (* Admitted. *)
+
+  Theorem fsim :
+    MixSemantics.mix_forward_simulation (F.semantics prog) (E.semantics tprog).
+  Proof.
+  Admitted.
+
+End Preservation.
