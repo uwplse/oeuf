@@ -48,6 +48,7 @@ Inductive state :=
 
 Inductive sstep (E : env) : state -> state -> Prop :=
 | SSeq : forall i is f k,
+        is <> [] ->
         sstep E (Run (i :: is) f k)
                 (Run [i] f (Kseq is k))
 

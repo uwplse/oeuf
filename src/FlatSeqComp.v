@@ -325,6 +325,27 @@ Ltac three_step HS S :=
             B_step HS; [ eapply B.SContSeq |
                 ]]].
 
+Lemma three_step_lift : forall BE bi bcode bf bk bf',
+    (forall bk,
+        B.sstep BE (B.Run [bi] bf bk)
+                   (B.Run [] bf' bk)) ->
+    B.splus BE (B.Run (bi :: bcode) bf bk)
+               (B.Run bcode bf' bk).
+intros0 Hstep.
+destruct bcode.
+
+- B_start HS.
+  B_step HS. { eapply Hstep. }
+  exact HS.
+
+- B_start HS.
+  B_step HS. { eapply B.SSeq. discriminate. }
+  B_step HS. { eapply Hstep. }
+  B_step HS. { eapply B.SContSeq. }
+  exact HS.
+Qed.
+
+
 Lemma I_sim_almost : forall AE BE a a' b,
     Forall2 I_func AE BE ->
     I a b ->
@@ -344,58 +365,83 @@ try solve [exfalso; on >Forall2, invc].
 
 
 - (* Arg *)
-  three_step HS B.SArg.
-  eexists. split. exact HS.  i_ctor.
+  eexists. split. eapply three_step_lift, B.SArg; eauto.
+  i_ctor.
 
 - (* Self *)
-  three_step HS B.SSelf.
-  eexists. split. exact HS.  i_ctor.
+  eexists. split. eapply three_step_lift, B.SSelf; eauto.
+  i_ctor.
 
 - (* DerefinateConstr *)
-  three_step HS B.SDerefinateConstr; eauto.
-  eexists. split. exact HS.  i_ctor.
+  eexists. split. eapply three_step_lift.
+    { intros. eapply B.SDerefinateConstr; eauto. }
+  i_ctor.
 
 - (* DerefinateClose *)
-  three_step HS B.SDerefinateClose; eauto.
-  eexists. split. exact HS.  i_ctor.
+  eexists. split. eapply three_step_lift.
+    { intros. eapply B.SDerefinateClose; eauto. }
+  i_ctor.
 
 - (* MkConstr *)
-  three_step HS B.SConstrDone; eauto.
-  eexists. split. exact HS.  i_ctor.
+  eexists. split. eapply three_step_lift.
+    { intros. eapply B.SConstrDone; eauto. }
+  i_ctor.
 
 - (* MkClose *)
-  three_step HS B.SCloseDone; eauto.
-  eexists. split. exact HS.  i_ctor.
+  eexists. split. eapply three_step_lift.
+    { intros. eapply B.SCloseDone; eauto. }
+  i_ctor.
 
 - (* MakeCall *)
   fwd eapply Forall2_nth_error_ex with (xs := AE) as HH; eauto.
     destruct HH as ([bbody bret] & ? & ?).
   on >I_func, invc.
 
-  B_start HS.
-  B_step HS. { eapply B.SSeq. }
-  B_step HS. { eapply B.SMakeCall; eauto. }
+  destruct bcode.
 
-  eexists. split. exact HS.
-  i_ctor.
-    { rewrite app_nil_r. auto. }
-  i_ctor.
+  + B_start HS.
+    B_step HS. { eapply B.SMakeCall; eauto. }
+
+    eexists. split. exact HS.
+    i_ctor.
+      { rewrite app_nil_r. auto. }
+    i_ctor.
+
+  + B_start HS.
+    B_step HS. { eapply B.SSeq; eauto. discriminate. }
+    B_step HS. { eapply B.SMakeCall; eauto. }
+
+    eexists. split. exact HS.
+    i_ctor.
+      { rewrite app_nil_r. auto. }
+    i_ctor.
 
 - (* Switchinate *)
   fwd eapply Forall2_nth_error_ex with (xs := cases) as HH; eauto.  destruct HH as (bcase & ? & ?).
 
-  B_start HS.
-  B_step HS. { eapply B.SSeq. }
-  B_step HS. { eapply B.SSwitchinate; eauto. }
+  destruct bcode.
 
-  eexists. split. exact HS.
-  i_ctor.
-    { rewrite app_nil_r. auto. }
-  i_ctor.
+  + B_start HS.
+    B_step HS. { eapply B.SSwitchinate; eauto. }
+
+    eexists. split. exact HS.
+    i_ctor.
+      { rewrite app_nil_r. auto. }
+    i_ctor.
+
+  + B_start HS.
+    B_step HS. { eapply B.SSeq; eauto. discriminate. }
+    B_step HS. { eapply B.SSwitchinate; eauto. }
+
+    eexists. split. exact HS.
+    i_ctor.
+      { rewrite app_nil_r. auto. }
+    i_ctor.
 
 - (* Copy *)
-  three_step HS B.SCopy; eauto.
-  eexists. split. exact HS.  i_ctor.
+  eexists. split. eapply three_step_lift.
+    { intros. eapply B.SCopy; eauto. }
+  i_ctor.
 
 
 - (* ContSwitch *)
