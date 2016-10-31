@@ -38,8 +38,8 @@ Definition local f l := lookup (locals f) l.
 
 Inductive cont :=
 | Kseq (code : list insn) (k : cont)
-| Kswitch (code : list insn) (k : cont)
-| Kret (code : list insn) (ret : nat) (dst : nat) (f : frame) (k : cont)
+| Kswitch (k : cont)
+| Kret (ret : nat) (dst : nat) (f : frame) (k : cont)
 | Kstop (ret : nat).
 
 Inductive state :=
@@ -84,14 +84,14 @@ Inductive sstep (E : env) : state -> state -> Prop :=
         nth_error E fname = Some (body, ret) ->
         sstep E (Run [Call dst fl a] f k)
                 (Run body (Frame arg (Close fname free) [])
-                    (Kret [] ret dst f k))
+                    (Kret ret dst f k))
 
 (* NB: `Switch` still has an implicit target of `Arg` *)
 | SSwitchinate : forall dst cases f k  tag args case,
         arg f = Constr tag args ->
         nth_error cases tag = Some case ->
         sstep E (Run [Switch dst cases] f k)
-                (Run case f (Kswitch [] k))
+                (Run case f (Kswitch k))
 
 | SCopy : forall dst src f k v,
         local f src = Some v ->
@@ -101,13 +101,13 @@ Inductive sstep (E : env) : state -> state -> Prop :=
 | SContSeq : forall code f k,
         sstep E (Run [] f (Kseq code k))
                 (Run code f k)
-| SContSwitch : forall code f k,
-        sstep E (Run [] f (Kswitch code k))
-                (Run code f k)
-| SContRet : forall f code ret dst f' k v,
+| SContSwitch : forall f k,
+        sstep E (Run [] f (Kswitch k))
+                (Run [] f k)
+| SContRet : forall f ret dst f' k v,
         local f ret = Some v ->
-        sstep E (Run [] f (Kret code ret dst f' k))
-                (Run code (set f' dst v) k)
+        sstep E (Run [] f (Kret ret dst f' k))
+                (Run [] (set f' dst v) k)
 | SContStop : forall ret f v,
         local f ret = Some v ->
         sstep E (Run [] f (Kstop ret))
