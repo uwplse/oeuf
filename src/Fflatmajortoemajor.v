@@ -628,6 +628,8 @@ Proof.
     edestruct (star_step_mk_blocks tge cases env k' (switch targid cases (transf_expr target)) (transf_fundef f)); eauto.
     break_and.
     app (plus_step_inner_switch tge targid cases (transf_expr target) (transf_fundef f) x env tag vargs s0) find_case.
+    erewrite switch_cases_to_rev in H2.
+    erewrite rev_involutive in H2.
     eapply star_step_exit_case_index in H2; eauto.
     repeat break_exists. break_and.
     eexists. split.
