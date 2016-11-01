@@ -393,7 +393,6 @@ Inductive id_map_ok : id_map -> Prop :=
 
 
 
-
 Lemma lookup_keys_nth_error : forall A xs k (x : A),
     lookup xs k = Some x ->
     exists n, nth_error (keys xs) n = Some k.
@@ -577,8 +576,6 @@ eapply nth_error_Forall2.
   rewrite count_up_nth_error in *; eauto. inject_some.
   reflexivity.
 Qed.
-
-
 
 
 
@@ -788,29 +785,6 @@ Hint Resolve set_switch_target_I_frame.
 
 Hint Constructors I_value.
 
-(*
-Hint Constructors B.eval.
-
-Lemma local_sim : forall af bf l av,
-    I_frame af bf ->
-    A.local af l = Some av ->
-    exists bv,
-        B.local bf l = Some bv /\
-        I_value av bv.
-destruct af, bf.
-make_first locals. induction locals; intros0 II Alocal.
-- unfold A.local in *. simpl in *. discriminate.
-- destruct a as [k v].
-  invc II. on >Forall2, invc. destruct y. break_and. simpl in *.
-  unfold A.local, B.local in *. simpl in *.
-
-  destruct (eq_nat_dec l k).
-  + inject_some.
-    eexists. break_if; try congruence. eauto.
-  + break_if; try congruence. eauto.
-Qed.
-*)
-
 Lemma eval_sim : forall M af ae av bf be,
     I_frame M af bf ->
     I_expr M ae be ->
@@ -900,14 +874,15 @@ Qed.
 
 Theorem I_sim : forall M AE BE a a' b,
     id_map_ok M ->
-    I_env AE BE ->
+    I_env M AE BE ->
+    A.state_fnames_below (length AE) a ->
     I M a b ->
     A.sstep AE a a' ->
     exists b',
         B.step BE b E0 b' /\
         I M a' b'.
 destruct a as [ae af ak | val ak ];
-intros0 Mok Henv II Astep;
+intros0 Mok Henv Afnames II Astep;
 inv Astep; inv II;
 try on >I_stmt, invc;
 simpl in *.
@@ -924,7 +899,7 @@ simpl in *.
 
 - (* MkClose *)
   assert (be ! bdst = None) by admit.
-  assert (fname < length AE) by admit.
+  break_and.
 
   rewrite <- nth_error_Some in *.
   destruct (nth_error AE fname) eqn:?; try congruence.

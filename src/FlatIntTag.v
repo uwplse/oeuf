@@ -357,3 +357,106 @@ destruct s; try solve [unfold switch_placement; eapply check_no_switch].
 - (* Switch *)
   simpl. eapply check_no_switch_list.
 Defined.
+
+
+
+Definition fnames_below n :=
+    let fix go s :=
+        let fix go_list ps :=
+            match ps with
+            | [] => True
+            | (_, s) :: ps => go s /\ go_list ps
+            end in
+        match s with
+        | Skip => True
+        | Seq s1 s2 => go s1 /\ go s2
+        | Call _ _ _ => True
+        | MkConstr _ _ _ => True
+        | Switch _ cases => go_list cases
+        | MkClose _ fname _ => fname < n
+        | Assign _ _ => True
+        end in go.
+
+Definition fnames_below_list n :=
+    let go := fnames_below n in
+    let fix go_list (ps : list (Z * stmt)) :=
+        match ps with
+        | [] => True
+        | (_, s) :: ps => go s /\ go_list ps
+        end in go_list.
+
+Ltac refold_fnames_below n :=
+    fold (fnames_below_list n) in *.
+
+Definition check_fnames_below n s : { fnames_below n s } + { ~ fnames_below n s }.
+induction s using stmt_rect_mut with
+    (Pl := fun cases =>
+        { fnames_below_list n cases } + { ~ fnames_below_list n cases });
+try solve [left; constructor].
+
+- (* Seq *)
+  destruct IHs1; [ | right; inversion 1; eauto ].
+  destruct IHs2; [ | right; inversion 1; eauto ].
+  left. constructor; auto.
+
+- (* Switch *)
+  destruct IHs; [ | right; assumption ].
+  left. assumption.
+
+- (* MkClose *)
+  destruct (lt_dec fname n); [ | right; assumption ].
+  left. assumption.
+
+- (* cons *)
+  destruct IHs; [ | right; inversion 1; eauto ].
+  destruct IHs0; [ | right; inversion 1; eauto ].
+  left. constructor; eauto.
+Defined.
+
+
+Definition cont_fnames_below n :=
+    let go := fnames_below n in
+    let fix go_cont k :=
+        match k with
+        | Kseq s k => go s /\ go_cont k
+        | Kswitch k => go_cont k
+        | Kreturn _ k => go_cont k
+        | Kcall _ _ k => go_cont k
+        | Kstop => True
+        end in go_cont.
+
+Definition state_fnames_below n :=
+    let go := fnames_below n in
+    let go_cont := cont_fnames_below n in
+    let go_state s :=
+        match s with
+        | Run s _ k => go s /\ go_cont k
+        | Return _ k => go_cont k
+        end in go_state.
+
+Lemma step_fnames_below : forall E s s' n,
+    Forall (fun f => fnames_below n (fst f)) E ->
+    state_fnames_below n s ->
+    sstep E s s' ->
+    state_fnames_below n s'.
+intros0 Henv II Hstep; invc Hstep;
+simpl in *; refold_fnames_below n.
+
+- intuition.
+- auto.
+- intuition.
+- fwd eapply Forall_nth_error; eauto. simpl in *. intuition.
+
+- break_and. split; auto.
+  generalize dependent cases. make_first cases. induction cases; intros; simpl in *.
+  + discriminate.
+  + break_match. break_if.
+    * inject_some. break_and. auto.
+    * break_and. eapply IHcases; eauto.
+
+- auto.
+- intuition.
+- auto.
+- intuition.
+- intuition.
+Qed.
