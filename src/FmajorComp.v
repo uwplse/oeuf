@@ -373,6 +373,7 @@ Inductive I : A.state -> B.state -> Prop :=
         I_stmt as_ bs ->
         I_frame af be ->
         I_cont ak bk ->
+        ((forall id, I_id IkSwitchTarget id -> be ! id = None) \/ A.no_switch as_) ->
         I (A.Run as_ af ak)
           (B.State bs bk be)
 | IReturn : forall av ak bv bk,
@@ -872,24 +873,38 @@ induction acases; intros0 Alook Hfa; invc Hfa; simpl in *.
   + eapply IHacases; eauto.
 Qed.
 
+Lemma zlookup_no_switch : forall cases tag case,
+    zlookup cases tag = Some case ->
+    A.no_switch_list cases ->
+    A.no_switch case.
+induction cases; intros0 Hlook Hsw; simpl in *.
+- discriminate.
+- break_match. break_if.
+  + inject_some. intuition.
+  + break_and. eauto.
+Qed.
+
 Theorem I_sim : forall M AE BE a a' b,
     id_map_ok M ->
     I_env M AE BE ->
     A.state_fnames_below (length AE) a ->
+    A.state_switch_placement a ->
     I M a b ->
     A.sstep AE a a' ->
     exists b',
         B.step BE b E0 b' /\
         I M a' b'.
 destruct a as [ae af ak | val ak ];
-intros0 Mok Henv Afnames II Astep;
+intros0 Mok Henv Afnames Aswpl II Astep;
 inv Astep; inv II;
 try on >I_stmt, invc;
 simpl in *.
 
 - (* Seq *)
   eexists. split. eapply B.step_seq; eauto.
-  i_ctor. i_ctor.
+  i_ctor.
+  + i_ctor.
+  + on (_ \/ _), invc; [ left; auto | right; break_and; auto ].
 
 - (* MkConstr *)
   assert (be ! bdst = None) by admit.
@@ -928,9 +943,13 @@ simpl in *.
   + rewrite PTree.gso, PTree.gss by (eapply I_id_ne; eauto; discriminate).
     constructor. auto.
   + rewrite PTree.gss. constructor. auto.
+  + left. intros.
+    rewrite PTree.gso, PTree.gso by (eapply I_id_ne; eauto; discriminate).
+    eapply PTree.gempty.
 
 - (* Switchinate *)
-  assert (be ! btargid = None) by admit.
+  on (_ \/ _), invc; try solve [exfalso; assumption].
+  assert (be ! btargid = None) by eauto.
 
   fwd eapply eval_sim with (ae := A.Arg) as HH; eauto using A.EArg.
     destruct HH as (btv & ? & ?).
@@ -940,7 +959,9 @@ simpl in *.
   fwd eapply zlookup_find_case as HH; eauto.  destruct HH as (bcase & ? & ?).
 
   eexists. split. eapply B.step_switch; eauto.
-  i_ctor. i_ctor.
+  i_ctor.
+  + i_ctor.
+  + right. break_and. eauto using zlookup_no_switch.
 
 - (* Assign *)
   assert (be ! bdst = None) by admit.
@@ -956,6 +977,7 @@ simpl in *.
 
   eexists. split. eapply B.step_skip_seq; eauto.
   i_ctor.
+  + right. repeat break_and. auto.
 
 - (* ContSwitch *)
   on >I_cont, inv.
