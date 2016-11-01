@@ -93,7 +93,7 @@ Definition compile_func (f : F.func_def) : option E.function :=
 
 Definition compile_gdef (f : F.func_def) : option (AST.globdef E.fundef unit) :=
     compile_func f >>= fun f' =>
-    Some (Gfun f').
+    Some (Gfun (Internal f')).
 
 Definition compile_gdefs (fs : list F.func_def) :
         option (list (AST.globdef E.fundef unit)) :=

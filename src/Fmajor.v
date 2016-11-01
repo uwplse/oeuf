@@ -42,7 +42,7 @@ Record function : Type := mkfunction {
   fn_body: stmt * expr
 }.
 
-Definition fundef := function.
+Definition fundef := AST.fundef function.
 Definition program := AST.program fundef unit.
 
 Definition genv := Genv.t fundef unit.
@@ -153,7 +153,7 @@ Inductive step : state -> trace -> state -> Prop :=
       eval_expr e earg varg -> (* the argument *)
       eval_expr e efunc (Close fname cargs) -> (* the function itself *)
       Genv.find_symbol ge fname = Some bcode ->
-      Genv.find_funct_ptr ge bcode = Some fn ->
+      Genv.find_funct_ptr ge bcode = Some (Internal fn) ->
       length fn.(fn_params) = 2%nat ->
       fn.(fn_sig) = call_sig ->
       step (State f (Scall id efunc earg) exp k e) E0
@@ -174,7 +174,7 @@ Inductive step : state -> trace -> state -> Prop :=
       eval_exprlist e l vargs ->
       e ! id = None ->
       Genv.find_symbol ge fname = Some bcode ->
-      Genv.find_funct_ptr ge bcode = Some fn ->
+      Genv.find_funct_ptr ge bcode = Some (Internal fn) ->
       step (State f (SmakeClose id fname l) exp k e)
         E0 (State f Sskip exp k (PTree.set id (Close fname vargs) e))
   | step_switch: forall e target targid tag vargs cases s k exp f,
@@ -193,7 +193,7 @@ Inductive initial_state (p: program): state -> Prop :=
   | initial_state_intro: forall b f,
       let ge := Genv.globalenv p in
       Genv.find_symbol ge p.(prog_main) = Some b ->
-      Genv.find_funct_ptr ge b = Some f ->
+      Genv.find_funct_ptr ge b = Some (Internal f) ->
       let retexp := snd (fn_body f) in
       initial_state p (State f (fst (fn_body f)) retexp (Kreturn retexp Kstop) (PTree.empty value)).
 

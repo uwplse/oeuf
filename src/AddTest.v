@@ -86,8 +86,8 @@ Definition main_fn : Fmajor.function :=
                     16%Z (main_body,Var main_tmp2).
 
 Definition add_one_prog : Fmajor.program :=
-  AST.mkprogram ((add_one_id,Gfun add_one_fn) ::
-                 (main_id,Gfun main_fn) ::
+  AST.mkprogram ((add_one_id,Gfun (Internal add_one_fn)) ::
+                 (main_id,Gfun (Internal main_fn)) ::
                  nil) nil main_id.
 
 (*
