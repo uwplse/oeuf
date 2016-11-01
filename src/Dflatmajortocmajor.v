@@ -59,7 +59,7 @@ Definition transf_function (alloc : ident) (f : Dmajor.function) : Cmajor.functi
                     (transf_stmt alloc (fn_body f)).
 
 Definition transf_fundef (alloc : ident) (fd : Dmajor.fundef) : res Cmajor.fundef :=
-  OK (Internal (transf_function alloc fd)).
+  OK (AST.transf_fundef (transf_function alloc) fd).
 
 
 Definition new_globs (bump : ident) (alloc : ident) : list (ident * globdef Cmajor.fundef unit) :=
@@ -161,7 +161,7 @@ Inductive match_states : Dflatmajor.state -> Cmajor.state -> Prop :=
         (Dflatmajor.State f s k sp e m z)
         (Cmajor.State f' s' k' sp e' m')
   | match_callstate: forall f f' args args' k k' m m' z
-        (TF: transf_fundef malloc_id f = OK f')
+        (TF: transf_fundef malloc_id (Internal f) = OK f')
         (MC: match_cont k k')
         (LD: Val.lessdef_list args args')
         (ME: Mem.extends m m'),
@@ -443,7 +443,7 @@ Qed.
   
 Lemma funsig_transf :
   forall fd fd',
-    transf_fundef malloc_id fd = OK fd' ->
+    transf_fundef malloc_id (Internal fd) = OK fd' ->
     Cmajor.funsig fd' = funsig fd.
 Proof.
   intros. unfold transf_fundef in *.

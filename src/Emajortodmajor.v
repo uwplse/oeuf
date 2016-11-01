@@ -154,7 +154,7 @@ Definition transf_function (f : Emajor.function) : Dmajor.function :=
   Dmajor.mkfunction sig params (collect_locals s) ss ts.
 
 Definition transf_fundef (fd : Emajor.fundef) : Dmajor.fundef :=
-  transf_function fd.
+  Internal (transf_function fd).
 
 (* Fixpoint transf_globdefs (main_id : ident) (gds : list (ident * globdef Emajor.fundef unit)) : (list (ident * globdef Dmajor.fundef unit)) := *)
 (*   match gds with *)
@@ -396,7 +396,7 @@ Inductive match_states: Emajor.state -> Dmajor.state -> Prop :=
       match_states (Emajor.State f s k e) (Dmajor.State f' s' k' e' m)
 | match_callstate :
     forall fd fd' vals vals' m k k',
-      transf_fundef fd = fd' ->
+      transf_fundef fd = (Internal fd') ->
       list_forall2 (value_inject tge m) vals vals' ->
       match_cont k k' m ->
       match_states (Emajor.Callstate fd vals k) (Dmajor.Callstate fd' vals' k' m)
@@ -1378,14 +1378,15 @@ Proof.
   econstructor; eauto.
   econstructor.
   simpl. find_rewrite.
-  break_match; try congruence. reflexivity.
+  break_match; try congruence. f_equal.
+  erewrite functions_transf in H15; eauto. inv H15.
+  unfold transf_fundef. reflexivity.
   erewrite symbols_transf in H16; eauto. inv H16.
   erewrite functions_transf in H15; eauto. inv H15.
   simpl. eassumption.
   econstructor; eauto.
   erewrite symbols_transf in H16; eauto. inv H16.
   erewrite functions_transf in H15; eauto. inv H15.
-  reflexivity.
   repeat (econstructor; eauto).
   econstructor; eauto.
 
@@ -1480,12 +1481,17 @@ Proof.
   econstructor; eauto.
 
   (* callstate *)
-  + destruct (Mem.alloc m 0 (fn_stackspace (transf_fundef fd))) eqn:?.
+  + 
+    destruct (Mem.alloc m 0 (fn_stackspace fd')) eqn:?.
   eexists.  split.
   eapply plus_one; nil_trace.
   simpl.
   econstructor; eauto.
   econstructor; eauto.
+  unfold transf_fundef in H1. congruence.
+  unfold transf_fundef in H1.
+  destruct fd; inv H1; simpl in *; congruence.
+  
   (* TODO HERE *)
   (* eapply mem_locked_match_cont; eauto. *)
   (* eapply alloc_mem_locked; eauto. *)
