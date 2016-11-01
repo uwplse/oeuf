@@ -154,7 +154,7 @@ Definition transf_function (f : Emajor.function) : Dmajor.function :=
   Dmajor.mkfunction sig params (collect_locals s) ss ts.
 
 Definition transf_fundef (fd : Emajor.fundef) : Dmajor.fundef :=
-  Internal (transf_function fd).
+  AST.transf_fundef transf_function fd.
 
 (* Fixpoint transf_globdefs (main_id : ident) (gds : list (ident * globdef Emajor.fundef unit)) : (list (ident * globdef Dmajor.fundef unit)) := *)
 (*   match gds with *)
@@ -396,7 +396,7 @@ Inductive match_states: Emajor.state -> Dmajor.state -> Prop :=
       match_states (Emajor.State f s k e) (Dmajor.State f' s' k' e' m)
 | match_callstate :
     forall fd fd' vals vals' m k k',
-      transf_fundef fd = (Internal fd') ->
+      transf_fundef (Internal fd) = (Internal fd') ->
       list_forall2 (value_inject tge m) vals vals' ->
       match_cont k k' m ->
       match_states (Emajor.Callstate fd vals k) (Dmajor.Callstate fd' vals' k' m)
@@ -1368,8 +1368,11 @@ Proof.
 
   (* function call *)
   + app transf_expr_inject (Emajor.eval_expr e efunc).
-  app transf_expr_inject (Emajor.eval_expr e earg).
-  inv H5.
+    app transf_expr_inject (Emajor.eval_expr e earg).
+    app symbols_transf Genv.find_symbol.
+    app functions_transf Genv.find_funct_ptr.
+    
+  inv H5. find_rewrite. inv H18.
   eexists. split.
   eapply plus_one.
   econstructor; eauto.
@@ -1377,18 +1380,10 @@ Proof.
   econstructor; eauto.
   econstructor; eauto.
   econstructor.
-  simpl. find_rewrite.
-  break_match; try congruence. f_equal.
-  erewrite functions_transf in H15; eauto. inv H15.
-  unfold transf_fundef. reflexivity.
-  erewrite symbols_transf in H16; eauto. inv H16.
-  erewrite functions_transf in H15; eauto. inv H15.
-  simpl. eassumption.
-  econstructor; eauto.
-  erewrite symbols_transf in H16; eauto. inv H16.
-  erewrite functions_transf in H15; eauto. inv H15.
+  simpl. find_rewrite. inv H11.
+  break_match; try congruence. eassumption.
+  simpl. assumption.
   repeat (econstructor; eauto).
-  econstructor; eauto.
 
   (* return *)
   + destruct k; simpl in H8; try solve [inv H8]; invp match_cont.
@@ -1488,8 +1483,8 @@ Proof.
   simpl.
   econstructor; eauto.
   econstructor; eauto.
-  unfold transf_fundef in H1. congruence.
-  unfold transf_fundef in H1.
+  unfold transf_fundef in H1. simpl in H1. congruence.
+  unfold transf_fundef in H1. simpl in H1.
   destruct fd; inv H1; simpl in *; congruence.
   
   (* TODO HERE *)

@@ -94,8 +94,8 @@ Definition transf_cases (targid : ident) (cases : list (Z * Fflatmajor.stmt)) (t
     mk_blocks switch cases O.
 
 Definition transf_fundef (f : Fflatmajor.function) : Emajor.fundef :=
-  Emajor.mkfunction (Fflatmajor.fn_params f) (Fflatmajor.fn_sig f) (Fflatmajor.fn_stackspace f)
-                    (transf_stmt (Fflatmajor.fn_body f)).
+  Internal (Emajor.mkfunction (Fflatmajor.fn_params f) (Fflatmajor.fn_sig f) (Fflatmajor.fn_stackspace f)
+                    (transf_stmt (Fflatmajor.fn_body f))).
 
 Definition transf_program (p : Fflatmajor.program) : Emajor.program :=
   AST.transform_program transf_fundef p.
@@ -323,9 +323,10 @@ Inductive match_cont: Fflatmajor.cont -> Emajor.cont -> Prop :=
       transf_stmt s = s' ->
       match_cont (Fflatmajor.Kseq s k) (Emajor.Kseq s' k')
 | match_call :
-    forall id f env k k',
+    forall id f f' env k k',
       match_cont k k' ->
-      match_cont (Fflatmajor.Kcall id f env k) (Emajor.Kcall id (transf_fundef f) env k')
+      transf_fundef f = Internal f' ->
+      match_cont (Fflatmajor.Kcall id f env k) (Emajor.Kcall id f' env k')
 | match_switch :
     forall k k' k0 n,
       match_cont k k' ->
@@ -344,7 +345,7 @@ Qed.
 Inductive match_states : Fflatmajor.state -> Emajor.state -> Prop := 
 | match_state :
     forall f f' s s' k k' env,
-      transf_fundef f = f' ->
+      transf_fundef f = Internal f' ->
       transf_stmt s = s' ->
       match_cont k k' ->
       match_states (Fflatmajor.State f s k env) (Emajor.State f' s' k' env)
@@ -353,10 +354,11 @@ Inductive match_states : Fflatmajor.state -> Emajor.state -> Prop :=
       match_cont k k' ->
       match_states (Fflatmajor.Returnstate v k) (Emajor.Returnstate v k')
 | match_callstate :
-    forall f l k k',
+    forall f f' l k k',
       match_cont k k' ->
       length l = length (Fflatmajor.fn_params f) ->
-      match_states (Fflatmajor.Callstate f l k) (Emajor.Callstate (transf_fundef f) l k').
+      transf_fundef f = Internal f' ->
+      match_states (Fflatmajor.Callstate f l k) (Emajor.Callstate f' l k').
   
 
 (* exit steps *)
@@ -602,7 +604,7 @@ Proof.
     eapply plus_one. econstructor; eauto.
     erewrite Genv.find_symbol_transf; eauto.
     erewrite Genv.find_funct_ptr_transf; eauto.
-    simpl. rewrite H12. reflexivity.
+    simpl. f_equal. unfold transf_fundef. reflexivity. simpl. rewrite H13. reflexivity.
     econstructor; eauto.
     econstructor; eauto.
 
@@ -625,12 +627,12 @@ Proof.
 
   (* Sswitch *)
   * rewrite transf_switch.
-    edestruct (star_step_mk_blocks tge cases env k' (switch targid cases (transf_expr target)) (transf_fundef f)); eauto.
+    edestruct (star_step_mk_blocks tge cases env k' (switch targid cases (transf_expr target)) f'); eauto.
     break_and.
-    app (plus_step_inner_switch tge targid cases (transf_expr target) (transf_fundef f) x env tag vargs s0) find_case.
-    erewrite switch_cases_to_rev in H2.
-    erewrite rev_involutive in H2.
-    eapply star_step_exit_case_index in H2; eauto.
+    app (plus_step_inner_switch tge targid cases (transf_expr target) f' x env tag vargs s0) find_case.
+    erewrite switch_cases_to_rev in H4.
+    erewrite rev_involutive in H4.
+    eapply star_step_exit_case_index in H4; eauto.
     repeat break_exists. break_and.
     eexists. split.
     eapply star_plus_trans; nil_trace.
