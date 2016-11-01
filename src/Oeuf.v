@@ -36,7 +36,7 @@ Definition transf_untyped_to_cminor (l : list UntypedComp.U.expr * list Metadata
  @@@ FmajorComp.compile_cu
   @@ Fmajortofflatmajor.transf_program
   @@ Fflatmajortoemajor.transf_program
-  @@ Emajortodmajor.transf_prog
+ @@@ Emajortodmajor.transf_prog
  @@@ Dflatmajortocmajor.transf_prog
   @@ Cmajortominor.transf_prog
   @@ print print_Cminor
