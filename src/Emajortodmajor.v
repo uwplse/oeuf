@@ -1541,14 +1541,21 @@ Qed.
 Theorem fsim :
   forward_simulation (Emajor.semantics prog) (Dmajor.semantics tprog).
 Proof.
+  eapply forward_simulation_plus.
+  intros. simpl. subst tprog. unfold transf_prog.
+  eapply Genv.public_symbol_transf.
+
+  admit.
+  admit.
+
+  intros. eapply step_sim; eauto.
+  
 Admitted.
 
-(* We're going to have to solve one problem: *)
-(* How do we compose a forward simulation with what we currently have? *)
 
 End PRESERVATION.
 
 (* TODO: *)
 (* 1. We need a way to refer to parts of the original program, and show that anything reached in execution is part of the original prog *)
 (* 2. We need a way to prove properties about the program text, and show they correspond to properties about execution *)
-(* Once we have these, we can dispatch the admits *)
+(* Once we have these, we can dispatch these *)
