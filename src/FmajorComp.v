@@ -188,7 +188,31 @@ Definition compile_func (f : A.stmt * A.expr) : option B.function :=
     get_id IkArg >>= fun id_arg =>
     Some (B.mkfunction [id_self; id_arg] the_sig 0%Z (body', ret')).
 
+Definition compile_gdef (nf : nat * (A.stmt * A.expr)) :
+        option (ident * AST.globdef B.fundef unit) :=
+    let '(n, f) := nf in
+    get_id (IkFunc n) >>= fun id =>
+    compile_func f >>= fun f' =>
+    Some (id, AST.Gfun f').
+
+Definition compile_gdefs (nfs : list (nat * (A.stmt * A.expr))) :
+        option (list (ident * AST.globdef B.fundef unit)) :=
+    map_partial compile_gdef nfs.
+
 End compile.
+
+Section compile_cu.
+Open Scope option_monad.
+
+Definition compile_cu (cu : list (A.stmt * A.expr) * list metadata) : option B.program :=
+    build_id_list cu >>= fun M =>
+    let '(funcs, metas) := cu in
+    compile_gdefs M (numbered funcs) >>= fun gdefs =>
+    let pub_fnames := map fst (filter (fun n_m => m_is_public (snd n_m)) (numbered metas)) in
+    map_partial (fun fn => id_key_assoc M (IkFunc fn)) pub_fnames >>= fun pub_idents =>
+    Some (AST.mkprogram gdefs pub_idents 1%positive).
+
+End compile_cu.
 
 Ltac refold_compile M :=
     fold (compile_expr M) in *;
@@ -265,8 +289,28 @@ Inductive I_func : A.stmt * A.expr -> B.function -> Prop :=
                (B.mkfunction [bself; barg] the_sig 0%Z (bbody, bret))
 .
 
+Inductive I_prog : A.env -> B.program -> Prop :=
+| IProg : forall ae ae' bdefs bdefs' bpublic bmain,
+        ae' = numbered ae ->
+        bdefs = map (fun p => (fst p, AST.Gfun (snd p))) bdefs' ->
+        Forall2 (fun a b =>
+            let '(an, af) := a in
+            let '(bid, bf) := b in
+            I_id (IkFunc an) bid /\
+            I_func af bf) ae' bdefs' ->
+        list_norepet (map fst bdefs) ->
+        I_prog ae (AST.mkprogram bdefs bpublic bmain).
+
 Inductive I_env : A.env -> B.genv -> Prop :=
-    (* TODO *)
+| IEnv : forall AE BE ,
+        (forall afname af bfname,
+            nth_error AE afname = Some af ->
+            I_id (IkFunc afname) bfname ->
+            exists bsym bf,
+                Genv.find_symbol BE bfname = Some bsym /\
+                Genv.find_funct_ptr BE bsym = Some bf /\
+                I_func af bf) ->
+        I_env AE BE
 .
 
 Inductive I_value : value -> value -> Prop :=
@@ -342,6 +386,200 @@ End match_states.
 Hint Resolve ISkip.
 Hint Unfold B.is_call_cont.
 
+Inductive id_map_ok : id_map -> Prop :=
+| IdMapOk : forall M,
+        list_norepet (map snd M) ->
+        id_map_ok M.
+
+
+
+
+Lemma lookup_keys_nth_error : forall A xs k (x : A),
+    lookup xs k = Some x ->
+    exists n, nth_error (keys xs) n = Some k.
+intros.  eapply In_nth_error. eapply lookup_some_in_keys. eauto.
+Qed.
+
+Lemma lookup_some_in : forall A xs k (x : A),
+    lookup xs k = Some x ->
+    In (k, x) xs.
+first_induction xs; intros0 Hlook; simpl in *.
+- discriminate.
+- destruct a. break_if; inject_some; eauto.
+Qed.
+
+Lemma lookup_nth_error : forall A xs k (x : A),
+    lookup xs k = Some x ->
+    exists n, nth_error xs n = Some (k, x).
+intros.  eapply In_nth_error. eapply lookup_some_in. eauto.
+Qed.
+
+Lemma list_norepet_nth_error_unique' : forall A xs n (x : A),
+    nth_error xs n = Some x ->
+    list_norepet xs ->
+    ~ (exists n', n' <> n /\ nth_error xs n' = Some x).
+induction xs; intros0 Hnth Hnr.
+- destruct n; discriminate.
+- invc Hnr. destruct n; simpl in *.
+  + inject_some.
+    on (~ In _ _), contradict.
+    break_exists. break_and.  destruct x0; try congruence.
+    eapply nth_error_in. eauto.
+  + intro. break_exists. break_and.
+    destruct x0.
+    * simpl in *. inject_some.
+      on (~ In _ _), contradict.
+      eapply nth_error_in. eauto.
+    * simpl in *. eapply IHxs; eauto.
+      exists n. split; eauto.
+Qed.
+
+Lemma list_norepet_nth_error_unique : forall A xs n1 n2 (x : A),
+    nth_error xs n1 = Some x ->
+    nth_error xs n2 = Some x ->
+    list_norepet xs ->
+    n1 = n2.
+intros0 Hnth1 Hnth2 Hnr.
+destruct (eq_nat_dec n1 n2); eauto.
+exfalso. eapply list_norepet_nth_error_unique'; eauto.
+Qed.
+
+Lemma id_key_assoc_nth_error : forall V M k (v : V),
+    id_key_assoc M k = Some v ->
+    exists n, nth_error M n = Some (k, v).
+induction M; intros0 Hassoc; simpl in *.
+- discriminate.
+- destruct a. break_if.
+  + inject_some. exists 0. reflexivity.
+  + fwd eapply IHM as HH; eauto.  destruct HH as [n' ?].
+    exists (S n'). simpl. auto.
+Qed.
+
+Lemma I_id_ne : forall M k1 k2 i1 i2,
+    id_map_ok M ->
+    I_id M k1 i1 ->
+    I_id M k2 i2 ->
+    k1 <> k2 ->
+    i1 <> i2.
+intros0 Mok II1 II2 Hne.
+do 2 on >I_id, invc.
+unfold id_key_assoc in *.
+fwd eapply id_key_assoc_nth_error with (k := k1) as HH; eauto.
+  destruct HH as [n1 ?].
+fwd eapply id_key_assoc_nth_error with (k := k2) as HH; eauto.
+  destruct HH as [n2 ?].
+assert (HH : n1 <> n2) by congruence.
+contradict HH. eapply list_norepet_nth_error_unique.
+- eapply map_nth_error with (f := snd). eassumption.
+- change (snd (k1, i1)) with (snd (k2, i1)).
+  eapply map_nth_error. subst i1. assumption.
+- invc Mok. auto.
+Qed.
+
+Lemma map_Forall2 : forall A B (f : A -> B) xs ys,
+    map f xs = ys ->
+    Forall2 (fun x y => f x = y) xs ys.
+induction xs; intros0 Hmap; destruct ys; try discriminate; eauto.
+simpl in *. invc Hmap. eauto.
+Qed.
+
+Lemma nth_error_unique_list_norepet  : forall A (xs : list A),
+    (forall n1 n2 x,
+        nth_error xs n1 = Some x ->
+        nth_error xs n2 = Some x ->
+        n1 = n2) ->
+    list_norepet xs.
+induction xs; intros Hnth.
+- constructor.
+- constructor.
+  + intro HH. eapply In_nth_error in HH. destruct HH as [n ?].
+    specialize (Hnth 0 (S ??) a *** **).
+    discriminate.
+  + eapply IHxs. intros.
+    cut (S n1 = S n2).
+      { intro. congruence. }
+    eapply Hnth; simpl; eauto.
+Qed.
+
+Lemma count_up'_nth_error : forall acc n i,
+    (forall i', i' < length acc -> nth_error acc i' = Some (n + i')) ->
+    i < n + length acc ->
+    nth_error (count_up' acc n) i = Some i.
+first_induction n; intros0 Hacc Hlt; simpl in *.
+- eauto.
+- eapply IHn; cycle 1.
+    { simpl. omega. }
+  intros.  destruct i'.
+  + simpl. f_equal. omega.
+  + simpl. replace (n + S i') with (S (n + i')) by omega.
+    eapply Hacc. simpl in *. omega.
+Qed.
+
+Lemma count_up_nth_error : forall n i,
+    i < n ->
+    nth_error (count_up n) i = Some i.
+intros. eapply count_up'_nth_error.
+- intros. simpl in *. omega.
+- simpl. omega.
+Qed.
+
+Lemma numbered'_length : forall A (xs : list A) base,
+    length (numbered' base xs) = length xs.
+induction xs; intros; simpl in *; eauto.
+Qed.
+
+Lemma numbered_length : forall A (xs : list A),
+    length (numbered xs) = length xs.
+intros. eapply numbered'_length; eauto.
+Qed.
+
+Lemma count_up'_length : forall acc n,
+    length (count_up' acc n) = n + length acc.
+first_induction n; intros; simpl in *; eauto.
+rewrite IHn. simpl. omega.
+Qed.
+
+Lemma count_up_length : forall n,
+    length (count_up n) = n.
+intros. unfold count_up. rewrite count_up'_length. simpl. omega.
+Qed.
+
+Lemma numbered'_nth_error : forall A (xs : list A) base n x,
+    nth_error xs n = Some x ->
+    nth_error (numbered' base xs) n = Some (base + n, x).
+induction xs; intros0 Hnth; simpl in *.
+- destruct n; discriminate.
+- destruct n; simpl in *.
+  + inject_some. replace (base + 0) with base by omega. reflexivity.
+  + replace (base + S n) with (S base + n) by omega. eapply IHxs. eauto.
+Qed.
+
+Lemma numbered_nth_error : forall A (xs : list A) n x,
+    nth_error xs n = Some x ->
+    nth_error (numbered xs) n = Some (n, x).
+intros. eapply numbered'_nth_error. eauto.
+Qed.
+
+Lemma numbered_count_up : forall A (xs : list A),
+    Forall2 (fun a b => fst a = b) (numbered xs) (count_up (length xs)).
+intros.
+eapply nth_error_Forall2.
+- rewrite numbered_length, count_up_length. reflexivity.
+- intros.
+  assert (i < length xs). { 
+    rewrite <- numbered_length. rewrite <- nth_error_Some. congruence.
+  }
+  assert (exists x', nth_error xs i = Some x'). {
+    rewrite <- nth_error_Some in *. destruct (nth_error xs i); try congruence. eauto.
+  }
+  break_exists.
+  erewrite numbered_nth_error in *; eauto. inject_some.
+  rewrite count_up_nth_error in *; eauto. inject_some.
+  reflexivity.
+Qed.
+
+
+
 
 
 Lemma compile_I_expr : forall M a b,
@@ -382,6 +620,115 @@ Lemma compile_I_func : forall M a b,
 destruct a;
 intros0 Hcomp; simpl in Hcomp; break_bind_option; inject_some; refold_compile M;
 try solve [constructor; eauto using compile_I_expr, compile_I_stmt].
+Qed.
+
+Lemma build_id_list_ok : forall a metas M,
+    build_id_list (a, metas) = Some M ->
+    id_map_ok M.
+intros0 Hbuild.
+unfold build_id_list, intern_id_list in *.
+break_if; try discriminate.
+constructor. inject_some. eauto.
+Qed.
+
+Lemma compile_I_prog : forall a metas b,
+    compile_cu (a, metas) = Some b ->
+    exists M, I_prog M a b.
+intros0 Hcomp.
+unfold compile_cu in *. break_bind_option. inject_some.
+rename l into M. rename l0 into bdefs. rename l1 into bpublic.
+
+on (_ = Some bpublic), fun H => clear H.
+
+unfold compile_gdefs in *.
+on _, eapply_lem map_partial_Forall2.
+assert (HH : exists bdefs', bdefs = map (fun p => (fst p, AST.Gfun (snd p))) bdefs').
+  { unfold numbered in *. remember 0 as base. clear Heqbase.
+    generalize dependent bdefs. clear -base. make_first bdefs. induction bdefs; intros.
+      { exists []. reflexivity. }
+    destruct a0; simpl in *; on >Forall2, invc.
+    destruct (IHbdefs ?? ?? ?? **) as [bdefs' ?].  clear IHbdefs.
+    unfold compile_gdef in *. break_bind_option. destruct a. inject_some.
+    exists ((i0, f) :: bdefs'). simpl. reflexivity. }
+destruct HH as (bdefs' & Hbdefs').
+
+
+exists M. econstructor; eauto.
+
+- remember (numbered a) as na.
+  symmetry in Hbdefs'.  eapply map_Forall2 in Hbdefs'.
+  
+  list_magic_on (na, (bdefs, (bdefs', tt))); cycle 1.
+    { (* automation broke again :( *)
+      eapply nth_error_Forall2.
+        { erewrite Forall2_length with (xs := na) (ys := bdefs); eauto.
+          symmetry. eauto using Forall2_length. }
+      intros.
+      fwd eapply Forall2_nth_error_ex as HH; eauto.  destruct HH as (z & ? & ?).
+      on _, eapply_; try eassumption.
+      - pattern x, z. eapply Forall2_nth_error; eauto.
+    }
+  destruct na_i as [an af]. destruct bdefs'_i as [bid bf].
+  unfold compile_gdef in *. break_bind_option. inject_some. simpl in *. inject_pair.
+  eauto using compile_I_func.
+
+- clear dependent bdefs'.
+  fwd eapply build_id_list_ok; eauto. on (_ = Some M), fun H => clear H.
+
+  cut (Forall2 (fun b n => I_id M (IkFunc n) b) (map fst bdefs) (count_up (length a))); cycle 1.
+    { fwd eapply numbered_count_up with (xs := a).
+      remember (numbered a) as na. remember (count_up _) as cu.
+      fwd eapply map_Forall2 with (f := fst) (xs := bdefs); eauto.
+      remember (map fst bdefs) as bdefs'.
+      list_magic_on (na, (cu, (bdefs, (bdefs', tt)))).
+      destruct na_i as [n af]. destruct bdefs_i as [bid bf].
+      simpl in *. break_bind_option. inject_some. eauto. }
+  intros Hid.
+
+  eapply nth_error_unique_list_norepet. intros.
+  destruct (eq_nat_dec n1 n2); eauto. exfalso.
+
+  fwd eapply Forall2_nth_error_ex with (i := n1) as HH; eauto. 
+    destruct HH as (b1 & ? & ?).
+  rewrite count_up_nth_error in *; cycle 1.
+    { erewrite <- count_up_length, <- Forall2_length by eauto.
+      rewrite <- nth_error_Some. congruence. }
+  inject_some.
+
+  fwd eapply Forall2_nth_error_ex with (i := n2) as HH; eauto. 
+    destruct HH as (b2 & ? & ?).
+  rewrite count_up_nth_error in *; cycle 1.
+    { erewrite <- count_up_length, <- Forall2_length by eauto.
+      rewrite <- nth_error_Some. congruence. }
+  inject_some.
+
+  eapply I_id_ne with (k1 := IkFunc b1) (k2 := IkFunc b2); eauto.
+  congruence.
+Qed.
+
+
+Lemma I_prog_env : forall M A B,
+    I_prog M A B ->
+    I_env M A (Genv.globalenv B).
+intros0 II. invc II.
+econstructor. intros.
+fwd eapply numbered_nth_error; eauto.
+fwd eapply Forall2_nth_error_ex as HH; eauto.
+  destruct HH as ([bfname' bf] & ? & ? & ?).
+replace bfname' with bfname in * by (repeat on >I_id, invc; congruence).
+
+remember (AST.mkprogram _ _ _) as B.
+
+assert (In (bfname, Gfun bf) (AST.prog_defs B)).
+  { eapply nth_error_in. on _, eapply_lem map_nth_error.
+    subst B. simpl. on _, fun H => rewrite H.
+    simpl. reflexivity. }
+
+fwd eapply Genv.find_funct_ptr_exists with (p := B) as HH; eauto.
+  { subst B. unfold prog_defs_names. simpl in *. auto. }
+  destruct HH as (bsym & ? & ?).
+
+eauto.
 Qed.
 
 
@@ -464,26 +811,6 @@ make_first locals. induction locals; intros0 II Alocal.
 Qed.
 *)
 
-Lemma lookup_keys_nth_error : forall A xs k (x : A),
-    lookup xs k = Some x ->
-    exists n, nth_error (keys xs) n = Some k.
-intros.  eapply In_nth_error. eapply lookup_some_in_keys. eauto.
-Qed.
-
-Lemma lookup_some_in : forall A xs k (x : A),
-    lookup xs k = Some x ->
-    In (k, x) xs.
-first_induction xs; intros0 Hlook; simpl in *.
-- discriminate.
-- destruct a. break_if; inject_some; eauto.
-Qed.
-
-Lemma lookup_nth_error : forall A xs k (x : A),
-    lookup xs k = Some x ->
-    exists n, nth_error xs n = Some (k, x).
-intros.  eapply In_nth_error. eapply lookup_some_in. eauto.
-Qed.
-
 Lemma eval_sim : forall M af ae av bf be,
     I_frame M af bf ->
     I_expr M ae be ->
@@ -546,7 +873,7 @@ intros.  rewrite SuccNat2Pos.id_succ. reflexivity.
 Qed.
 
 Lemma I_env_nth_error : forall M AE BE afname af bfname,
-    I_env AE BE ->
+    I_env M AE BE ->
     nth_error AE afname = Some af ->
     I_id M (IkFunc afname) bfname ->
     exists bsym bf,
@@ -554,73 +881,7 @@ Lemma I_env_nth_error : forall M AE BE afname af bfname,
         Genv.find_funct_ptr BE bsym = Some bf /\
         I_func M af bf.
 intros0 IIenv Afind IIid.
-Admitted.
-
-Inductive id_map_ok : id_map -> Prop :=
-| IdMapOk : forall M,
-        list_norepet (map snd M) ->
-        id_map_ok M.
-
-Lemma list_norepet_nth_error_unique' : forall A xs n (x : A),
-    nth_error xs n = Some x ->
-    list_norepet xs ->
-    ~ (exists n', n' <> n /\ nth_error xs n' = Some x).
-induction xs; intros0 Hnth Hnr.
-- destruct n; discriminate.
-- invc Hnr. destruct n; simpl in *.
-  + inject_some.
-    on (~ In _ _), contradict.
-    break_exists. break_and.  destruct x0; try congruence.
-    eapply nth_error_in. eauto.
-  + intro. break_exists. break_and.
-    destruct x0.
-    * simpl in *. inject_some.
-      on (~ In _ _), contradict.
-      eapply nth_error_in. eauto.
-    * simpl in *. eapply IHxs; eauto.
-      exists n. split; eauto.
-Qed.
-
-Lemma list_norepet_nth_error_unique : forall A xs n1 n2 (x : A),
-    nth_error xs n1 = Some x ->
-    nth_error xs n2 = Some x ->
-    list_norepet xs ->
-    n1 = n2.
-intros0 Hnth1 Hnth2 Hnr.
-destruct (eq_nat_dec n1 n2); eauto.
-exfalso. eapply list_norepet_nth_error_unique'; eauto.
-Qed.
-
-Lemma id_key_assoc_nth_error : forall V M k (v : V),
-    id_key_assoc M k = Some v ->
-    exists n, nth_error M n = Some (k, v).
-induction M; intros0 Hassoc; simpl in *.
-- discriminate.
-- destruct a. break_if.
-  + inject_some. exists 0. reflexivity.
-  + fwd eapply IHM as HH; eauto.  destruct HH as [n' ?].
-    exists (S n'). simpl. auto.
-Qed.
-
-Lemma I_id_ne : forall M k1 k2 i1 i2,
-    id_map_ok M ->
-    I_id M k1 i1 ->
-    I_id M k2 i2 ->
-    k1 <> k2 ->
-    i1 <> i2.
-intros0 Mok II1 II2 Hne.
-do 2 on >I_id, invc.
-unfold id_key_assoc in *.
-fwd eapply id_key_assoc_nth_error with (k := k1) as HH; eauto.
-  destruct HH as [n1 ?].
-fwd eapply id_key_assoc_nth_error with (k := k2) as HH; eauto.
-  destruct HH as [n2 ?].
-assert (HH : n1 <> n2) by congruence.
-contradict HH. eapply list_norepet_nth_error_unique.
-- eapply map_nth_error with (f := snd). eassumption.
-- change (snd (k1, i1)) with (snd (k2, i1)).
-  eapply map_nth_error. subst i1. assumption.
-- invc Mok. auto.
+invc IIenv. eauto.
 Qed.
 
 Lemma zlookup_find_case : forall P tag (acases : list (Z * A.stmt)) acase bcases,
@@ -741,192 +1002,3 @@ simpl in *.
   i_ctor.
 
 Admitted.
-
-
-
-
-
-(* TODO *)
-
-
-
-
-
-
-
-
-Definition compile_cu (cu : list (F.stmt * F.expr) * list metadata) : option E.program :=
-    let '(funcs, metas) := cu in
-    compile_gdefs funcs >>= fun funcs' =>
-    let n_funcs' := numbered_pos 1%positive funcs' in
-    let n_metas := numbered_pos 1%positive metas in
-    let pub_idents := map fst (filter (fun n_m => m_is_public (snd n_m)) n_metas) in
-    let dummy := intern_names (map (fun n_m => (fst n_m, m_name (snd n_m))) n_metas) in
-    Some (AST.mkprogram n_funcs' pub_idents (Pos.sub dummy dummy)).
-
-End compile.
-
-
-
-
-Definition compile_cu (cu : list A.expr * list metadata) : list B.expr * list metadata :=
-    let '(exprs, metas) := cu in
-    let exprs' := compile_list exprs in
-    (exprs', metas).
-
-Definition compile_cu cu : option _ :=
-    if S.elim_body_placement_list_dec (fst cu)
-        then Some (compile_cu' cu)
-        else None.
-
-
-
-
-
-
-
-Fixpoint compile_expr (e : F.expr) : E.expr :=
-    match e with
-    | F.Arg => E.Var 1%positive
-    | F.Self => E.Var 2%positive
-    | F.Temp n => E.Var (Pos.of_nat (4 + n))
-    | F.Deref e off => E.Deref (compile_expr e) off
-    end.
-
-Fixpoint compile_expr_list (es : list F.expr) : list E.expr :=
-    map compile_expr es.
-
-Definition conv_dest (n : nat) : ident :=
-    Pos.of_nat (4 + n).
-
-Definition conv_tag (n : nat) : option int :=
-    let z := Z_of_nat n in
-    if Z_lt_ge_dec z Int.modulus then Some (Int.repr z) else None.
-
-Lemma conv_tag_ok : forall n i,
-    conv_tag n = Some i ->
-    Z.to_nat (Int.unsigned i) = n.
-intros0 Hconv.
-unfold conv_tag in Hconv. break_match; try discriminate.
-injection Hconv; intros; subst.
-rewrite Int.unsigned_repr_eq. rewrite Coqlib.Zmod_small by omega.
-apply Nat2Z.id.
-Qed.
-
-Definition conv_fn (fn : F.function_name) : function_name :=
-    Pos.of_succ_nat fn.
-
-
-Fixpoint numbered {A} n (xs : list A) :=
-    match xs with
-    | [] => []
-    | x :: xs => (n, x) :: numbered (Z.succ n) xs
-    end.
-
-Section compile.
-Open Scope option_monad.
-
-Fixpoint compile_stmt (s : F.stmt) : option E.stmt :=
-    let fix go_list ss : option (list E.stmt) :=
-        match ss with
-        | [] => Some []
-        | s :: ss => @cons E.stmt <$> compile_stmt s <*> go_list ss
-        end in
-    match s with
-    | F.Skip => Some (E.Sskip)
-    | F.Call dst f a =>
-        Some (E.Scall (conv_dest dst) (compile_expr f) (compile_expr a))
-    | F.MakeConstr dst tag args =>
-        conv_tag tag >>= fun tag' =>
-        Some (E.SmakeConstr (conv_dest dst) tag' (compile_expr_list args))
-    | F.Switch cases target =>
-        go_list cases >>= fun cases' =>
-        Some (E.Sswitch 3%positive (numbered 0 cases') (compile_expr target))
-    | F.MakeClose dst fn free =>
-        Some (E.SmakeClose (conv_dest dst) (conv_fn fn) (compile_expr_list free))
-    | F.Seq s1 s2 =>
-        E.Sseq <$> compile_stmt s1 <*> compile_stmt s2
-    | F.Assign dst e => Some (E.Sassign (conv_dest dst) (compile_expr e))
-    end.
-
-Fixpoint compile_stmt_list ss : option (list E.stmt) :=
-    match ss with
-    | [] => Some []
-    | s :: ss => @cons E.stmt <$> compile_stmt s <*> compile_stmt_list ss
-    end.
-
-Definition the_sig := AST.mksignature [AST.Tint; AST.Tint] (Some AST.Tint) AST.cc_default.
-
-Definition compile_func (f : F.func_def) : option E.function :=
-    let '(body, ret) := f in
-    compile_stmt body >>= fun body' =>
-    Some (E.mkfunction [2%positive; 1%positive] the_sig 0%Z (body', compile_expr ret)).
-
-Definition compile_gdef (f : F.func_def) : option (AST.globdef E.fundef unit) :=
-    compile_func f >>= fun f' =>
-    Some (Gfun f').
-
-Definition compile_gdefs (fs : list F.func_def) :
-        option (list (AST.globdef E.fundef unit)) :=
-    map_partial compile_gdef fs.
-
-
-Fixpoint numbered_pos {A} n (xs : list A) :=
-    match xs with
-    | [] => []
-    | x :: xs => (n, x) :: numbered_pos (Pos.succ n) xs
-    end.
-
-Axiom register_ident : positive -> String.string -> positive.
-
-Fixpoint intern_names (l : list (positive * String.string)) : positive :=
-  match l with
-  | [] => 1
-  | (p,s) :: l => register_ident p s + intern_names l
-  end.
-
-Definition compile_cu (cu : list (F.stmt * F.expr) * list metadata) : option E.program :=
-    let '(funcs, metas) := cu in
-    compile_gdefs funcs >>= fun funcs' =>
-    let n_funcs' := numbered_pos 1%positive funcs' in
-    let n_metas := numbered_pos 1%positive metas in
-    let pub_idents := map fst (filter (fun n_m => m_is_public (snd n_m)) n_metas) in
-    let dummy := intern_names (map (fun n_m => (fst n_m, m_name (snd n_m))) n_metas) in
-    Some (AST.mkprogram n_funcs' pub_idents (Pos.sub dummy dummy)).
-
-End compile.
-Extract Inlined Constant register_ident => "Camlcoq.register_ident_coq".
-
-
-Require MixSemantics.
-
-Section Preservation.
-
-  Variable prog : F.prog_type.
-  Variable tprog : E.program.
-
-  Hypothesis TRANSF : compile_cu prog = Some tprog.
-
-  
-  (* Inductive match_states (AE : A.env) (BE : B.env) : A.expr -> B.expr -> Prop := *)
-  (* | match_st : *)
-  (*     forall a b, *)
-  (*       R AE BE a b -> *)
-  (*       match_states AE BE a b. *)
-
-  (* Lemma step_sim : *)
-  (*   forall AE BE a b, *)
-  (*     match_states AE BE a b -> *)
-  (*     forall a', *)
-  (*       A.step AE a a' -> *)
-  (*       exists b', *)
-  (*         splus (B.step BE) b b'. *)
-  (* Proof. *)
-  (* Admitted. *)
-
-  Theorem fsim :
-    MixSemantics.mix_forward_simulation (F.semantics prog) (E.semantics tprog).
-  Proof.
-  Admitted.
-
-End Preservation.
