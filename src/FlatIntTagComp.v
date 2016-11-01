@@ -4,13 +4,13 @@ Require Import ZArith.
 Require Import Common Monads.
 Require Import Metadata.
 Require String.
-Require FlatExprRet FlatIntTag.
+Require FlatStop FlatIntTag.
 Require Import ListLemmas.
 Require HighValues HigherValue.
 
 Require Import Psatz.
 
-Module A := FlatExprRet.
+Module A := FlatStop.
 Module B := FlatIntTag.
 
 Module V1 := HigherValue.
@@ -165,10 +165,9 @@ Inductive I_cont : A.cont -> B.cont -> Prop :=
         I_cont ak bk ->
         I_cont (A.Kcall dst af ak)
                (B.Kcall dst bf bk)
-| IkStop : forall aret bret,
-        I_expr aret bret ->
-        I_cont (A.Kstop aret)
-               (B.Kstop bret).
+| IkStop :
+        I_cont A.Kstop
+               B.Kstop.
 
 Inductive I : A.state -> B.state -> Prop :=
 | IRun : forall acode af ak  bcode bf bk,
@@ -183,10 +182,7 @@ Inductive I : A.state -> B.state -> Prop :=
         I_cont ak bk ->
         I (A.Return av ak)
           (B.Return bv bk)
-
-| IStop : forall av bv,
-        I_value av bv ->
-        I (A.Stop av) (B.Stop bv).
+.
 
 
 
@@ -343,8 +339,8 @@ Theorem I_sim : forall AE BE a a' b,
     exists b',
         B.sstep BE b b' /\
         I a' b'.
-destruct a as [ae af ak | val ak | ae];
-intros0 Henv II Astep; [ | | solve [invc Astep] ];
+destruct a as [ae af ak | val ak ];
+intros0 Henv II Astep;
 inv Astep; inv II;
 try on >I_stmt, invc;
 try on >I_frame, inv;
@@ -411,13 +407,6 @@ simpl in *.
   fwd eapply eval_sim; eauto. break_exists. break_and.
 
   eexists. split. eapply B.SContReturn; eauto.
-  i_ctor.
-
-- (* ContStop *)
-  on >I_cont, inv.
-  fwd eapply eval_sim; eauto. break_exists. break_and.
-
-  eexists. split. eapply B.SContStop; eauto.
   i_ctor.
 
 - (* ContCall *)

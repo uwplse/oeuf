@@ -48,12 +48,11 @@ Inductive cont :=
 | Kswitch (k : cont)
 | Kreturn (ret : expr) (k : cont)
 | Kcall (dst : nat) (f : frame) (k : cont)
-| Kstop (ret : expr).
+| Kstop.
 
 Inductive state :=
 | Run (s : stmt) (f : frame) (k : cont)
-| Return (v : value) (k : cont)
-| Stop (v : value).
+| Return (v : value) (k : cont).
 
 Inductive eval : frame -> expr -> value -> Prop :=
 | EArg : forall f,
@@ -122,10 +121,6 @@ Inductive sstep (E : env) : state -> state -> Prop :=
 | SContCall : forall v dst f k,
         sstep E (Return v (Kcall dst f k))
                 (Run Skip (set f dst v) k)
-| SContStop : forall ret f v,
-        eval f ret v ->
-        sstep E (Run Skip f (Kstop ret))
-                (Stop v)
 .
 
 Inductive sstar (E : env) : state -> state -> Prop :=
