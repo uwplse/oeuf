@@ -64,10 +64,10 @@ Definition alloc (dst : ident) (sz : Z) := Salloc dst (const sz).
 Definition store (addr : expr) (payload : expr) := Sstore Mint32 addr payload.
 
 
-Definition fundef := function.
+Definition fundef := AST.fundef function.
 Definition program := AST.program fundef unit.
 
-Definition funsig (fd: fundef) := fn_sig fd.
+Definition funsig (fd: function) := fn_sig fd.
 
 Definition genv := Genv.t fundef unit.
 Definition env := PTree.t val.
@@ -107,7 +107,7 @@ Inductive state: Type :=
              (m: mem),                  (**r current memory state *)
       state
   | Callstate:                  (**r Invocation of a function *)
-      forall (f: fundef)                (**r function to invoke *)
+      forall (f: function)                (**r function to invoke *)
              (args: list val)           (**r arguments provided by caller *)
              (k: cont)                  (**r what to do next  *)
              (m: mem),                  (**r memory state *)
@@ -202,7 +202,7 @@ Inductive step: state -> trace -> state -> Prop :=
   | step_call: forall f optid sig a bl k e m vfp vargs fd,
       eval_expr e m a vfp ->
       eval_exprlist e m bl vargs ->
-      Genv.find_funct ge vfp = Some fd ->
+      Genv.find_funct ge vfp = Some (Internal fd) ->
       funsig fd = sig ->
       step (State f (Scall optid sig a bl) k e m)
         E0 (Callstate fd vargs (Kcall optid f e k) m)
@@ -257,7 +257,7 @@ Inductive initial_state (p: program): state -> Prop :=
       let ge := Genv.globalenv p in
       Genv.init_mem p = Some m0 ->
       Genv.find_symbol ge p.(prog_main) = Some b ->
-      Genv.find_funct_ptr ge b = Some f ->
+      Genv.find_funct_ptr ge b = Some (Internal f) ->
       funsig f = signature_main ->
       initial_state p (Callstate f nil Kstop m0).
 
