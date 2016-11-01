@@ -93,9 +93,12 @@ Definition transf_cases (targid : ident) (cases : list (Z * Fflatmajor.stmt)) (t
         end in
     mk_blocks switch cases O.
 
-Definition transf_fundef (f : Fflatmajor.function) : Emajor.fundef :=
-  Internal (Emajor.mkfunction (Fflatmajor.fn_params f) (Fflatmajor.fn_sig f) (Fflatmajor.fn_stackspace f)
-                    (transf_stmt (Fflatmajor.fn_body f))).
+Definition transf_function (f : Fflatmajor.function) : Emajor.function :=
+  Emajor.mkfunction (Fflatmajor.fn_params f) (Fflatmajor.fn_sig f) (Fflatmajor.fn_stackspace f)
+                    (transf_stmt (Fflatmajor.fn_body f)).
+
+Definition transf_fundef (f : Fflatmajor.fundef) : Emajor.fundef :=
+  AST.transf_fundef transf_function f.
 
 Definition transf_program (p : Fflatmajor.program) : Emajor.program :=
   AST.transform_program transf_fundef p.
@@ -325,7 +328,7 @@ Inductive match_cont: Fflatmajor.cont -> Emajor.cont -> Prop :=
 | match_call :
     forall id f f' env k k',
       match_cont k k' ->
-      transf_fundef f = Internal f' ->
+      transf_function f = f' ->
       match_cont (Fflatmajor.Kcall id f env k) (Emajor.Kcall id f' env k')
 | match_switch :
     forall k k' k0 n,
@@ -345,7 +348,7 @@ Qed.
 Inductive match_states : Fflatmajor.state -> Emajor.state -> Prop := 
 | match_state :
     forall f f' s s' k k' env,
-      transf_fundef f = Internal f' ->
+      transf_function f = f' ->
       transf_stmt s = s' ->
       match_cont k k' ->
       match_states (Fflatmajor.State f s k env) (Emajor.State f' s' k' env)
@@ -357,7 +360,7 @@ Inductive match_states : Fflatmajor.state -> Emajor.state -> Prop :=
     forall f f' l k k',
       match_cont k k' ->
       length l = length (Fflatmajor.fn_params f) ->
-      transf_fundef f = Internal f' ->
+      transf_function f = f' ->
       match_states (Fflatmajor.Callstate f l k) (Emajor.Callstate f' l k').
   
 
@@ -604,7 +607,7 @@ Proof.
     eapply plus_one. econstructor; eauto.
     erewrite Genv.find_symbol_transf; eauto.
     erewrite Genv.find_funct_ptr_transf; eauto.
-    simpl. f_equal. unfold transf_fundef. reflexivity. simpl. rewrite H13. reflexivity.
+    simpl. reflexivity. simpl. find_rewrite. reflexivity.
     econstructor; eauto.
     econstructor; eauto.
 
@@ -627,13 +630,12 @@ Proof.
 
   (* Sswitch *)
   * rewrite transf_switch.
-    edestruct (star_step_mk_blocks tge cases env k' (switch targid cases (transf_expr target)) f'); eauto.
+    edestruct (star_step_mk_blocks tge cases env k' (switch targid cases (transf_expr target)) (transf_function f)); eauto.
     break_and.
-    app (plus_step_inner_switch tge targid cases (transf_expr target) f' x env tag vargs s0) find_case.
-    erewrite switch_cases_to_rev in H4.
-    erewrite rev_involutive in H4.
-    eapply star_step_exit_case_index in H4; eauto.
-    repeat break_exists. break_and.
+    app (plus_step_inner_switch tge targid cases (transf_expr target) (transf_function f) x env tag vargs s0) find_case.
+    erewrite switch_cases_to_rev in *.
+    erewrite rev_involutive in *.
+    app star_step_exit_case_index switch_cases_rev.
     eexists. split.
     eapply star_plus_trans; nil_trace.
     eassumption.
