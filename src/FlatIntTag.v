@@ -358,6 +358,62 @@ destruct s; try solve [unfold switch_placement; eapply check_no_switch].
   simpl. eapply check_no_switch_list.
 Defined.
 
+Definition cont_no_switch :=
+    let go := no_switch in
+    let fix go_cont k :=
+        match k with
+        | Kseq s k => go s /\ go_cont k
+        | Kswitch k => go_cont k
+        | Kreturn _ k => go_cont k
+        | Kcall _ _ k => go_cont k
+        | Kstop => True
+        end in go_cont.
+
+Definition state_switch_placement :=
+    let go := switch_placement in
+    let go_cont := cont_no_switch in
+    let go_state s :=
+        match s with
+        | Run s _ k => go s /\ go_cont k
+        | Return _ k => go_cont k
+        end in go_state.
+
+Lemma no_switch_placement : forall s,
+    no_switch s ->
+    switch_placement s.
+destruct s; intuition.
+Qed.
+Hint Resolve no_switch_placement.
+
+Lemma step_switch_placement : forall E s s',
+    Forall (fun f => switch_placement (fst f)) E ->
+    state_switch_placement s ->
+    sstep E s s' ->
+    state_switch_placement s'.
+intros0 Henv II Hstep; invc Hstep;
+simpl in *; refold_no_switch.
+
+- intuition.
+- auto.
+- intuition.
+- fwd eapply Forall_nth_error; eauto. simpl in *. intuition.
+
+- break_and. split; auto.
+  generalize dependent cases. make_first cases. induction cases; intros; simpl in *.
+  + discriminate.
+  + break_match. break_if.
+    * inject_some. break_and. auto.
+    * break_and. eapply IHcases; eauto.
+
+- auto.
+- intuition.
+- auto.
+- intuition.
+- intuition.
+Qed.
+
+
+
 
 
 Definition fnames_below n :=
