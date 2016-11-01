@@ -150,7 +150,7 @@ Section Simulation.
     eapply compose_forward_simulation.
     eapply Dmajortodflatmajor.fsim; try eassumption.
 
-    admit.
+    admit. admit.
     (* Dflatmajor to Cmajor *)
     eapply compose_forward_simulation.
     eapply Dflatmajortocmajor.fsim; try eassumption.
