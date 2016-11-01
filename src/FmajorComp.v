@@ -319,10 +319,9 @@ Inductive I_cont : A.cont -> B.cont -> Prop :=
         be ! bdst = None ->
         I_cont (A.Kcall adst af ak)
                (B.Kcall bdst be bk)
-    (* TODO: handle stop states *)
-| IkStop : forall aret,
-        I_cont (A.Kstop aret)
-               (B.Kstop)
+| IkStop :
+        I_cont A.Kstop
+               B.Kstop
 .
 
 Inductive I : A.state -> B.state -> Prop :=
@@ -646,8 +645,8 @@ Theorem I_sim : forall M AE BE a a' b,
     exists b',
         B.step BE b E0 b' /\
         I M a' b'.
-destruct a as [ae af ak | val ak | ae];
-intros0 Mok Henv II Astep; [ | | solve [invc Astep] ];
+destruct a as [ae af ak | val ak ];
+intros0 Mok Henv II Astep;
 inv Astep; inv II;
 try on >I_stmt, invc;
 simpl in *.
@@ -734,10 +733,6 @@ simpl in *.
 
   eexists. split. eapply B.step_skip_return; eauto.
   i_ctor.
-
-- (* ContStop *)
-  on >I_cont, inv.
-  admit.
 
 - (* ContCall *)
   on >I_cont, inv.
