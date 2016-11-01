@@ -457,15 +457,6 @@ Qed.
 Theorem fsim :
   forward_simulation (Cmajor.semantics prog) (Cminor.semantics tprog).
 Proof.
-Admitted.
-
-End PRESERVATION.
-
-Theorem transf_program_correct:
-  forall prog tprog,
-    transf_prog prog = tprog ->
-    forward_simulation (Cmajor.semantics prog) (Cminor.semantics tprog).
-Proof.
   intros.
   eapply forward_simulation_step with (match_states := match_states).
   eapply public_symbol_transf; eauto.
@@ -473,5 +464,8 @@ Proof.
   eapply match_final_state; eauto.
   eapply single_step_correct; eauto.
 Qed.
+
+End PRESERVATION.
+
 
 
