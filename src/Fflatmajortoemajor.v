@@ -682,7 +682,7 @@ Proof.
   erewrite Genv.find_symbol_transf; eauto.
   unfold transf_program.
   erewrite Genv.find_funct_ptr_transf; eauto.
-
+  
   
 Admitted.
 

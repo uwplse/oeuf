@@ -199,7 +199,7 @@ Inductive initial_state (p: program): state -> Prop :=
       let ge := Genv.globalenv p in
       Genv.find_symbol ge p.(prog_main) = Some b ->
       Genv.find_funct_ptr ge b = Some f ->
-      initial_state p (State f (fn_body f) Kstop (PTree.empty value)).
+      initial_state p (Callstate f nil Kstop).
 
 Inductive final_state: state -> int -> Prop :=
   | final_state_intro: forall r v,

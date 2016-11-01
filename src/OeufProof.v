@@ -40,7 +40,12 @@ Require Import StructTact.Util.
 
 Require Import EricTact.
 
-(* Theorem: given 2 x86 level values and their matching high level values, we can build a call out of them and establish matching with it *)
+
+(* All of the things we need from the top level: *)
+(* 1. forward step simulation: step in SourceLang corresponds to steps in Asm, assuming matching states *)
+(* 2. match states establishment: either start from an exp we compiled, or take two values and compose them, and we get establish match_states between top and Asm states *)
+(* 3. backwards simulation: use the fact that Asm is deterministic to show that the target program can't do anything else but what we want *)
+(* 4. cotermination: show that anything that a value matches to can't step *)
 
 Section Simulation.
 
