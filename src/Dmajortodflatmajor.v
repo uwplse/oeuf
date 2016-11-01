@@ -1334,10 +1334,40 @@ Proof.
     repeat (econstructor; eauto).
 Qed.
 
+Lemma initial_states_match :
+  forall st,
+    Dmajor.initial_state prog st ->
+    exists st',
+      Dflatmajor.initial_state prog st' /\ match_states st st'.
+Proof.
+  intros.
+  inv H. eexists; split.
+  econstructor; eauto.
+  econstructor; eauto;
+    try solve [simpl; econstructor; eauto].
+  (* there's more to do here *)
+Admitted.
+
+Lemma match_final_states :
+  forall st st' r,
+    match_states st st' ->
+    Dmajor.final_state st r ->
+    Dflatmajor.final_state st' r.
+Proof.
+  intros. inv H0. inv H.
+  inv H9.
+  inv H6.
+  econstructor; eauto.
+Qed.
+
 Theorem fsim :
   forward_simulation (Dmajor.semantics prog) (Dflatmajor.semantics prog).
 Proof.
-Admitted.
-
+  eapply forward_simulation_plus.
+  intros. simpl. reflexivity.
+  eapply initial_states_match.
+  eapply match_final_states.
+  eapply single_step_correct.
+Qed.
 
 End PRESERVATION.
