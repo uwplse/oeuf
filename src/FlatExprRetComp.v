@@ -53,6 +53,15 @@ Ltac refold_compile :=
     fold compile_expr in *;
     fold compile_list in *.
 
+Definition compile_func (f : A.stmt * nat) : B.stmt * B.expr :=
+    let '(body, ret) := f in
+    (compile body, compile_expr (A.Var ret)).
+
+Definition compile_cu (cu : list (A.stmt * nat) * list metadata) :
+        list (B.stmt * B.expr) * list metadata :=
+    let '(funcs, metas) := cu in
+    (map compile_func funcs, metas).
+
 
 
 Inductive I_expr : A.expr -> B.expr -> Prop :=
@@ -149,7 +158,7 @@ intros0 Hcomp; simpl in Hcomp; try rewrite <- Hcomp; refold_compile;
 try solve [econstructor; eauto].
 Qed.
 
-Lemma map_compile_I_expr : forall a b,
+Lemma compile_list_I_expr : forall a b,
     map compile_expr a = b ->
     Forall2 I_expr a b.
 induction a;
@@ -157,7 +166,7 @@ intros0 Hcomp; simpl in Hcomp; try rewrite <- Hcomp; refold_compile;
 try solve [econstructor; eauto using compile_I_expr].
 Qed.
 
-Theorem compile_I_stmt : forall a b,
+Lemma compile_I_stmt : forall a b,
     compile a = b ->
     I_stmt a b.
 induction a using A.stmt_rect_mut with
@@ -165,7 +174,32 @@ induction a using A.stmt_rect_mut with
         compile_list a = b ->
         Forall2 I_stmt a b);
 intros0 Hcomp; simpl in Hcomp; try rewrite <- Hcomp; refold_compile;
-try solve [econstructor; eauto using compile_I_expr, map_compile_I_expr].
+try solve [econstructor; eauto using compile_I_expr, compile_list_I_expr].
+Qed.
+
+Lemma compile_list_I_stmt : forall a b,
+    compile_list a = b ->
+    Forall2 I_stmt a b.
+induction a;
+intros0 Hcomp; simpl in Hcomp; try rewrite <- Hcomp; refold_compile;
+try solve [econstructor; eauto using compile_I_stmt].
+Qed.
+
+Lemma compile_I_func : forall a b,
+    compile_func a = b ->
+    I_func a b.
+intros0 Hcomp. destruct a.
+unfold compile_func in Hcomp. rewrite <- Hcomp.
+econstructor. eauto using compile_I_stmt.
+Qed.
+
+Theorem compile_cu_I_env : forall a ameta b bmeta,
+    compile_cu (a, ameta) = (b, bmeta) ->
+    Forall2 I_func a b.
+intros0 Hcomp. unfold compile_cu in *. inject_pair.
+remember (map compile_func a) as b.
+symmetry in Heqb. apply map_Forall2 in Heqb.
+list_magic_on (a, (b, tt)). eauto using compile_I_func.
 Qed.
 
 
