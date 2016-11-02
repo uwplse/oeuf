@@ -1557,6 +1557,175 @@ Proof.
   eauto.
 Qed.
 
+
+Section ALLOC.
+
+Variable m1: mem.
+Variables lo hi: Z.
+Variable m2: mem.
+Variable b: block.
+Hypothesis ALLOC: Mem.alloc m1 lo hi = (m2, b).
+
+
+Lemma alloc_access_result :
+  Mem.mem_access m2 = PMap.set (Mem.nextblock m1)
+                           (fun (ofs : Z) (_ : perm_kind) =>
+                              if zle lo ofs && zlt ofs hi then Some Freeable else None)
+                           (Mem.mem_access m1).
+Proof.
+  intros.
+  unfold alloc in *. inv ALLOC.
+  simpl. reflexivity.
+Qed.
+
+End ALLOC.
+
+Lemma alloc_drop :
+  forall m lo hi b m',
+    Mem.alloc m lo hi = (m',b) ->
+    forall k m0,
+      Mem.mem_access m' = Mem.mem_access m0 ->
+      exists m'',
+        Mem.drop_perm m0 b lo hi k = Some m''.
+Proof.
+  intros. app alloc_access_result Mem.alloc.
+  rewrite H0 in H. clear H0.
+  unfold Mem.drop_perm.
+  break_match; try solve [eauto].
+  exfalso. apply n.
+  unfold Mem.range_perm.
+  intros.
+  unfold Mem.perm.
+  unfold Mem.perm_order'.
+  rewrite H.
+  app Mem.alloc_result Mem.alloc.
+  subst. rewrite PMap.gss.
+  unfold proj_sumbool. unfold andb.
+  repeat break_match; try congruence; try omega. inv Heqo.
+  econstructor.
+Qed.
+
+(*
+Lemma store_zeros_succeeds :
+  forall m b lo hi,
+    (forall ofs, lo <= ofs < hi -> Mem.valid_access m Mint8unsigned b ofs Writable) ->
+    exists m',
+      store_zeros m b lo hi = Some m' /\ Mem.mem_access m = Mem.mem_access m'.
+Proof.
+Admitted.
+
+Lemma alloc_global_succeeds :
+  forall {F V} (ge : Genv.t F V) a m,
+  exists m',
+    Genv.alloc_global ge m a = Some m'.
+Proof.
+  intros. destruct a.
+  simpl. destruct g.
+  break_let. eapply alloc_drop; eauto.
+  break_let. remember (Genv.init_data_list_size (gvar_init v)) as hi.
+  assert (forall ofs, 0 <= ofs < hi -> Mem.valid_access m0 Mint8unsigned b ofs Writable).
+  intros.
+  eapply Mem.valid_access_implies.
+  eapply Mem.valid_access_alloc_same; eauto; try omega. simpl. omega.
+  simpl. eapply Z.divide_1_l.
+  econstructor.
+  edestruct store_zeros_succeeds; repeat break_and; try rewrite H0; eauto.
+
+  
+Lemma store_init_data_list_succeeds :
+  forall m b lo hi,
+    (forall ofs, lo <= ofs < hi -> Mem.valid_access m Mint8unsigned b ofs Writable) ->
+    exists m',
+      store_zeros m b lo hi = Some m' /\ Mem.mem_access m = Mem.mem_access m'.
+Proof.
+Admitted.
+*)  
+  
+
+Lemma alloc_global_succeeds :
+  forall {F V} (ge : Genv.t F V) id f m,
+  exists m',
+    Genv.alloc_global ge m (id,Gfun f) = Some m'.
+Proof.
+  intros.
+  simpl. 
+  break_let. eapply alloc_drop; eauto.
+Qed.
+
+(* This is true but needs translation validation *)
+Lemma prog_defs_funs :
+  forall id g,
+    In (id,g) (prog_defs tprog) ->
+    exists f,
+      g = Gfun f.
+Proof.
+Admitted.
+
+Lemma alloc_globals_funs_succeeds :
+  forall l m,
+  (forall id g, In (id,g) l -> (exists f, g = Gfun f)) ->
+  exists m',
+    Genv.alloc_globals tge m l = Some m'.
+Proof.
+  induction l; intros.
+  simpl. eauto.
+  simpl.
+  assert (In a (a :: l)). simpl. left. auto.
+  destruct a. eapply H in H0. break_exists. subst g.
+  edestruct (alloc_global_succeeds tge); eauto.
+  rewrite H0.
+  eapply IHl. intros. eapply H. simpl. right. eauto.
+Qed.
+
+Lemma init_mem_succeeds :
+  exists m,
+    Genv.init_mem tprog = Some m.
+Proof.
+  unfold Genv.init_mem.
+  edestruct alloc_globals_funs_succeeds; eauto.
+  eapply prog_defs_funs.
+Qed.
+
+(* Probably need to just validate this, no big deal *)
+Lemma funsig_main :
+  forall b f f',
+    Genv.find_symbol ge (prog_main prog) = Some b ->
+    Genv.find_funct_ptr ge b = Some (Internal f) ->
+    transf_function f = OK f' ->
+    funsig f' = signature_main.
+Proof.
+Admitted.
+
+Lemma initial_states_match :
+  forall st,
+    Emajor.initial_state prog st ->
+    exists st',
+      Dmajor.initial_state tprog st' /\ match_states st st'.
+Proof.
+  intros. inv H.
+  destruct init_mem_succeeds.
+  app functions_transf Genv.find_funct_ptr.
+  unfold tge in *. 
+  destruct x0; simpl in H4; unfold bind in *; simpl in H4; break_match_hyp; try congruence.
+  inv H4.
+  eexists; split; repeat (econstructor; eauto).
+  unfold transf_prog in *.
+  erewrite transform_partial_program_main; eauto.
+  eapply symbols_transf; eauto.
+  eapply funsig_main; eauto.
+Qed.
+
+
+Lemma match_final_states :
+  forall st st' r,
+    match_states st st' ->
+    Emajor.final_state st r ->
+    Dmajor.final_state st' r.
+Proof.
+  intros. inv H0. inv H.
+  inv H5.
+Admitted. (* This is where we need pointers in final states. Right here *)
+
 Theorem fsim :
   forward_simulation (Emajor.semantics prog) (Dmajor.semantics tprog).
 Proof.
@@ -1565,12 +1734,12 @@ Proof.
   unfold transf_prog in *.
   eapply Genv.public_symbol_transf_partial; eauto.
 
-  admit.
-  admit.
-
+  eapply initial_states_match; eauto.
+  eapply match_final_states; eauto.
+  
   intros. eapply step_sim; eauto.
   
-Admitted.
+Qed.
 
 
 End PRESERVATION.
