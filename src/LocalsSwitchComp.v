@@ -14,28 +14,6 @@ Add Printing Constructor A.frame.
 Add Printing Constructor B.frame.
 
 
-Section compile.
-Open Scope state_monad.
-
-(*
-Definition A_dst e :=
-    match e with
-    | A.Arg dst => dst
-    | A.Self dst => dst
-    | A.Deref dst _ => dst
-    | A.Call dst => dst
-    | A.MkConstr dst _ _ => dst
-    | A.Switch dst _ => dst
-    | A.MkClose dst _ _ => dst
-    end.
-
-Fixpoint last_dest dst is :=
-    match is with
-    | [] => dst
-    | i :: is => last_dest (A_dst i) is
-    end.
-*)
-
 Definition compile : A.insn -> B.insn :=
     let fix go e :=
         let fix go_list (es : list A.insn) : list B.insn :=
@@ -74,7 +52,13 @@ Definition compile_case_list :=
         | e :: es => (go_list e ++ [B.Copy dst]) :: go_case_list dst es
         end in go_case_list.
 
-End compile.
+Definition compile_func (f : list A.insn) : list B.insn :=
+    compile_list f.
+
+Definition compile_cu (cu : list (list A.insn) * list metadata) :
+        list (list B.insn) * list metadata :=
+    let '(funcs, metas) := cu in
+    (map compile_func funcs, metas).
 
 Ltac refold_compile :=
     fold compile_list in *;
@@ -138,7 +122,7 @@ Inductive I : A.state -> B.state -> Prop :=
 
 
 
-Theorem compile_I_expr : forall a b,
+Lemma compile_I_insn : forall a b,
     compile a = b ->
     I_insn a b.
 induction a using A.insn_rect_mut with
@@ -151,7 +135,32 @@ induction a using A.insn_rect_mut with
 intros0 Hcomp; simpl in Hcomp; try rewrite <- Hcomp; refold_compile;
 try solve [econstructor; eauto].
 
-- constructor; eauto. constructor. eauto.
+- constructor; eauto. constructor; eauto.
+Qed.
+
+Lemma compile_list_I_insn : forall a b,
+    compile_list a = b ->
+    Forall2 I_insn a b.
+induction a;
+intros0 Hcomp; simpl in Hcomp; try rewrite <- Hcomp; refold_compile;
+try solve [econstructor; eauto using compile_I_insn].
+Qed.
+
+Lemma compile_I_func : forall a b,
+    compile_func a = b ->
+    Forall2 I_insn a b.
+intros0 Hcomp.
+unfold compile_func in Hcomp. rewrite <- Hcomp.
+eauto using compile_list_I_insn.
+Qed.
+
+Theorem compile_cu_I_env : forall a ameta b bmeta,
+    compile_cu (a, ameta) = (b, bmeta) ->
+    Forall2 (Forall2 I_insn) a b.
+intros0 Hcomp. unfold compile_cu in *. inject_pair.
+remember (map compile_func a) as b.
+symmetry in Heqb. apply map_Forall2 in Heqb.
+list_magic_on (a, (b, tt)). eauto using compile_I_func.
 Qed.
 
 

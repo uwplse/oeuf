@@ -115,11 +115,22 @@ Definition compile_case_list :=
 Definition compile_func func :=
     let '(code, ret) := func in
     match check_and_rewind (compile_list code) [ret] [] with
-    | Some (code', _) => Some (code', [ret])
+    | Some (code', _) => Some (code', ret)
     | None => None
     end.
 
 End compile.
+
+Section compile_cu.
+Open Scope option_monad.
+
+Definition compile_cu (cu : list (list A.insn * nat) * list metadata) :
+        option (list (list B.insn * nat) * list metadata) :=
+    let '(funcs, metas) := cu in
+    map_partial compile_func funcs >>= fun funcs' =>
+    Some (funcs', metas).
+
+End compile_cu.
 
 Ltac refold_compile :=
     fold compile_list in *;
@@ -236,7 +247,7 @@ induction cases; intros0 Hcomp; simpl in *; break_bind_state_option.
 - do 2 on _, apply_lem check_and_rewind_state_eq. congruence.
 Qed.
 
-Theorem compile_I_expr : forall a b s s',
+Theorem compile_I_insn : forall a b s s',
     compile a s = Some (b, s') ->
     I_insn a b s s'.
 induction a using A.insn_rect_mut with
@@ -263,6 +274,38 @@ try solve [econstructor; eauto].
   on _, apply_lem check_and_rewind_ok.
   constructor; eauto.
 Qed.
+
+Theorem compile_list_I_insn : forall a b s s',
+    compile_list a s = Some (b, s') ->
+    I_insns a b s s'.
+induction a;
+intros0 Hcomp; simpl in Hcomp; refold_compile;
+unfold push, pop, popn in *; break_bind_state_option;
+repeat (break_match; try discriminate); inject_some;
+try solve [econstructor; eauto using compile_I_insn].
+Qed.
+
+Lemma compile_I_func : forall a b,
+    compile_func a = Some b ->
+    I_func a b.
+intros0 Hcomp.
+unfold compile_func in Hcomp.
+  break_match. break_match; try discriminate. break_match. inject_some.
+unfold check_and_rewind in *.
+  break_match; try discriminate. break_match.
+  break_match; try discriminate. inject_some.
+constructor; eauto using compile_list_I_insn.
+Qed.
+
+Theorem compile_cu_I_env : forall a ameta b bmeta,
+    compile_cu (a, ameta) = Some (b, bmeta) ->
+    Forall2 I_func a b.
+intros0 Hcomp. unfold compile_cu in *. break_bind_option. inject_some.
+rename Heqo into Heqb.
+apply map_partial_Forall2 in Heqb.
+list_magic_on (a, (b, tt)). eauto using compile_I_func.
+Qed.
+
 
 
 
