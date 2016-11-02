@@ -59,11 +59,21 @@ Definition compile_list_list :=
         | e :: es => @cons _ <$> go_list e <*> go_list_list es
         end in go_list_list.
 
+Definition compile_func (f : list A.insn) : list B.insn :=
+    let body := f in
+    let '(body', _) := compile_list body 0 in
+    body'.
+
+Definition compile_cu (cu : list (list A.insn) * list metadata) :
+        list (list B.insn) * list metadata :=
+    let '(funcs, metas) := cu in
+    (map compile_func funcs, metas).
+
+End compile.
+
 Ltac refold_compile :=
     fold compile_list in *;
     fold compile_list_list in *.
-
-End compile.
 
 
 
@@ -131,7 +141,7 @@ Inductive I : A.state -> B.state -> Prop :=
 
 
 
-Theorem compile_I_expr : forall a b s s',
+Lemma compile_I_insn : forall a b s s',
     compile a s = (b, s') ->
     I_insn a b.
 induction a using A.insn_rect_mut with
@@ -143,6 +153,31 @@ induction a using A.insn_rect_mut with
         Forall2 (Forall2 I_insn) a b);
 intros0 Hcomp; simpl in Hcomp; break_bind_state;
 try solve [econstructor; eauto].
+Qed.
+
+Lemma compile_list_I_insn : forall a b s s',
+    compile_list a s = (b, s') ->
+    Forall2 I_insn a b.
+induction a;
+intros0 Hcomp; simpl in Hcomp; break_bind_state;
+try solve [econstructor; eauto using compile_I_insn].
+Qed.
+
+Lemma compile_I_func : forall a b,
+    compile_func a = b ->
+    Forall2 I_insn a b.
+intros0 Hcomp.
+unfold compile_func in Hcomp. break_match. rewrite <- Hcomp.
+eauto using compile_list_I_insn.
+Qed.
+
+Theorem compile_cu_I_env : forall a ameta b bmeta,
+    compile_cu (a, ameta) = (b, bmeta) ->
+    Forall2 (Forall2 I_insn) a b.
+intros0 Hcomp. unfold compile_cu in *. inject_pair.
+remember (map compile_func a) as b.
+symmetry in Heqb. apply map_Forall2 in Heqb.
+list_magic_on (a, (b, tt)). eauto using compile_I_func.
 Qed.
 
 

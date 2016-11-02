@@ -53,15 +53,17 @@ Definition compile_list_list :=
         | e :: es => go_list e :: go_list_list es
         end in go_list_list.
 
+Definition compile_func (f : list A.insn) : list B.insn * nat :=
+    (compile_list f, A.last_dest 0 f).
+
+Definition compile_cu (cu : list (list A.insn) * list metadata) :
+        list (list B.insn * nat) * list metadata :=
+    let '(funcs, metas) := cu in
+    (map compile_func funcs, metas).
+
 Ltac refold_compile :=
     fold compile_list in *;
     fold compile_list_list in *.
-
-
-
-Definition label_func a := (compile_list a, A.last_dest 0 a).
-
-Definition label_func_list := map label_func.
 
 
 
@@ -84,6 +86,12 @@ Inductive I_insn : A.insn -> B.insn -> Prop :=
 | ICopy : forall dst,
         I_insn (A.Copy dst) (B.Copy dst)
 .
+
+Inductive I_func : list A.insn -> list B.insn * nat -> Prop :=
+| IFunc : forall acode bcode bret,
+        Forall2 I_insn acode bcode ->
+        bret = A.last_dest 0 acode ->
+        I_func acode (bcode, bret).
 
 Inductive I_frame : A.frame -> B.frame -> Prop :=
 | IFrame : forall arg self stk locals,
@@ -114,7 +122,7 @@ Inductive I : A.state -> B.state -> Prop :=
 
 
 
-Theorem compile_I_expr : forall a b,
+Theorem compile_I_insn : forall a b,
     compile a = b ->
     I_insn a b.
 induction a using A.insn_rect_mut with
@@ -128,13 +136,29 @@ intros0 Hcomp; simpl in Hcomp; try rewrite <- Hcomp; refold_compile;
 try solve [econstructor; eauto].
 Qed.
 
-Theorem compile_list_I_expr : forall a b,
+Theorem compile_list_I_insn : forall a b,
     compile_list a = b ->
     Forall2 I_insn a b.
 induction a; intros0 Hcomp; simpl in Hcomp; try rewrite <- Hcomp;
-try solve [econstructor; eauto using compile_I_expr].
+try solve [econstructor; eauto using compile_I_insn].
 Qed.
-Hint Resolve compile_list_I_expr.
+
+Lemma compile_I_func : forall a b,
+    compile_func a = b ->
+    I_func a b.
+intros0 Hcomp.
+unfold compile_func in Hcomp. rewrite <- Hcomp.
+constructor; eauto using compile_list_I_insn.
+Qed.
+
+Theorem compile_cu_I_env : forall a ameta b bmeta,
+    compile_cu (a, ameta) = (b, bmeta) ->
+    Forall2 I_func a b.
+intros0 Hcomp. unfold compile_cu in *. inject_pair.
+remember (map compile_func a) as b.
+symmetry in Heqb. apply map_Forall2 in Heqb.
+list_magic_on (a, (b, tt)). eauto using compile_I_func.
+Qed.
 
 
 
@@ -186,31 +210,6 @@ intros0 HP II. invc II.
 - eapply HP; eauto.
 Qed.
 
-(*
-Lemma I_cont_cons_inv : forall ai acode ak bcode top bk
-        (P : _ -> _ -> _ -> _ -> _ -> _ -> Prop),
-    (forall bi bcode' top',
-        bcode = bi :: bcode' ->
-        I_insn ai bi ->
-        Forall2 I_insn acode bcode' ->
-        I_cont acode ak bcode' top' bk ->
-        cont_ret bk = A.last_dest top (ai :: acode) ->
-        P ai acode ak bcode top bk) ->
-    I_cont (ai :: acode) ak bcode top bk -> P ai acode ak bcode top bk.
-intros0 HP II. invc II.
-
-- on (Forall2 _ (_ :: _) _), invc.
-  eapply HP; clear HP; eauto.
-  constructor; eauto.
-  destruct acode; simpl; eauto.
-
-- on (Forall2 _ (_ :: _) _), invc.
-  eapply HP; clear HP; eauto.
-  constructor; eauto.
-  destruct acode; simpl; eauto.
-Qed.
-*)
-
 Lemma app_last_dest' : forall ret ret' xs ys,
     ret = A.last_dest ret' xs ->
     ret = A.last_dest ret ys ->
@@ -224,18 +223,6 @@ Lemma app_last_dest : forall ret xs ys,
     ret = A.last_dest ret (xs ++ ys).
 intros. eapply app_last_dest'; eauto.
 Qed.
-
-(*
-Lemma app_I_cont : forall acode acode' ak bcode bcode' bk ret,
-    I_cont acode ak bcode bk ->
-    Forall2 I_insn acode' bcode' ->
-    ret = A.last_dest ret acode' ->
-    ret = cont_ret bk ->
-    I_cont (acode' ++ acode) ak (bcode' ++ bcode) bk.
-intros0 II Hfa Hdest Hret; invc II; simpl in *;
-constructor; eauto using Forall2_app, app_last_dest.
-Qed.
-*)
 
 Lemma push_I_frame : forall af bf dst v,
     I_frame af bf ->
@@ -265,43 +252,6 @@ Lemma app_last_dest_eq : forall default xs ys,
     A.last_dest (A.last_dest default xs) ys.
 first_induction xs; simpl in *; eauto.
 Qed.
-
-(*
-Lemma switch_I_cont : forall tag dst acases acase acode ak bcases bcase bcode bk,
-    nth_error acases tag = Some acase ->
-    nth_error bcases tag = Some bcase ->
-    A.switch_dest_ok (A.Switch dst acases) ->
-    I_cont (A.Switch dst acases :: acode) ak
-           (B.Switch dst bcases :: bcode) bk ->
-    I_cont (acase ++ acode) ak
-           (bcase ++ bcode) bk.
-intros0 Ha Hb Hok II; invc II;
-on (Forall2 _ (_ :: _) _), invc;
-on >I_insn, invc.
-
-(* get facts about the case *)
-all: simpl in *; A.refold_switch_dest_ok;
-     rewrite A.switch_dest_ok_case_list_Forall in *.
-all: fwd eapply Forall_nth_error; try eassumption.
-all: simpl in *; break_and.
-
-- constructor; eauto.
-  + eapply Forall2_app; eauto.
-    eapply Forall2_nth_error; eauto.
-  + destruct acode.
-    * rewrite app_nil_r. simpl in *.
-      destruct acase; simpl in *; congruence.
-    * rewrite app_last_dest_eq. simpl in *. auto.
-
-- constructor; eauto.
-  + eapply Forall2_app; eauto.
-    eapply Forall2_nth_error; eauto.
-  + destruct acode.
-    * rewrite app_nil_r. simpl in *.
-      destruct acase; simpl in *; congruence.
-    * rewrite app_last_dest_eq. simpl in *. auto.
-Qed.
-*)
 
 Lemma switch_I_cont : forall tag dst acases acase acode af ak bcases bcase bcode bf bk,
     nth_error acases tag = Some acase ->
@@ -333,8 +283,6 @@ all: simpl in *; break_and.
 Qed.
 
 
-
-
 Lemma I_tail : forall ai acode af af' ak bi bcode bf bf' bk,
     I_frame af' bf' ->
     hd 0 (A.stack af') = A.dest ai ->
@@ -362,7 +310,7 @@ intros0 II. invc II.
 Qed.
 
 Theorem I_sim : forall AE BE a a' b,
-    label_func_list AE = BE ->
+    Forall2 I_func AE BE ->
     A.state_switch_dest_ok a ->
     I a b ->
     A.sstep AE a a' ->
@@ -405,7 +353,10 @@ simpl in *; try subst.
   i_lem I_tail. auto.
 
 - (* MakeCall *)
-  fwd eapply map_nth_error with (f := label_func); eauto.
+  fwd eapply Forall2_nth_error_ex with (xs := AE) as HH; eauto. 
+    destruct HH as ([bbody bret] & ? & ?).
+  on >I_func, invc.
+
   eexists. split. eapply B.SMakeCall; simpl; eauto.
   i_ctor. i_lem I_tail. auto.
 
