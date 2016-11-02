@@ -84,10 +84,46 @@ list_magic_on (e00, (e01, (e02, (e03, (e04, (e05, (e06, (e07, (e08, (e09, (e10, 
 eapply IFuncCombined; eassumption.
 Qed.
 
+Ltac break_result_chain :=
+    let go l :=
+        match l with
+        | OK _ => fail 1
+        | _ => destruct l eqn:?; try discriminate
+        end in
+    repeat match goal with
+    | [ H : context [ ?l @@ ?r ] |- _ ] => go l
+    | [ H : context [ ?l @@@ ?r ] |- _ ] => go l
+    end.
+
+Ltac inject_ok :=
+    repeat match goal with
+    | [ H : OK ?x = OK ?y |- _ ] =>
+            assert (x = y) by congruence;
+            clear H
+    end.
+
+
 Theorem compile_I_func : forall a ameta b bmeta,
-    compile_cu (a, ameta) = Some (b, bmeta) ->
+    compile_cu (a, ameta) = OK (b, bmeta) ->
     Forall2 I_func a b.
 intros0 Hcomp. unfold compile_cu in *.
-match goal with
-| [ H : context [ ?l @@ ?r ] |- _ ] => idtac l; idtac r
-end.
+
+remember (a, ameta) as aprog.
+break_result_chain.  simpl in *.  inject_ok.
+unfold option_to_res in *. repeat (break_match; try discriminate).
+subst aprog.  repeat on (_ * _)%type, fun x => destruct x.
+
+on _, eapply_lem FlatSwitchComp.compile_cu_I_env.
+on _, eapply_lem FlatSeqComp.compile_cu_I_env.
+on _, eapply_lem FlatSeqComp2.compile_cu_I_env.
+on _, eapply_lem FlatSeqStmtComp.compile_cu_I_env.
+on _, eapply_lem FlatReturnComp.compile_cu_I_env.
+on _, eapply_lem FlatExprComp.compile_cu_I_env.
+on _, eapply_lem FlatExprRetComp.compile_cu_I_env.
+on _, eapply_lem FlatStopComp.compile_cu_I_env.
+on _, eapply_lem FlatDestCheckComp.compile_cu_I_env.
+on _, eapply_lem FlatIntTagComp.compile_cu_I_env.
+
+inject_ok. inject_pair.
+eapply chain_I_env; eassumption.
+Qed.
