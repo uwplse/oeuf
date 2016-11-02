@@ -80,15 +80,18 @@ Inductive sstep (E : env) : state -> state -> Prop :=
                 (Run s1 f (Kseq s2 k))
 
 | SConstrDone : forall dst tag args f k vs,
+        local f dst = None ->
         Forall2 (eval f) args vs ->
         sstep E (Run (MkConstr dst tag args) f k)
                 (Run Skip (set f dst (Constr tag vs)) k)
 | SCloseDone : forall dst fname free f k vs,
+        local f dst = None ->
         Forall2 (eval f) free vs ->
         sstep E (Run (MkClose dst fname free) f k)
                 (Run Skip (set f dst (Close (Pos.of_succ_nat fname) vs)) k)
 
 | SMakeCall : forall dst fe ae f k  fname free arg body ret,
+        local f dst = None ->
         eval f fe (Close fname free) ->
         eval f ae arg ->
         nth_error E (pred (Pos.to_nat fname)) = Some (body, ret) ->
@@ -104,6 +107,7 @@ Inductive sstep (E : env) : state -> state -> Prop :=
                 (Run case f (Kswitch k))
 
 | SAssign : forall dst src f k v,
+        local f dst = None ->
         eval f src v ->
         sstep E (Run (Assign dst src) f k)
                 (Run Skip (set f dst v) k)
@@ -119,6 +123,7 @@ Inductive sstep (E : env) : state -> state -> Prop :=
         sstep E (Run Skip f (Kreturn ret k))
                 (Return v k)
 | SContCall : forall v dst f k,
+        local f dst = None ->
         sstep E (Return v (Kcall dst f k))
                 (Run Skip (set f dst v) k)
 .

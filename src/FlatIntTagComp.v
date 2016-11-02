@@ -4,13 +4,13 @@ Require Import ZArith.
 Require Import Common Monads.
 Require Import Metadata.
 Require String.
-Require FlatStop FlatIntTag.
+Require FlatDestCheck FlatIntTag.
 Require Import ListLemmas.
 Require HighValues HigherValue.
 
 Require Import Psatz.
 
-Module A := FlatStop.
+Module A := FlatDestCheck.
 Module B := FlatIntTag.
 
 Module V1 := HigherValue.
@@ -331,6 +331,22 @@ eapply numbered_zlookup'.
 - lia.
 - replace (n - 0) with n by lia. auto.
 Qed.
+
+Lemma I_frame_local_none : forall af bf l,
+    I_frame af bf ->
+    A.local af l = None ->
+    B.local bf l = None.
+intros0 II Anone. invc II.
+
+assert (Heq : keys alocals = keys blocals). {
+  eapply Forall2_map_eq. list_magic_on (alocals, (blocals, tt)). intuition.
+}
+
+eapply in_keys_lookup_none.
+simpl. rewrite <- Heq.
+eapply lookup_none_in_keys. auto.
+Qed.
+Hint Resolve I_frame_local_none.
 
 Theorem I_sim : forall AE BE a a' b,
     Forall2 I_func AE BE ->
