@@ -248,6 +248,13 @@ induction xs; destruct ys; intros0 Hfa; invc Hfa; eauto.
 simpl. specialize (IHxs ?? **). repeat find_rewrite. reflexivity.
 Qed.
 
+Lemma map_Forall2 : forall A B (f : A -> B) xs ys,
+    map f xs = ys ->
+    Forall2 (fun x y => f x = y) xs ys.
+induction xs; intros0 Hmap; destruct ys; try discriminate; eauto.
+simpl in *. invc Hmap. eauto.
+Qed.
+
 Lemma Forall2_rev : forall A B P (xs : list A) (ys : list B),
     Forall2 P xs ys ->
     Forall2 P (rev xs) (rev ys).

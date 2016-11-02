@@ -478,13 +478,6 @@ contradict HH. eapply list_norepet_nth_error_unique.
 - invc Mok. auto.
 Qed.
 
-Lemma map_Forall2 : forall A B (f : A -> B) xs ys,
-    map f xs = ys ->
-    Forall2 (fun x y => f x = y) xs ys.
-induction xs; intros0 Hmap; destruct ys; try discriminate; eauto.
-simpl in *. invc Hmap. eauto.
-Qed.
-
 Lemma nth_error_unique_list_norepet  : forall A (xs : list A),
     (forall n1 n2 x,
         nth_error xs n1 = Some x ->

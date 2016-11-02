@@ -76,6 +76,17 @@ Definition compile_list :=
         | e :: es => @cons _ <$> go e <*> go_list es
         end in go_list.
 
+Definition compile_func (f : A.stmt * A.expr) : option (B.stmt * B.expr) :=
+    let '(body, ret) := f in
+    compile body >>= fun body' =>
+    Some (body', compile_expr ret).
+
+Definition compile_cu (cu : list (A.stmt * A.expr) * list metadata) :
+        option (list (B.stmt * B.expr) * list metadata) :=
+    let '(funcs, metas) := cu in
+    map_partial compile_func funcs >>= fun funcs' =>
+    Some (funcs', metas).
+
 End compile.
 
 Ltac refold_compile :=
@@ -194,7 +205,7 @@ intros0 Hcomp; simpl in Hcomp; try rewrite <- Hcomp; refold_compile;
 try solve [econstructor; eauto].
 Qed.
 
-Lemma map_compile_I_expr : forall a b,
+Lemma compile_list_I_expr : forall a b,
     map compile_expr a = b ->
     Forall2 I_expr a b.
 induction a;
@@ -202,22 +213,48 @@ intros0 Hcomp; simpl in Hcomp; try rewrite <- Hcomp; refold_compile;
 try solve [econstructor; eauto using compile_I_expr].
 Qed.
 
-Theorem compile_I_stmt : forall a b,
+Lemma compile_I_stmt : forall a b,
     compile a = Some b ->
     I_stmt a b.
 induction a using A.stmt_rect_mut with
     (Pl := fun a => forall b,
         compile_list a = Some b ->
         Forall2 I_stmt a b);
-intros0 Hcomp; simpl in Hcomp; break_bind_option; inject_some; refold_compile;
-try solve [econstructor; eauto using compile_I_expr, map_compile_I_expr].
+intros0 Hcomp; simpl in Hcomp; refold_compile; break_bind_option; inject_some;
+try solve [econstructor; eauto using compile_I_expr, compile_list_I_expr].
 
-- constructor.
-  + unfold nat_to_int in *. break_if; try discriminate.
+- (* Switch *)
+  constructor.
+  + unfold nat_to_int in *.  break_if; try discriminate.
     inject_some.
-    rewrite Int.unsigned_repr; eauto.
-    unfold Int.max_unsigned. lia.
-  + eauto using map_compile_I_expr.
+    rewrite Int.unsigned_repr by (unfold Int.max_unsigned; omega).
+    auto.
+  + eauto using compile_list_I_expr.
+Qed.
+
+Lemma compile_list_I_stmt : forall a b,
+    compile_list a = Some b ->
+    Forall2 I_stmt a b.
+induction a;
+intros0 Hcomp; simpl in Hcomp; break_bind_option; inject_some;
+try solve [econstructor; eauto using compile_I_stmt].
+Qed.
+
+Lemma compile_I_func : forall a b,
+    compile_func a = Some b ->
+    I_func a b.
+intros0 Hcomp. destruct a.
+unfold compile_func in Hcomp. break_bind_option. inject_some.
+econstructor; eauto using compile_I_stmt, compile_I_expr.
+Qed.
+
+Theorem compile_cu_I_env : forall a ameta b bmeta,
+    compile_cu (a, ameta) = Some (b, bmeta) ->
+    Forall2 I_func a b.
+intros0 Hcomp. unfold compile_cu in *. inject_pair.
+break_bind_option. inject_some.
+rename Heqo into Heqb.  apply map_partial_Forall2 in Heqb.
+list_magic_on (a, (b, tt)). eauto using compile_I_func.
 Qed.
 
 
