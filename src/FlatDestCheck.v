@@ -79,15 +79,18 @@ Inductive sstep (E : env) : state -> state -> Prop :=
                 (Run s1 f (Kseq s2 k))
 
 | SConstrDone : forall dst tag args f k vs,
+        local f dst = None ->
         Forall2 (eval f) args vs ->
         sstep E (Run (MkConstr dst tag args) f k)
                 (Run Skip (set f dst (Constr tag vs)) k)
 | SCloseDone : forall dst fname free f k vs,
+        local f dst = None ->
         Forall2 (eval f) free vs ->
         sstep E (Run (MkClose dst fname free) f k)
                 (Run Skip (set f dst (Close fname vs)) k)
 
 | SMakeCall : forall dst fe ae f k  fname free arg body ret,
+        local f dst = None ->
         eval f fe (Close fname free) ->
         eval f ae arg ->
         nth_error E fname = Some (body, ret) ->
@@ -103,6 +106,7 @@ Inductive sstep (E : env) : state -> state -> Prop :=
                 (Run case f (Kswitch k))
 
 | SAssign : forall dst src f k v,
+        local f dst = None ->
         eval f src v ->
         sstep E (Run (Assign dst src) f k)
                 (Run Skip (set f dst v) k)
@@ -118,6 +122,7 @@ Inductive sstep (E : env) : state -> state -> Prop :=
         sstep E (Run Skip f (Kreturn ret k))
                 (Return v k)
 | SContCall : forall v dst f k,
+        local f dst = None ->
         sstep E (Return v (Kcall dst f k))
                 (Run Skip (set f dst v) k)
 .
@@ -186,160 +191,5 @@ Definition stmt_ind' (P : stmt -> Prop)
     ltac:(refine (@stmt_rect_mut P (Forall P)
         HSkip HSeq HCall HConstr HSwitch HClose HAssign _ _ i); eauto).
 
-
-
-Definition all_dests :=
-    let fix go s :=
-        let fix go_list ps :=
-            match ps with
-            | [] => []
-            | s :: ps => go s ++ go_list ps
-            end in
-        match s with
-        | Skip => []
-        | Seq s1 s2 => go s1 ++ go s2
-        | Call dst _ _ => [dst]
-        | MkConstr dst _ _ => [dst]
-        | Switch _ cases => go_list cases
-        | MkClose dst _ _ => [dst]
-        | Assign dst _ => [dst]
-        end in go.
-
-Definition all_dests_list :=
-    let go := all_dests in
-    let fix go_list ps :=
-        match ps with
-        | [] => []
-        | s :: ps => go s ++ go_list ps
-        end in go_list.
-
-Ltac refold_all_dests :=
-    fold all_dests_list in *.
-
-Definition cont_all_dests :=
-    let go := all_dests in
-    let fix go_cont k :=
-        match k with
-        | Kseq s k => go s ++ go_cont k
-        | Kswitch k => go_cont k
-        | Kreturn _ k => go_cont k
-        | Kcall dst _ k => []
-        | Kstop => []
-        end in go_cont.
-
-
-
-Definition dests_ok :=
-    let fix go s :=
-        let fix go_list ps :=
-            match ps with
-            | [] => True
-            | s :: ps => go s /\ go_list ps
-            end in
-        match s with
-        | Seq s1 s2 => go s1 /\ go s2 /\ disjoint (all_dests s1) (all_dests s2)
-        | Switch _ cases => go_list cases
-        | _ => True
-        end in go.
-
-Definition dests_ok_list :=
-    let go := dests_ok in
-    let fix go_list ps :=
-        match ps with
-        | [] => True
-        | s :: ps => go s /\ go_list ps
-        end in go_list.
-
-Ltac refold_dests_ok :=
-    fold dests_ok_list in *.
-
-Definition check_dests_ok s : { dests_ok s } + { ~ dests_ok s }.
-induction s using stmt_rect_mut with
-    (Pl := fun cases =>
-        { dests_ok_list cases } + { ~ dests_ok_list cases });
-try solve [left; constructor].
-
-- (* Seq *)
-  destruct IHs1; [ | right; intro; simpl in *; intuition ].
-  destruct IHs2; [ | right; intro; simpl in *; intuition ].
-  destruct (disjoint_dec eq_nat_dec (all_dests s1) (all_dests s2));
-    [ | right; intro; simpl in *; intuition ].
-  left. simpl. auto.
-
-- (* Switch *)
-  destruct IHs; [ | right; assumption ].
-  left. assumption.
-
-- (* cons *)
-  destruct IHs; [ | right; inversion 1; eauto ].
-  destruct IHs0; [ | right; inversion 1; eauto ].
-  left. constructor; eauto.
-Defined.
-
-Definition cont_dests_ok :=
-    let go := dests_ok in
-    let fix go_cont k :=
-        match k with
-        | Kseq s k => go s /\ go_cont k /\
-                disjoint (all_dests s) (cont_all_dests k)
-        | Kswitch k => go_cont k
-        | Kreturn _ k => go_cont k
-        | Kcall _ _ k => go_cont k
-        | Kstop => True
-        end in go_cont.
-
-Definition state_dests_ok :=
-    let go := dests_ok in
-    let go_cont := cont_dests_ok in
-    let go_state s :=
-        match s with
-        | Run s _ k => go s /\ go_cont k /\
-                disjoint (all_dests s) (cont_all_dests k)
-        | Return _ k => go_cont k
-        end in go_state.
-
-Lemma step_dests_ok : forall E s s',
-    Forall (fun f => dests_ok (fst f)) E ->
-    state_dests_ok s ->
-    sstep E s s' ->
-    state_dests_ok s'.
-intros0 Henv II Hstep; invc Hstep;
-simpl in *; refold_all_dests; refold_dests_ok.
-
-- repeat break_and. on _, invc_using disjoint_app_inv_l.
-  intuition. eauto using disjoint_app_r.
-
-- intuition.
-- intuition.
-- fwd eapply Forall_nth_error; eauto. simpl in *. intuition.
-
-- break_and.
-  on (arg _ = _), fun H => clear H.
-  generalize dependent cases. make_first cases. induction cases; intros; simpl in *.
-  + destruct tag; discriminate.
-  + destruct tag; simpl in *.
-    * inject_some. on _, invc_using disjoint_app_inv_l. intuition.
-    * on _, invc_using disjoint_app_inv_l. break_and. eapply IHcases; eauto.
-
-- intuition.
-- intuition.
-- intuition.
-- intuition.
-- intuition.
-Qed.
-
-
-
-Lemma all_dests_list_disjoint : forall xs cases n case,
-    disjoint xs (all_dests_list cases) ->
-    nth_error cases n = Some case ->
-    disjoint xs (all_dests case).
-induction cases; intros0 Hdj Hnth; simpl in *.
-- destruct n; discriminate.
-- on _, invc_using disjoint_app_inv_r.
-  destruct n; simpl in *.
-  + inject_some. auto.
-  + eapply IHcases; eauto.
-Qed.
 
 
