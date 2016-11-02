@@ -1031,6 +1031,19 @@ intros0 HP Hxy. inv_using distinct_app_inv' Hxy.
 eapply HP; eauto using distinct_disjoint.
 Qed.
 
+Lemma disjoint_dec {A}
+    (A_eq_dec : forall (x y : A), { x = y } + { x <> y })
+    (xs ys : list A) : { disjoint xs ys } + { ~ disjoint xs ys }.
+induction xs.
+- left. constructor. constructor.
+- rename a into x.
+  destruct (in_dec A_eq_dec x ys).
+    { right. inversion 1. on >Forall, invc. auto. }
+  destruct IHxs; [ | right; inversion 1; eauto ].
+  left. on >@disjoint, invc. constructor; eauto.
+Qed.
+  
+
 
 
 (* association list lookups *)
