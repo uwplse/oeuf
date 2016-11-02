@@ -974,6 +974,26 @@ simpl in *. firstorder.
 Qed.
 Hint Resolve tail_disjoint_r.
 
+Lemma disjoint_sym : forall A (xs ys : list A),
+    disjoint xs ys ->
+    disjoint ys xs.
+intros0 Hxy. invc Hxy. constructor.
+rewrite Forall_forall in *. intros.
+firstorder.
+Qed.
+
+Lemma disjoint_head_l : forall A (xs ys : list A) x,
+    disjoint (x :: xs) ys ->
+    ~ In x ys.
+intros0 Hxy. invc Hxy. on >Forall, invc. auto.
+Qed.
+
+Lemma disjoint_head_r : forall A (xs ys : list A) y,
+    disjoint xs (y :: ys) ->
+    ~ In y xs.
+intros. eauto using disjoint_sym, disjoint_head_l.
+Qed.
+
 Lemma nil_disjoint_l : forall A (ys : list A),
     disjoint [] ys.
 intros. constructor. constructor.
@@ -987,13 +1007,68 @@ Qed.
 Hint Resolve nil_disjoint_r.
 
 
-Lemma disjoint_sym : forall A (xs ys : list A),
-    disjoint xs ys ->
-    disjoint ys xs.
-intros0 Hxy. invc Hxy. constructor.
-rewrite Forall_forall in *. intros.
-firstorder.
+Lemma disjoint_cons_inv_l : forall A (xs ys : list A) x
+        (P : _ -> _ -> _ -> Prop),
+    (~ In x ys ->
+        disjoint xs ys ->
+        P x xs ys) ->
+    disjoint (x :: xs) ys -> P x xs ys.
+intros0 HP Hxy. invc Hxy. on >Forall, invc.
+eapply HP; eauto using Disjoint.
 Qed.
+
+Lemma disjoint_cons_inv_r : forall A (xs ys : list A) y
+        (P : _ -> _ -> _ -> Prop),
+    (~ In y xs ->
+        disjoint xs ys ->
+        P xs y ys) ->
+    disjoint xs (y :: ys) -> P xs y ys.
+intros0 HP Hxy. eapply disjoint_sym in Hxy.
+invc_using disjoint_cons_inv_l Hxy.
+eauto using disjoint_sym.
+Qed.
+
+Lemma disjoint_app_inv_l : forall A (xs1 xs2 ys : list A)
+        (P : _ -> _ -> _ -> Prop),
+    (disjoint xs1 ys ->
+        disjoint xs2 ys ->
+        P xs1 xs2 ys) ->
+    disjoint (xs1 ++ xs2) ys -> P xs1 xs2 ys.
+induction xs1; intros0 HP Hxy.
+- eapply HP; eauto.
+- rewrite <- app_comm_cons in *. invc_using disjoint_cons_inv_l Hxy.
+  on _, invc_using IHxs1.
+  eapply HP; eauto.
+Qed.
+
+Lemma disjoint_app_inv_r : forall A (xs ys1 ys2 : list A)
+        (P : _ -> _ -> _ -> Prop),
+    (disjoint xs ys1 ->
+        disjoint xs ys2 ->
+        P xs ys1 ys2) ->
+    disjoint xs (ys1 ++ ys2) -> P xs ys1 ys2.
+intros0 HP Hxy. eapply disjoint_sym in Hxy.
+invc_using disjoint_app_inv_l Hxy.
+eauto using disjoint_sym.
+Qed.
+
+Lemma disjoint_app_l : forall A (xs1 xs2 ys : list A),
+    disjoint xs1 ys ->
+    disjoint xs2 ys ->
+    disjoint (xs1 ++ xs2) ys.
+induction xs1; intros0 Hxy1 Hxy2.
+- simpl in *. auto.
+- simpl. on _, invc_using disjoint_cons_inv_l.
+  eapply cons_disjoint_l; eauto.
+Qed.
+
+Lemma disjoint_app_r : forall A (xs ys1 ys2 : list A),
+    disjoint xs ys1 ->
+    disjoint xs ys2 ->
+    disjoint xs (ys1 ++ ys2).
+intros. eauto using disjoint_sym, disjoint_app_l.
+Qed.
+
 
 Lemma distinct_disjoint : forall A (xs ys : list A),
     distinct (xs ++ ys) ->
