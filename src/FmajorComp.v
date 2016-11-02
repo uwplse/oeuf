@@ -323,20 +323,22 @@ Inductive I_value : value -> value -> Prop :=
         I_value (Close afname afree) (Close bfname bfree)
 .
 
-Inductive I_opt_value : value -> option value -> Prop :=
-| IOptValue : forall v1 v2,
+Inductive I_opt_value : option value -> option value -> Prop :=
+| IOVSome : forall v1 v2,
         I_value v1 v2 ->
-        I_opt_value v1 (Some v2).
+        I_opt_value (Some v1) (Some v2)
+| IOVNone : I_opt_value None None.
 Hint Constructors I_opt_value.
 
 Inductive I_frame : A.frame -> B.env -> Prop :=
-| IFrame : forall aarg aself alocals barg_id bself_id blocals_ids benv,
+| IFrame : forall aarg aself alocals barg_id bself_id benv,
         I_id IkArg barg_id ->
         I_id IkSelf bself_id ->
-        Forall2 (fun ai bi => I_id (IkVar ai) bi) (keys alocals) blocals_ids ->
-        I_opt_value aarg (benv ! barg_id) ->
-        I_opt_value aself (benv ! bself_id) ->
-        Forall2 (fun aentry bid => I_opt_value (snd aentry) (benv ! bid)) alocals blocals_ids ->
+        I_opt_value (Some aarg) (benv ! barg_id) ->
+        I_opt_value (Some aself) (benv ! bself_id) ->
+        (forall al bid,
+            I_id (IkVar al) bid ->
+            I_opt_value (lookup alocals al) (benv ! bid)) ->
         I_frame (A.Frame aarg aself alocals) benv
 .
 
@@ -743,44 +745,41 @@ rewrite PTree.gso; eauto.
 Qed.
 
 Lemma set_I_frame : forall M af adst av bf bdst bv,
+    id_map_ok M ->
     I_frame M af bf ->
     I_id M (IkVar adst) bdst ->
     I_value M av bv ->
     bf ! bdst = None ->
     I_frame M (A.set af adst av) (PTree.set bdst bv bf).
-intros0 II IIid IIval Hnone. invc II.
+intros0 Mok II IIid IIval Hnone. invc II.
 unfold A.set. simpl. econstructor; eauto.
-- econstructor; eauto.
 - rewrite PTree.gso; eauto. repeat on >I_opt_value, invc. congruence.
 - rewrite PTree.gso; eauto. repeat on >I_opt_value, invc. congruence.
-- econstructor.
-    { rewrite PTree.gss. simpl. constructor. auto. }
-  unfold keys in *. rewrite <- Forall2_map_l in *.
-  list_magic_on (blocals_ids, (alocals, tt)).
-  destruct alocals_i as [ak av']. simpl in *.
-  rewrite PTree.gso; eauto. repeat on >I_opt_value, invc. congruence.
+- intros.
+  destruct (eq_nat_dec al adst).
+  + subst al.  replace bid with bdst in * by (repeat on >I_id, invc; congruence).
+    rewrite PTree.gss. simpl. break_if; try congruence.
+    constructor. auto.
+  + assert (bid <> bdst) by (eapply I_id_ne; eauto; congruence).
+    rewrite PTree.gso by auto. simpl. break_if; try congruence.
+    eauto.
 Qed.
 Hint Resolve set_I_frame.
 
 Lemma set_switch_target_I_frame : forall M af bf bdst bv,
+    id_map_ok M ->
     I_frame M af bf ->
     I_id M IkSwitchTarget bdst ->
     bf ! bdst = None ->
     I_frame M af (PTree.set bdst bv bf).
-intros0 II IIid Hnone. invc II.
+intros0 Mok II IIid Hnone. invc II.
 unfold A.set. simpl. econstructor; eauto.
 - rewrite PTree.gso; eauto. repeat on >I_opt_value, invc. congruence.
 - rewrite PTree.gso; eauto. repeat on >I_opt_value, invc. congruence.
-- unfold keys in *. rewrite <- Forall2_map_l in *.
-  list_magic_on (blocals_ids, (alocals, tt)); cycle 1.
-    { (* automation broke :( *)
-      eapply nth_error_Forall2; eauto using Forall2_length.
-      intros. on _, eapply_; try eassumption.
-      - pattern x, y. eapply Forall2_nth_error; eauto.
-      - pattern x, y. eapply Forall2_nth_error; eauto.
-    }
-  destruct alocals_i as [ak av']. simpl in *.
-  rewrite PTree.gso; eauto. repeat on >I_opt_value, invc. congruence.
+- intros.
+  assert (bid <> bdst). { eapply I_id_ne; eauto. discriminate. }
+  rewrite PTree.gso by auto.
+  eauto.
 Qed.
 Hint Resolve set_switch_target_I_frame.
 
@@ -802,14 +801,9 @@ inv IIframe; invc Aeval; invc IIexpr.
 - repeat on >I_opt_value, invc.
   eexists; split; eauto. constructor. congruence.
 
-- fwd eapply lookup_nth_error as HH; eauto. simpl in *. destruct HH as [n ?].
-  fwd eapply map_nth_error with (f := fst) (l := alocals); eauto.
-    simpl in *. change (map fst alocals) with (keys alocals) in *.
-  fwd eapply Forall2_nth_error_ex with (xs := keys alocals) as HH; eauto.
-    destruct HH as (ak & ? & ?).
-  fwd eapply Forall2_nth_error with (ys := blocals_ids); eauto. simpl in *.
-
-  repeat on >I_opt_value, invc.
+- on _, fun H => specialize (H ?? ?? **).
+  unfold A.local in *. simpl in *. find_rewrite.
+  on >I_opt_value, invc.
   eexists; split; eauto. constructor. congruence.
 
 - fwd eapply IHae; eauto.  break_exists. break_and.
@@ -884,6 +878,20 @@ induction cases; intros0 Hlook Hsw; simpl in *.
   + break_and. eauto.
 Qed.
 
+Lemma I_frame_local_none : forall M af al bf bid,
+    I_frame M af bf ->
+    I_id M (IkVar al) bid ->
+    A.local af al = None ->
+    bf ! bid = None.
+intros0 II IIid Anone.
+invc II.
+on _, fun H => specialize (H ?? ?? IIid).
+unfold A.local in *. simpl in *. find_rewrite.
+on >I_opt_value, invc.
+reflexivity.
+Qed.
+Hint Resolve I_frame_local_none.
+
 Theorem I_sim : forall M AE BE a a' b,
     id_map_ok M ->
     I_env M AE BE ->
@@ -907,13 +915,11 @@ simpl in *.
   + on (_ \/ _), invc; [ left; auto | right; break_and; auto ].
 
 - (* MkConstr *)
-  assert (be ! bdst = None) by admit.
   fwd eapply eval_sim_forall as HH; eauto.  destruct HH as (bvs & ? & ?).
   eexists. split. eapply B.step_make_constr; eauto.
   i_ctor.
 
 - (* MkClose *)
-  assert (be ! bdst = None) by admit.
   break_and.
 
   rewrite <- nth_error_Some in *.
@@ -927,8 +933,6 @@ simpl in *.
   i_ctor. i_lem set_I_frame. i_ctor. rewrite nat_pos_nat. auto.
 
 - (* MakeCall *)
-  assert (be ! bdst = None) by admit.
-
   fwd eapply eval_sim with (ae := fe) as HH; eauto.  destruct HH as (bfe & ? & ?).
   fwd eapply eval_sim with (ae := ae0) as HH; eauto.  destruct HH as (bae & ? & ?).
   on (I_value _ (Close _ _) _), invc.
@@ -943,6 +947,9 @@ simpl in *.
   + rewrite PTree.gso, PTree.gss by (eapply I_id_ne; eauto; discriminate).
     constructor. auto.
   + rewrite PTree.gss. constructor. auto.
+  + intros.
+    rewrite PTree.gso, PTree.gso by (eapply I_id_ne; eauto; discriminate).
+    rewrite PTree.gempty. constructor.
   + left. intros.
     rewrite PTree.gso, PTree.gso by (eapply I_id_ne; eauto; discriminate).
     eapply PTree.gempty.
@@ -964,8 +971,6 @@ simpl in *.
   + right. break_and. eauto using zlookup_no_switch.
 
 - (* Assign *)
-  assert (be ! bdst = None) by admit.
-
   fwd eapply eval_sim as HH; eauto.  destruct HH as (bv & ? & ?).
 
   eexists. split. eapply B.step_assign; eauto.
@@ -998,4 +1003,4 @@ simpl in *.
   eexists. split. eapply B.step_return; eauto.
   i_ctor.
 
-Admitted.
+Qed.
