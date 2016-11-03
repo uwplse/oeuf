@@ -334,3 +334,27 @@ stk_simpl; try subst stack.
     { i_ctor. }
 
 Qed.
+
+
+
+Require Semantics.
+
+Section Preservation.
+
+  Variable prog : A.prog_type.
+  Variable tprog : B.prog_type.
+
+  Hypothesis TRANSF : compile_cu prog = tprog.
+
+  Theorem fsim :
+    Semantics.forward_simulation (A.semantics prog) (B.semantics tprog).
+  Proof.
+    eapply Semantics.forward_simulation_plus with (match_states := I).
+    - inversion 1. (* TODO - replace with callstate matching *)
+    - intros0 II Afinal. invc Afinal; invc II. constructor.
+    - intros0 Astep. intros0 II.
+      eapply splus_semantics_sim, I_sim; eauto.
+      destruct prog, tprog. eapply compile_cu_I_env; eauto.
+  Qed.
+
+End Preservation.

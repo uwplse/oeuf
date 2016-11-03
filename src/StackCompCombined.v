@@ -100,27 +100,33 @@ Section Preservation.
   Variable tprog : B.prog_type.
 
   Hypothesis TRANSF : compile_cu prog = OK tprog.
-
-  
-  (* Inductive match_states (AE : A.env) (BE : B.env) : A.expr -> B.expr -> Prop := *)
-  (* | match_st : *)
-  (*     forall a b, *)
-  (*       R AE BE a b -> *)
-  (*       match_states AE BE a b. *)
-
-  (* Lemma step_sim : *)
-  (*   forall AE BE a b, *)
-  (*     match_states AE BE a b -> *)
-  (*     forall a', *)
-  (*       A.step AE a a' -> *)
-  (*       exists b', *)
-  (*         splus (B.step BE) b b'. *)
-  (* Proof. *)
-  (* Admitted. *)
+  Hypothesis Anval : Forall A.no_values (fst prog).
 
   Theorem fsim :
     Semantics.forward_simulation (A.semantics prog) (B.semantics tprog).
   Proof.
-  Admitted.
+    unfold compile_cu in TRANSF.
+    break_result_chain.
+
+    eapply Semantics.compose_forward_simulation.
+    eapply StackMachComp.fsim; try eassumption.
+
+    eapply Semantics.compose_forward_simulation.
+    eapply StackContComp.fsim; try eassumption.
+
+    eapply Semantics.compose_forward_simulation.
+    eapply StackContComp2.fsim; try eassumption.
+
+    eapply Semantics.compose_forward_simulation.
+    eapply StackContComp3.fsim; try eassumption.
+
+    eapply Semantics.compose_forward_simulation.
+    eapply StackFlatComp.fsim; try eassumption.
+
+    eapply Semantics.compose_forward_simulation.
+    eapply StackFlatterComp.fsim; try eassumption.
+
+    eapply StackFlatterComp2.fsim; try eassumption.
+  Qed.
 
 End Preservation.

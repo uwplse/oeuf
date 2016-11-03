@@ -144,9 +144,10 @@ Definition prog_type : Type := env * list metadata.
 
 Inductive initial_state (prog : prog_type) : state -> Prop :=.
 
-Inductive final_state (prog : prog_type) : state -> Prop :=.
+Inductive final_state (prog : prog_type) : state -> Prop :=
+| FinalState : forall v, final_state prog (Stop v).
 
-Definition initial_env (prog : prog_type) : env := nil. (* TODO: write this *)
+Definition initial_env (prog : prog_type) : env := fst prog.
 
 Definition semantics (prog : prog_type) : Semantics.semantics :=
   @Semantics.Semantics_gen state env
