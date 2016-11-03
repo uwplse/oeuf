@@ -1,3 +1,5 @@
+Require Import StructTact.StructTactics.
+Require Import StuartTact.
 
 
 Section steplib.
@@ -96,3 +98,57 @@ End steplib.
 
 Implicit Arguments sstar [state].
 Implicit Arguments splus [state].
+
+
+Require Semantics.
+
+Lemma sstar_semantics : forall genv state step ge s s',
+    sstar (step ge) s s' ->
+    Semantics.star genv state step ge s s'.
+induction 1.
+- constructor.
+- econstructor; eauto.
+Qed.
+
+Lemma splus_semantics : forall genv state step ge s s',
+    splus (step ge) s s' ->
+    Semantics.plus genv state step ge s s'.
+destruct 1.
+- econstructor; eauto. constructor.
+- econstructor; eauto using splus_sstar, sstar_semantics.
+Qed.
+
+Lemma splus_semantics_sim : forall genv state_a state_b step
+        ge (a' : state_a) (b : state_b) match_states,
+    (exists b' : state_b,
+        splus (step ge) b b' /\ match_states a' b') ->
+    (exists b' : state_b,
+        Semantics.plus genv state_b step ge b b' /\ match_states a' b').
+firstorder eauto using splus_semantics.
+Qed.
+
+Lemma sstar_01_semantics_sim : forall genv state_a state_b step measure
+        ge (a a' : state_a) (b : state_b) match_states,
+    (exists b' : state_b,
+        (step ge b b' \/ (b' = b /\ measure a' < measure a)) /\
+        match_states a' b') ->
+    ((exists b' : state_b,
+            Semantics.plus genv state_b step ge b b' /\ match_states a' b') \/
+        (measure a' < measure a /\ match_states a' b)).
+intros. break_exists. break_and. on (_ \/ _), invc.
+- left. eapply splus_semantics_sim. firstorder eauto using SPlusOne.
+- right. firstorder congruence.
+Qed.
+
+Lemma sstar_semantics_sim : forall genv state_a state_b step measure
+        ge (a a' : state_a) (b : state_b) match_states,
+    (exists b' : state_b,
+        (splus (step ge) b b' \/ (b' = b /\ measure a' < measure a)) /\
+        match_states a' b') ->
+    ((exists b' : state_b,
+            Semantics.plus genv state_b step ge b b' /\ match_states a' b') \/
+        (measure a' < measure a /\ match_states a' b)).
+intros. break_exists. break_and. on (_ \/ _), invc.
+- left. eapply splus_semantics_sim. firstorder.
+- right. firstorder congruence.
+Qed.
