@@ -166,15 +166,23 @@ Section Simulation.
     eapply compose_notrace_mix_forward_simulation.
     eapply SelfCloseComp.fsim; try eassumption.
 
-    (* SelfClose to StackFlatter2 *)
+    (* SelfClose to ValueFlag *)
+    eapply compose_notrace_mix_forward_simulation.
+    eapply ValueFlagComp.fsim; try eassumption.
+
+    (* ValueFlag to StackFlatter2 *)
     eapply compose_notrace_mix_forward_simulation.
     eapply StackCompCombined.fsim; try eassumption.
 
-    (* SelfNumbered to Flattened *)
+    (* StackFlatter2 to LocalsOnly *)
     eapply compose_notrace_mix_forward_simulation.
-    eapply FlattenedComp.fsim; try eassumption.
-    
-    (* Flattened to Fmajor *)
+    eapply LocalsCompCombined.fsim; try eassumption.
+
+    (* LocalsOnly to FlatIntTag *)
+    eapply compose_notrace_mix_forward_simulation.
+    eapply FlatCompCombined.fsim; try eassumption.
+
+    (* FlatIntTag to Fmajor *)
     eapply compose_mix_trace_forward_simulation.
     eapply FmajorComp.fsim; try eassumption.
 
