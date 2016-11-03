@@ -32,7 +32,7 @@ Definition compile_cu (cu : A.env * list metadata) : res (B.env * list metadata)
   @@ FlatExprComp.compile_cu
   @@ FlatExprRetComp.compile_cu
   @@ FlatStopComp.compile_cu
-  @@ FlatDestCheckComp.compile_cu
+ @@@ FlatDestCheckComp.compile_cu ~~ "FlatDestCheckComp"
  @@@ FlatIntTagComp.compile_cu ~~ "FlatIntTag"
 .
 
@@ -117,26 +117,40 @@ Section Preservation.
 
   Hypothesis TRANSF : compile_cu prog = OK tprog.
 
-  
-  (* Inductive match_states (AE : A.env) (BE : B.env) : A.expr -> B.expr -> Prop := *)
-  (* | match_st : *)
-  (*     forall a b, *)
-  (*       R AE BE a b -> *)
-  (*       match_states AE BE a b. *)
-
-  (* Lemma step_sim : *)
-  (*   forall AE BE a b, *)
-  (*     match_states AE BE a b -> *)
-  (*     forall a', *)
-  (*       A.step AE a a' -> *)
-  (*       exists b', *)
-  (*         splus (B.step BE) b b'. *)
-  (* Proof. *)
-  (* Admitted. *)
-
   Theorem fsim :
     Semantics.forward_simulation (A.semantics prog) (B.semantics tprog).
   Proof.
-  Admitted.
+    unfold compile_cu in TRANSF.
+    break_result_chain.
+
+    eapply Semantics.compose_forward_simulation.
+    eapply FlatSwitchComp.fsim; try eassumption.
+
+    eapply Semantics.compose_forward_simulation.
+    eapply FlatSeqComp.fsim; try eassumption.
+
+    eapply Semantics.compose_forward_simulation.
+    eapply FlatSeqComp2.fsim; try eassumption.
+
+    eapply Semantics.compose_forward_simulation.
+    eapply FlatSeqStmtComp.fsim; try eassumption.
+
+    eapply Semantics.compose_forward_simulation.
+    eapply FlatReturnComp.fsim; try eassumption.
+
+    eapply Semantics.compose_forward_simulation.
+    eapply FlatExprComp.fsim; try eassumption.
+
+    eapply Semantics.compose_forward_simulation.
+    eapply FlatExprRetComp.fsim; try eassumption.
+
+    eapply Semantics.compose_forward_simulation.
+    eapply FlatStopComp.fsim; try eassumption.
+
+    eapply Semantics.compose_forward_simulation.
+    eapply FlatDestCheckComp.fsim; try eassumption.
+
+    eapply FlatIntTagComp.fsim; try eassumption.
+  Qed.
 
 End Preservation.
