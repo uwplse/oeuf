@@ -11,7 +11,7 @@ Module A := StackFlatter.
 Module B := StackFlatter2.
 
 
-Definition compile_one : A.insn -> list B.insn :=
+Definition compile : A.insn -> list B.insn :=
     let fix go e :=
         let fix go_block (es : list A.insn) : list B.insn :=
             match es with
@@ -34,27 +34,33 @@ Definition compile_one : A.insn -> list B.insn :=
         | A.MkClose fname nfree => [B.MkClose fname nfree]
         end in go.
 
-Definition compile_one_block :=
-    let go := compile_one in
+Definition compile_block :=
+    let go := compile in
     let fix go_block es :=
         match es with
         | [] => []
         | e :: es => go e ++ go_block es
         end in go_block.
 
-Definition compile_one_block_list :=
-    let go_block := compile_one_block in
+Definition compile_block_list :=
+    let go_block := compile_block in
     let fix go_block_list es :=
         match es with
         | [] => []
         | e :: es => go_block e :: go_block_list es
         end in go_block_list.
 
-Definition compile : list A.insn -> list B.insn := compile_one_block.
+Definition compile_func (f : list A.insn) : list B.insn :=
+    compile_block f.
+
+Definition compile_cu (cu : list (list A.insn) * list metadata) :
+        list (list B.insn) * list metadata :=
+    let '(funcs, metas) := cu in
+    (map compile_func funcs, metas).
 
 Ltac refold_compile :=
-    fold compile_one_block in *;
-    fold compile_one_block_list in *.
+    fold compile_block in *;
+    fold compile_block_list in *.
 
 
 
@@ -157,22 +163,37 @@ first_induction acode; intros0 II II'; inv_using I_insns_inv II; try discriminat
   eapply cons_I_insns; eauto.
 Qed.
 
-Theorem compile_I_expr : forall a b,
-    compile a = b ->
+Theorem compile_block_I_insn : forall a b,
+    compile_block a = b ->
     I_insns a b.
 induction a using A.insn_list_rect_mut with
     (P := fun a => forall b,
-        compile_one a = b ->
+        compile a = b ->
         I_insns [a] b)
     (Pl := fun a => forall b,
-        compile_one_block a = b ->
+        compile_block a = b ->
         I_insns a b)
     (Pll := fun a => forall b,
-        compile_one_block_list a = b ->
+        compile_block_list a = b ->
         Forall2 I_insns a b);
 intros0 Hcomp; simpl in Hcomp; refold_compile; try (rewrite <- Hcomp; clear Hcomp);
 try solve [econstructor; eauto using INil].
 - eapply cons_I_insns; eauto.
+Qed.
+
+Lemma compile_I_func : forall a b,
+    compile_func a = b ->
+    I_insns a b.
+intros. eapply compile_block_I_insn; eauto.
+Qed.
+
+Theorem compile_cu_I_env : forall a ameta b bmeta,
+    compile_cu (a, ameta) = (b, bmeta) ->
+    Forall2 I_insns a b.
+intros0 Hcomp. unfold compile_cu in *. inject_pair.
+remember (map compile_func a) as b.
+symmetry in Heqb. apply map_Forall2 in Heqb.
+list_magic_on (a, (b, tt)). eauto using compile_I_func.
 Qed.
 
 

@@ -244,3 +244,18 @@ Lemma no_values_list_is_Forall : forall es,
     no_values_list es <-> Forall no_values es.
 induction es; simpl; split; inversion 1; constructor; firstorder eauto.
 Qed.
+
+Definition no_values_dec e : { no_values e } + { ~ no_values e }.
+induction e using expr_rect_mut with
+    (Pl := fun es => { no_values_list es } + { ~ no_values_list es });
+simpl in *; refold_no_values;
+try solve [ assumption | left; constructor | right; inversion 1 ].
+
+- destruct IHe1; [ | right; inversion 1; intuition ].
+  destruct IHe2; [ | right; inversion 1; intuition ].
+  left. constructor; auto.
+
+- destruct IHe; [ | right; inversion 1; intuition ].
+  destruct IHe0; [ | right; inversion 1; intuition ].
+  left. constructor; auto.
+Defined.
