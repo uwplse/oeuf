@@ -560,3 +560,28 @@ simpl in *; B.refold_dests; try subst.
     { eapply I_frame_stack_local; eauto. eapply A_top_nth_error; eauto. simpl. omega. }
   i_ctor.
 Qed.
+
+
+
+Require Semantics.
+
+Section Preservation.
+
+  Variable prog : A.prog_type.
+  Variable tprog : B.prog_type.
+
+  Hypothesis TRANSF : compile_cu prog = tprog.
+  Hypothesis Bdests : Forall (fun is => distinct (B.dests_list is)) (fst tprog).
+
+  Theorem fsim :
+    Semantics.forward_simulation (A.semantics prog) (B.semantics tprog).
+  Proof.
+    eapply Semantics.forward_simulation_step with (match_states := I).
+    - inversion 1. (* TODO - replace with callstate matching *)
+    - intros0 II Afinal. invc Afinal; invc II. constructor.
+    - intros0 Astep. intros0 II.
+      eapply I_sim; eauto.
+      destruct prog, tprog. eapply compile_cu_I_env; eauto.
+  Qed.
+
+End Preservation.

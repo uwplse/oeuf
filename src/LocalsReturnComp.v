@@ -389,3 +389,49 @@ simpl in *; try subst.
       unfold A.local, B.local in *. simpl in *. inject_some. eauto. }
   i_ctor.
 Qed.
+
+
+Inductive I' : A.state -> B.state -> Prop :=
+| I'_intro : forall a b,
+        I a b ->
+        A.state_switch_dest_ok a ->
+        I' a b.
+
+Theorem I'_sim : forall AE BE a a' b,
+    Forall2 I_func AE BE ->
+    Forall A.switch_dest_ok_list AE ->
+    I' a b ->
+    A.sstep AE a a' ->
+    exists b',
+        B.sstep BE b b' /\
+        I' a' b'.
+intros. on >I', invc.
+fwd eapply I_sim; eauto. break_exists; break_and.
+eexists; split; eauto. constructor; eauto.
+eapply A.state_switch_dest_ok_inductive; eassumption.
+Qed.
+
+
+
+Require Semantics.
+
+Section Preservation.
+
+  Variable prog : A.prog_type.
+  Variable tprog : B.prog_type.
+
+  Hypothesis TRANSF : compile_cu prog = tprog.
+  Hypothesis Aswitch : Forall A.switch_dest_ok_list (fst prog).
+
+  Theorem fsim :
+    Semantics.forward_simulation (A.semantics prog) (B.semantics tprog).
+  Proof.
+    eapply Semantics.forward_simulation_step with (match_states := I').
+    - inversion 1. (* TODO - replace with callstate matching *)
+    - intros0 II Afinal. invc Afinal. invc II. on >I, invc. constructor.
+    - intros0 Astep. intros0 II.
+      eapply I'_sim; eauto.
+      destruct prog, tprog. eapply compile_cu_I_env; eauto.
+  Qed.
+
+End Preservation.
