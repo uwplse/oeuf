@@ -221,9 +221,7 @@ Proof.
 Admitted.
 
 
-
-
-Lemma I_sim_almost :
+(* Lemma I_sim_almost :
   forall e e' s,
     I e s ->
     step e e' ->
@@ -290,7 +288,4 @@ Admitted.
   Proof.
     eapply Semantics.forward_simulation_step.
 
-
-
-End subst_equiv_ksubst.
-End subst_equiv_ksubst.
+*)
