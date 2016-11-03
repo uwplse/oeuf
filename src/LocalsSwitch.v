@@ -258,6 +258,15 @@ Fixpoint last_dest (dst : nat) (is : list insn) : nat :=
     | i :: is => last_dest (dest i) is
     end.
 
+Lemma last_dest_any_default : forall default is dst,
+    default <> dst ->
+    last_dest default is = dst ->
+    (forall default', last_dest default' is = dst).
+first_induction is; intros0 Hne Hlast; intros.
+- simpl in *. congruence.
+- simpl in *. auto.
+Qed.
+
 Definition switch_dest_ok :=
     let fix go i :=
         let fix go_list is :=
@@ -322,6 +331,35 @@ induction cases; simpl; split; intro; eauto.
 - on >Forall, invc. firstorder.
 Qed.
 
+Definition switch_dest_ok_dec i : { switch_dest_ok i } + { ~ switch_dest_ok i }.
+induction i using insn_rect_mut with
+    (Pl := fun i => { switch_dest_ok_list i } + { ~ switch_dest_ok_list i })
+    (Pll := fun i => forall dst,
+        { switch_dest_ok_case_list dst i } + { ~ switch_dest_ok_case_list dst i });
+try solve [left; constructor; eauto].
+
+- destruct (IHi dst); [ | right; assumption ].
+  left. assumption.
+
+- destruct IHi; [ | right; inversion 1; eauto ].
+  destruct IHi0; [ | right; inversion 1; eauto ].
+  left. constructor; auto.
+
+- intro.
+  destruct IHi; [ | right; inversion 1; intuition ].
+  destruct (IHi0 dst); [ | right; inversion 1; intuition ].
+  destruct (eq_nat_dec (last_dest (S dst) is) dst); cycle 1.
+    { right. inversion 1. eauto. }
+  left. constructor; eauto using last_dest_any_default.
+Defined.
+
+Definition switch_dest_ok_list_dec is : { switch_dest_ok_list is } + { ~ switch_dest_ok_list is }.
+induction is.
+- left. constructor.
+- destruct (switch_dest_ok_dec a); [ | right; inversion 1; auto ].
+  destruct IHis; [ | right; inversion 1; auto ].
+  left. constructor; auto.
+Defined.
 
 Inductive state_switch_dest_ok : state -> Prop :=
 | SsdRet : forall is f code dst f' k',

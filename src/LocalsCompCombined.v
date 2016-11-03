@@ -21,7 +21,7 @@ Definition compile_cu (cu : A.env * list metadata) : res (B.env * list metadata)
   OK cu
  @@@ LocalsDestsComp.compile_cu ~~ "LocalsDestsComp"
   @@ LocalsSwitchComp.compile_cu
-  @@ LocalsReturnComp.compile_cu
+ @@@ LocalsReturnComp.compile_cu ~~ "LocalsReturnComp"
  @@@ LocalsSourcesComp.compile_cu ~~ "LocalsSourcesComp"
   @@ LocalsOnlyComp.compile_cu
 .
@@ -103,7 +103,6 @@ Section Preservation.
 
     eapply Semantics.compose_forward_simulation.
     eapply LocalsReturnComp.fsim; try eassumption.
-      { admit. }
 
     eapply Semantics.compose_forward_simulation.
     eapply LocalsSourcesComp.fsim; try eassumption.
