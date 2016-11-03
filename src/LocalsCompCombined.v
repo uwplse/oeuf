@@ -108,6 +108,6 @@ Section Preservation.
     eapply LocalsSourcesComp.fsim; try eassumption.
 
     eapply LocalsOnlyComp.fsim; try eassumption.
-  Admitted.
+  Qed.
 
 End Preservation.

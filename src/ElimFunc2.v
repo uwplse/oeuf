@@ -1,4 +1,5 @@
 Require Import Common.
+Require Import StepLib.
 
 Require Import Utopia.
 Require Import Monads.
@@ -274,23 +275,37 @@ Inductive sstep (E : env) : state -> state -> Prop :=
                 (Run e' l k)
 .
 
-Inductive sstar (E : env) : state -> state -> Prop :=
-| SStarNil : forall e, sstar E e e
-| SStarCons : forall e e' e'',
-        sstep E e e' ->
-        sstar E e' e'' ->
-        sstar E e e''.
-
-Inductive splus (E : env) : state -> state -> Prop :=
-| SPlusOne : forall s s',
-        sstep E s s' ->
-        splus E s s'
-| SPlusCons : forall s s' s'',
-        sstep E s s' ->
-        splus E s' s'' ->
-        splus E s s''.
 
 
+Definition sstar BE := StepLib.sstar (sstep BE).
+Definition SStarNil := @StepLib.SStarNil state.
+Definition SStarCons := @StepLib.SStarCons state.
+
+Definition splus BE := StepLib.splus (sstep BE).
+Definition SPlusOne := @StepLib.SPlusOne state.
+Definition SPlusCons := @StepLib.SPlusCons state.
+
+
+
+Require Import Metadata.
+
+Definition prog_type : Type := list expr * list metadata.
+
+Require Semantics.
+
+Inductive initial_state (prog : prog_type) : state -> Prop :=.
+
+Inductive final_state (prog : prog_type) : state -> Prop :=
+| FinalState : forall v, value v -> final_state prog (Stop v).
+
+Definition initial_env (prog : prog_type) : env := fst prog.
+
+Definition semantics (prog : prog_type) : Semantics.semantics :=
+  @Semantics.Semantics_gen state env
+                 (sstep)
+                 (initial_state prog)
+                 (final_state prog)
+                 (initial_env prog).
 
 
 
@@ -425,6 +440,14 @@ induction e using expr_rect_mut with
   left. efd_fixup E. firstorder.
 Defined.
 
+Definition enough_free_list_dec E e : { enough_free_list E e } + { ~ enough_free_list E e }.
+induction e.
+- left. constructor.
+- destruct (enough_free_dec E a); [ | right; inversion 1; auto ].
+  destruct IHe; [ | right; inversion 1; auto ].
+  left. constructor; auto.
+Defined.
+
 
 
 Lemma enough_free_unroll_elim : forall E rec case args info e',
@@ -521,7 +544,21 @@ intros0 Henv Hefs Hstep. invc Hstep; invc Hefs.
   constructor; eauto.
 Qed.
 
+Lemma enough_free_plus : forall E s s',
+    Forall (enough_free E) E ->
+    enough_free_state E s ->
+    splus E s s' ->
+    enough_free_state E s'.
+induction 3; eauto using enough_free_step.
+Qed.
 
+Lemma enough_free_star : forall E s s',
+    Forall (enough_free E) E ->
+    enough_free_state E s ->
+    sstar E s s' ->
+    enough_free_state E s'.
+induction 3; eauto using enough_free_step.
+Qed.
 
 
 Definition no_elim_body :=
@@ -867,23 +904,3 @@ Ltac refold_elim_rec_shape :=
     fold elim_rec_shape_list in *;
     fold elim_rec_shape_pair in *;
     fold elim_rec_shape_list_pair in *.
-
-
-Require Import Metadata.
-
-Definition prog_type : Type := list expr * list metadata.
-
-Require Semantics.
-
-Inductive initial_state (prog : prog_type) : state -> Prop :=.
-
-Inductive final_state (prog : prog_type) : state -> Prop :=.
-
-Definition initial_env (prog : prog_type) : env := nil. (* TODO: write this *)
-
-Definition semantics (prog : prog_type) : Semantics.semantics :=
-  @Semantics.Semantics_gen state env
-                 (sstep)
-                 (initial_state prog)
-                 (final_state prog)
-                 (initial_env prog).

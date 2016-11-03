@@ -380,3 +380,112 @@ Inductive splus (E : env) : state -> state -> Prop :=
 
 
 *)
+
+
+
+Definition close_dyn_placement :=
+    let fix go e :=
+        let fix go_list es :=
+            match es with
+            | [] => True
+            | e :: es => go e /\ go_list es
+            end in
+        let fix go_pair p :=
+            let '(e, r) := p in
+            go e in
+        let fix go_list_pair ps :=
+            match ps with
+            | [] => True
+            | p :: ps => go_pair p /\ go_list_pair ps
+            end in
+        match e with
+        | Arg => True
+        | UpVar _ => True
+        | Call (CloseDyn _ _ _) a => go a
+        | Call f a => go f /\ go a
+        | Constr _ args => go_list args
+        | ElimBody (CloseDyn _ _ _) cases => go_list_pair cases
+        | ElimBody rec cases => go rec /\ go_list_pair cases
+        | Close _ free => go_list free
+        | CloseDyn _ _ _ => False
+        end in go.
+
+Definition close_dyn_placement_list :=
+    let go := close_dyn_placement in
+    let fix go_list es :=
+        match es with
+        | [] => True
+        | e :: es => go e /\ go_list es
+        end in go_list.
+
+Definition close_dyn_placement_pair :=
+    let go := close_dyn_placement in
+    let fix go_pair (p : expr * rec_info) :=
+        match p with
+        | (e, _) => go e
+        end in go_pair.
+
+Definition close_dyn_placement_list_pair :=
+    let go_pair := close_dyn_placement_pair in
+    let fix go_list_pair ps :=
+        match ps with
+        | [] => True
+        | p :: ps => go_pair p /\ go_list_pair ps
+        end in go_list_pair.
+
+Ltac refold_close_dyn_placement :=
+    fold close_dyn_placement_list in *;
+    fold close_dyn_placement_pair in *;
+    fold close_dyn_placement_list_pair in *.
+
+Definition close_dyn_placement_dec e : { close_dyn_placement e } + { ~ close_dyn_placement e }.
+induction e using expr_rect_mut with
+    (Pl := fun e => { close_dyn_placement_list e } + { ~ close_dyn_placement_list e })
+    (Pp := fun e => { close_dyn_placement_pair e } + { ~ close_dyn_placement_pair e })
+    (Plp := fun e => { close_dyn_placement_list_pair e } + { ~ close_dyn_placement_list_pair e }).
+
+- left. constructor.
+
+- left. constructor.
+
+- destruct e1.
+  Focus 7. {
+    destruct IHe2; [ | right; intro; auto ].
+    left. auto.
+  } Unfocus.
+  all: destruct IHe1; [ | right; inversion 1; auto ].
+  all: destruct IHe2; [ | right; inversion 1; auto ].
+  all: left; constructor; auto.
+
+- simpl. refold_close_dyn_placement. auto.
+
+- destruct e.
+  Focus 7. {
+    simpl. refold_close_dyn_placement. auto.
+  } Unfocus.
+  all: destruct IHe; [ | right; inversion 1; auto ].
+  all: destruct IHe0; [ | right; inversion 1; auto ].
+  all: left; constructor; auto.
+
+- simpl. refold_close_dyn_placement. auto.
+
+- right. simpl. auto.
+
+
+- left. constructor.
+
+- destruct IHe; [ | right; inversion 1; auto ].
+  destruct IHe0; [ | right; inversion 1; auto ].
+  left. constructor; auto.
+
+
+- simpl. auto.
+
+
+- left. constructor.
+
+- destruct IHe; [ | right; inversion 1; auto ].
+  destruct IHe0; [ | right; inversion 1; auto ].
+  left. constructor; auto.
+
+Defined.
