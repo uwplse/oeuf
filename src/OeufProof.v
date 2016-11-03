@@ -31,6 +31,7 @@ Require Cmajortominor.
 
 Require Import Cmajor. (* Cminor bridge *)
 Require Import OeufCompcertSimulations.
+Require Import TraceSemantics.
 
 Require Import compcert.lib.Coqlib.
 Require Import compcert.ia32.Asm.
@@ -114,6 +115,7 @@ Section Simulation.
     eapply compose_notrace_mix_forward_simulation.
     eapply StackCompCombined.fsim; try eassumption.
 
+    admit.
     (* StackFlatter2 to LocalsOnly *)
     eapply compose_notrace_mix_forward_simulation.
     eapply LocalsCompCombined.fsim; try eassumption.
@@ -127,39 +129,40 @@ Section Simulation.
     eapply FmajorComp.fsim; try eassumption.
 
     (* Fmajor to Fflatmajor *)
-    eapply compose_forward_simulation.
+    eapply TraceSemantics.compose_forward_simulation.
     eapply Fmajortofflatmajor.fsim; try eassumption.
 
     (* Fflatmajor to Emajor *)
-    eapply compose_forward_simulation.
+    eapply TraceSemantics.compose_forward_simulation.
     eapply Fflatmajortoemajor.fsim; try eassumption.
 
     (* Emajor to Dmajor *)
-    eapply compose_forward_simulation.
+    eapply TraceSemantics.compose_forward_simulation.
     eapply Emajortodmajor.fsim; try eassumption.
     
     (* Dmajor to Dflatmajor *)
-    eapply compose_forward_simulation.
+    eapply TraceSemantics.compose_forward_simulation.
     eapply Dmajortodflatmajor.fsim; try eassumption.
 
     admit. admit.
 
     (* Dflatmajor to Cmajor *)
-    eapply compose_forward_simulation.
+    eapply TraceSemantics.compose_forward_simulation.
     eapply Dflatmajortocmajor.fsim; try eassumption.
 
     admit. admit.
 
     (* Cmajor to Cminor *)
-    eapply compose_forward_simulation.
+    eapply TraceSemantics.compose_forward_simulation.
     eapply Cmajortominor.fsim; try eassumption.
 
     (* Cminor to Asm *)
     admit.
 
+    (*
     rewrite print_identity in *. subst p0.
     eapply transf_cminor_program_correct in TRANSF.
-    destruct TRANSF. eassumption.
+    destruct TRANSF. eassumption.*)
     
   Admitted.
 
@@ -194,8 +197,9 @@ Section Simulation.
     simpl. eassumption.
     break_exists. break_and.
     repeat eexists; eauto.
+    admit.
     eapply match_states_equiv; eauto.
-  Qed.
+  Admitted.
 
   Theorem final_states_match :
     forall {ty} (expr : SourceLang.expr nil ty) st,
@@ -218,7 +222,7 @@ Section Simulation.
     inv H2. eauto.
   Qed.
 
-  Definition match_initial_states_field {ty} := (MixSemantics.fsim_match_initial_states (source_semantics prog) (Asm.semantics tprog) (Oeuf_forward_simulation ty)).
+  Definition match_initial_states_field {ty} := (MixSemantics.fsim_match_initial_states (source_semantics prog) (Asm_semantics tprog) (Oeuf_forward_simulation ty)).
 
   (* Here's how we show that we establish matching for initial symbols in our program *)
   (* i.e. what we call to build closures *)
@@ -253,8 +257,6 @@ Section Simulation.
   Proof.
   Admitted.
       
-  
-  
-*)  
+
     
 End Simulation.
