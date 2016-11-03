@@ -193,7 +193,7 @@ Definition compile_gdef (nf : nat * (A.stmt * A.expr)) :
     let '(n, f) := nf in
     get_id (IkFunc n) >>= fun id =>
     compile_func f >>= fun f' =>
-    Some (id, AST.Gfun f').
+    Some (id, AST.Gfun (Internal f')).
 
 Definition compile_gdefs (nfs : list (nat * (A.stmt * A.expr))) :
         option (list (ident * AST.globdef B.fundef unit)) :=
