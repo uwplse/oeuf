@@ -154,7 +154,9 @@ Proof.
   intros. unfold partial_if in *. destruct (flag tt). eauto. inv H. apply forward_simulation_identity.
 Qed.
 
+(*
 Theorem transf_rtl_program_correct:
   forall p tp,
   transf_rtl_program p = OK tp ->
   forward_simulation (RTL.semantics p) (Asm.semantics tp).
+*)
