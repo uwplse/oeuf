@@ -138,21 +138,6 @@ Ltac refold_compile :=
     fold compile_list_pair in *.
 
 
-Ltac break_bind_state :=
-    unfold seq, fmap in *;
-    repeat match goal with
-    | [ H : @bind_state ?A ?B ?S ?x_ ?k_ ?s_ = (_, _) |- _ ] =>
-            (* unfold the top-level bind_state, then destruct *)
-            let orig := constr:(@bind_state A B S x_ k_ s_) in
-            let bind := eval unfold bind_state in (fun x k s => @bind_state A B S x k s) in
-            let repl := eval cbv beta in (bind x_ k_ s_) in
-            change orig with repl in H;
-            destruct (x_ s_) as [?x ?s] eqn:?
-    | [ H : ret_state _ _ = (_, _) |- _ ] => invc H
-    end.
-
-
-
 Inductive I_expr : A.expr -> B.expr -> Prop :=
 | IArg : I_expr A.Arg B.Arg
 | IUpVar : forall n,

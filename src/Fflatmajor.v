@@ -43,7 +43,7 @@ Record function : Type := mkfunction {
   fn_body: stmt
 }.
 
-Definition fundef := function.
+Definition fundef := AST.fundef function.
 Definition program := AST.program fundef unit.
 
 Definition genv := Genv.t fundef unit.
@@ -155,7 +155,7 @@ Inductive step : state -> trace -> state -> Prop :=
       eval_expr e earg varg -> (* the argument *)
       eval_expr e efunc (Close fname cargs) -> (* the function itself *)
       Genv.find_symbol ge fname = Some bcode ->
-      Genv.find_funct_ptr ge bcode = Some fn ->
+      Genv.find_funct_ptr ge bcode = Some (Internal fn) ->
       length fn.(fn_params) = 2%nat ->
       fn.(fn_sig) = call_sig ->
       step (State f (Scall id efunc earg) k e) E0
@@ -198,8 +198,8 @@ Inductive initial_state (p: program): state -> Prop :=
   | initial_state_intro: forall b f,
       let ge := Genv.globalenv p in
       Genv.find_symbol ge p.(prog_main) = Some b ->
-      Genv.find_funct_ptr ge b = Some f ->
-      initial_state p (State f (fn_body f) Kstop (PTree.empty value)).
+      Genv.find_funct_ptr ge b = Some (Internal f) ->
+      initial_state p (Callstate f nil Kstop).
 
 Inductive final_state: state -> int -> Prop :=
   | final_state_intro: forall r v,

@@ -311,6 +311,10 @@ let intern_string s =
     Hashtbl.add atom_of_string s a;
     Hashtbl.add string_of_atom a s;
     a
+
+let intern_string_coq s =
+  intern_string (camlstring_of_coqstring s)
+
 let extern_atom a =
   try
     Hashtbl.find string_of_atom a

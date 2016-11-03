@@ -1,42 +1,35 @@
 Require Import compcert.driver.Compiler compcert.common.Errors.
 Require Import Common Monads.
-Require UntypedComp TaggedComp LiftedComp SwitchedComp FlattenedComp FmajorComp.
+Require UntypedComp TaggedComp LiftedComp SwitchedComp FmajorComp.
 Require Fmajortofflatmajor Fflatmajortoemajor Emajortodmajor Dflatmajortocmajor Cmajortominor.
 Require TaggedNumberedComp ElimFuncComp ElimFuncComp2 ElimFuncComp3.
-Require SelfCloseComp SelfNumberedComp.
+Require SelfCloseComp ValueFlagComp.
+Require StackCompCombined LocalsCompCombined FlatCompCombined.
 Require CompilationUnit Metadata.
+Require Import CompilerUtil.
 
 Require Import compcert.common.AST.
 Require compcert.backend.SelectLong.
 
 
-Definition option_to_res {A} (o : option A) : res A :=
-  match o with
-  | None => Error []
-  | Some a => OK a
-  end.
-
-Coercion option_to_res : option >-> res.
-
-Local Open Scope option_monad.
-
-
 Definition transf_untyped_to_cminor (l : list UntypedComp.U.expr * list Metadata.metadata) : res Cminor.program :=
   OK l
   @@ LiftedComp.compile_cu
- @@@ TaggedComp.compile_cu
+ @@@ TaggedComp.compile_cu ~~ "TaggedComp"
   @@ TaggedNumberedComp.compile_cu
   @@ ElimFuncComp.compile_cu
   @@ ElimFuncComp2.compile_cu
- @@@ ElimFuncComp3.compile_cu
+ @@@ ElimFuncComp3.compile_cu ~~ "ElimFuncComp3"
   @@ SwitchedComp.compile_cu
   @@ SelfCloseComp.compile_cu
-  @@ SelfNumberedComp.compile_cu
-  @@ FlattenedComp.compile_cu
+  @@ ValueFlagComp.compile_cu
+ @@@ StackCompCombined.compile_cu
+ @@@ LocalsCompCombined.compile_cu
+ @@@ FlatCompCombined.compile_cu
  @@@ FmajorComp.compile_cu
   @@ Fmajortofflatmajor.transf_program
   @@ Fflatmajortoemajor.transf_program
-  @@ Emajortodmajor.transf_prog
+ @@@ Emajortodmajor.transf_prog
  @@@ Dflatmajortocmajor.transf_prog
   @@ Cmajortominor.transf_prog
   @@ print print_Cminor
