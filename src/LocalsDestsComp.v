@@ -59,17 +59,25 @@ Definition compile_list_list :=
         | e :: es => @cons _ <$> go_list e <*> go_list_list es
         end in go_list_list.
 
-Definition compile_func (f : list A.insn) : list B.insn :=
+Definition compile_func (f : list A.insn) : option (list B.insn) :=
     let body := f in
     let '(body', _) := compile_list body 0 in
-    body'.
-
-Definition compile_cu (cu : list (list A.insn) * list metadata) :
-        list (list B.insn) * list metadata :=
-    let '(funcs, metas) := cu in
-    (map compile_func funcs, metas).
+    if distinct_dec eq_nat_dec (B.dests_list body')
+        then Some body'
+        else None.
 
 End compile.
+
+Section compile_cu.
+Open Scope option_monad.
+
+Definition compile_cu (cu : list (list A.insn) * list metadata) :
+        option (list (list B.insn) * list metadata) :=
+    let '(funcs, metas) := cu in
+    map_partial compile_func funcs >>= fun funcs' =>
+    Some (funcs', metas).
+
+End compile_cu.
 
 Ltac refold_compile :=
     fold compile_list in *;
@@ -164,20 +172,37 @@ try solve [econstructor; eauto using compile_I_insn].
 Qed.
 
 Lemma compile_I_func : forall a b,
-    compile_func a = b ->
+    compile_func a = Some b ->
     Forall2 I_insn a b.
 intros0 Hcomp.
-unfold compile_func in Hcomp. break_match. rewrite <- Hcomp.
+unfold compile_func in Hcomp. break_match. break_if; try discriminate. inject_some.
 eauto using compile_list_I_insn.
 Qed.
 
 Theorem compile_cu_I_env : forall a ameta b bmeta,
-    compile_cu (a, ameta) = (b, bmeta) ->
+    compile_cu (a, ameta) = Some (b, bmeta) ->
     Forall2 (Forall2 I_insn) a b.
-intros0 Hcomp. unfold compile_cu in *. inject_pair.
-remember (map compile_func a) as b.
-symmetry in Heqb. apply map_Forall2 in Heqb.
+intros0 Hcomp. unfold compile_cu in *. break_bind_option. inject_some.
+on _, apply_lem map_partial_Forall2.
 list_magic_on (a, (b, tt)). eauto using compile_I_func.
+Qed.
+
+
+
+Lemma compile_func_dests_distinct : forall a b,
+    compile_func a = Some b ->
+    distinct (B.dests_list b).
+intros0 Hcomp.
+unfold compile_func in Hcomp. break_match. break_if; try discriminate. inject_some.
+auto.
+Qed.
+
+Theorem compile_cu_dests_distinct : forall a ameta b bmeta,
+    compile_cu (a, ameta) = Some (b, bmeta) ->
+    Forall (fun is => distinct (B.dests_list is)) b.
+intros0 Hcomp. unfold compile_cu in *. break_bind_option. inject_some.
+on _, apply_lem map_partial_Forall2.
+list_magic_on (a, (b, tt)). eauto using compile_func_dests_distinct.
 Qed.
 
 
@@ -570,8 +595,7 @@ Section Preservation.
   Variable prog : A.prog_type.
   Variable tprog : B.prog_type.
 
-  Hypothesis TRANSF : compile_cu prog = tprog.
-  Hypothesis Bdests : Forall (fun is => distinct (B.dests_list is)) (fst tprog).
+  Hypothesis TRANSF : compile_cu prog = Some tprog.
 
   Theorem fsim :
     Semantics.forward_simulation (A.semantics prog) (B.semantics tprog).
@@ -581,7 +605,8 @@ Section Preservation.
     - intros0 II Afinal. invc Afinal; invc II. constructor.
     - intros0 Astep. intros0 II.
       eapply I_sim; eauto.
-      destruct prog, tprog. eapply compile_cu_I_env; eauto.
+      + destruct prog, tprog. eapply compile_cu_I_env; eauto.
+      + destruct prog, tprog. eapply compile_cu_dests_distinct; eauto.
   Qed.
 
 End Preservation.
