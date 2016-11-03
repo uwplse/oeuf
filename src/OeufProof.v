@@ -47,7 +47,7 @@ Require Import StructTact.Util.
 Require Import EricTact.
 
 Section Simulation.
-
+  (*
   Variable prog : compilation_unit.
   Variable tprog : Asm.program.
   Hypothesis TRANSF : transf_to_asm prog = OK tprog.
@@ -253,6 +253,6 @@ Section Simulation.
       
   
   
-  
+*)  
     
 End Simulation.
