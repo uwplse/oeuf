@@ -8,9 +8,12 @@ Require Import compcert.common.Globalenvs.
 Require Import compcert.common.Memory.
 Require Import compcert.common.Events.
 Require Import compcert.common.Switch.
-Require Import compcert.common.Smallstep.
+(*Require Import compcert.common.Smallstep.*)
 Require Import compcert.common.Errors.
 Require compcert.backend.SelectLong.
+
+Require Import HighValues.
+Require Import TraceSemantics.
 
 Require Import Cmajor.
 Require Import Dmajor.
@@ -738,7 +741,7 @@ Proof.
   admit. (* adding more globals extends the mem *)
   admit. (* no name collisions to new globals *)
 Admitted.
-
+(*
 Lemma match_final_state :
  forall (s1 : Smallstep.state (Dflatmajor.semantics prog))
         (s2 : Smallstep.state (Cmajor.semantics tprog)) (r : int),
@@ -773,7 +776,7 @@ Proof.
   unfold transf_fundef in *. congruence.
   eauto.
 Qed.  
-
+*)
 Theorem fsim :
   forward_simulation (Dflatmajor.semantics prog) (Cmajor.semantics tprog).
 Proof.
@@ -793,10 +796,9 @@ Theorem transf_program_correct:
 Proof.
   intros.
   eapply forward_simulation_plus.
-  eapply public_symbol_transf; eauto.
-  eapply initial_states_match; eauto.
-  eapply match_final_state; eauto.
+  admit.
+  admit.
   eapply single_step_correct; eauto.
-Qed.
+Admitted.
 
 

@@ -8,7 +8,9 @@ Require Import compcert.common.Globalenvs.
 Require Import compcert.common.Memory.
 Require Import compcert.common.Events.
 Require Import compcert.common.Switch.
-Require Import compcert.common.Smallstep.
+(*Require Import compcert.common.Smallstep.*)
+
+Require Import TraceSemantics.
 
 Require Import List.
 Import ListNotations.
@@ -697,21 +699,20 @@ Lemma match_final_states :
     Fflatmajor.final_state s1 r ->
     Emajor.final_state s2 r.
 Proof.
-Admitted.
+  intros.
+  invp Fflatmajor.final_state.
+  invp match_states.
+  invp match_cont.
+  econstructor.
+Qed.
 
 Theorem fsim :
   forward_simulation (Fflatmajor.semantics prog) (Emajor.semantics tprog).
 Proof.
   eapply forward_simulation_plus.
-  intros. simpl.
-  unfold transf_program in *. subst tprog.
-  solve [eapply Genv.public_symbol_transf].
-
   solve [eapply initial_states_match; eauto].
   solve [eapply match_final_states; eauto].
-
   intros. eapply step_sim; eauto.
-  
 Qed.
 
 End PRESERVATION.

@@ -8,7 +8,7 @@ Require Import compcert.common.Globalenvs.
 Require Import compcert.common.Memory.
 Require Import compcert.common.Events.
 Require Import compcert.common.Switch.
-Require Import compcert.common.Smallstep.
+(*Require Import compcert.common.Smallstep.*)
 
 Require Import compcert.backend.Cminor.
 Require Import Cmajor.
@@ -422,25 +422,35 @@ Proof.
   eapply Mem.extends_refl.
 Qed.
 
+
 Lemma match_final_state :
- forall (s1 : Smallstep.state (semantics prog))
-        (s2 : Smallstep.state (Cminor.semantics tprog)) (r : int),
-   match_states s1 s2 ->
-   Smallstep.final_state (semantics prog) s1 r ->
-   Smallstep.final_state (Cminor.semantics tprog) s2 r.
+  forall s1 s2 r,
+    match_states s1 s2 ->
+    final_state prog s1 r ->
+    cminor_final_state tprog s2 r.
 Proof.
   intros.
+  remember find_funct_ptr_transf as Hft.
+  clear HeqHft.
+  remember find_symbol_transf as Hst.
+  clear HeqHst.
   inv H0. inv H.
+  assert (exists b ofs, v' = Vptr b ofs) by (inv H1; eauto).
+  repeat break_exists; subst.
   inv LD.
   inv MC.
   econstructor; eauto.
+  eapply HighValues.value_inject_mem_extends; eauto.
+  eapply HighValues.value_inject_swap_ge; try eassumption.
+  intros. eapply Hft in H2. eauto.
+  intros. rewrite Hst. eauto.
 Qed.
 
 Lemma initial_states_match :
-  forall s1 : Smallstep.state (semantics prog),
-    Smallstep.initial_state (semantics prog) s1 ->
-    exists s2 : Smallstep.state (Cminor.semantics tprog),
-      Smallstep.initial_state (Cminor.semantics tprog) s2 /\ match_states s1 s2.
+  forall s1,
+    initial_state prog s1 ->
+    exists s2,
+      Cminor.initial_state tprog s2 /\ match_states s1 s2.
 Proof.
   intros. 
   inversion H.
@@ -455,11 +465,10 @@ Proof.
 Qed.  
 
 Theorem fsim :
-  forward_simulation (Cmajor.semantics prog) (Cminor.semantics tprog).
+  TraceSemantics.forward_simulation (Cmajor.semantics prog) (Cminor_semantics tprog).
 Proof.
   intros.
-  eapply forward_simulation_step with (match_states := match_states).
-  eapply public_symbol_transf; eauto.
+  eapply TraceSemantics.forward_simulation_step with (match_states := match_states).
   eapply initial_states_match; eauto.
   eapply match_final_state; eauto.
   eapply single_step_correct; eauto.

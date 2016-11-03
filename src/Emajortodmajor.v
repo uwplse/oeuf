@@ -9,7 +9,9 @@ Require Import compcert.common.Memory.
 Require Import compcert.common.Events.
 Require Import compcert.common.Errors.
 Require Import compcert.common.Switch.
-Require Import compcert.common.Smallstep.
+(*Require Import compcert.common.Smallstep.*)
+
+Require Import TraceSemantics.
 
 Require Import List.
 Import ListNotations.
@@ -1715,25 +1717,23 @@ Proof.
   eapply funsig_main; eauto.
 Qed.
 
-
 Lemma match_final_states :
   forall st st' r,
     match_states st st' ->
     Emajor.final_state st r ->
-    Dmajor.final_state st' r.
+    Dmajor.final_state tprog st' r.
 Proof.
-  intros. inv H0. inv H.
-  inv H5.
-Admitted. (* This is where we need pointers in final states. Right here *)
+  intros.
+  invp Emajor.final_state.
+  invp match_states.
+  invp match_cont.
+  econstructor. eassumption.
+Qed.
 
 Theorem fsim :
   forward_simulation (Emajor.semantics prog) (Dmajor.semantics tprog).
 Proof.
   eapply forward_simulation_plus.
-  intros. simpl.
-  unfold transf_prog in *.
-  eapply Genv.public_symbol_transf_partial; eauto.
-
   eapply initial_states_match; eauto.
   eapply match_final_states; eauto.
   

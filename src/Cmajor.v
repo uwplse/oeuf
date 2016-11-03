@@ -8,7 +8,9 @@ Require Import compcert.common.Globalenvs.
 Require Import compcert.common.Memory.
 Require Import compcert.common.Events.
 Require Import compcert.common.Switch.
-Require Import compcert.common.Smallstep.
+(*Require Import compcert.common.Smallstep.*)
+Require Import TraceSemantics.
+Require Import HighValues.
 
 Require Import List.
 Import ListNotations.
@@ -298,14 +300,15 @@ Inductive initial_state (p: program): state -> Prop :=
 
 (** A final state is a [Returnstate] with an empty continuation. *)
 
-Inductive final_state: state -> int -> Prop :=
-  | final_state_intro: forall r m,
-      final_state (Returnstate (Vint r) Kstop m) r.
+Inductive final_state (p : program) : state -> value -> Prop :=
+| final_state_intro: forall v v' m,
+    value_inject (Genv.globalenv p) m v v' ->
+    final_state p (Returnstate v' Kstop m) v.
 
 (** The corresponding small-step semantics. *)
 
 Definition semantics (p: program) :=
-  Semantics step (initial_state p) final_state (Genv.globalenv p).
+  Semantics step (initial_state p) (final_state p) (Genv.globalenv p).
 
 (** This semantics is receptive to changes in events. *)
 
@@ -326,4 +329,13 @@ Proof.
   red; intros; inv H; simpl; try omega; eapply external_call_trace_length; eauto.
 Qed.
 *)
+Require Import compcert.backend.Cminor.
 
+(* Cminor bridge *)
+Inductive cminor_final_state(p : Cminor.program): Cminor.state -> value -> Prop :=
+| cminor_final_state_intro: forall v v' m,
+    value_inject (Genv.globalenv p) m v v' ->
+    cminor_final_state p (Cminor.Returnstate v' Cminor.Kstop m) v.
+
+Definition Cminor_semantics (p: Cminor.program) :=
+  Semantics Cminor.step (Cminor.initial_state p) (cminor_final_state p) (Genv.globalenv p).

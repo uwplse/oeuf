@@ -9,9 +9,11 @@ Require Import compcert.common.Globalenvs.
 Require Import compcert.common.Memory.
 Require Import compcert.common.Events.
 Require Import compcert.common.Switch.
-Require Import compcert.common.Smallstep.
+(*Require Import compcert.common.Smallstep.*)
 Require Import compcert.common.Errors.
 Require compcert.backend.SelectLong.
+
+Require Import TraceSemantics.
 
 Require Import Dmajor.
 Require Import Dflatmajor.
@@ -58,11 +60,7 @@ Definition env_inj (mi : meminj) (e e' : env) : Prop :=
       e' ! id = Some v' /\ Val.inject mi v v'.
 
 (* globals aren't moved around *)
-Definition globals_inj_same (mi : meminj) : Prop :=
-  forall b f v,
-    (Genv.find_funct_ptr ge b = Some f \/
-    Genv.find_var_info ge b = Some v) ->
-    mi b = Some (b,0).
+Definition globals_inj_same := HighValues.globals_inj_same ge.
 
 (* yet another useful property for a mapping function *)
 Definition meminj_injective (mi : meminj) : Prop :=
@@ -72,10 +70,7 @@ Definition meminj_injective (mi : meminj) : Prop :=
     b1 = b2.
 
 (* nothing is moved around within blocks *)
-Definition same_offsets (mi : meminj) : Prop :=
-  forall b b' delta,
-    mi b = Some (b',delta) ->
-    delta = 0.
+Definition same_offsets := HighValues.same_offsets.
 
 (* conglomeration props *)
 Definition wf_inj (mi : meminj) : Prop :=
@@ -822,6 +817,7 @@ Proof.
 
   (* globals_inj_same *)
   unfold globals_inj_same in *.
+  unfold HighValues.globals_inj_same in *.
   intros. eapply H2 in H9.
   break_if; congruence.
 
@@ -841,7 +837,7 @@ Proof.
   eapply H7; eauto.
 
   (* same_offsets *)
-  unfold same_offsets.
+  unfold same_offsets. unfold HighValues.same_offsets.
   intros.
   break_if; simpl; eauto; congruence.
 
@@ -1398,7 +1394,7 @@ Lemma wf_mem_refl :
 Proof.
   intros. unfold wf_mem. unfold wf_inj.
   repeat split.
-  unfold globals_inj_same. intros. unfold Mem.flat_inj.
+  unfold globals_inj_same. unfold HighValues.globals_inj_same. intros. unfold Mem.flat_inj.
   destruct H0.
   app Genv.find_funct_ptr_not_fresh Genv.find_funct_ptr.
   unfold Mem.valid_block in *. break_match; try congruence.
@@ -1406,7 +1402,7 @@ Proof.
   unfold Mem.valid_block in *. break_match; try congruence.
   unfold meminj_injective. intros. unfold Mem.flat_inj in *.
   repeat break_match_hyp; try congruence.
-  unfold same_offsets. unfold Mem.flat_inj.
+  unfold same_offsets. unfold HighValues.same_offsets. unfold Mem.flat_inj.
   intros. break_match_hyp; try congruence.
   unfold total_inj. intros.
   unfold Mem.flat_inj.
@@ -1453,23 +1449,27 @@ Proof.
   simpl. eapply init_mem_nextblock; eauto.
 Qed.
 
+
 Lemma match_final_states :
   forall st st' r,
     match_states st st' ->
-    Dmajor.final_state st r ->
-    Dflatmajor.final_state st' r.
+    Dmajor.final_state prog st r ->
+    Dflatmajor.final_state prog st' r.
 Proof.
-  intros. inv H0. inv H.
-  inv H9.
-  inv H6.
-  econstructor; eauto.
+  intros.
+  invp Dmajor.final_state.
+  invp match_states.
+  invp match_cont.
+  econstructor.
+  eapply HighValues.value_val_inject; eauto.
+  unfold wf_mem in *. unfold wf_inj in *. intuition.
+  unfold wf_mem in *. unfold wf_inj in *. intuition.
 Qed.
 
 Theorem fsim :
   forward_simulation (Dmajor.semantics prog) (Dflatmajor.semantics prog).
 Proof.
   eapply forward_simulation_plus.
-  intros. simpl. reflexivity.
   eapply initial_states_match.
   eapply match_final_states.
   eapply single_step_correct.
