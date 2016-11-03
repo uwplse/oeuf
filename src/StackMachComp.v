@@ -42,6 +42,15 @@ Definition compile_list :=
 Ltac refold_compile :=
     fold compile_list in *.
 
+Definition compile_func (f : A.expr) : list B.insn :=
+    compile f.
+
+Definition compile_cu (cu : list A.expr * list metadata) :
+        list (list B.insn) * list metadata :=
+    let '(funcs, metas) := cu in
+    (map compile_func funcs, metas).
+
+
 
 Inductive I_expr : (* stk *) list value -> A.expr -> list B.insn -> Prop :=
 | IArg : I_expr [] A.Arg [B.Arg]
@@ -91,36 +100,7 @@ Inductive I : A.state -> B.state -> Prop :=
 
 
 
-(*
-Lemma stack_app_I_expr : forall stk stk' a b,
-    I_expr stk a b ->
-    I_expr (stk ++ stk') a b.
-inversion 1; constructor; eauto.
-- rewrite nth_error_app1 by (rewrite <- nth_error_Some; congruence). auto.
-- rewrite nth_error_app1 by (rewrite <- nth_error_Some; congruence). auto.
-- rewrite nth_error_app1 by (rewrite <- nth_error_Some; congruence). auto.
-- rewrite nth_error_app1 by (rewrite <- nth_error_Some; congruence). auto.
-
-- rewrite firstn_app; auto.
-  on (_ = vs), fun H => rewrite <- H.
-  rewrite rev_length. rewrite firstn_length. lia.
-- rewrite firstn_app; auto.
-  on (_ = vs), fun H => rewrite <- H.
-  rewrite rev_length. rewrite firstn_length. lia.
-Qed.
-Hint Resolve stack_app_I_expr.
-
-Lemma stack_nil_I_expr : forall stk a b,
-    I_expr [] a b ->
-    I_expr stk a b.
-intros. change stk with ([] ++ stk). eapply stack_app_I_expr. auto.
-Qed.
-Hint Resolve stack_nil_I_expr.
-*)
-
-
-
-Theorem compile_I_expr : forall a b,
+Lemma compile_I_expr : forall a b,
     A.no_values a ->
     compile a = b ->
     I_expr [] a b.
@@ -140,6 +120,33 @@ try solve [econstructor; eauto].
 - (* MkClose *)
   eapply IMkClose with (vs := []); eauto.
 Qed.
+
+Lemma compile_list_I_expr : forall a b,
+    A.no_values_list a ->
+    compile_list a = b ->
+    Forall2 (I_expr []) a b.
+induction a; intros0 Hnval Hcomp; simpl in Hcomp; try rewrite <- Hcomp;
+simpl in Hnval; break_and;
+try solve [econstructor; eauto using compile_I_expr].
+Qed.
+
+Lemma compile_I_func : forall a b,
+    A.no_values a ->
+    compile_func a = b ->
+    I_expr [] a b.
+intros. eapply compile_I_expr; eauto.
+Qed.
+
+Theorem compile_cu_I_env : forall a ameta b bmeta,
+    Forall A.no_values a ->
+    compile_cu (a, ameta) = (b, bmeta) ->
+    Forall2 (I_expr []) a b.
+intros0 Hnval Hcomp. unfold compile_cu in *. inject_pair.
+remember (map compile_func a) as b.
+symmetry in Heqb. apply map_Forall2 in Heqb.
+list_magic_on (a, (b, tt)). eauto using compile_I_func.
+Qed.
+
 
 
 Lemma I_expr_not_value : forall stk a b,

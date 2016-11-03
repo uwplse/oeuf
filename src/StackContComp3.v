@@ -11,7 +11,7 @@ Module A := StackCont2.
 Module B := StackCont3.
 
 
-Definition compile_one : A.insn -> B.insn :=
+Definition compile : A.insn -> B.insn :=
     let fix go e :=
         let fix go_list es :=
             match es with
@@ -34,27 +34,33 @@ Definition compile_one : A.insn -> B.insn :=
         | A.MkClose fname nfree => B.MkClose fname nfree
         end in go.
 
-Definition compile_one_list :=
-    let go := compile_one in
+Definition compile_list :=
+    let go := compile in
     let fix go_list es :=
         match es with
         | [] => []
         | e :: es => go e :: go_list es
         end in go_list.
 
-Definition compile_one_list_list :=
-    let go_list := compile_one_list in
+Definition compile_list_list :=
+    let go_list := compile_list in
     let fix go_list_list es :=
         match es with
         | [] => []
         | e :: es => go_list e :: go_list_list es
         end in go_list_list.
 
-Definition compile : list A.insn -> list B.insn := compile_one_list.
+Definition compile_func (f : list A.insn) : list B.insn :=
+    compile_list f.
+
+Definition compile_cu (cu : list (list A.insn) * list metadata) :
+        list (list B.insn) * list metadata :=
+    let '(funcs, metas) := cu in
+    (map compile_func funcs, metas).
 
 Ltac refold_compile :=
-    fold compile_one_list in *;
-    fold compile_one_list_list in *.
+    fold compile_list in *;
+    fold compile_list_list in *.
 
 
 
@@ -107,21 +113,43 @@ Inductive I : A.state -> B.state -> Prop :=
 
 
 
-Theorem compile_I_expr : forall a b,
+Lemma compile_I_insn : forall a b,
     compile a = b ->
-    Forall2 I_insn a b.
-induction a using A.insn_list_rect_mut with
+    I_insn a b.
+induction a using A.insn_rect_mut with
     (P := fun a => forall b,
-        compile_one a = b ->
+        compile a = b ->
         I_insn a b)
     (Pl := fun a => forall b,
-        compile_one_list a = b ->
+        compile_list a = b ->
         Forall2 I_insn a b)
     (Pll := fun a => forall b,
-        compile_one_list_list a = b ->
+        compile_list_list a = b ->
         Forall2 (Forall2 I_insn) a b);
 intros0 Hcomp; simpl in Hcomp; refold_compile; try (rewrite <- Hcomp; clear Hcomp);
 try solve [econstructor; eauto].
+Qed.
+
+Lemma compile_list_I_insn : forall a b,
+    compile_list a = b ->
+    Forall2 I_insn a b.
+induction a; intros0 Hcomp; simpl in Hcomp; try rewrite <- Hcomp;
+try solve [econstructor; eauto using compile_I_insn].
+Qed.
+
+Lemma compile_I_func : forall a b,
+    compile_func a = b ->
+    Forall2 I_insn a b.
+intros. eapply compile_list_I_insn; eauto.
+Qed.
+
+Theorem compile_cu_I_env : forall a ameta b bmeta,
+    compile_cu (a, ameta) = (b, bmeta) ->
+    Forall2 (Forall2 I_insn) a b.
+intros0 Hcomp. unfold compile_cu in *. inject_pair.
+remember (map compile_func a) as b.
+symmetry in Heqb. apply map_Forall2 in Heqb.
+list_magic_on (a, (b, tt)). eauto using compile_I_func.
 Qed.
 
 
