@@ -624,12 +624,13 @@ break_if; try discriminate.
 constructor. inject_some. eauto.
 Qed.
 
-Lemma compile_I_prog : forall a metas b,
+Lemma compile_I_prog : forall M a metas b,
     compile_cu (a, metas) = Some b ->
-    exists M, I_prog M a b.
-intros0 Hcomp.
+    build_id_list (a, metas) = Some M ->
+    I_prog M a b.
+intros0 Hcomp Hids.
 unfold compile_cu in *. break_bind_option. inject_some.
-rename l into M. rename l0 into bdefs. rename l1 into bpublic.
+rename l0 into bdefs. rename l1 into bpublic.
 
 on (_ = Some bpublic), fun H => clear H.
 
@@ -646,7 +647,7 @@ assert (HH : exists bdefs', bdefs = map (fun p => (fst p, AST.Gfun (Internal (sn
 destruct HH as (bdefs' & Hbdefs').
 
 
-exists M. econstructor; eauto.
+econstructor; eauto.
 
 - remember (numbered a) as na.
   symmetry in Hbdefs'.  eapply map_Forall2 in Hbdefs'.
@@ -991,8 +992,33 @@ simpl in *.
 
 Qed.
 
+Inductive I' (M : id_map) (AE : A.env) : A.state -> B.state -> Prop :=
+| I'_intro : forall a b,
+        I M a b ->
+        A.state_fnames_below (length AE) a ->
+        A.state_switch_placement a ->
+        I' M AE a b.
+
+Theorem I'_sim : forall M AE BE a a' b,
+    id_map_ok M ->
+    I_env M AE BE ->
+    Forall (fun f => A.fnames_below (length AE) (fst f)) AE ->
+    Forall (fun f => A.switch_placement (fst f)) AE ->
+    I' M AE a b ->
+    A.sstep AE a a' ->
+    exists b',
+        B.step BE b E0 b' /\
+        I' M AE a' b'.
+intros. on >I', invc.
+fwd eapply I_sim; eauto. break_exists; break_and.
+eexists; split; eauto. constructor; eauto.
+- eapply A.step_fnames_below; try eassumption.
+- eapply A.step_switch_placement; try eassumption.
+Qed.
 
 
+
+Require Semantics.
 Require MixSemantics.
 
 Section Preservation.
@@ -1002,26 +1028,52 @@ Section Preservation.
 
   Hypothesis TRANSF : compile_cu prog = Some tprog.
 
-  
-  (* Inductive match_states (AE : A.env) (BE : B.env) : A.expr -> B.expr -> Prop := *)
-  (* | match_st : *)
-  (*     forall a b, *)
-  (*       R AE BE a b -> *)
-  (*       match_states AE BE a b. *)
-
-  (* Lemma step_sim : *)
-  (*   forall AE BE a b, *)
-  (*     match_states AE BE a b -> *)
-  (*     forall a', *)
-  (*       A.step AE a a' -> *)
-  (*       exists b', *)
-  (*         splus (B.step BE) b b'. *)
-  (* Proof. *)
-  (* Admitted. *)
+Lemma raw_sim_lockstep : forall (index : Type) (order : index -> index -> Prop)
+          (state_a state_b : Type) (match_states : state_a -> state_b -> Prop)
+          (genv : Type)
+          (step : genv -> state_b -> trace -> state_b -> Prop)
+          (a' : state_a) (b : state_b) (i : index) (ge : genv),
+    (exists b' : state_b,
+        step ge b E0 b' /\ match_states a' b') ->
+    (exists (i' : index), True) ->
+    (exists (i' : index) (b' : state_b),
+        (TraceSemantics.plus step ge b E0 b' \/
+         TraceSemantics.star step ge b E0 b' /\ order i' i) /\
+        match_states a' b').
+intros.
+do 2 break_exists. break_and.
+do 2 on _, fun x => exists x.
+split.
+- left. econstructor 1; eauto.
+  + econstructor 1.
+  + reflexivity.
+- assumption.
+Qed.
 
   Theorem fsim :
     MixSemantics.mix_forward_simulation (A.semantics prog) (B.semantics tprog).
   Proof.
+    assert (HH : { M | build_id_list prog = Some M }). {
+      unfold compile_cu in *. break_bind_option. eauto.
+    }
+    destruct HH as [M HM].
+    destruct prog as [AE ameta].
+
+    eapply MixSemantics.Forward_simulation with
+        (fsim_index := unit)
+        (fsim_order := ltof _ (fun _ => 0))
+        (fsim_match_states := fun _ => I' M AE).
+    - apply well_founded_ltof.
+    - inversion 1. (* TODO - replace with callstate matching *)
+    - intro. intros0 II Afinal.
+      invc Afinal. invc II. on >I, invc. on >I_cont, invc. eexists. constructor.
+    - intros0 Astep. intros0 II.
+      eapply raw_sim_lockstep; eauto. simpl.
+      eapply I'_sim; try eassumption.
+      + eauto using build_id_list_ok.
+      + eapply I_prog_env. eapply compile_I_prog; eauto.
+      + admit. (* TODO: validate *)
+      + admit. (* TODO: validate *)
   Admitted.
 
 End Preservation.
