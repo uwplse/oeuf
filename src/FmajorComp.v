@@ -292,7 +292,7 @@ Inductive I_func : A.stmt * A.expr -> B.function -> Prop :=
 Inductive I_prog : A.env -> B.program -> Prop :=
 | IProg : forall ae ae' bdefs bdefs' bpublic bmain,
         ae' = numbered ae ->
-        bdefs = map (fun p => (fst p, AST.Gfun (snd p))) bdefs' ->
+        bdefs = map (fun p => (fst p, AST.Gfun (Internal (snd p)))) bdefs' ->
         Forall2 (fun a b =>
             let '(an, af) := a in
             let '(bid, bf) := b in
@@ -308,7 +308,7 @@ Inductive I_env : A.env -> B.genv -> Prop :=
             I_id (IkFunc afname) bfname ->
             exists bsym bf,
                 Genv.find_symbol BE bfname = Some bsym /\
-                Genv.find_funct_ptr BE bsym = Some bf /\
+                Genv.find_funct_ptr BE bsym = Some (Internal bf) /\
                 I_func af bf) ->
         I_env AE BE
 .
@@ -635,7 +635,7 @@ on (_ = Some bpublic), fun H => clear H.
 
 unfold compile_gdefs in *.
 on _, eapply_lem map_partial_Forall2.
-assert (HH : exists bdefs', bdefs = map (fun p => (fst p, AST.Gfun (snd p))) bdefs').
+assert (HH : exists bdefs', bdefs = map (fun p => (fst p, AST.Gfun (Internal (snd p)))) bdefs').
   { unfold numbered in *. remember 0 as base. clear Heqbase.
     generalize dependent bdefs. clear -base. make_first bdefs. induction bdefs; intros.
       { exists []. reflexivity. }
@@ -650,17 +650,8 @@ exists M. econstructor; eauto.
 
 - remember (numbered a) as na.
   symmetry in Hbdefs'.  eapply map_Forall2 in Hbdefs'.
-  
+
   list_magic_on (na, (bdefs, (bdefs', tt))); cycle 1.
-    { (* automation broke again :( *)
-      eapply nth_error_Forall2.
-        { erewrite Forall2_length with (xs := na) (ys := bdefs); eauto.
-          symmetry. eauto using Forall2_length. }
-      intros.
-      fwd eapply Forall2_nth_error_ex as HH; eauto.  destruct HH as (z & ? & ?).
-      on _, eapply_; try eassumption.
-      - pattern x, z. eapply Forall2_nth_error; eauto.
-    }
   destruct na_i as [an af]. destruct bdefs'_i as [bid bf].
   unfold compile_gdef in *. break_bind_option. inject_some. simpl in *. inject_pair.
   eauto using compile_I_func.
@@ -685,14 +676,16 @@ exists M. econstructor; eauto.
     destruct HH as (b1 & ? & ?).
   rewrite count_up_nth_error in *; cycle 1.
     { erewrite <- count_up_length, <- Forall2_length by eauto.
-      rewrite <- nth_error_Some. congruence. }
+      rewrite <- nth_error_Some.
+      (* this unfold has no visible effect, but makes some implicits line up *)
+      unfold B.fundef.  congruence. }
   inject_some.
 
   fwd eapply Forall2_nth_error_ex with (i := n2) as HH; eauto. 
     destruct HH as (b2 & ? & ?).
   rewrite count_up_nth_error in *; cycle 1.
     { erewrite <- count_up_length, <- Forall2_length by eauto.
-      rewrite <- nth_error_Some. congruence. }
+      rewrite <- nth_error_Some. unfold B.fundef. congruence. }
   inject_some.
 
   eapply I_id_ne with (k1 := IkFunc b1) (k2 := IkFunc b2); eauto.
@@ -712,7 +705,7 @@ replace bfname' with bfname in * by (repeat on >I_id, invc; congruence).
 
 remember (AST.mkprogram _ _ _) as B.
 
-assert (In (bfname, Gfun bf) (AST.prog_defs B)).
+assert (In (bfname, Gfun (Internal bf)) (AST.prog_defs B)).
   { eapply nth_error_in. on _, eapply_lem map_nth_error.
     subst B. simpl. on _, fun H => rewrite H.
     simpl. reflexivity. }
@@ -840,7 +833,7 @@ Lemma I_env_nth_error : forall M AE BE afname af bfname,
     I_id M (IkFunc afname) bfname ->
     exists bsym bf,
         Genv.find_symbol BE bfname = Some bsym /\
-        Genv.find_funct_ptr BE bsym = Some bf /\
+        Genv.find_funct_ptr BE bsym = Some (Internal bf) /\
         I_func M af bf.
 intros0 IIenv Afind IIid.
 invc IIenv. eauto.
