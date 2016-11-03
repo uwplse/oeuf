@@ -53,13 +53,21 @@ Definition compile_list_list :=
         | e :: es => go_list e :: go_list_list es
         end in go_list_list.
 
-Definition compile_func (f : list A.insn) : list B.insn * nat :=
-    (compile_list f, A.last_dest 0 f).
+Definition compile_func (f : list A.insn) : option (list B.insn * nat) :=
+    if A.switch_dest_ok_list_dec f
+        then Some (compile_list f, A.last_dest 0 f)
+        else None.
+
+Section compile_cu.
+Open Scope option_monad.
 
 Definition compile_cu (cu : list (list A.insn) * list metadata) :
-        list (list B.insn * nat) * list metadata :=
+        option (list (list B.insn * nat) * list metadata) :=
     let '(funcs, metas) := cu in
-    (map compile_func funcs, metas).
+    map_partial compile_func funcs >>= fun funcs' =>
+    Some (funcs', metas).
+
+End compile_cu.
 
 Ltac refold_compile :=
     fold compile_list in *;
@@ -144,20 +152,36 @@ try solve [econstructor; eauto using compile_I_insn].
 Qed.
 
 Lemma compile_I_func : forall a b,
-    compile_func a = b ->
+    compile_func a = Some b ->
     I_func a b.
 intros0 Hcomp.
-unfold compile_func in Hcomp. rewrite <- Hcomp.
+unfold compile_func in Hcomp. break_if; try discriminate. inject_some.
 constructor; eauto using compile_list_I_insn.
 Qed.
 
 Theorem compile_cu_I_env : forall a ameta b bmeta,
-    compile_cu (a, ameta) = (b, bmeta) ->
+    compile_cu (a, ameta) = Some (b, bmeta) ->
     Forall2 I_func a b.
-intros0 Hcomp. unfold compile_cu in *. inject_pair.
-remember (map compile_func a) as b.
-symmetry in Heqb. apply map_Forall2 in Heqb.
+intros0 Hcomp. unfold compile_cu in *. break_bind_option. inject_some.
+on _, apply_lem map_partial_Forall2.
 list_magic_on (a, (b, tt)). eauto using compile_I_func.
+Qed.
+
+
+Lemma compile_func_switch_dest_ok : forall a b,
+    compile_func a = Some b ->
+    A.switch_dest_ok_list a.
+intros0 Hcomp.
+unfold compile_func in Hcomp. break_if; try discriminate. inject_some.
+auto.
+Qed.
+
+Theorem compile_cu_switch_dest_ok : forall a ameta b bmeta,
+    compile_cu (a, ameta) = Some (b, bmeta) ->
+    Forall A.switch_dest_ok_list a.
+intros0 Hcomp. unfold compile_cu in *. break_bind_option. inject_some.
+on _, apply_lem map_partial_Forall2.
+list_magic_on (a, (b, tt)). eauto using compile_func_switch_dest_ok.
 Qed.
 
 
@@ -420,8 +444,7 @@ Section Preservation.
   Variable prog : A.prog_type.
   Variable tprog : B.prog_type.
 
-  Hypothesis TRANSF : compile_cu prog = tprog.
-  Hypothesis Aswitch : Forall A.switch_dest_ok_list (fst prog).
+  Hypothesis TRANSF : compile_cu prog = Some tprog.
 
   Theorem fsim :
     Semantics.forward_simulation (A.semantics prog) (B.semantics tprog).
@@ -430,8 +453,9 @@ Section Preservation.
     - inversion 1. (* TODO - replace with callstate matching *)
     - intros0 II Afinal. invc Afinal. invc II. on >I, invc. constructor.
     - intros0 Astep. intros0 II.
-      eapply I'_sim; eauto.
-      destruct prog, tprog. eapply compile_cu_I_env; eauto.
+      eapply I'_sim; try eassumption.
+      + destruct prog, tprog. eapply compile_cu_I_env; eauto.
+      + destruct prog, tprog. eapply compile_cu_switch_dest_ok; eauto.
   Qed.
 
 End Preservation.
