@@ -56,7 +56,7 @@ Definition compile : A.insn -> state_option (list nat) B.insn :=
             | [] => pure []
             | e :: es => @cons _ <$>
                     check_and_rewind (go_list e) stk <*>
-                    check_and_rewind (go_case_list stk es) stk
+                    go_case_list stk es
             end in
         match e with
         | A.Arg dst =>
@@ -109,7 +109,7 @@ Definition compile_case_list :=
         | [] => pure []
         | e :: es => @cons _ <$>
                 check_and_rewind (go_list e) stk <*>
-                check_and_rewind (go_case_list stk es) stk
+                go_case_list stk es
         end in go_case_list.
 
 Definition compile_func func :=
@@ -244,7 +244,9 @@ Lemma compile_case_list_state_eq : forall cases cases' stk s s',
     s' = s.
 induction cases; intros0 Hcomp; simpl in *; break_bind_state_option.
 - reflexivity.
-- do 2 on _, apply_lem check_and_rewind_state_eq. congruence.
+- on _, apply_lem check_and_rewind_state_eq.
+  on _, apply_lem IHcases.
+  congruence.
 Qed.
 
 Theorem compile_I_insn : forall a b s s',
@@ -270,9 +272,7 @@ try solve [econstructor; eauto].
   rewrite firstn_length. lia.
 - fwd eapply check_and_rewind_state_eq; eauto. subst.
   on _, apply_lem check_and_rewind_ok.
-  fwd eapply check_and_rewind_state_eq; eauto. subst.
-  on _, apply_lem check_and_rewind_ok.
-  constructor; eauto.
+  fwd eapply compile_case_list_state_eq; eauto.
 Qed.
 
 Theorem compile_list_I_insn : forall a b s s',
