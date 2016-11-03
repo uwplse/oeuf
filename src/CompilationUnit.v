@@ -1,6 +1,8 @@
 Require Import List String HList SourceLang.
 Import ListNotations.
 Require Semantics.
+Require Import HighValues.
+Require Import Utopia.
 
 Record compilation_unit :=
   CompilationUnit {
@@ -11,7 +13,6 @@ Record compilation_unit :=
 
 Definition singleton {ty} (e : expr [] ty) (name : string) : compilation_unit :=
   CompilationUnit [ty] (hcons e hnil) [name].
-
 
 (* Initial state stuff for SourceLang *)
 

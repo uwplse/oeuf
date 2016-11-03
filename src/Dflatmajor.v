@@ -8,7 +8,9 @@ Require Import compcert.common.Globalenvs.
 Require Import compcert.common.Memory.
 Require Import compcert.common.Events.
 Require Import compcert.common.Switch.
-Require Import compcert.common.Smallstep.
+(*Require Import compcert.common.Smallstep.*)
+Require Import TraceSemantics.
+Require Import HighValues.
 
 Require Import List.
 Import ListNotations.
@@ -272,14 +274,15 @@ Inductive initial_state (p: program): state -> Prop :=
 
 (** A final state is a [Returnstate] with an empty continuation. *)
 
-Inductive final_state: state -> int -> Prop :=
-  | final_state_intro: forall r m z,
-      final_state (Returnstate (Vint r) Kstop m z) r.
+Inductive final_state (p : program) : state -> value -> Prop :=
+| final_state_intro: forall m v v' z,
+    value_inject (Genv.globalenv p) m v v' ->
+    final_state p (Returnstate v' Kstop m z) v.
 
 (** The corresponding small-step semantics. *)
 
 Definition semantics (p: program) :=
-  Semantics step (initial_state p) final_state (Genv.globalenv p).
+  Semantics step (initial_state p) (final_state p) (Genv.globalenv p).
 
 (** This semantics is receptive to changes in events. *)
 

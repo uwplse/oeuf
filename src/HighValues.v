@@ -18,6 +18,7 @@ Require Import Ring.
 Require Import StructTact.StructTactics.
 Require Import StructTact.Util.
 
+Require Import EricTact.
 
 (* Computation will be over higher level values, i.e. Constr and Close *)
 (* We will need a way to relate those to lower level values *)
@@ -105,6 +106,153 @@ Inductive value_inject {A B} (ge : Genv.t A B) (m : mem) : value -> val -> Prop 
       load_all (arg_addrs b (Int.add ofs (Int.repr 4)) values) m = Some l' -> (* one more deref for args *)
       (forall a b, In (a,b) l' -> value_inject ge m a b) -> (* all args inject *)
       value_inject ge m (Close fname values) (Vptr b ofs).
+
+
+(* nothing is moved around within blocks *)
+Definition same_offsets (mi : meminj) : Prop :=
+  forall b b' delta,
+    mi b = Some (b',delta) ->
+    delta = 0.
+
+(* globals aren't moved around *)
+Definition globals_inj_same {F V} (ge : Genv.t F V) (mi : meminj) : Prop :=
+  forall b f v,
+    (Genv.find_funct_ptr ge b = Some f \/
+    Genv.find_var_info ge b = Some v) ->
+    mi b = Some (b,0).
+
+Lemma load_all_inject :
+    forall l b ofs k args b' mi m m',
+      load_all (arg_addrs b (Int.add ofs k) args) m = Some l ->
+      Mem.inject mi m m' ->
+      mi b = Some (b',0) ->
+      exists l',
+        load_all (arg_addrs b' (Int.add ofs k) args) m' = Some l' /\ list_forall2 (fun x y => fst x = fst y /\ Val.inject mi (snd x) (snd y)) l l'.
+Proof.
+  induction l; intros.
+  destruct args; simpl in H; inv H. simpl.
+  exists nil. split; eauto. econstructor; eauto.
+  repeat (break_match_hyp; try congruence).
+  destruct args. simpl in H. inv H.
+  simpl in H. repeat (break_match_hyp; try congruence).
+  invc H.
+  simpl. app Mem.load_inject Mem.load. rewrite Z.add_0_r in *.
+  collapse_match.
+  eapply IHl in Heqo0; eauto.
+  break_exists; break_and.
+  collapse_match.
+  eexists; split; eauto.
+  econstructor; eauto.
+Qed.
+
+Lemma list_forall2_in_backwards :
+  forall {A B : Type} (P : A -> B -> Prop) l l',
+    list_forall2 P l l' ->
+    forall elem',
+      In elem' l' ->
+      exists elem,
+        In elem l /\ P elem elem'.
+Proof.
+  induction 1; intros.
+  simpl in H. inv H.
+  simpl in H1. destruct H1. subst b1. eexists; split; eauto. simpl. left. reflexivity.
+  simpl. apply IHlist_forall2 in H1. break_exists. break_and.
+  eexists; split; eauto; right; eauto.
+Qed.
+
+Lemma load_all_hval_in :
+  forall args l b ofs m,
+    load_all (arg_addrs b ofs args) m = Some l ->
+    forall a x,
+      In (a,x) l ->
+      In a args.
+Proof.
+  induction args; intros.
+  simpl in H. inv H. simpl in H0. inv H0.
+  simpl in H. repeat break_match_hyp; try congruence.
+  inv H. simpl in H0. destruct H0. inv H0.
+  simpl; left; reflexivity.
+  simpl; right; eauto.
+Qed.
+
+Lemma value_val_inject :
+  forall {F} (ge : Genv.t F unit) m v v',
+    value_inject ge m v v' ->
+    forall mi m' v0,
+      Val.inject mi v' v0 ->
+      Mem.inject mi m m' ->
+      same_offsets mi ->
+      globals_inj_same ge mi ->
+      value_inject ge m' v v0.
+Proof.
+  induction v using value_ind'; intros;
+    inv H0; inv H1;
+      app Mem.loadv_inject Mem.loadv;
+      inv H7; app H3 (mi b); subst delta;
+        app load_all_inject load_all; repeat break_and;
+          econstructor; eauto; repeat rewrite Int.add_zero in *; try eassumption.
+
+  Focus 2.
+  rewrite Int.add_commut in *.
+  repeat rewrite Int.add_zero in *.
+  unfold same_offsets in *.
+  app H3 (mi bcode). subst delta0.
+  erewrite H4 in H16; eauto. inv H16. assumption.
+
+
+  
+  intros.
+  eapply list_forall2_in_backwards in H12; eauto.
+  break_exists. repeat break_and. destruct x0. simpl in H14. subst.
+  eapply H10 in H12.
+  rewrite Forall_forall in H. simpl in H15. eapply H; eauto.
+  eapply load_all_hval_in; eauto.
+    
+  intros. 
+  eapply list_forall2_in_backwards in H14; eauto.
+  break_exists. repeat break_and. destruct x0. simpl in H17. subst.
+  eapply H12 in H14.
+  rewrite Forall_forall in H. simpl in H18. eapply H; eauto.
+  eapply load_all_hval_in; eauto.
+
+  Grab Existential Variables.
+  repeat (econstructor; eauto).
+Qed.
+
+
+Lemma value_inject_swap_ge :
+  forall {F F' V} (ge1 : Genv.t F V) (ge2 : Genv.t F' V),
+    forall m v v',
+      value_inject ge1 m v v' ->
+    (forall b f,
+        Genv.find_funct_ptr ge1 b = Some f ->
+        exists f',
+          Genv.find_funct_ptr ge2 b = Some f') ->
+    (forall fname b,
+        Genv.find_symbol ge1 fname = Some b ->
+        Genv.find_symbol ge2 fname = Some b) ->
+      value_inject ge2 m v v'.
+Proof.
+  induction 1; intros.
+  econstructor; eauto.
+  eapply H5 in H0.
+  break_exists.
+  econstructor; eauto.
+Qed.
+
+
+Lemma value_inject_mem_extends :
+  forall {F V} (ge : Genv.t F V) m m' v v' v0,
+    value_inject ge m v v' ->
+    Mem.extends m m' ->
+    Val.lessdef v' v0 ->
+    value_inject ge m' v v0.
+Proof.
+  induction 1; intros.
+  inv H4. app Mem.loadv_extends Mem.loadv.
+  inv H6.
+  econstructor; eauto.
+Admitted.
 
 
 Definition env_inject {A B} (hlenv : PTree.t value) (llenv : PTree.t val) (ge : Genv.t A B)(m : mem) : Prop :=

@@ -4,9 +4,10 @@ Require Import Wellfounded.
 
 (* Oeuf *)
 Require Import Semantics.
+Require Import TraceSemantics.
 
 (* Compcert *)
-Require Import compcert.common.Smallstep.
+(*Require Import compcert.common.Smallstep.*)
 Require Import compcert.common.Globalenvs.
 Require Import compcert.common.Events.
 Require Import compcert.lib.Coqlib.
@@ -18,13 +19,13 @@ Require Import StructTact.Util.
 Require Import EricTact.
 
 
-Definition trace_semantics := semantics.
+Definition trace_semantics := TraceSemantics.semantics.
 Definition notrace_semantics := Semantics.semantics.
 
 Definition trace_fsim_index := fsim_index.
 Definition trace_fsim_order := fsim_order.
 
-Definition trace_forward_simulation := forward_simulation.
+Definition trace_forward_simulation := TraceSemantics.forward_simulation.
 Definition notrace_forward_simulation := Semantics.forward_simulation.
 
 (* We need a simulation from notrace to trace *)
@@ -120,7 +121,10 @@ Proof.
 Qed.
 
 
+
+
 End SIMULATION_SEQUENCES.
+
 
 
 Section COMPOSE_SIMULATIONS.
@@ -200,22 +204,22 @@ Proof.
   apply Forward_simulation with (fsim_order := ff_order) (fsim_match_states := ff_match_states).
 (* well founded *)
   unfold ff_order. apply wf_lex_ord. apply wf_clos_trans.
-  apply Smallstep.fsim_order_wf.
+  apply TraceSemantics.fsim_order_wf.
   apply fsim_order_wf.  
 (* initial states *)
   intros. exploit (fsim_match_initial_states _ _ S12); eauto. intros [i [s2 [A B]]].
-  exploit (Smallstep.fsim_match_initial_states S23); eauto. intros [i' [s3 [C D]]].
+  exploit (TraceSemantics.fsim_match_initial_states S23); eauto. intros [i' [s3 [C D]]].
   exists (i', i); exists s3; split; auto. exists s2; auto.
 (* final states *)
   intros. destruct H as [s3 [A B]].
   edestruct (fsim_match_final_states _ _ S12); eauto.
   eexists.
-  eapply (Smallstep.fsim_match_final_states S23); eauto.
+  eapply (TraceSemantics.fsim_match_final_states S23); eauto.
 (* simulation *)
   intros. destruct H0 as [s3 [A B]]. destruct i as [i2 i1]; simpl in *.
   exploit (fsim_simulation' _ _ S12); eauto. intros [[i1' [s3' [C D]]] | [i1' [C D]]].
   (* L2 makes one or several steps. *)
-  exploit Smallstep.simulation_plus; eauto. intros [[i2' [s2' [P Q]]] | [i2' [P Q]]].
+  exploit TraceSemantics.simulation_plus; eauto. intros [[i2' [s2' [P Q]]] | [i2' [P Q]]].
   (* L3 makes one or several steps *)
   exists (i2', i1'); exists s2'; split. auto. exists s3'; auto.
   (* L3 makes no step *)
@@ -231,7 +235,7 @@ Proof.
 (*  intros.
   transitivity (Senv.public_symbol (symbolenv L2) id);
   try apply fsim_public_preserved; auto;
-  try apply Smallstep.fsim_public_preserved; auto. *)
+  try apply TraceSemantics.fsim_public_preserved; auto. *)
 Qed.
   
 End COMPOSE_MIX_TRACE.

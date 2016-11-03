@@ -8,7 +8,9 @@ Require Import compcert.common.Globalenvs.
 Require Import compcert.common.Memory.
 Require Import compcert.common.Events.
 Require Import compcert.common.Switch.
-Require Import compcert.common.Smallstep.
+(*Require Import compcert.common.Smallstep.*)
+
+Require Import TraceSemantics.
 
 Require Import List.
 Import ListNotations.
@@ -211,9 +213,9 @@ Inductive initial_state (p: program): state -> Prop :=
       Genv.find_funct_ptr ge b = Some (Internal f) ->
       initial_state p (Callstate f nil Kstop).
 
-Inductive final_state: state -> int -> Prop :=
-  | final_state_intro: forall r v,
-      final_state (Returnstate v Kstop) r.
+Inductive final_state: state -> value -> Prop :=
+  | final_state_intro: forall v,
+      final_state (Returnstate v Kstop) v.
 
 Definition semantics (p: program) :=
   Semantics step (initial_state p) final_state (Genv.globalenv p).
