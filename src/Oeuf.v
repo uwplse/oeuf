@@ -6,30 +6,20 @@ Require TaggedNumberedComp ElimFuncComp ElimFuncComp2 ElimFuncComp3.
 Require SelfCloseComp ValueFlagComp.
 Require StackCompCombined LocalsCompCombined FlatCompCombined.
 Require CompilationUnit Metadata.
+Require Import CompilerUtil.
 
 Require Import compcert.common.AST.
 Require compcert.backend.SelectLong.
 
 
-Definition option_to_res {A} (o : option A) : res A :=
-  match o with
-  | None => Error []
-  | Some a => OK a
-  end.
-
-Coercion option_to_res : option >-> res.
-
-Local Open Scope option_monad.
-
-
 Definition transf_untyped_to_cminor (l : list UntypedComp.U.expr * list Metadata.metadata) : res Cminor.program :=
   OK l
   @@ LiftedComp.compile_cu
- @@@ TaggedComp.compile_cu
+ @@@ TaggedComp.compile_cu ~~ "TaggedComp"
   @@ TaggedNumberedComp.compile_cu
   @@ ElimFuncComp.compile_cu
   @@ ElimFuncComp2.compile_cu
- @@@ ElimFuncComp3.compile_cu
+ @@@ ElimFuncComp3.compile_cu ~~ "ElimFuncComp3"
   @@ SwitchedComp.compile_cu
   @@ SelfCloseComp.compile_cu
   @@ ValueFlagComp.compile_cu

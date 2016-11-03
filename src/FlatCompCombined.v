@@ -2,6 +2,7 @@ Require Import compcert.driver.Compiler compcert.common.Errors.
 Require Import Common Monads.
 Require CompilationUnit.
 Require Import Metadata.
+Require Import CompilerUtil.
 
 Require LocalsOnly FlatIntTag.
 Require
@@ -21,13 +22,6 @@ Module A := LocalsOnly.
 Module B := FlatIntTag.
 
 
-Definition option_to_res {A} (o : option A) : res A :=
-  match o with
-  | None => Error []
-  | Some a => OK a
-  end.
-Coercion option_to_res : option >-> res.
-
 Definition compile_cu (cu : A.env * list metadata) : res (B.env * list metadata) :=
   OK cu
   @@ FlatSwitchComp.compile_cu
@@ -39,7 +33,8 @@ Definition compile_cu (cu : A.env * list metadata) : res (B.env * list metadata)
   @@ FlatExprRetComp.compile_cu
   @@ FlatStopComp.compile_cu
   @@ FlatDestCheckComp.compile_cu
- @@@ FlatIntTagComp.compile_cu.
+ @@@ FlatIntTagComp.compile_cu ~~ "FlatIntTag"
+.
 
 Inductive I : A.state -> B.state -> Prop :=
 | ICombined : forall s00 s01 s02 s03 s04 s05 s06 s07 s08 s09 s10,
@@ -87,24 +82,6 @@ list_magic_on (e00, (e01, (e02, (e03, (e04, (e05, (e06, (e07, (e08, (e09, (e10, 
 eapply IFuncCombined; eassumption.
 Qed.
 
-Ltac break_result_chain :=
-    let go l :=
-        match l with
-        | OK _ => fail 1
-        | _ => destruct l eqn:?; try discriminate
-        end in
-    repeat match goal with
-    | [ H : context [ ?l @@ ?r ] |- _ ] => go l
-    | [ H : context [ ?l @@@ ?r ] |- _ ] => go l
-    end.
-
-Ltac inject_ok :=
-    repeat match goal with
-    | [ H : OK ?x = OK ?y |- _ ] =>
-            assert (x = y) by congruence;
-            clear H
-    end.
-
 
 Theorem compile_I_func : forall a ameta b bmeta,
     compile_cu (a, ameta) = OK (b, bmeta) ->
@@ -112,8 +89,7 @@ Theorem compile_I_func : forall a ameta b bmeta,
 intros0 Hcomp. unfold compile_cu in *.
 
 remember (a, ameta) as aprog.
-break_result_chain.  simpl in *.  inject_ok.
-unfold option_to_res in *. repeat (break_match; try discriminate).
+break_result_chain.
 subst aprog.  repeat on (_ * _)%type, fun x => destruct x.
 
 on _, eapply_lem FlatSwitchComp.compile_cu_I_env.
@@ -127,7 +103,6 @@ on _, eapply_lem FlatStopComp.compile_cu_I_env.
 on _, eapply_lem FlatDestCheckComp.compile_cu_I_env.
 on _, eapply_lem FlatIntTagComp.compile_cu_I_env.
 
-inject_ok. inject_pair.
 eapply chain_I_env; eassumption.
 Qed.
 

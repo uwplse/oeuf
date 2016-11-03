@@ -4,6 +4,7 @@ Require Import HList.
 Require Import Untyped.
 Require Import StepLib.
 Require Import MixSemantics.
+Require Import CompilerUtil.
 
 Require Import SourceLang.
 
@@ -44,32 +45,6 @@ Require Import EricTact.
 
 (* Theorem: given 2 x86 level values and their matching high level values, we can build a call out of them and establish matching with it *)
 
-Ltac break_result_chain :=
-    let go l :=
-        match l with
-        | OK _ => fail 1
-        | _ => destruct l eqn:?; try discriminate
-        end in
-    repeat match goal with
-    | [ H : context [ ?l @@ ?r ] |- _ ] => go l
-    | [ H : context [ ?l @@@ ?r ] |- _ ] => go l
-    end.
-
-Ltac break_result_chain' :=
-    repeat match goal with
-    | [ H : context [ OK ?l @@ ?r ] |- _ ] => unfold Compiler.apply_total in H at 1
-    | [ H : context [ OK ?l @@@ ?r ] |- _ ] => unfold Compiler.apply_partial in H at 1
-    | [ H : context [ ?l @@ ?r ] |- _ ] => destruct l eqn:?; try discriminate
-    | [ H : context [ ?l @@@ ?r ] |- _ ] => destruct l eqn:?; try discriminate
-    end.
-
-Ltac inject_ok :=
-    repeat match goal with
-    | [ H : OK ?x = OK ?y |- _ ] =>
-            assert (x = y) by congruence;
-            clear H
-    end.
-
 Section Simulation.
 
   Variable prog : compilation_unit.
@@ -93,44 +68,7 @@ Section Simulation.
     (* Break down structure of compiler *)
     unfold transf_untyped_to_asm in *.
     unfold transf_untyped_to_cminor in *.
-    Set Default Timeout 10.
-
-    repeat match goal with
-    | [ H : OK ?l @@ ?r = _ |- _ ] => unfold Compiler.apply_total in H at 1
-    | [ H : OK ?l @@@ ?r = _ |- _ ] => unfold Compiler.apply_partial in H at 1
-    | [ H : ?l @@ ?r = _ |- _ ] => destruct l eqn:?; try discriminate
-    | [ H : ?l @@@ ?r = _ |- _ ] => destruct l eqn:?; try discriminate
-    | [ H : OK ?l = OK ?r |- _ ] =>
-            assert (l = r) by congruence;
-            clear H
-    | [ H : option_to_res ?l = OK ?r |- _ ] =>
-            assert (l = Some r) by
-                (clear -H; unfold option_to_res in H; destruct l; congruence);
-            clear H
-    end.
-
-  (*
     break_result_chain.
-    unfold Compiler.apply_partial in Heqr0 at 1.
-    unfold Compiler.apply_partial in Heqr at 1.
-    break_result_chain.
-    break_result_chain.
-    unfold Compiler.apply_partial in *.
-
-    repeat (break_match_hyp; try congruence).
-    unfold Compiler.apply_partial in *.
-    unfold Compiler.apply_total in *.
-    repeat (break_match_hyp; try congruence).
-    repeat match goal with
-           | [ H : OK _ = OK _ |- _ ] => inversion H; clear H
-           end.
-    unfold option_to_res in *.
-    repeat (break_match_hyp; try congruence).
-    repeat match goal with
-           | [ H : OK _ = OK _ |- _ ] => inversion H; clear H
-           end.
-    subst p16 p17 p18 p20.
-  *)
 
     (* Untyped to Lifted *)
     eapply compose_notrace_mix_forward_simulation.
