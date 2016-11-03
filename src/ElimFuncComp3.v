@@ -677,26 +677,18 @@ Section Preservation.
 
   Hypothesis TRANSF : compile_cu prog = Some tprog.
 
-  
-  (* Inductive match_states (AE : A.env) (BE : B.env) : A.expr -> B.expr -> Prop := *)
-  (* | match_st : *)
-  (*     forall a b, *)
-  (*       R AE BE a b -> *)
-  (*       match_states AE BE a b. *)
-
-  (* Lemma step_sim : *)
-  (*   forall AE BE a b, *)
-  (*     match_states AE BE a b -> *)
-  (*     forall a', *)
-  (*       A.step AE a a' -> *)
-  (*       exists b', *)
-  (*         splus (B.step BE) b b'. *)
-  (* Proof. *)
-  (* Admitted. *)
-
   Theorem fsim :
     Semantics.forward_simulation (A.semantics prog) (B.semantics tprog).
   Proof.
-  Admitted.
+    eapply Semantics.forward_simulation_step with (match_states := I (fst prog) (fst tprog)).
+    - inversion 1. (* TODO - replace with callstate matching *)
+    - intros0 II Afinal. invc Afinal. invc II. constructor. eauto using I_expr_value.
+    - intros0 Astep. intros0 II.
+      eapply I_sim; try eassumption.
+      + destruct prog, tprog. simpl in *. unfold compile_cu in *.
+        break_if; try discriminate. simpl in *. inject_some. auto.
+      + destruct prog, tprog. simpl in *. unfold compile_cu in *.
+        break_if; try discriminate. auto.
+  Qed.
 
 End Preservation.

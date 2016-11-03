@@ -18,7 +18,7 @@ Definition transf_untyped_to_cminor (l : list UntypedComp.U.expr * list Metadata
  @@@ TaggedComp.compile_cu ~~ "TaggedComp"
   @@ TaggedNumberedComp.compile_cu
   @@ ElimFuncComp.compile_cu
-  @@ ElimFuncComp2.compile_cu
+ @@@ ElimFuncComp2.compile_cu ~~ "ElimFuncComp2"
  @@@ ElimFuncComp3.compile_cu ~~ "ElimFuncComp3"
   @@ SwitchedComp.compile_cu
   @@ SelfCloseComp.compile_cu

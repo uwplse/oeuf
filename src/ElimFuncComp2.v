@@ -138,7 +138,7 @@ Inductive I_expr (AE : A.env) (BE : B.env) : A.expr -> B.expr -> Prop :=
 | IClose : forall fname afree bfree body,
         nth_error BE fname = Some body ->
         let n := length bfree in
-        B.num_locals body <= n ->
+        B.num_locals body <= S n ->
         n <= length afree ->
         Forall2 (I_expr AE BE) (firstn n afree) bfree ->
         (* Additional constraints ensure we avoid matching non-values to values.
@@ -337,7 +337,7 @@ invc Hcdp || simpl in Hcdp; try solve [eauto | constructor; eauto].
 - rename x into body. A.refold_close_dyn_placement.
   rewrite compile_list_length in *.
   econstructor; eauto.
-  + rewrite compile_list_length. assumption.
+  + rewrite compile_list_length. auto.
   + rewrite compile_list_length. lia.
   + rewrite compile_list_length. rewrite firstn_all by auto. eapply IHae; eauto.
   + remember (skipn _ _) as free'.
