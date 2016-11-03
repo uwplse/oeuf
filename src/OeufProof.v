@@ -47,7 +47,7 @@ Require Import StructTact.Util.
 Require Import EricTact.
 
 Section Simulation.
-  (*
+
   Variable prog : compilation_unit.
   Variable tprog : Asm.program.
   Hypothesis TRANSF : transf_to_asm prog = OK tprog.
@@ -55,7 +55,7 @@ Section Simulation.
   (* In this theorem we grab all of the things we need from all of the passes *)
   Theorem Oeuf_forward_simulation :
     forall ty,
-      mix_forward_simulation (@CompilationUnit.source_semantics ty prog) (Cminor_semantics tprog).
+      mix_forward_simulation (@CompilationUnit.source_semantics ty prog) (Asm_semantics tprog).
   Proof.
     (* SourceLang to Untyped *)
     unfold transf_to_asm in TRANSF.
@@ -155,6 +155,8 @@ Section Simulation.
     eapply Cmajortominor.fsim; try eassumption.
 
     (* Cminor to Asm *)
+    admit.
+
     rewrite print_identity in *. subst p0.
     eapply transf_cminor_program_correct in TRANSF.
     destruct TRANSF. eassumption.

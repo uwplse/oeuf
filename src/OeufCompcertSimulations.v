@@ -116,3 +116,30 @@ Proof.
   right. eauto.
   eapply Selectionproof.get_helpers_correct; eauto.
 Qed.
+
+(* RTLgen, RTLgenproof *)
+(* Tailcall, Tailcallproof *)
+(* Inlining, Inliningproof *)
+(* Renumber, Renumberproof *)
+(* Constprop, Constpropproof *)
+(* CSE, CSEproof *)
+(* Deadcode, Deadcodeproof *)
+(* Unusedglob, Unusedglobproof *)
+(* Allocation, Allocproof *)
+(* Tunneling, Tunnelingproof *)
+(* Linearize, Linearizeproof *)
+(* CleanupLabels, CleanupLabelsproof *)
+(* Debugvar, Debugvarproof *)
+(* Stacking, Stackingproof *)
+(* Asmgen, Asmgenproof *)
+
+
+Inductive asm_final_state (p : Asm.program) : Asm.state -> value -> Prop :=
+| asm_final_state_intro :
+    forall (rs : Asm.regset) m v v',
+      value_inject (Genv.globalenv p) m v v' ->
+      rs (Asm.IR Asm.EAX) = v' ->
+      asm_final_state p (Asm.State rs m) v.
+
+Definition Asm_semantics (p : Asm.program) :=
+  Semantics (Asm.step) (Asm.initial_state p) (asm_final_state p) (Genv.globalenv p).
