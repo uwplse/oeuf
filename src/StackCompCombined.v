@@ -14,6 +14,9 @@ Require
     StackFlatterComp2
 .
 
+Module A := ValueFlag.
+Module B := StackFlatter2.
+
 Definition option_to_res {A} (o : option A) : res A :=
   match o with
   | None => Error []
@@ -21,8 +24,7 @@ Definition option_to_res {A} (o : option A) : res A :=
   end.
 Coercion option_to_res : option >-> res.
 
-Definition compile_cu (cu : ValueFlag.env * list metadata) :
-        res (StackFlatter2.env * list metadata) :=
+Definition compile_cu (cu : A.env * list metadata) : res (B.env * list metadata) :=
   OK cu
   @@ StackMachComp.compile_cu
   @@ StackContComp.compile_cu
@@ -33,7 +35,7 @@ Definition compile_cu (cu : ValueFlag.env * list metadata) :
   @@ StackFlatterComp2.compile_cu
 .
 
-Inductive I : ValueFlag.state -> StackFlatter2.state -> Prop :=
+Inductive I : A.state -> B.state -> Prop :=
 | ICombined : forall s00 s01 s02 s03 s04 s05 s06 s07,
         StackMachComp.I         s00 s01 ->
         StackContComp.I         s01 s02 ->
@@ -44,7 +46,7 @@ Inductive I : ValueFlag.state -> StackFlatter2.state -> Prop :=
         StackFlatterComp2.I     s06 s07 ->
         I s00 s07.
 
-Inductive I_func : ValueFlag.expr -> list StackFlatter2.insn -> Prop :=
+Inductive I_func : A.expr -> list B.insn -> Prop :=
 | IFuncCombined : forall f00 f01 f02 f03 f04 f05 f06 f07,
         StackMachComp.I_expr []             f00 f01 ->
         Forall2 StackContComp.I_insn        f01 f02 ->
@@ -113,3 +115,38 @@ on _, eapply_lem StackFlatterComp2.compile_cu_I_env.
 inject_ok. inject_pair.
 eapply chain_I_env; eassumption.
 Qed.
+
+
+
+Require Semantics.
+
+Section Preservation.
+
+  Variable prog : A.prog_type.
+  Variable tprog : B.prog_type.
+
+  Hypothesis TRANSF : compile_cu prog = OK tprog.
+
+  
+  (* Inductive match_states (AE : A.env) (BE : B.env) : A.expr -> B.expr -> Prop := *)
+  (* | match_st : *)
+  (*     forall a b, *)
+  (*       R AE BE a b -> *)
+  (*       match_states AE BE a b. *)
+
+  (* Lemma step_sim : *)
+  (*   forall AE BE a b, *)
+  (*     match_states AE BE a b -> *)
+  (*     forall a', *)
+  (*       A.step AE a a' -> *)
+  (*       exists b', *)
+  (*         splus (B.step BE) b b'. *)
+  (* Proof. *)
+  (* Admitted. *)
+
+  Theorem fsim :
+    Semantics.forward_simulation (A.semantics prog) (B.semantics tprog).
+  Proof.
+  Admitted.
+
+End Preservation.

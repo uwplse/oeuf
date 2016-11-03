@@ -4,6 +4,7 @@ Require String.
 Require LocalsOnly FlatSwitch.
 Require Import ListLemmas.
 Require Import HigherValue.
+Require Import StepLib.
 
 Require Import Psatz.
 
@@ -198,74 +199,6 @@ Qed.
 
 
 
-Lemma B_sstar_snoc : forall E s s' s'',
-    B.sstar E s s' ->
-    B.sstep E s' s'' ->
-    B.sstar E s s''.
-induction 1; intros.
-- econstructor; try eassumption. econstructor.
-- econstructor; eauto.
-Qed.
-
-Lemma B_splus_snoc : forall E s s' s'',
-    B.splus E s s' ->
-    B.sstep E s' s'' ->
-    B.splus E s s''.
-induction 1; intros.
-- econstructor 2; try eassumption.
-  econstructor 1; eassumption.
-- econstructor; solve [eauto].
-Qed.
-
-Lemma B_splus_sstar : forall E s s',
-    B.splus E s s' ->
-    B.sstar E s s'.
-induction 1; intros.
-- econstructor; try eassumption. constructor.
-- econstructor; eauto.
-Qed.
-
-Lemma B_sstar_then_sstar : forall E s s' s'',
-    B.sstar E s s' ->
-    B.sstar E s' s'' ->
-    B.sstar E s s''.
-induction 1; intros.
-- assumption.
-- econstructor; solve [eauto].
-Qed.
-
-Lemma B_sstar_then_splus : forall E s s' s'',
-    B.sstar E s s' ->
-    B.splus E s' s'' ->
-    B.splus E s s''.
-induction 1; intros.
-- assumption.
-- econstructor; solve [eauto].
-Qed.
-
-Lemma B_splus_then_sstar' : forall E s s' s'',
-    B.sstar E s' s'' ->
-    B.splus E s s' ->
-    B.splus E s s''.
-induction 1; intros.
-- assumption.
-- eapply IHsstar. eapply B_splus_snoc; eauto.
-Qed.
-
-Lemma B_splus_then_sstar : forall E s s' s'',
-    B.splus E s s' ->
-    B.sstar E s' s'' ->
-    B.splus E s s''.
-intros. eauto using B_splus_then_sstar'.
-Qed.
-
-Lemma B_splus_then_splus : forall E s s' s'',
-    B.splus E s s' ->
-    B.splus E s' s'' ->
-    B.splus E s s''.
-induction 1; intros; eauto using B.SPlusCons.
-Qed.
-
 
 Ltac B_start HS :=
     match goal with
@@ -295,10 +228,10 @@ Ltac B_step HS :=
         | clear HS' ] in
     match type of HS with
     | B.sstar ?E ?s0 ?s1 => go E s0 s1 B.splus
-            ltac:(eapply B_sstar_then_splus with (1 := HS');
+            ltac:(eapply sstar_then_splus with (1 := HS');
                   eapply B.SPlusOne)
     | B.splus ?E ?s0 ?s1 => go E s0 s1 B.splus
-            ltac:(eapply B_splus_snoc with (1 := HS'))
+            ltac:(eapply splus_snoc with (1 := HS'))
     end.
 
 Ltac B_star HS :=
@@ -313,9 +246,9 @@ Ltac B_star HS :=
         | clear HS' ] in
     match type of HS with
     | B.sstar ?E ?s0 ?s1 => go E s0 s1 B.sstar
-            ltac:(eapply B_sstar_then_sstar with (1 := HS'))
+            ltac:(eapply sstar_then_sstar with (1 := HS'))
     | B.splus ?E ?s0 ?s1 => go E s0 s1 B.splus
-            ltac:(eapply B_splus_then_sstar with (1 := HS'))
+            ltac:(eapply splus_then_sstar with (1 := HS'))
     end.
 
 Ltac B_plus HS :=
@@ -330,9 +263,9 @@ Ltac B_plus HS :=
         | clear HS' ] in
     match type of HS with
     | B.sstar ?E ?s0 ?s1 => go E s0 s1 B.splus
-            ltac:(eapply B_sstar_then_splus with (1 := HS'))
+            ltac:(eapply sstar_then_splus with (1 := HS'))
     | B.splus ?E ?s0 ?s1 => go E s0 s1 B.splus
-            ltac:(eapply B_splus_then_splus with (1 := HS'))
+            ltac:(eapply splus_then_splus with (1 := HS'))
     end.
 
 

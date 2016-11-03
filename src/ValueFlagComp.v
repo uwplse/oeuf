@@ -4,6 +4,7 @@ Require String.
 Require SelfClose ValueFlag.
 Require Import ListLemmas.
 Require Import HigherValue.
+Require Import StepLib.
 
 Require Import Psatz.
 
@@ -258,74 +259,6 @@ Hint Resolve value_I_expr_I_value.
 
 
 
-Lemma B_sstar_snoc : forall E s s' s'',
-    B.sstar E s s' ->
-    B.sstep E s' s'' ->
-    B.sstar E s s''.
-induction 1; intros.
-- econstructor; try eassumption. econstructor.
-- econstructor; eauto.
-Qed.
-
-Lemma B_splus_snoc : forall E s s' s'',
-    B.splus E s s' ->
-    B.sstep E s' s'' ->
-    B.splus E s s''.
-induction 1; intros.
-- econstructor 2; try eassumption.
-  econstructor 1; eassumption.
-- econstructor; solve [eauto].
-Qed.
-
-Lemma B_splus_sstar : forall E s s',
-    B.splus E s s' ->
-    B.sstar E s s'.
-induction 1; intros.
-- econstructor; try eassumption. constructor.
-- econstructor; eauto.
-Qed.
-
-Lemma B_sstar_then_sstar : forall E s s' s'',
-    B.sstar E s s' ->
-    B.sstar E s' s'' ->
-    B.sstar E s s''.
-induction 1; intros.
-- assumption.
-- econstructor; solve [eauto].
-Qed.
-
-Lemma B_sstar_then_splus : forall E s s' s'',
-    B.sstar E s s' ->
-    B.splus E s' s'' ->
-    B.splus E s s''.
-induction 1; intros.
-- assumption.
-- econstructor; solve [eauto].
-Qed.
-
-Lemma B_splus_then_sstar' : forall E s s' s'',
-    B.sstar E s' s'' ->
-    B.splus E s s' ->
-    B.splus E s s''.
-induction 1; intros.
-- assumption.
-- eapply IHsstar. eapply B_splus_snoc; eauto.
-Qed.
-
-Lemma B_splus_then_sstar : forall E s s' s'',
-    B.splus E s s' ->
-    B.sstar E s' s'' ->
-    B.splus E s s''.
-intros. eauto using B_splus_then_sstar'.
-Qed.
-
-Lemma B_splus_then_splus : forall E s s' s'',
-    B.splus E s s' ->
-    B.splus E s' s'' ->
-    B.splus E s s''.
-induction 1; intros; eauto using B.SPlusCons.
-Qed.
-
 
 Ltac B_start HS :=
     match goal with
@@ -355,10 +288,10 @@ Ltac B_step HS :=
         | clear HS' ] in
     match type of HS with
     | B.sstar ?E ?s0 ?s1 => go E s0 s1 B.splus
-            ltac:(eapply B_sstar_then_splus with (1 := HS');
+            ltac:(eapply sstar_then_splus with (1 := HS');
                   eapply B.SPlusOne)
     | B.splus ?E ?s0 ?s1 => go E s0 s1 B.splus
-            ltac:(eapply B_splus_snoc with (1 := HS'))
+            ltac:(eapply splus_snoc with (1 := HS'))
     end.
 
 Ltac B_star HS :=
@@ -373,9 +306,9 @@ Ltac B_star HS :=
         | clear HS' ] in
     match type of HS with
     | B.sstar ?E ?s0 ?s1 => go E s0 s1 B.sstar
-            ltac:(eapply B_sstar_then_sstar with (1 := HS'))
+            ltac:(eapply sstar_then_sstar with (1 := HS'))
     | B.splus ?E ?s0 ?s1 => go E s0 s1 B.splus
-            ltac:(eapply B_splus_then_sstar with (1 := HS'))
+            ltac:(eapply splus_then_sstar with (1 := HS'))
     end.
 
 Ltac B_plus HS :=
@@ -390,9 +323,9 @@ Ltac B_plus HS :=
         | clear HS' ] in
     match type of HS with
     | B.sstar ?E ?s0 ?s1 => go E s0 s1 B.splus
-            ltac:(eapply B_sstar_then_splus with (1 := HS'))
+            ltac:(eapply sstar_then_splus with (1 := HS'))
     | B.splus ?E ?s0 ?s1 => go E s0 s1 B.splus
-            ltac:(eapply B_splus_then_splus with (1 := HS'))
+            ltac:(eapply splus_then_splus with (1 := HS'))
     end.
 
 
@@ -466,7 +399,7 @@ assert (nth_error bexprs i = Some barg).
 
 erewrite nth_error_3part with (xs := bargs) by eauto.
 
-eapply B_sstar_then_sstar.
+eapply sstar_then_sstar.
 - rewrite <- app_assoc, <- app_assoc.
   eapply eval_mkconstr_one with (av := aarg).
   + eapply Forall_nth_error; eauto.
@@ -557,7 +490,7 @@ assert (nth_error bexprs i = Some barg).
 
 erewrite nth_error_3part with (xs := bfree) by eauto.
 
-eapply B_sstar_then_sstar.
+eapply sstar_then_sstar.
 - rewrite <- app_assoc, <- app_assoc.
   eapply eval_mkclose_one with (av := aarg).
   + eapply Forall_nth_error; eauto.
@@ -605,7 +538,8 @@ try solve [exfalso; eapply Bnval; constructor].
 - B_start HS.
   B_star HS.
     { eapply eval_mkconstr'; eauto.
-      list_magic_on (args, (bargs, tt)). eauto using B_splus_sstar. }
+      list_magic_on (args, (bargs, tt)).
+      eapply splus_sstar. on _, eapply_; eauto. }
   B_step HS.
     { eapply B.SConstrDone.
       eapply Forall2_map_partial. rewrite <- Forall2_map_l. rewrite Forall2_same.
@@ -616,7 +550,8 @@ try solve [exfalso; eapply Bnval; constructor].
 - B_start HS.
   B_star HS.
     { eapply eval_mkclose'; eauto.
-      list_magic_on (free, (bfree, tt)). eauto using B_splus_sstar. }
+      list_magic_on (free, (bfree, tt)).
+      eapply splus_sstar. on _, eapply_; eauto. }
   B_step HS.
     { eapply B.SCloseDone.
       eapply Forall2_map_partial. rewrite <- Forall2_map_l. rewrite Forall2_same.
@@ -634,7 +569,8 @@ Lemma eval_mkconstr_partial : forall BE tag aargs bargs bargs' a s k,
 intros.
 eapply eval_mkconstr_tail with (i := 0) (j := length aargs);
 eauto using Forall2_length, sliding_zero.
-list_magic_on (aargs, (bargs, tt)). eauto using eval_value_expr, B_splus_sstar.
+list_magic_on (aargs, (bargs, tt)).
+eapply splus_sstar, eval_value_expr; eauto.
 Qed.
 
 Lemma eval_mkclose_partial : forall BE tag afree bfree bfree' a s k,
@@ -645,7 +581,8 @@ Lemma eval_mkclose_partial : forall BE tag afree bfree bfree' a s k,
 intros.
 eapply eval_mkclose_tail with (i := 0) (j := length afree);
 eauto using Forall2_length, sliding_zero.
-list_magic_on (afree, (bfree, tt)). eauto using eval_value_expr, B_splus_sstar.
+list_magic_on (afree, (bfree, tt)).
+eapply splus_sstar, eval_value_expr; eauto.
 Qed.
 
 
@@ -935,3 +872,38 @@ all: simpl in *; B.refold_cases_arent_values; repeat break_and.
   + pattern bcase. eapply Forall_nth_error; eauto.
 
 Qed.
+
+
+
+Require Semantics.
+
+Section Preservation.
+
+  Variable prog : A.prog_type.
+  Variable tprog : B.prog_type.
+
+  Hypothesis TRANSF : compile_cu prog = tprog.
+
+  
+  (* Inductive match_states (AE : A.env) (BE : B.env) : A.expr -> B.expr -> Prop := *)
+  (* | match_st : *)
+  (*     forall a b, *)
+  (*       R AE BE a b -> *)
+  (*       match_states AE BE a b. *)
+
+  (* Lemma step_sim : *)
+  (*   forall AE BE a b, *)
+  (*     match_states AE BE a b -> *)
+  (*     forall a', *)
+  (*       A.step AE a a' -> *)
+  (*       exists b', *)
+  (*         splus (B.step BE) b b'. *)
+  (* Proof. *)
+  (* Admitted. *)
+
+  Theorem fsim :
+    Semantics.forward_simulation (A.semantics prog) (B.semantics tprog).
+  Proof.
+  Admitted.
+
+End Preservation.

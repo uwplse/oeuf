@@ -999,9 +999,6 @@ Section Preservation.
       eapply I_expr_value; eauto.
   Qed.
 
-  Check T.step.
-  Check E.splus.
-  
   Lemma step_sim :
     forall t t' e,
       match_states (T.initial_env prog) (E.initial_env tprog) t e ->
