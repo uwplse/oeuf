@@ -57,10 +57,13 @@ Definition transf_fun_body (f : (Fmajor.stmt * Fmajor.expr)) : Fflatmajor.stmt :
   let (s,e) := f in
   Sseq (transf_stmt s) (Sreturn (transf_expr e)).
 
-Definition transf_fundef (f : Fmajor.function) : Fflatmajor.fundef :=
+Definition transf_function (f : Fmajor.function) : Fflatmajor.function :=
   Fflatmajor.mkfunction (Fmajor.fn_params f) (Fmajor.fn_sig f) (Fmajor.fn_stackspace f)
                     (transf_fun_body (Fmajor.fn_body f)).
-                    
+
+Definition transf_fundef (fd : Fmajor.fundef) : Fflatmajor.fundef :=
+  AST.transf_fundef transf_function fd.
+
 Definition transf_program (p : Fmajor.program) : Fflatmajor.program :=
   AST.transform_program transf_fundef p.
 
@@ -95,12 +98,12 @@ Inductive match_cont: Fmajor.cont -> Fflatmajor.cont -> Prop :=
 | match_call :
     forall id f env k k',
       match_cont k k' ->
-      match_cont (Fmajor.Kcall id env k) (Fflatmajor.Kcall id (transf_fundef f) env k').
+      match_cont (Fmajor.Kcall id env k) (Fflatmajor.Kcall id (transf_function f) env k').
 
 Inductive match_states: Fmajor.state -> Fflatmajor.state -> Prop :=
 | match_state :
     forall f f' s s' k k' env,
-      transf_fundef f = f' ->
+      transf_function f = f' ->
       transf_stmt s = s' ->
       match_cont k k' ->
       match_states (Fmajor.State s k env) (Fflatmajor.State f' s' k' env)
@@ -143,13 +146,14 @@ Qed.
 
 Lemma find_funct_ptr_transf :
   forall b f,
-    Genv.find_funct_ptr ge b = Some f ->
-    Genv.find_funct_ptr tge b = Some (transf_fundef f).
+    Genv.find_funct_ptr ge b = Some (Internal f) ->
+    Genv.find_funct_ptr tge b = Some (Internal (transf_function f)).
 Proof.
   intros.
   unfold ge in *. unfold tge in *.
   subst tprog. unfold transf_program.
   erewrite Genv.find_funct_ptr_transf; eauto.
+  reflexivity.
 Qed.
 
 
@@ -267,6 +271,7 @@ Proof.
     eapply eval_exprlist_transf; eauto.
     eapply find_symbol_transf; eauto.
     eapply find_funct_ptr_transf; eauto.
+    
     econstructor; eauto.
 
   (* switch *)
@@ -321,7 +326,7 @@ Proof.
   erewrite Genv.find_symbol_transf; eauto.
   unfold transf_program.
   erewrite Genv.find_funct_ptr_transf; eauto.
-  econstructor; eauto.
+
 
   
 Admitted.

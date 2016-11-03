@@ -93,9 +93,12 @@ Definition transf_cases (targid : ident) (cases : list (Z * Fflatmajor.stmt)) (t
         end in
     mk_blocks switch cases O.
 
-Definition transf_fundef (f : Fflatmajor.function) : Emajor.fundef :=
+Definition transf_function (f : Fflatmajor.function) : Emajor.function :=
   Emajor.mkfunction (Fflatmajor.fn_params f) (Fflatmajor.fn_sig f) (Fflatmajor.fn_stackspace f)
                     (transf_stmt (Fflatmajor.fn_body f)).
+
+Definition transf_fundef (f : Fflatmajor.fundef) : Emajor.fundef :=
+  AST.transf_fundef transf_function f.
 
 Definition transf_program (p : Fflatmajor.program) : Emajor.program :=
   AST.transform_program transf_fundef p.
@@ -323,9 +326,10 @@ Inductive match_cont: Fflatmajor.cont -> Emajor.cont -> Prop :=
       transf_stmt s = s' ->
       match_cont (Fflatmajor.Kseq s k) (Emajor.Kseq s' k')
 | match_call :
-    forall id f env k k',
+    forall id f f' env k k',
       match_cont k k' ->
-      match_cont (Fflatmajor.Kcall id f env k) (Emajor.Kcall id (transf_fundef f) env k')
+      transf_function f = f' ->
+      match_cont (Fflatmajor.Kcall id f env k) (Emajor.Kcall id f' env k')
 | match_switch :
     forall k k' k0 n,
       match_cont k k' ->
@@ -344,7 +348,7 @@ Qed.
 Inductive match_states : Fflatmajor.state -> Emajor.state -> Prop := 
 | match_state :
     forall f f' s s' k k' env,
-      transf_fundef f = f' ->
+      transf_function f = f' ->
       transf_stmt s = s' ->
       match_cont k k' ->
       match_states (Fflatmajor.State f s k env) (Emajor.State f' s' k' env)
@@ -353,10 +357,11 @@ Inductive match_states : Fflatmajor.state -> Emajor.state -> Prop :=
       match_cont k k' ->
       match_states (Fflatmajor.Returnstate v k) (Emajor.Returnstate v k')
 | match_callstate :
-    forall f l k k',
+    forall f f' l k k',
       match_cont k k' ->
       length l = length (Fflatmajor.fn_params f) ->
-      match_states (Fflatmajor.Callstate f l k) (Emajor.Callstate (transf_fundef f) l k').
+      transf_function f = f' ->
+      match_states (Fflatmajor.Callstate f l k) (Emajor.Callstate f' l k').
   
 
 (* exit steps *)
@@ -404,41 +409,132 @@ Inductive switch_cases_rev : nat -> list Emajor.stmt -> Emajor.cont -> Emajor.co
       switch_cases_rev O nil k k
 | switch_snoc :
     forall n l k k',
-      switch_cases n l k k' ->
+      switch_cases_rev n l k k' ->
       forall s,
         switch_cases_rev (S n) (l ++ [s]) k (Kseq (Sseq s (Sexit n)) (Kblock k')).
 
-(*
+Lemma app_singleton_not_nil :
+  forall {A} (l : list A) x,
+    nil <> l ++ [x].
+Proof.
+  induction l; intros; simpl; try congruence.
+Qed.
+
 Lemma switch_cases_to_rev :
   forall l n k k',
-    switch_cases n l k k' ->
+    switch_cases n l k k' <->
     switch_cases_rev n (rev l) k k'.
 Proof.
-  induction 1; intros. econstructor; eauto.
-  simpl. econstructor; eauto. 
- *)
+  induction l; split; intros.
+  inv H. simpl. econstructor; eauto.
+  simpl in H. inv H. econstructor; eauto.
+  destruct l; simpl in H0; inversion H0.
+  simpl in H. simpl. inv H. eapply IHl in H5.
+  econstructor; eauto.
+  simpl in H. assert (n <> O).
+  inv H; try congruence.
+  apply app_singleton_not_nil in H2. inversion H2.
+  destruct n; try congruence. clear H0.
+  inv H.
+  eapply app_inj_tail in H1. break_and. subst.
+  erewrite <- IHl in H2. econstructor; eauto.
+Qed.
+
+
+Lemma find_case_inv :
+  forall l t z x s,
+    find_case t (l ++ [(z,x)]) = Some s ->
+    find_case t l = Some s \/ (find_case t l = None /\ t = z /\ x = s /\ case_index t (l ++ [(z,x)]) = O).
+Proof.
+  induction l; intros.
+  simpl in H. break_match_hyp; try congruence.
+  right. repeat split; try congruence. simpl.
+  break_match; reflexivity.
+  simpl in H. destruct a.
+  break_match_hyp. inv H.
+  left. simpl. rewrite zeq_true. reflexivity.
+
+  simpl. repeat rewrite zeq_false by congruence.
+  eapply IHl in H. 
+  destruct H. left. assumption.
+  right. repeat break_and.
+  subst.
+
+  repeat split; assumption.
+Qed.
+
+Lemma find_case_case_index_append_tail :
+  forall l l' t s,
+    find_case t l = Some s ->
+    case_index t (l ++ l') = (case_index t l + length l')%nat.
+Proof.
+  induction l; intros; simpl in H; try solve [inv H].
+  destruct a.
+  break_match_hyp; try congruence. inv H.
+  simpl. repeat rewrite zeq_true.
+  solve [eapply app_length].
+  simpl.
+  repeat rewrite zeq_false by congruence.
+  eauto.
+Qed.
+
+Lemma plus_1_r :
+  forall (n : nat),
+    (n + 1 = S n)%nat.
+Proof.
+  intros. omega.
+Qed.
 
 Lemma star_step_exit_case_index :
   forall cases tge k' x tag s0 f env,
     find_case (Int.unsigned tag) cases = Some s0 ->
-    switch_cases (length cases) (rev (map transf_stmt (map snd cases))) k' x ->
+    switch_cases_rev (length cases) (map transf_stmt (map snd cases)) k' x ->
     exists k0 n,
       star step tge (State f (Sexit (case_index (Int.unsigned tag) cases)) (Kblock x) env)
            E0 (State f (transf_stmt s0) (Kseq (Sexit n) (Kblock k0)) env) /\ exit_cont n k' k0.
 Proof.
   induction cases using rev_ind; intros.
   simpl in H. inv H.
-
-  repeat rewrite map_app in *.
-  rewrite rev_app_distr in *.
-  simpl in *.
-  rewrite app_length in *. simpl in *.
-  replace (length cases + 1)%nat with (S (length cases)) in * by omega.
+  rewrite app_length in H0.
+  simpl in H0. rewrite plus_1_r in *.
   inv H0.
+  repeat rewrite list_append_map in *.
+  simpl in *.
+  eapply app_inj_tail in H2; break_and; subst.
+  destruct x.
+  eapply find_case_inv in H.
+  destruct H.
+  + (* our case wasn't the last one *)
+    (* Thus we use the IH *)
+    copy H.
+    eapply IHcases in H; eauto. repeat break_exists; break_and.
+    erewrite find_case_case_index_append_tail; eauto.
+    simpl.
+    rewrite plus_1_r in *.
+    eexists; eexists; split.
+    
+    eapply star_left; nil_trace.
+    econstructor; eauto.
+    eapply star_left; nil_trace.
+    econstructor; eauto.
+    eassumption.
+    assumption.
 
-
-  
-Admitted.
+  + repeat break_and.
+    subst. rewrite H4.
+    eexists. eexists. split.
+    eapply star_left; nil_trace.
+    econstructor; eauto.
+    eapply star_left; nil_trace.
+    econstructor; eauto.
+    simpl.
+    eapply star_left; nil_trace.
+    econstructor; eauto.
+    eapply star_refl.
+    replace (map transf_stmt (map snd cases)) with (rev (rev (map transf_stmt (map snd cases)))) in H3 by (eapply rev_involutive; eauto).
+    rewrite <- switch_cases_to_rev in H3.
+    eapply switch_cases_exit_cont; eauto.
+Qed.
 
 Lemma plus_step_exit_cont_ind :
   forall tge n k k_exit f env,
@@ -511,7 +607,7 @@ Proof.
     eapply plus_one. econstructor; eauto.
     erewrite Genv.find_symbol_transf; eauto.
     erewrite Genv.find_funct_ptr_transf; eauto.
-    simpl. rewrite H12. reflexivity.
+    simpl. reflexivity. simpl. find_rewrite. reflexivity.
     econstructor; eauto.
     econstructor; eauto.
 
@@ -534,11 +630,12 @@ Proof.
 
   (* Sswitch *)
   * rewrite transf_switch.
-    edestruct (star_step_mk_blocks tge cases env k' (switch targid cases (transf_expr target)) (transf_fundef f)); eauto.
+    edestruct (star_step_mk_blocks tge cases env k' (switch targid cases (transf_expr target)) (transf_function f)); eauto.
     break_and.
-    app (plus_step_inner_switch tge targid cases (transf_expr target) (transf_fundef f) x env tag vargs s0) find_case.
-    eapply star_step_exit_case_index in H2; eauto.
-    repeat break_exists. break_and.
+    app (plus_step_inner_switch tge targid cases (transf_expr target) (transf_function f) x env tag vargs s0) find_case.
+    erewrite switch_cases_to_rev in *.
+    erewrite rev_involutive in *.
+    app star_step_exit_case_index switch_cases_rev.
     eexists. split.
     eapply star_plus_trans; nil_trace.
     eassumption.
@@ -589,7 +686,7 @@ Proof.
   erewrite Genv.find_symbol_transf; eauto.
   unfold transf_program.
   erewrite Genv.find_funct_ptr_transf; eauto.
-
+  
   
 Admitted.
 

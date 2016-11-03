@@ -26,6 +26,7 @@ Section PRESERVATION.
 Variable prog: Dmajor.program.
 Let ge := Genv.globalenv prog.
 Hypothesis no_repet : list_norepet (prog_defs_names prog).
+Hypothesis nonempty : prog_defs prog <> nil.
 
 (* Well formedness of a stack frame in memory *)
 Definition stack_frame_wf (b : block) (stacksize : Z) (mi : meminj) (m : mem) : Prop :=
@@ -1334,10 +1335,144 @@ Proof.
     repeat (econstructor; eauto).
 Qed.
 
+Lemma genv_next_add_globals :
+  forall {F V} l (ge : @Genv.t F V),
+    l <> nil ->
+    Genv.genv_next (Genv.add_globals ge l) = (Genv.genv_next ge + (Pos.of_nat (length l)))%positive.
+Proof.
+  induction l; intros.
+  congruence.
+  destruct l. simpl.
+  eapply Pplus_one_succ_r.
+  remember (p :: l) as x.
+  simpl. rewrite IHl; try congruence.
+  subst x. simpl.
+  repeat rewrite Pplus_one_succ_r.
+  repeat rewrite Pos.add_assoc. 
+  destruct (length l).
+  reflexivity.
+  rewrite (Pos.add_comm (Pos.of_nat (S n)) 1) at 2.
+  repeat rewrite Pos.add_assoc. reflexivity.
+Qed.
+
+Lemma init_mem_nextblock :
+  forall m,
+    Genv.init_mem prog = Some m ->
+    Plt 1%positive (Mem.nextblock m).
+Proof.
+  intros.
+  app Genv.init_mem_genv_next Genv.init_mem.
+  unfold Genv.globalenv in *.
+  rewrite genv_next_add_globals in H; eauto.
+  simpl in *.  
+  rewrite <- H.
+  break_match; try econstructor; eauto.
+Qed.
+
+Lemma alloc_wf_mem :
+  forall m m' lo hi m0 m0' b,
+    Mem.alloc m lo hi = (m0,b) ->
+    Mem.alloc m' lo hi = (m0',b) ->
+    forall mi,
+      Mem.inject mi m m' ->
+      wf_mem mi m m' ->
+      Mem.inject (fun x => if peq x b then Some (b,0) else mi x) m0 m0'
+      /\ wf_mem (fun x => if peq x b then Some (b,0) else mi x) m0 m0'.
+Proof.
+  intros.
+  app wf_mem_alloc wf_mem.
+  eapply alloc_parallel_inject in H1; eauto;
+    try solve [instantiate (1 := lo); omega];
+    try solve [instantiate (1 := hi); omega];
+    repeat break_exists.
+  destruct H.
+  destruct H1. rewrite H in H0. inv H0.
+  split; auto.
+Qed.
+
+
+Lemma wf_mem_refl :
+  forall m,
+    Genv.init_mem prog = Some m ->
+    wf_mem (Mem.flat_inj (Mem.nextblock m)) m m.
+Proof.
+  intros. unfold wf_mem. unfold wf_inj.
+  repeat split.
+  unfold globals_inj_same. intros. unfold Mem.flat_inj.
+  destruct H0.
+  app Genv.find_funct_ptr_not_fresh Genv.find_funct_ptr.
+  unfold Mem.valid_block in *. break_match; try congruence.
+  app Genv.find_var_info_not_fresh Genv.find_var_info.
+  unfold Mem.valid_block in *. break_match; try congruence.
+  unfold meminj_injective. intros. unfold Mem.flat_inj in *.
+  repeat break_match_hyp; try congruence.
+  unfold same_offsets. unfold Mem.flat_inj.
+  intros. break_match_hyp; try congruence.
+  unfold total_inj. intros.
+  unfold Mem.flat_inj.
+  app Mem.load_valid_access Mem.load.
+  eapply Mem.valid_access_implies in H0;
+    try eapply Mem.valid_access_valid_block in H0;
+    try solve [econstructor; eauto].
+  unfold Mem.valid_block in *.
+  exists b.
+  break_match; congruence.
+  unfold minimal_inj_domain. intros. destruct x.
+  unfold Mem.flat_inj in *.
+  unfold Mem.valid_block. break_match_hyp; congruence.
+  unfold minimal_inj_range.
+  intros. unfold Mem.flat_inj in *.
+  unfold Mem.valid_block. break_match_hyp; congruence.
+Qed.  
+
+Lemma init_mem_wf :
+  forall m,
+    Genv.init_mem prog = Some m ->
+    exists mi,
+      Mem.inject mi m m /\ wf_mem mi m m.
+Proof.
+  intros.
+  app Genv.initmem_inject Genv.init_mem.
+  eexists; split. eauto.
+  eapply wf_mem_refl; eauto.
+Qed.
+
+Lemma initial_states_match :
+  forall st,
+    Dmajor.initial_state prog st ->
+    exists st',
+      Dflatmajor.initial_state prog st' /\ match_states st st'.
+Proof.
+  intros.
+  inv H.
+  app init_mem_wf Genv.init_mem.
+  eexists; split.
+  econstructor; eauto.
+  econstructor; eauto;
+    try solve [simpl; econstructor; eauto].
+  simpl. eapply init_mem_nextblock; eauto.
+Qed.
+
+Lemma match_final_states :
+  forall st st' r,
+    match_states st st' ->
+    Dmajor.final_state st r ->
+    Dflatmajor.final_state st' r.
+Proof.
+  intros. inv H0. inv H.
+  inv H9.
+  inv H6.
+  econstructor; eauto.
+Qed.
+
 Theorem fsim :
   forward_simulation (Dmajor.semantics prog) (Dflatmajor.semantics prog).
 Proof.
-Admitted.
-
+  eapply forward_simulation_plus.
+  intros. simpl. reflexivity.
+  eapply initial_states_match.
+  eapply match_final_states.
+  eapply single_step_correct.
+Qed.
 
 End PRESERVATION.

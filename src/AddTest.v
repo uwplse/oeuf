@@ -86,8 +86,8 @@ Definition main_fn : Fmajor.function :=
                     16%Z (main_body,Var main_tmp2).
 
 Definition add_one_prog : Fmajor.program :=
-  AST.mkprogram ((add_one_id,Gfun add_one_fn) ::
-                 (main_id,Gfun main_fn) ::
+  AST.mkprogram ((add_one_id,Gfun (Internal add_one_fn)) ::
+                 (main_id,Gfun (Internal main_fn)) ::
                  nil) nil main_id.
 
 (*
@@ -156,12 +156,12 @@ Proof.
   econstructor; eauto.
   simpl. reflexivity.
   simpl. econstructor; eauto.
-  Focus 2. admit. (* mem store must work, bring from alloc fact *)
+  Focus 2. adm. (* mem store must work, bring from alloc fact *)
   (* threading memory through here will be ugly *)
   
 
   take_step.
-  destruct (Mem.storev Mint32 m5 (Vptr b2 Int.zero) (Vptr 1%positive Int.zero)) eqn:?. Focus 2. admit.
+  destruct (Mem.storev Mint32 m5 (Vptr b2 Int.zero) (Vptr 1%positive Int.zero)) eqn:?. Focus 2. adm.
   take_step.
   simpl. econstructor. simpl. reflexivity.
   simpl. econstructor. simpl. reflexivity.
@@ -173,7 +173,7 @@ Proof.
   take_step.
   destruct (Mem.alloc m6 (-4) (Int.unsigned (Int.repr 4))) eqn:?. 
   destruct (Mem.store Mint32 m7 b3 (-4) (Vint (Int.repr 4))) eqn:?.
-  Focus 2. admit.
+  Focus 2. adm.
   take_step.
   simpl. econstructor; eauto. simpl. reflexivity.
   simpl. econstructor; eauto.
@@ -181,7 +181,7 @@ Proof.
   take_step.
 
   destruct (Mem.storev Mint32 m8 (Vptr b3 Int.zero) (Vint (Int.repr tag_0))) eqn:?.
-  Focus 2. admit.
+  Focus 2. adm.
   take_step.
   econstructor; eauto.
   econstructor; eauto.
@@ -196,7 +196,7 @@ Proof.
                       (Int.unsigned (Int.repr (4 + 4 * Z.of_nat (length [Var main_tmp0]))))) eqn:?.
   destruct (Mem.store Mint32 m10 b4 (-4)
                       (Vint (Int.repr (4 + 4 * Z.of_nat (length [Var main_tmp0]))))) eqn:?.
-  Focus 2. admit.
+  Focus 2. adm.
   take_step.
 
   econstructor; eauto.
@@ -206,7 +206,7 @@ Proof.
   take_step.
 
   destruct (Mem.storev Mint32 m11 (Vptr b4 Int.zero) (Vint (Int.repr tag_S))) eqn:?.
-  Focus 2. admit.
+  Focus 2. adm.
   
   take_step.
   econstructor; eauto. simpl. 
@@ -217,7 +217,7 @@ Proof.
 
 
   destruct (Mem.storev Mint32 m12 (Val.add (Vptr b4 Int.zero) (Vint (Int.repr 4)))
-     (Vptr b3 Int.zero)) eqn:?. Focus 2. admit.
+     (Vptr b3 Int.zero)) eqn:?. Focus 2. adm.
   take_step.
   econstructor; eauto.
   econstructor; eauto. simpl. 
@@ -227,7 +227,7 @@ Proof.
   take_step.
   take_step.
 
-  assert (Mem.loadv Mint32 m13 (Vptr b2 Int.zero) = Some (Vptr 1%positive Int.zero)) by admit.
+  assert (Mem.loadv Mint32 m13 (Vptr b2 Int.zero) = Some (Vptr 1%positive Int.zero)) by adm.
   simpl.
   take_step.
   simpl. econstructor; eauto.
@@ -253,7 +253,7 @@ Proof.
   take_step.
   destruct (Mem.alloc m14 (-4) (Int.unsigned (Int.repr 4))) eqn:?.
   destruct (Mem.store Mint32 m15 b6 (-4) (Vint (Int.repr 4))) eqn:?.
-  Focus 2. admit.
+  Focus 2. adm.
   take_step.
   econstructor; eauto.
   econstructor; eauto.
@@ -261,7 +261,7 @@ Proof.
   take_step.
 
   destruct (Mem.store Mint32 m16 b6 (Int.unsigned Int.zero) (Vptr 1%positive Int.zero)) eqn:?.
-  Focus 2. admit.
+  Focus 2. adm.
   
   take_step.
 
@@ -277,7 +277,7 @@ Proof.
   take_step.
   take_step.
   take_step.
-  assert (Mem.loadv Mint32 m17 (Vptr b4 Int.zero) = Some (Vint (Int.repr tag_S))) by admit.
+  assert (Mem.loadv Mint32 m17 (Vptr b4 Int.zero) = Some (Vint (Int.repr tag_S))) by adm.
   take_step.
   econstructor; eauto.
   econstructor; eauto.
@@ -298,7 +298,7 @@ Proof.
   take_step.
   econstructor; eauto. simpl.
   
-Admitted.
+Qed.
   
   
 Definition i := initial_state add_one_prog.
