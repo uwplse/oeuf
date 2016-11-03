@@ -17,6 +17,10 @@ Require
     FlatIntTagComp
 .
 
+Module A := LocalsOnly.
+Module B := FlatIntTag.
+
+
 Definition option_to_res {A} (o : option A) : res A :=
   match o with
   | None => Error []
@@ -24,8 +28,7 @@ Definition option_to_res {A} (o : option A) : res A :=
   end.
 Coercion option_to_res : option >-> res.
 
-Definition compile_cu (cu : LocalsOnly.env * list metadata) :
-        res (FlatIntTag.env * list metadata) :=
+Definition compile_cu (cu : A.env * list metadata) : res (B.env * list metadata) :=
   OK cu
   @@ FlatSwitchComp.compile_cu
   @@ FlatSeqComp.compile_cu
@@ -38,7 +41,7 @@ Definition compile_cu (cu : LocalsOnly.env * list metadata) :
   @@ FlatDestCheckComp.compile_cu
  @@@ FlatIntTagComp.compile_cu.
 
-Inductive I : LocalsOnly.state -> FlatIntTag.state -> Prop :=
+Inductive I : A.state -> B.state -> Prop :=
 | ICombined : forall s00 s01 s02 s03 s04 s05 s06 s07 s08 s09 s10,
         FlatSwitchComp.I    s00 s01 ->
         FlatSeqComp.I       s01 s02 ->
@@ -52,7 +55,7 @@ Inductive I : LocalsOnly.state -> FlatIntTag.state -> Prop :=
         FlatIntTagComp.I    s09 s10 ->
         I s00 s10.
 
-Inductive I_func : list LocalsOnly.insn * nat -> FlatIntTag.stmt * FlatIntTag.expr -> Prop :=
+Inductive I_func : list A.insn * nat -> B.stmt * B.expr -> Prop :=
 | IFuncCombined : forall f00 f01 f02 f03 f04 f05 f06 f07 f08 f09 f10,
         FlatSwitchComp.I_func       f00 f01 ->
         FlatSeqComp.I_func          f01 f02 ->
@@ -127,3 +130,38 @@ on _, eapply_lem FlatIntTagComp.compile_cu_I_env.
 inject_ok. inject_pair.
 eapply chain_I_env; eassumption.
 Qed.
+
+
+
+Require Semantics.
+
+Section Preservation.
+
+  Variable prog : A.prog_type.
+  Variable tprog : B.prog_type.
+
+  Hypothesis TRANSF : compile_cu prog = OK tprog.
+
+  
+  (* Inductive match_states (AE : A.env) (BE : B.env) : A.expr -> B.expr -> Prop := *)
+  (* | match_st : *)
+  (*     forall a b, *)
+  (*       R AE BE a b -> *)
+  (*       match_states AE BE a b. *)
+
+  (* Lemma step_sim : *)
+  (*   forall AE BE a b, *)
+  (*     match_states AE BE a b -> *)
+  (*     forall a', *)
+  (*       A.step AE a a' -> *)
+  (*       exists b', *)
+  (*         splus (B.step BE) b b'. *)
+  (* Proof. *)
+  (* Admitted. *)
+
+  Theorem fsim :
+    Semantics.forward_simulation (A.semantics prog) (B.semantics tprog).
+  Proof.
+  Admitted.
+
+End Preservation.

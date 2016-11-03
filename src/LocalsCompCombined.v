@@ -3,7 +3,7 @@ Require Import Common Monads.
 Require CompilationUnit.
 Require Import Metadata.
 
-Require StackFlatter2 LocalsOnlyComp.
+Require StackFlatter2 LocalsOnly.
 Require
     LocalsDestsComp
     LocalsSwitchComp
@@ -12,6 +12,9 @@ Require
     LocalsOnlyComp
 .
 
+Module A := StackFlatter2.
+Module B := LocalsOnly.
+
 Definition option_to_res {A} (o : option A) : res A :=
   match o with
   | None => Error []
@@ -19,8 +22,7 @@ Definition option_to_res {A} (o : option A) : res A :=
   end.
 Coercion option_to_res : option >-> res.
 
-Definition compile_cu (cu : StackFlatter2.env * list metadata) :
-        res (LocalsOnly.env * list metadata) :=
+Definition compile_cu (cu : A.env * list metadata) : res (B.env * list metadata) :=
   OK cu
   @@ LocalsDestsComp.compile_cu
   @@ LocalsSwitchComp.compile_cu
@@ -29,7 +31,7 @@ Definition compile_cu (cu : StackFlatter2.env * list metadata) :
   @@ LocalsOnlyComp.compile_cu
 .
 
-Inductive I : StackFlatter2.state -> LocalsOnly.state -> Prop :=
+Inductive I : A.state -> B.state -> Prop :=
 | ICombined : forall s00 s01 s02 s03 s04 s05,
         LocalsDestsComp.I   s00 s01 ->
         LocalsSwitchComp.I  s01 s02 ->
@@ -38,7 +40,7 @@ Inductive I : StackFlatter2.state -> LocalsOnly.state -> Prop :=
         LocalsOnlyComp.I    s04 s05 ->
         I s00 s05.
 
-Inductive I_func : list StackFlatter2.insn -> list LocalsOnly.insn * nat -> Prop :=
+Inductive I_func : list A.insn -> list B.insn * nat -> Prop :=
 | IFuncCombined : forall f00 f01 f02 f03 f04 f05,
         Forall2 LocalsDestsComp.I_insn      f00 f01 ->
         Forall2 LocalsSwitchComp.I_insn     f01 f02 ->
@@ -100,3 +102,38 @@ on _, eapply_lem LocalsOnlyComp.compile_cu_I_env.
 inject_ok. inject_pair.
 eapply chain_I_env; eassumption.
 Qed.
+
+
+
+Require Semantics.
+
+Section Preservation.
+
+  Variable prog : A.prog_type.
+  Variable tprog : B.prog_type.
+
+  Hypothesis TRANSF : compile_cu prog = OK tprog.
+
+  
+  (* Inductive match_states (AE : A.env) (BE : B.env) : A.expr -> B.expr -> Prop := *)
+  (* | match_st : *)
+  (*     forall a b, *)
+  (*       R AE BE a b -> *)
+  (*       match_states AE BE a b. *)
+
+  (* Lemma step_sim : *)
+  (*   forall AE BE a b, *)
+  (*     match_states AE BE a b -> *)
+  (*     forall a', *)
+  (*       A.step AE a a' -> *)
+  (*       exists b', *)
+  (*         splus (B.step BE) b b'. *)
+  (* Proof. *)
+  (* Admitted. *)
+
+  Theorem fsim :
+    Semantics.forward_simulation (A.semantics prog) (B.semantics tprog).
+  Proof.
+  Admitted.
+
+End Preservation.
