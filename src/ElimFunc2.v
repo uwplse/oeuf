@@ -629,13 +629,13 @@ induction es.
 - destruct (no_elim_body_dec a); [| nebd_fail ].
   destruct IHes; [| nebd_fail ].
   left. constructor; auto.
-Qed.
+Defined.
 
 Definition no_elim_body_pair_dec p : { no_elim_body_pair p } + { ~ no_elim_body_pair p }.
 destruct p.
 destruct (no_elim_body_dec e); [| nebd_fail ].
 left. auto.
-Qed.
+Defined.
 
 Definition no_elim_body_list_pair_dec ps :
     { no_elim_body_list_pair ps } + { ~ no_elim_body_list_pair ps }.
@@ -644,7 +644,7 @@ induction ps.
 - destruct (no_elim_body_pair_dec a); [| nebd_fail ].
   destruct IHps; [| nebd_fail ].
   left. constructor; auto.
-Qed.
+Defined.
 
 
 Definition elim_body_placement_dec e : { elim_body_placement e } + { ~ elim_body_placement e }.
@@ -654,7 +654,7 @@ simpl.
 destruct (no_elim_body_dec e); [| nebd_fail ].
 destruct (no_elim_body_list_pair_dec cases); [| nebd_fail ].
 left. auto.
-Qed.
+Defined.
 
 Definition elim_body_placement_list_dec es :
     { Forall elim_body_placement es } + { ~ Forall elim_body_placement es }.
@@ -663,7 +663,7 @@ induction es.
 - destruct (elim_body_placement_dec a); [| nebd_fail ].
   destruct IHes; [| nebd_fail ].
   left. constructor; auto.
-Qed.
+Defined.
 
 
 

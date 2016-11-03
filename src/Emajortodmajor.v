@@ -7,6 +7,7 @@ Require Import compcert.common.Values.
 Require Import compcert.common.Globalenvs.
 Require Import compcert.common.Memory.
 Require Import compcert.common.Events.
+Require Import compcert.common.Errors.
 Require Import compcert.common.Switch.
 Require Import compcert.common.Smallstep.
 
@@ -104,7 +105,6 @@ Fixpoint transf_stmt (s : Emajor.stmt) : Dmajor.stmt :=
   | Emajor.Sreturn exp => Dmajor.Sreturn (Some (transf_expr exp))
   end.
 
-
 Section collect_locals.
 
 Require Import Monads.
@@ -115,13 +115,6 @@ Definition record_local (i : ident) (ls : list ident) : unit * list ident :=
         (tt, ls)
     else
         (tt, i :: ls).
-
-(*
-Transparent peq.
-Eval compute in (record_local 1 (2 :: 3 :: nil))%positive.
-Eval compute in (record_local 1 (1 :: 3 :: nil))%positive.
-Opaque peq.
-*)
 
 Fixpoint walk_stmt (s : Emajor.stmt) : state (list ident) unit :=
     match s with
@@ -145,32 +138,30 @@ Definition collect_locals (s : Emajor.stmt) : list ident :=
 
 End collect_locals.
 
-Definition transf_function (f : Emajor.function) : Dmajor.function :=
+Section TF.
+Require Import String.
+Open Scope string.
+
+Definition transf_function (f : Emajor.function) : res Dmajor.function :=
   let s := Emajor.fn_body f in
   let ts := transf_stmt s in
   let ss := Emajor.fn_stackspace f in
   let params := Emajor.fn_params f in
   let sig := Emajor.fn_sig f in
-  Dmajor.mkfunction sig params (collect_locals s) ss ts.
+  let locs := collect_locals s in
+  if list_disjoint_dec peq params locs then
+    OK (Dmajor.mkfunction sig params locs ss ts)
+  else
+    Error (MSG "tried to use the same ID for a param and a local" :: nil).
 
-Definition transf_fundef (fd : Emajor.fundef) : Dmajor.fundef :=
-  transf_function fd.
+Close Scope string.
+End TF.
 
-(* Fixpoint transf_globdefs (main_id : ident) (gds : list (ident * globdef Emajor.fundef unit)) : (list (ident * globdef Dmajor.fundef unit)) := *)
-(*   match gds with *)
-(*   | nil => nil *)
-(*   | (id,Gfun fd) :: fs => *)
-(*     let tfd := transf_fundef (fnsig id) fd in *)
-(*     let tfs := transf_globdefs main_id fs in *)
-(*     (id,Gfun tfd) :: tfs *)
-(*   | (id,Gvar v) :: fs => *)
-(*     let tfs := transf_globdefs main_id fs in *)
-(*     (id,Gvar v) :: tfs *)
-(*   end. *)
+Definition transf_fundef (fd : Emajor.fundef) : res Dmajor.fundef :=
+  AST.transf_partial_fundef transf_function fd.
 
-
-Definition transf_prog (p : Emajor.program) : Dmajor.program :=
-  AST.transform_program transf_fundef p.
+Definition transf_prog (p : Emajor.program) : res Dmajor.program :=
+  AST.transform_partial_program transf_fundef p.
 
 Section PRESERVATION.
 
@@ -178,7 +169,7 @@ Variable prog: Emajor.program.
 Variable tprog: Dmajor.program.
 Let ge := Genv.globalenv prog.
 Let tge := Genv.globalenv tprog.
-Hypothesis TRANSF : transf_prog prog = tprog.
+Hypothesis TRANSF : transf_prog prog = OK tprog.
 
 Lemma transf_expr_inject_id :
   forall Ee De m id,
@@ -382,24 +373,24 @@ Inductive match_cont: Emajor.cont -> Dmajor.cont -> mem -> Prop :=
 | match_cont_call: forall id f e k f' e' k' m,
     match_cont k k' m ->
     env_inject e e' tge m ->
-    transf_function f = f' ->
+    transf_function f = OK f' ->
     match_cont (Emajor.Kcall id f e k) (Dmajor.Kcall (Some id) f' e' k') m.
 
 
 Inductive match_states: Emajor.state -> Dmajor.state -> Prop :=
 | match_state :
     forall f f' s s' k k' e e' m,
-      transf_function f = f' ->
+      transf_function f = OK f' ->
       transf_stmt s = s' ->
       match_cont k k' m ->
       env_inject e e' tge m ->
       match_states (Emajor.State f s k e) (Dmajor.State f' s' k' e' m)
 | match_callstate :
-    forall fd fd' vals vals' m k k',
-      transf_fundef fd = fd' ->
+    forall f f' vals vals' m k k',
+      transf_function f = OK f' ->
       list_forall2 (value_inject tge m) vals vals' ->
       match_cont k k' m ->
-      match_states (Emajor.Callstate fd vals k) (Dmajor.Callstate fd' vals' k' m)
+      match_states (Emajor.Callstate f vals k) (Dmajor.Callstate f' vals' k' m)
 | match_returnstate :
     forall v v' k k' m,
       value_inject tge m v v' ->
@@ -426,8 +417,9 @@ Lemma find_symbol_transf :
     Genv.find_symbol tge id = Genv.find_symbol ge id.
 Proof.
   intros. unfold tge.
-  unfold ge. rewrite <- TRANSF.
-  apply Genv.find_symbol_transf. 
+  unfold ge.
+  unfold transf_prog in *.
+  eapply Genv.find_symbol_transf_partial; eauto.
 Qed.
 
 Lemma env_inject_update :
@@ -463,21 +455,19 @@ Lemma symbols_transf :
     Genv.find_symbol tge fname = Some b.
 Proof.
   intros. subst ge. subst tge.
-  rewrite <- TRANSF.
   unfold transf_prog.
-  rewrite Genv.find_symbol_transf.
-  assumption.
+  erewrite Genv.find_symbol_transf_partial; eauto.
 Qed.
 
 Lemma functions_transf :
   forall fblock fn,
     Genv.find_funct_ptr ge fblock = Some fn ->
-    Genv.find_funct_ptr tge fblock = Some (transf_fundef fn).
+    exists fn',
+      Genv.find_funct_ptr tge fblock = Some fn' /\ transf_fundef fn = OK fn'.
 Proof.
   intros. subst ge. subst tge.
-  rewrite <- TRANSF.
-  unfold transf_prog.
-  erewrite Genv.find_funct_ptr_transf; eauto.
+  unfold transf_prog in *.
+  eapply Genv.find_funct_ptr_transf_partial; eauto.
 Qed.
 
 Lemma value_inject_ptr :
@@ -823,9 +813,11 @@ Proof.
   rewrite Int.repr_unsigned; eauto.
 Qed.
 
+Definition length {A} (l : list A) := @List.length A l. (* OMG string get out of here *)
+
 (* key store_args lemma *)  
 Lemma step_store_args :
-  forall l ofs m f id k env m0 vs hvs,
+  forall (l : list Emajor.expr) ofs m f id k env m0 vs hvs,
     env ! id = Some (Vptr (Mem.nextblock m0) Int.zero) ->
     writable m (Mem.nextblock m0) ofs (ofs + 4 * Z.of_nat (length l)) ->
     eval_exprlist tge env m0 (map transf_expr l) vs -> 
@@ -1248,16 +1240,17 @@ Proof.
 Qed.
 
 Lemma SmakeConstr_sim :
-  forall k k' m e e' l vargs id tag f,
+  forall k k' m e e' l vargs id tag f f',
     match_cont k k' m ->
     env_inject e e' tge m ->
     e ! id = None ->
     Emajor.eval_exprlist e l vargs ->
     (forall x : Z,
         0 <= x <= Z.of_nat (length l) -> Int.unsigned (Int.repr (4 + 4 * x)) = (4 + 4 * x)%Z) ->
+    transf_function f = OK f' ->
     exists st0',
       plus step tge
-           (State (transf_function f) (transf_stmt (SmakeConstr id tag l)) k' e' m)
+           (State f' (transf_stmt (SmakeConstr id tag l)) k' e' m)
            E0 st0' /\
       match_states
         (Emajor.State f Emajor.Sskip k (PTree.set id (Constr tag vargs) e)) st0'.
@@ -1286,7 +1279,7 @@ Proof.
   
   rewrite PTree.gso in * by congruence.
   unfold env_inject in *.
-  apply H0 in H18. break_exists.
+  apply H0 in H19. break_exists.
   break_and.
 
   eexists. split; eauto.
@@ -1294,7 +1287,7 @@ Proof.
 Qed.
 
 Lemma SmakeClose_sim :
-  forall k k' m e e' l vargs fname id f bcode fn,
+  forall k k' m e e' l vargs fname id f f' bcode fn,
     match_cont k k' m ->
     env_inject e e' tge m ->
     e ! id = None ->
@@ -1303,9 +1296,10 @@ Lemma SmakeClose_sim :
     Genv.find_funct_ptr tge bcode = Some fn ->
     (forall x : Z,
         0 <= x <= Z.of_nat (length l) -> Int.unsigned (Int.repr (4 + 4 * x)) = (4 + 4 * x)%Z) ->
+    transf_function f = OK f' ->
     exists st0',
       plus step tge
-           (State (transf_function f) (transf_stmt (SmakeClose id fname l)) k' e' m)
+           (State f' (transf_stmt (SmakeClose id fname l)) k' e' m)
            E0 st0' /\
       match_states
         (Emajor.State f Emajor.Sskip k (PTree.set id (Close fname vargs) e)) st0'.
@@ -1334,12 +1328,27 @@ Proof.
   
   rewrite PTree.gso in * by congruence.
   unfold env_inject in *.
-  apply H0 in H20. break_exists.
+  apply H0 in H21. break_exists.
   break_and.
 
   eexists. split; eauto.
   eapply mem_locked_value_inject; try eassumption.
 Qed.  
+
+
+Lemma not_in_set_params :
+  forall l vs x,
+    ~ In x l ->
+    (Emajor.set_params vs l) ! x = None.
+Proof.
+  induction l; intros.
+  simpl. rewrite PTree.gempty. reflexivity.
+  simpl. break_match. rewrite PTree.gempty. reflexivity.
+  subst vs. rewrite not_in_cons in H.
+  break_and. rewrite PTree.gso by congruence.
+  eauto.
+Qed.
+
 
 (* This is sorta what we want *)
 Theorem step_sim_no_trace :
@@ -1368,8 +1377,13 @@ Proof.
 
   (* function call *)
   + app transf_expr_inject (Emajor.eval_expr e efunc).
-  app transf_expr_inject (Emajor.eval_expr e earg).
-  inv H5.
+    app transf_expr_inject (Emajor.eval_expr e earg).
+    app symbols_transf Genv.find_symbol.
+    app functions_transf Genv.find_funct_ptr.
+    destruct x1; simpl in H15; try congruence.
+    Focus 2. unfold bind in *. break_match_hyp; try congruence.
+    
+  inv H6. find_rewrite. inv H20.
   eexists. split.
   eapply plus_one.
   econstructor; eauto.
@@ -1377,20 +1391,18 @@ Proof.
   econstructor; eauto.
   econstructor; eauto.
   econstructor.
-  simpl. find_rewrite.
-  break_match; try congruence. reflexivity.
-  erewrite symbols_transf in H16; eauto. inv H16.
-  erewrite functions_transf in H15; eauto. inv H15.
-  simpl. eassumption.
-  econstructor; eauto.
-  erewrite symbols_transf in H16; eauto. inv H16.
-  erewrite functions_transf in H15; eauto. inv H15.
-  reflexivity.
+  simpl. find_rewrite. inv H12.
+  break_match; try congruence.
+  eassumption.
+  simpl. find_rewrite. inv H12.
+  unfold bind in *. break_match_hyp; try congruence. inv H15.
+  destruct fn; destruct f0; unfold transf_function in Heqr; simpl in Heqr.
+  break_match_hyp; try congruence. simpl. inv Heqr. simpl in H13. assumption.
   repeat (econstructor; eauto).
-  econstructor; eauto.
-
+  unfold bind in *. break_match_hyp; try congruence.
+  
   (* return *)
-  + destruct k; simpl in H8; try solve [inv H8]; invp match_cont.
+  + destruct k; simpl in H9; try solve [inv H9]; invp match_cont.
     app transf_expr_inject Emajor.eval_expr.
     eexists; split.
     eapply plus_one.
@@ -1480,25 +1492,32 @@ Proof.
   econstructor; eauto.
 
   (* callstate *)
-  + destruct (Mem.alloc m 0 (fn_stackspace (transf_fundef fd))) eqn:?.
+  + 
+    destruct (Mem.alloc m 0 (fn_stackspace f')) eqn:?.
   eexists.  split.
   eapply plus_one; nil_trace.
   simpl.
   econstructor; eauto.
   econstructor; eauto.
-  (* TODO HERE *)
-  (* eapply mem_locked_match_cont; eauto. *)
-  (* eapply alloc_mem_locked; eauto. *)
-  (* app env_inject_set_params_locals list_forall2. *)
-  (* unfold transf_fundef. simpl. *)
-  (* instantiate (1 := Emajor.fn_params fd) in H2. *)
-  (* app alloc_mem_locked Mem.alloc. *)
-  (* eapply mem_locked_env_inject in H2; eauto. *)
+  unfold transf_function in H1. simpl in H1. break_match_hyp; try congruence.
+  unfold transf_function in H1. simpl in H1. inv H1. simpl. reflexivity.
 
-  (* eapply disjoint_set_locals; eauto. *)
-  admit. (* params are not locals *)
-  (* this will need to be a global program property, ensured by something *)
-  (* shouldn't be that hard *)
+  app env_inject_set_params_locals list_forall2.
+  unfold transf_function in H1. break_match_hyp; try congruence.
+  assert (Emajor.fn_params f = fn_params f').
+  {
+    invc H1. 
+    simpl. reflexivity.
+  }
+  rewrite H5.
+  eapply disjoint_set_locals; eauto.
+
+  intros.
+  replace (fn_vars f') with (collect_locals (Emajor.fn_body f)) in * by (invc H1; simpl; reflexivity).
+  app list_disjoint_sym list_disjoint.
+  app list_disjoint_notin In.
+  rewrite <- H5.
+  eapply not_in_set_params; eauto.
 
   (* returnstate *)
   + invp match_cont.
@@ -1538,17 +1557,194 @@ Proof.
   eauto.
 Qed.
 
-Theorem fsim :
-  forward_simulation (Emajor.semantics prog) (Dmajor.semantics tprog).
+
+Section ALLOC.
+
+Variable m1: mem.
+Variables lo hi: Z.
+Variable m2: mem.
+Variable b: block.
+Hypothesis ALLOC: Mem.alloc m1 lo hi = (m2, b).
+
+
+Lemma alloc_access_result :
+  Mem.mem_access m2 = PMap.set (Mem.nextblock m1)
+                           (fun (ofs : Z) (_ : perm_kind) =>
+                              if zle lo ofs && zlt ofs hi then Some Freeable else None)
+                           (Mem.mem_access m1).
+Proof.
+  intros.
+  unfold alloc in *. inv ALLOC.
+  simpl. reflexivity.
+Qed.
+
+End ALLOC.
+
+Lemma alloc_drop :
+  forall m lo hi b m',
+    Mem.alloc m lo hi = (m',b) ->
+    forall k m0,
+      Mem.mem_access m' = Mem.mem_access m0 ->
+      exists m'',
+        Mem.drop_perm m0 b lo hi k = Some m''.
+Proof.
+  intros. app alloc_access_result Mem.alloc.
+  rewrite H0 in H. clear H0.
+  unfold Mem.drop_perm.
+  break_match; try solve [eauto].
+  exfalso. apply n.
+  unfold Mem.range_perm.
+  intros.
+  unfold Mem.perm.
+  unfold Mem.perm_order'.
+  rewrite H.
+  app Mem.alloc_result Mem.alloc.
+  subst. rewrite PMap.gss.
+  unfold proj_sumbool. unfold andb.
+  repeat break_match; try congruence; try omega. inv Heqo.
+  econstructor.
+Qed.
+
+(*
+Lemma store_zeros_succeeds :
+  forall m b lo hi,
+    (forall ofs, lo <= ofs < hi -> Mem.valid_access m Mint8unsigned b ofs Writable) ->
+    exists m',
+      store_zeros m b lo hi = Some m' /\ Mem.mem_access m = Mem.mem_access m'.
 Proof.
 Admitted.
 
-(* We're going to have to solve one problem: *)
-(* How do we compose a forward simulation with what we currently have? *)
+Lemma alloc_global_succeeds :
+  forall {F V} (ge : Genv.t F V) a m,
+  exists m',
+    Genv.alloc_global ge m a = Some m'.
+Proof.
+  intros. destruct a.
+  simpl. destruct g.
+  break_let. eapply alloc_drop; eauto.
+  break_let. remember (Genv.init_data_list_size (gvar_init v)) as hi.
+  assert (forall ofs, 0 <= ofs < hi -> Mem.valid_access m0 Mint8unsigned b ofs Writable).
+  intros.
+  eapply Mem.valid_access_implies.
+  eapply Mem.valid_access_alloc_same; eauto; try omega. simpl. omega.
+  simpl. eapply Z.divide_1_l.
+  econstructor.
+  edestruct store_zeros_succeeds; repeat break_and; try rewrite H0; eauto.
+
+  
+Lemma store_init_data_list_succeeds :
+  forall m b lo hi,
+    (forall ofs, lo <= ofs < hi -> Mem.valid_access m Mint8unsigned b ofs Writable) ->
+    exists m',
+      store_zeros m b lo hi = Some m' /\ Mem.mem_access m = Mem.mem_access m'.
+Proof.
+Admitted.
+*)  
+  
+
+Lemma alloc_global_succeeds :
+  forall {F V} (ge : Genv.t F V) id f m,
+  exists m',
+    Genv.alloc_global ge m (id,Gfun f) = Some m'.
+Proof.
+  intros.
+  simpl. 
+  break_let. eapply alloc_drop; eauto.
+Qed.
+
+(* This is true but needs translation validation *)
+Lemma prog_defs_funs :
+  forall id g,
+    In (id,g) (prog_defs tprog) ->
+    exists f,
+      g = Gfun f.
+Proof.
+Admitted.
+
+Lemma alloc_globals_funs_succeeds :
+  forall l m,
+  (forall id g, In (id,g) l -> (exists f, g = Gfun f)) ->
+  exists m',
+    Genv.alloc_globals tge m l = Some m'.
+Proof.
+  induction l; intros.
+  simpl. eauto.
+  simpl.
+  assert (In a (a :: l)). simpl. left. auto.
+  destruct a. eapply H in H0. break_exists. subst g.
+  edestruct (alloc_global_succeeds tge); eauto.
+  rewrite H0.
+  eapply IHl. intros. eapply H. simpl. right. eauto.
+Qed.
+
+Lemma init_mem_succeeds :
+  exists m,
+    Genv.init_mem tprog = Some m.
+Proof.
+  unfold Genv.init_mem.
+  edestruct alloc_globals_funs_succeeds; eauto.
+  eapply prog_defs_funs.
+Qed.
+
+(* Probably need to just validate this, no big deal *)
+Lemma funsig_main :
+  forall b f f',
+    Genv.find_symbol ge (prog_main prog) = Some b ->
+    Genv.find_funct_ptr ge b = Some (Internal f) ->
+    transf_function f = OK f' ->
+    funsig f' = signature_main.
+Proof.
+Admitted.
+
+Lemma initial_states_match :
+  forall st,
+    Emajor.initial_state prog st ->
+    exists st',
+      Dmajor.initial_state tprog st' /\ match_states st st'.
+Proof.
+  intros. inv H.
+  destruct init_mem_succeeds.
+  app functions_transf Genv.find_funct_ptr.
+  unfold tge in *. 
+  destruct x0; simpl in H4; unfold bind in *; simpl in H4; break_match_hyp; try congruence.
+  inv H4.
+  eexists; split; repeat (econstructor; eauto).
+  unfold transf_prog in *.
+  erewrite transform_partial_program_main; eauto.
+  eapply symbols_transf; eauto.
+  eapply funsig_main; eauto.
+Qed.
+
+
+Lemma match_final_states :
+  forall st st' r,
+    match_states st st' ->
+    Emajor.final_state st r ->
+    Dmajor.final_state st' r.
+Proof.
+  intros. inv H0. inv H.
+  inv H5.
+Admitted. (* This is where we need pointers in final states. Right here *)
+
+Theorem fsim :
+  forward_simulation (Emajor.semantics prog) (Dmajor.semantics tprog).
+Proof.
+  eapply forward_simulation_plus.
+  intros. simpl.
+  unfold transf_prog in *.
+  eapply Genv.public_symbol_transf_partial; eauto.
+
+  eapply initial_states_match; eauto.
+  eapply match_final_states; eauto.
+  
+  intros. eapply step_sim; eauto.
+  
+Qed.
+
 
 End PRESERVATION.
 
 (* TODO: *)
 (* 1. We need a way to refer to parts of the original program, and show that anything reached in execution is part of the original prog *)
 (* 2. We need a way to prove properties about the program text, and show they correspond to properties about execution *)
-(* Once we have these, we can dispatch the admits *)
+(* Once we have these, we can dispatch these *)
