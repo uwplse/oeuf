@@ -3,6 +3,7 @@ Require Import Utopia.
 Require Import Metadata.
 Require Import Semantics.
 Require Import Untyped.
+Require Import ListLemmas.
 
 Inductive cont_elt :=
 | kAppL (r : expr)
@@ -135,6 +136,46 @@ Hint Resolve value_no_step.
 
 Hint Constructors value.
 
+
+Definition extend (s : state) (k : cont) : state :=
+  match s with
+  | Run e k0 => Run e (k ++ k0)
+  | Stop e => plug e k
+  end.
+
+Lemma kstep_extend :
+  forall e k k' s,
+    kstep (Run e k) s ->
+    kstep (Run e (k' ++ k)) (extend s k').
+Admitted.
+
+Lemma I_AppL_extend:
+  forall e1 e2 s, I e1 s -> I (App e1 e2) (extend s [kAppL e2]).
+Proof.
+Admitted.
+
+Lemma I_AppR_extend:
+  forall e1 e2 s, I e2 s -> I (App e1 e2) (extend s [kAppR e1]).
+Proof.
+Admitted.
+
+Lemma cons_app_singleton :
+  forall A (x : A) xs,
+    x :: xs = [x] ++ xs.
+Proof. reflexivity. Qed.
+
+Lemma I_ConstrArg_extend:
+  forall tag vs e es s,
+    I e s -> I (Constr tag (vs ++ [e] ++ es)) (extend s [kConstrArg tag vs es]).
+Proof.
+Admitted.
+
+Lemma I_Elim_extend:
+  forall ty cases target s,
+    I target s -> I (Elim ty cases target) (extend s [kElim ty cases]).
+Proof.
+Admitted.
+
 Theorem I_sim :
   forall e e',
     step e e' ->
@@ -143,26 +184,42 @@ Theorem I_sim :
       exists s', kstep s s' /\ I e' s'.
 Proof.
   induction e using expr_ind'; intros;
-    on >step, inv.
-  - on >I, inv; intuition.
-    eexists.
+    on >step, inv;
+    on >I, invc; try solve [exfalso; eauto].
+  - eexists.
     split.
     apply KBeta; auto.
     admit.
-  - on >I, inv; try solve [exfalso; eauto].
-    fwd eapply IHe1; eauto.
+  - fwd eapply IHe1; eauto.
+    break_exists_name s'.
+    break_and.
+    rewrite cons_app_singleton.
+    eauto 10 using kstep_extend, I_AppL_extend.
+  - fwd eapply IHe2; eauto.
+    break_exists_name s'.
+    break_and.
+    rewrite cons_app_singleton.
+    eauto using kstep_extend, I_AppR_extend.
+  - on _, fun H => apply HList.app_middle_member in H.
+    intuition idtac.
+    + admit.
+    + subst.
+      on >Forall, invc_using ListLemmas.Forall_app_inv.
+      on (Forall _ (_ :: _)), fun H =>
+        inversion H as [| ? ? IH]; subst.
+      fwd eapply IH; eauto.
+      break_exists_name s'. break_and.
+      rewrite cons_app_singleton.
+      eauto using kstep_extend, I_ConstrArg_extend.
+    + admit.
+  - fwd eapply IHe; eauto.
+    break_exists_name s'.
+    break_and.
+    rewrite cons_app_singleton.
+    eauto using kstep_extend, I_Elim_extend.
+  - admit.
+Admitted.
 
-
-Lemma kstep_expand :
-  forall e k k' s,
-    kstep (Run e k) s ->
-
-
-
-    break_exists. intuition.
-    eexists.
-    split.
-    eapply KAppL.
 
 
 
