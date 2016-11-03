@@ -3,6 +3,7 @@ Require Import Metadata.
 Require String.
 Require ElimFunc ElimFunc2.
 Require Import ListLemmas.
+Require Import StepLib.
 
 Require Import Psatz.
 
@@ -77,10 +78,23 @@ Ltac refold_compile :=
     fold compile_list_pair in *.
 
 
-Definition compile_cu (cu : list A.expr * list metadata) : list B.expr * list metadata :=
-    let '(exprs, metas) := cu in
-    let exprs' := compile_list exprs in
-    (exprs', metas).
+Definition compile_func (f : A.expr) : option (B.expr) :=
+    if A.close_dyn_placement_dec f
+        then Some (compile f)
+        else None.
+
+Section compile_cu.
+Open Scope option_monad.
+
+Definition compile_cu (cu : list A.expr * list metadata) :
+        option (list B.expr * list metadata) :=
+    let '(funcs, metas) := cu in
+    map_partial compile_func funcs >>= fun funcs' =>
+    if B.enough_free_list_dec funcs' funcs'
+        then Some (funcs', metas)
+        else None.
+
+End compile_cu.
 
 
 Lemma compile_list_Forall : forall aes bes,
@@ -247,63 +261,6 @@ Qed.
 
 
 
-Definition A_close_dyn_placement :=
-    let fix go e :=
-        let fix go_list es :=
-            match es with
-            | [] => True
-            | e :: es => go e /\ go_list es
-            end in
-        let fix go_pair p :=
-            let '(e, r) := p in
-            go e in
-        let fix go_list_pair ps :=
-            match ps with
-            | [] => True
-            | p :: ps => go_pair p /\ go_list_pair ps
-            end in
-        match e with
-        | A.Arg => True
-        | A.UpVar _ => True
-        | A.Call (A.CloseDyn _ _ _) a => go a
-        | A.Call f a => go f /\ go a
-        | A.Constr _ args => go_list args
-        | A.ElimBody (A.CloseDyn _ _ _) cases => go_list_pair cases
-        | A.ElimBody rec cases => go rec /\ go_list_pair cases
-        | A.Close _ free => go_list free
-        | A.CloseDyn _ _ _ => False
-        end in go.
-
-Definition A_close_dyn_placement_list :=
-    let go := A_close_dyn_placement in
-    let fix go_list es :=
-        match es with
-        | [] => True
-        | e :: es => go e /\ go_list es
-        end in go_list.
-
-Definition A_close_dyn_placement_pair :=
-    let go := A_close_dyn_placement in
-    let fix go_pair (p : A.expr * A.rec_info) :=
-        match p with
-        | (e, _) => go e
-        end in go_pair.
-
-Definition A_close_dyn_placement_list_pair :=
-    let go_pair := A_close_dyn_placement_pair in
-    let fix go_list_pair ps :=
-        match ps with
-        | [] => True
-        | p :: ps => go_pair p /\ go_list_pair ps
-        end in go_list_pair.
-
-Ltac refold_A_close_dyn_placement :=
-    fold A_close_dyn_placement_list in *;
-    fold A_close_dyn_placement_pair in *;
-    fold A_close_dyn_placement_list_pair in *.
-
-
-
 Lemma free_list'_length : forall acc n,
     length (free_list' acc n) = length acc + S n.
 first_induction n; intros.
@@ -332,24 +289,24 @@ intro. destruct (close_dyn_free _ _); simpl in *.
 Qed.
 
 Lemma compile_I_expr : forall AE BE ae be,
-    A_close_dyn_placement ae ->
+    A.close_dyn_placement ae ->
     B.enough_free BE be ->
     compile ae = be ->
     I_expr AE BE ae be.
 intros AE BE.
 induction ae using A.expr_rect_mut with
     (Pl := fun aes => forall bes,
-        A_close_dyn_placement_list aes ->
+        A.close_dyn_placement_list aes ->
         B.enough_free_list BE bes ->
         compile_list aes = bes ->
         Forall2 (I_expr AE BE) aes bes)
     (Pp := fun ap => forall bp,
-        A_close_dyn_placement_pair ap ->
+        A.close_dyn_placement_pair ap ->
         B.enough_free_pair BE bp ->
         compile_pair ap = bp ->
         I_expr AE BE (fst ap) (fst bp) /\ snd ap = snd bp)
     (Plp := fun aps => forall bps,
-        A_close_dyn_placement_list_pair aps ->
+        A.close_dyn_placement_list_pair aps ->
         B.enough_free_list_pair BE bps ->
         compile_list_pair aps = bps ->
         Forall2 (fun ap bp => I_expr AE BE (fst ap) (fst bp) /\ snd ap = snd bp) aps bps);
@@ -367,8 +324,8 @@ invc Hcdp || simpl in Hcdp; try solve [eauto | constructor; eauto].
     * eauto.
 
 (* ElimBody case *)
-- refold_A_close_dyn_placement.
-  destruct ae; break_and; try on (A_close_dyn_placement _), invc;
+- A.refold_close_dyn_placement.
+  destruct ae; break_and; try on (A.close_dyn_placement _), invc;
     try solve [constructor; eauto; constructor; eauto].
   destruct expect.
   + simpl. rewrite close_dyn_free_zero. eapply IElimCdzExpr. eauto.
@@ -377,7 +334,7 @@ invc Hcdp || simpl in Hcdp; try solve [eauto | constructor; eauto].
     * eauto.
 
 (* Close case *)
-- rename x into body. refold_A_close_dyn_placement.
+- rename x into body. A.refold_close_dyn_placement.
   rewrite compile_list_length in *.
   econstructor; eauto.
   + rewrite compile_list_length. assumption.
@@ -390,6 +347,36 @@ invc Hcdp || simpl in Hcdp; try solve [eauto | constructor; eauto].
     constructor.
 
 Qed.
+
+
+Lemma compile_func_close_dyn_placement : forall a b,
+    compile_func a = Some b ->
+    A.close_dyn_placement a.
+intros0 Hcomp.
+unfold compile_func in Hcomp. break_if; try discriminate. inject_some.
+auto.
+Qed.
+
+Theorem compile_cu_close_dyn_placement : forall a ameta b bmeta,
+    compile_cu (a, ameta) = Some (b, bmeta) ->
+    Forall A.close_dyn_placement a.
+intros0 Hcomp. unfold compile_cu in *. break_bind_option.
+  break_if; try discriminate. inject_some.
+on _, apply_lem map_partial_Forall2.
+list_magic_on (a, (b, tt)). eauto using compile_func_close_dyn_placement.
+Qed.
+
+Theorem compile_cu_enough_free : forall a ameta b bmeta,
+    compile_cu (a, ameta) = Some (b, bmeta) ->
+    Forall (B.enough_free b) b.
+intros0 Hcomp. unfold compile_cu in *. break_bind_option.
+  break_if; try discriminate. inject_some.
+rewrite <- B.enough_free_list_Forall. auto.
+Qed.
+
+
+
+
 
 Definition var_n n :=
     match n with
@@ -530,76 +517,6 @@ Qed.
 
 
 
-Lemma B_sstar_snoc : forall E s s' s'',
-    B.sstar E s s' ->
-    B.sstep E s' s'' ->
-    B.sstar E s s''.
-induction 1; intros.
-- econstructor; try eassumption. econstructor.
-- econstructor; eauto.
-Qed.
-
-Lemma B_splus_snoc : forall E s s' s'',
-    B.splus E s s' ->
-    B.sstep E s' s'' ->
-    B.splus E s s''.
-induction 1; intros.
-- econstructor 2; try eassumption.
-  econstructor 1; eassumption.
-- econstructor; solve [eauto].
-Qed.
-
-Lemma B_splus_sstar : forall E s s',
-    B.splus E s s' ->
-    B.sstar E s s'.
-induction 1; intros.
-- econstructor; try eassumption. constructor.
-- econstructor; eauto.
-Qed.
-
-Lemma B_sstar_then_sstar : forall E s s' s'',
-    B.sstar E s s' ->
-    B.sstar E s' s'' ->
-    B.sstar E s s''.
-induction 1; intros.
-- assumption.
-- econstructor; solve [eauto].
-Qed.
-
-Lemma B_sstar_then_splus : forall E s s' s'',
-    B.sstar E s s' ->
-    B.splus E s' s'' ->
-    B.splus E s s''.
-induction 1; intros.
-- assumption.
-- econstructor; solve [eauto].
-Qed.
-
-Lemma B_splus_then_sstar' : forall E s s' s'',
-    B.sstar E s' s'' ->
-    B.splus E s s' ->
-    B.splus E s s''.
-induction 1; intros.
-- assumption.
-- eapply IHsstar. eapply B_splus_snoc; eauto.
-Qed.
-
-Lemma B_splus_then_sstar : forall E s s' s'',
-    B.splus E s s' ->
-    B.sstar E s' s'' ->
-    B.splus E s s''.
-intros. eauto using B_splus_then_sstar'.
-Qed.
-
-Lemma B_splus_then_splus : forall E s s' s'',
-    B.splus E s s' ->
-    B.splus E s' s'' ->
-    B.splus E s s''.
-induction 1; intros; eauto using B.SPlusCons.
-Qed.
-
-
-
 Ltac B_start HS :=
     match goal with
     | [ |- context [ ?pred ?E ?s _ ] ] =>
@@ -628,10 +545,10 @@ Ltac B_step HS :=
         | clear HS' ] in
     match type of HS with
     | B.sstar ?E ?s0 ?s1 => go E s0 s1 B.splus
-            ltac:(eapply B_sstar_then_splus with (1 := HS');
+            ltac:(eapply sstar_then_splus with (1 := HS');
                   eapply B.SPlusOne)
     | B.splus ?E ?s0 ?s1 => go E s0 s1 B.splus
-            ltac:(eapply B_splus_snoc with (1 := HS'))
+            ltac:(eapply splus_snoc with (1 := HS'))
     end.
 
 Ltac B_star HS :=
@@ -646,9 +563,9 @@ Ltac B_star HS :=
         | clear HS' ] in
     match type of HS with
     | B.sstar ?E ?s0 ?s1 => go E s0 s1 B.sstar
-            ltac:(eapply B_sstar_then_sstar with (1 := HS'))
+            ltac:(eapply sstar_then_sstar with (1 := HS'))
     | B.splus ?E ?s0 ?s1 => go E s0 s1 B.splus
-            ltac:(eapply B_splus_then_sstar with (1 := HS'))
+            ltac:(eapply splus_then_sstar with (1 := HS'))
     end.
 
 Ltac B_plus HS :=
@@ -663,9 +580,9 @@ Ltac B_plus HS :=
         | clear HS' ] in
     match type of HS with
     | B.sstar ?E ?s0 ?s1 => go E s0 s1 B.splus
-            ltac:(eapply B_sstar_then_splus with (1 := HS'))
+            ltac:(eapply sstar_then_splus with (1 := HS'))
     | B.splus ?E ?s0 ?s1 => go E s0 s1 B.splus
-            ltac:(eapply B_splus_then_splus with (1 := HS'))
+            ltac:(eapply splus_then_splus with (1 := HS'))
     end.
 
 
@@ -1044,7 +961,7 @@ B_step HS.
 B_step HS.
   { eapply Hstep; eauto. }
 
-eapply B_splus_sstar in HS.
+eapply splus_sstar in HS.
 eexists. split. eapply HS.
 eapply sliding_app; eauto.
 eapply sliding_length in Hsld; eauto. congruence.
@@ -1086,7 +1003,7 @@ destruct (eq_nat_dec (S i) (length free)) as [Hlen' | Hlen'].
 
 specialize (IHj (S i) free' vs es ltac:(lia) ltac:(lia) ** ** ** ** **).
 
-eapply B_sstar_then_sstar; eassumption.
+eapply sstar_then_sstar; eassumption.
 Qed.
 
 
@@ -1130,7 +1047,7 @@ Qed.
 
 Theorem I_sim : forall AE BE a a' b,
     compile_list AE = BE ->
-    Forall A_close_dyn_placement AE ->
+    Forall A.close_dyn_placement AE ->
     Forall (B.enough_free BE) BE ->
     I AE BE a b ->
     A.sstep AE a a' ->
@@ -1449,6 +1366,49 @@ destruct ae; inv Astep; invc II; [ try on (I_expr _ _ _ _), invc.. | | ].
 
 Qed.
 
+
+Inductive I' (AE : A.env) (BE : B.env) : A.state -> B.state -> Prop :=
+| I'_intro : forall a b,
+        I AE BE a b ->
+        B.enough_free_state BE b ->
+        I' AE BE a b.
+
+Theorem I'_sim : forall AE BE a a' b,
+    compile_list AE = BE ->
+    Forall A.close_dyn_placement AE ->
+    Forall (B.enough_free BE) BE ->
+    I' AE BE a b ->
+    A.sstep AE a a' ->
+    exists b',
+        (B.splus BE b b' \/
+         (b' = b /\ state_metric a' < state_metric a)) /\
+        I' AE BE a' b'.
+intros. on >I', invc.
+fwd eapply I_sim; eauto. break_exists; break_and.
+eexists; split; eauto. constructor; eauto.
+eapply B.enough_free_star; try eassumption.
+- on (_ \/ _), invc.
+  + eapply splus_sstar. auto.
+  + break_and. subst. eapply SStarNil.
+Qed.
+
+
+
+Lemma compile_cu_compile_list : forall a ameta b bmeta,
+    compile_cu (a, ameta) = Some (b, bmeta) ->
+    compile_list a = b.
+intros.
+simpl in *. break_bind_option. break_if; try discriminate. inject_some.
+on _, apply_lem map_partial_Forall2.
+on >B.enough_free_list, fun H => clear H.
+generalize dependent b. induction a; intros; on >Forall2, invc.
+- simpl. reflexivity.
+- simpl. f_equal; eauto.
+  unfold compile_func in *. break_if; try discriminate. inject_some. reflexivity.
+Qed.
+
+
+
 Require Semantics.
 
 Section Preservation.
@@ -1456,28 +1416,19 @@ Section Preservation.
   Variable prog : A.prog_type.
   Variable tprog : B.prog_type.
 
-  Hypothesis TRANSF : compile_cu prog = tprog.
-
-  
-  (* Inductive match_states (AE : A.env) (BE : B.env) : A.expr -> B.expr -> Prop := *)
-  (* | match_st : *)
-  (*     forall a b, *)
-  (*       R AE BE a b -> *)
-  (*       match_states AE BE a b. *)
-
-  (* Lemma step_sim : *)
-  (*   forall AE BE a b, *)
-  (*     match_states AE BE a b -> *)
-  (*     forall a', *)
-  (*       A.step AE a a' -> *)
-  (*       exists b', *)
-  (*         splus (B.step BE) b b'. *)
-  (* Proof. *)
-  (* Admitted. *)
+  Hypothesis TRANSF : compile_cu prog = Some tprog.
 
   Theorem fsim :
     Semantics.forward_simulation (A.semantics prog) (B.semantics tprog).
   Proof.
+    eapply Semantics.forward_simulation_star with (match_states := I' (fst prog) (fst tprog)).
+    - admit. (* TODO - replace with callstate matching *)
+    - intros0 II Afinal. invc Afinal. invc II. on >I, invc. constructor. eauto using I_expr_value.
+    - intros0 Astep. intros0 II.
+      eapply sstar_semantics_sim, I'_sim; try eassumption.
+      + destruct prog, tprog. eapply compile_cu_compile_list; eauto.
+      + destruct prog, tprog. eapply compile_cu_close_dyn_placement; eauto.
+      + destruct prog, tprog. eapply compile_cu_enough_free; eauto.
   Admitted.
 
 End Preservation.

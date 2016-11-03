@@ -1,4 +1,5 @@
 Require Import Common.
+Require Import StepLib.
 
 Require Import Utopia.
 Require Import Monads.
@@ -77,21 +78,17 @@ Inductive sstep (E : env) : state -> state -> Prop :=
                 (Run e' (Constr tag args :: l) k)
 .
 
-Inductive sstar (E : env) : state -> state -> Prop :=
-| SStarNil : forall e, sstar E e e
-| SStarCons : forall e e' e'',
-        sstep E e e' ->
-        sstar E e' e'' ->
-        sstar E e e''.
 
-Inductive splus (E : env) : state -> state -> Prop :=
-| SPlusOne : forall s s',
-        sstep E s s' ->
-        splus E s s'
-| SPlusCons : forall s s' s'',
-        sstep E s s' ->
-        splus E s' s'' ->
-        splus E s s''.
+
+Definition sstar BE := StepLib.sstar (sstep BE).
+Definition SStarNil := @StepLib.SStarNil state.
+Definition SStarCons := @StepLib.SStarCons state.
+
+Definition splus BE := StepLib.splus (sstep BE).
+Definition SPlusOne := @StepLib.SPlusOne state.
+Definition SPlusCons := @StepLib.SPlusCons state.
+
+
 
 Require Import Metadata.
 
@@ -101,9 +98,10 @@ Require Semantics.
 
 Inductive initial_state (prog : prog_type) : state -> Prop :=.
 
-Inductive final_state (prog : prog_type) : state -> Prop :=.
+Inductive final_state (prog : prog_type) : state -> Prop :=
+| FinalState : forall v, value v -> final_state prog (Stop v).
 
-Definition initial_env (prog : prog_type) : env := nil. (* TODO: write this *)
+Definition initial_env (prog : prog_type) : env := fst prog.
 
 Definition semantics (prog : prog_type) : Semantics.semantics :=
   @Semantics.Semantics_gen state env
