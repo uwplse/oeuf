@@ -53,14 +53,22 @@ Ltac refold_compile :=
     fold compile_expr in *;
     fold compile_list in *.
 
-Definition compile_func (f : A.stmt * A.expr) : B.stmt * B.expr :=
+Definition compile_func (f : A.stmt * A.expr) : option (B.stmt * B.expr) :=
     let '(body, ret) := f in
-    (compile body, compile_expr ret).
+    if A.check_dests_ok body
+        then Some (compile body, compile_expr ret)
+        else None.
+
+Section compile_cu.
+Open Scope option_monad.
 
 Definition compile_cu (cu : list (A.stmt * A.expr) * list metadata) :
-        list (B.stmt * B.expr) * list metadata :=
+        option (list (B.stmt * B.expr) * list metadata) :=
     let '(funcs, metas) := cu in
-    (map compile_func funcs, metas).
+    map_partial compile_func funcs >>= fun funcs' =>
+    Some (funcs', metas).
+
+End compile_cu.
 
 
 
@@ -191,20 +199,37 @@ try solve [econstructor; eauto using compile_I_stmt].
 Qed.
 
 Lemma compile_I_func : forall a b,
-    compile_func a = b ->
+    compile_func a = Some b ->
     I_func a b.
 intros0 Hcomp. destruct a.
-unfold compile_func in Hcomp. rewrite <- Hcomp.
+unfold compile_func in Hcomp. break_if; try discriminate. inject_some.
 econstructor; eauto using compile_I_stmt, compile_I_expr.
 Qed.
 
 Theorem compile_cu_I_env : forall a ameta b bmeta,
-    compile_cu (a, ameta) = (b, bmeta) ->
+    compile_cu (a, ameta) = Some (b, bmeta) ->
     Forall2 I_func a b.
-intros0 Hcomp. unfold compile_cu in *. inject_pair.
-remember (map compile_func a) as b.
-symmetry in Heqb. apply map_Forall2 in Heqb.
+intros0 Hcomp. unfold compile_cu in *. break_bind_option. inject_some.
+on _, apply_lem map_partial_Forall2.
 list_magic_on (a, (b, tt)). eauto using compile_I_func.
+Qed.
+
+
+
+Lemma compile_func_dests_ok : forall a b,
+    compile_func a = Some b ->
+    A.dests_ok (fst a).
+intros0 Hcomp.
+unfold compile_func in Hcomp. break_match. break_if; try discriminate. inject_some.
+auto.
+Qed.
+
+Theorem compile_cu_dests_ok : forall a ameta b bmeta,
+    compile_cu (a, ameta) = Some (b, bmeta) ->
+    Forall (fun a => A.dests_ok (fst a)) a.
+intros0 Hcomp. unfold compile_cu in *. break_bind_option. inject_some.
+on _, apply_lem map_partial_Forall2.
+list_magic_on (a, (b, tt)). eauto using compile_func_dests_ok.
 Qed.
 
 
@@ -342,3 +367,48 @@ simpl in *; A.refold_all_dests.
   i_ctor.
 Qed.
 
+
+Inductive I' : A.state -> B.state -> Prop :=
+| I'_intro : forall a b,
+        I a b ->
+        A.state_dests_ok a ->
+        I' a b.
+
+Theorem I'_sim : forall AE BE a a' b,
+    Forall2 I_func AE BE ->
+    Forall (fun f => A.dests_ok (fst f)) AE ->
+    I' a b ->
+    A.sstep AE a a' ->
+    exists b',
+        B.sstep BE b b' /\
+        I' a' b'.
+intros. on >I', invc.
+fwd eapply I_sim; eauto. break_exists; break_and.
+eexists; split; eauto. constructor; eauto.
+eapply A.step_dests_ok; eassumption.
+Qed.
+
+
+
+Require Semantics.
+
+Section Preservation.
+
+  Variable prog : A.prog_type.
+  Variable tprog : B.prog_type.
+
+  Hypothesis TRANSF : compile_cu prog = Some tprog.
+
+  Theorem fsim :
+    Semantics.forward_simulation (A.semantics prog) (B.semantics tprog).
+  Proof.
+    eapply Semantics.forward_simulation_step with (match_states := I').
+    - inversion 1. (* TODO - replace with callstate matching *)
+    - intros0 II Afinal. invc Afinal. invc II. on >I, invc. on >I_cont, invc. constructor.
+    - intros0 Astep. intros0 II.
+      eapply I'_sim; try eassumption.
+      + destruct prog, tprog. eapply compile_cu_I_env; eauto.
+      + destruct prog, tprog. eapply compile_cu_dests_ok; eauto.
+  Qed.
+
+End Preservation.

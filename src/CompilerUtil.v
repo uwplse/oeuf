@@ -21,6 +21,12 @@ Arguments labeled _ msg%string_scope _.
 Notation "f '~~' l" := (fun x => labeled l (f x)) (at level 49).
 
 Ltac break_result_chain :=
+    (* common code for option_to_res and labeled cases *)
+    let invert_helper H l :=
+        (* congruence sometimes fails due to different @eq's having differently-
+           unfolded implicit arguments.  So sometimes we need a `compute` to
+           normalize the arguments first. *)
+        destruct l; idtac + compute in H |- *; congruence in
     repeat match goal with
     | [ H : OK ?l @@ ?r = _ |- _ ] => unfold Compiler.apply_total in H at 1
     | [ H : OK ?l @@@ ?r = _ |- _ ] => unfold Compiler.apply_partial in H at 1
@@ -34,10 +40,10 @@ Ltac break_result_chain :=
                sometimes can't prove `Some a = Some b` from `OK a = OK b` 
                without it. *)
             assert (l = Some r) by
-                (clear -H; unfold option_to_res in H; destruct l; (idtac + f_equal); congruence);
+                (clear -H; unfold option_to_res in H; invert_helper H l);
             clear H
     | [ H : labeled _ ?l = OK ?r |- _ ] =>
             assert (l = Some r) by
-                (clear -H; unfold labeled in H; destruct l; (idtac + f_equal); congruence);
+                (clear -H; unfold labeled in H; invert_helper H l);
             clear H
     end.
