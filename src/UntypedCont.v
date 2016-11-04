@@ -139,6 +139,11 @@ Inductive I : expr -> state -> Prop :=
     I (Elim ty cases target) (Run (Elim ty cases target) [])
 .
 
+Inductive almost_I : expr -> state -> Prop :=
+| AI_Stop : forall e, value e -> almost_I e (Stop e)
+| AI_Run : forall e h k, collapse h k = e -> almost_I e (Run h k).
+Hint Constructors almost_I.
+
 Lemma value_no_step :
   forall e e', 
     step e e' ->
@@ -208,79 +213,50 @@ Proof.
     auto.
 Qed.
 
-Lemma I_AppL_extend:
-  forall e1 e2 s, I e1 s -> I (App e1 e2) (extend s [kAppL e2]).
+Lemma almost_I_AppL_extend:
+  forall e1 e2 s, almost_I e1 s -> almost_I (App e1 e2) (extend s [kAppL e2]).
 Proof.
-Admitted.
+  intros.
+  invc H; cbn; auto.
+Qed.
 
-Lemma I_AppR_extend:
-  forall e1 e2 s, I e2 s -> I (App e1 e2) (extend s [kAppR e1]).
+Lemma almost_I_AppR_extend:
+  forall e1 e2 s, almost_I e2 s -> almost_I (App e1 e2) (extend s [kAppR e1]).
 Proof.
-Admitted.
+  intros.
+  invc H; cbn; auto.
+Qed.
 
 Lemma cons_app_singleton :
   forall A (x : A) xs,
     x :: xs = [x] ++ xs.
 Proof. reflexivity. Qed.
 
-Lemma I_ConstrArg_extend:
+Lemma almost_I_ConstrArg_extend:
   forall tag vs e es s,
-    I e s -> I (Constr tag (vs ++ [e] ++ es)) (extend s [kConstrArg tag vs es]).
+    almost_I e s -> almost_I (Constr tag (vs ++ [e] ++ es)) (extend s [kConstrArg tag vs es]).
 Proof.
-Admitted.
+  intros.
+  invc H; cbn; auto.
+Qed.
 
-Lemma I_Elim_extend:
+Lemma almost_I_Elim_extend:
   forall ty cases target s,
-    I target s -> I (Elim ty cases target) (extend s [kElim ty cases]).
+    almost_I target s -> almost_I (Elim ty cases target) (extend s [kElim ty cases]).
 Proof.
-Admitted.
+  intros.
+  invc H; cbn; auto.
+Qed.
 
-Theorem I_sim :
-  forall e e',
-    step e e' ->
-    forall s,
-      I e s ->
-      exists s', kstep s s' /\ I e' s'.
+Lemma member_In :
+  forall A (a : A) l,
+    HList.member a l ->
+    In a l.
 Proof.
-  induction e using expr_ind'; intros;
-    on >step, inv;
-    on >I, invc; try solve [exfalso; eauto].
-  - eexists.
-    split.
-    apply KBeta; auto.
-    admit.
-  - fwd eapply IHe1; eauto.
-    break_exists_name s'.
-    break_and.
-    rewrite cons_app_singleton.
-    eauto 10 using kstep_extend, I_AppL_extend.
-  - fwd eapply IHe2; eauto.
-    break_exists_name s'.
-    break_and.
-    rewrite cons_app_singleton.
-    eauto using kstep_extend, I_AppR_extend.
-  - on _, fun H => apply HList.app_middle_member in H.
-    intuition idtac.
-    + admit.
-    + subst.
-      on >Forall, invc_using ListLemmas.Forall_app_inv.
-      on (Forall _ (_ :: _)), fun H =>
-        inversion H as [| ? ? IH]; subst.
-      fwd eapply IH; eauto.
-      break_exists_name s'. break_and.
-      rewrite cons_app_singleton.
-      eauto using kstep_extend, I_ConstrArg_extend.
-    + admit.
-  - fwd eapply IHe; eauto.
-    break_exists_name s'.
-    break_and.
-    rewrite cons_app_singleton.
-    eauto using kstep_extend, I_Elim_extend.
-  - admit.
-Admitted.
+  induction 1; simpl; auto.
+Qed.
 
-
-(* Lemma I_sim_almost :
+Lemma I_sim_almost :
   forall e e' s,
     I e s ->
     step e e' ->
@@ -289,10 +265,49 @@ Admitted.
       almost_I e' s'.
 Proof.
   induction e using expr_ind'; intros;
-    on >step, inv.
-  - eexists; split.
-    on >I, inv.
-    eapply KBeta.
+    on >step, inv;
+    on >I, invc; try solve [exfalso; eauto].
+  - eexists.
+    split.
+    apply KBeta; auto.
+    econstructor.
+    auto.
+  - fwd eapply IHe1; eauto.
+    break_exists_name s'.
+    break_and.
+    rewrite cons_app_singleton.
+    eauto 10 using kstep_extend, almost_I_AppL_extend.
+  - fwd eapply IHe2; eauto.
+    break_exists_name s'.
+    break_and.
+    rewrite cons_app_singleton.
+    eauto using kstep_extend, almost_I_AppR_extend.
+  - on _, fun H => apply HList.app_middle_member in H.
+    intuition idtac.
+    + on >@HList.member, fun H => apply member_In in H.
+      on (Forall value vs), fun H => rewrite Forall_forall in H.
+      exfalso. eauto.
+    + subst.
+      on >Forall, invc_using ListLemmas.Forall_app_inv.
+      on (Forall _ (_ :: _)), fun H =>
+        inversion H as [| ? ? IH]; subst.
+      fwd eapply IH; eauto.
+      break_exists_name s'. break_and.
+      rewrite cons_app_singleton.
+      eauto using kstep_extend, almost_I_ConstrArg_extend.
+    + on >@HList.member, fun H => apply member_In in H.
+      on (Forall value pre), fun H => rewrite Forall_forall in H.
+      exfalso. eauto.
+  - fwd eapply IHe; eauto.
+    break_exists_name s'.
+    break_and.
+    rewrite cons_app_singleton.
+    eauto using kstep_extend, almost_I_Elim_extend.
+  - eexists. split.
+    eapply KEliminate; eauto.
+    econstructor.
+    auto.
+Qed.
 
 Lemma I_ketchup :
   forall e s,
