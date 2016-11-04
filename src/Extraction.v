@@ -27,7 +27,7 @@ Require compcert.cfrontend.Ctypes.
 Require compcert.cfrontend.Csyntax.
 Require compcert.cfrontend.Ctyping.
 Require compcert.cfrontend.Clight.
-(*Require compcert.driver.Compiler.*)
+Require compcert.driver.Compiler.
 Require OeufCompcertCompiler.
 Require compcert.cparser.Parser.
 Require compcert.cfrontend.Initializers.
@@ -106,13 +106,19 @@ Extract Constant Compopts.debug =>
   "fun _ -> !Clflags.option_g".
 
 (* Compiler *)
-(*Extract Constant Compiler.print_Clight => "PrintClight.print_if".*)
 Extract Constant OeufCompcertCompiler.print_Cminor => "PrintCminor.print_if".
 Extract Constant OeufCompcertCompiler.print_RTL => "PrintRTL.print_if".
 Extract Constant OeufCompcertCompiler.print_LTL => "PrintLTL.print_if".
 Extract Constant OeufCompcertCompiler.print_Mach => "PrintMach.print_if".
 Extract Constant OeufCompcertCompiler.print => "fun (f: 'a -> unit) (x: 'a) -> f x; x".
 Extract Constant OeufCompcertCompiler.time  => "Timing.time_coq".
+
+Extract Constant Compiler.print_Clight => "PrintClight.print_if".
+Extract Constant Compiler.print_Cminor => "PrintCminor.print_if".
+Extract Constant Compiler.print_RTL => "PrintRTL.print_if".
+Extract Constant Compiler.print_LTL => "PrintLTL.print_if".
+Extract Constant Compiler.print_Mach => "PrintMach.print_if".
+
 
 (*Extraction Inline Compiler.apply_total Compiler.apply_partial.*)
 
@@ -157,7 +163,7 @@ Set Extraction AccessOpaque.
 Cd "extraction".
 
 Separate Extraction
-   OeufCompcertCompiler.transf_cminor_program
+   Compiler.transf_c_program OeufCompcertCompiler.transf_cminor_program
    Cexec.do_initial_state Cexec.do_step Cexec.at_final_state
    Ctypes.merge_attributes Ctypes.remove_attributes Ctypes.build_composite_env
    Initializers.transl_init Initializers.constval
