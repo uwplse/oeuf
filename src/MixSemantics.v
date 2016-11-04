@@ -35,14 +35,21 @@ Record mix_forward_simulation (L1 : notrace_semantics) (L2 : trace_semantics) : 
     fsim_order: fsim_index -> fsim_index -> Prop;
     fsim_order_wf: well_founded fsim_order;
     fsim_match_states :> fsim_index -> Semantics.state L1 -> state L2 -> Prop;
-    fsim_match_initial_states:
-      forall s1, Semantics.initial_state L1 s1 ->
-      exists i, exists s2, initial_state L2 s2 /\ fsim_match_states i s1 s2;
+    fsim_match_val : Semantics.valtype L1 -> valtype L2 -> Prop;
+    fsim_match_callstate :
+      forall fv1 av1 fv2 av2 s2,
+        is_callstate L2 fv2 av2 s2 ->
+        fsim_match_val fv1 fv2 ->
+        fsim_match_val av1 av2 ->
+        exists s1 i,
+          fsim_match_states i s1 s2 /\
+          Semantics.is_callstate L1 fv1 av1 s1;
     fsim_match_final_states:
-      forall i s1 s2,
-        fsim_match_states i s1 s2 -> Semantics.final_state L1 s1 ->
-        exists r,
-          final_state L2 s2 r;
+      forall i s1 s2 v1,
+        fsim_match_states i s1 s2 ->
+        Semantics.final_state L1 s1 v1 ->
+        exists v2,
+          final_state L2 s2 v2 /\ fsim_match_val v1 v2;
     fsim_simulation:
       forall s1 s1', Semantics.step L1 (Semantics.globalenv L1) s1 s1' ->
       forall i s2, fsim_match_states i s1 s2 ->
@@ -122,7 +129,6 @@ Qed.
 
 
 
-
 End SIMULATION_SEQUENCES.
 
 
@@ -145,21 +151,29 @@ Let ff_order : ff_index -> ff_index -> Prop :=
 Let ff_match_states (i: ff_index) (s1: Semantics.state L1) (s3: state L3) : Prop :=
   exists s2, S12 (snd i) s1 s2 /\ S23 (fst i) s2 s3.
 
+Let ff_match_values (v1 : Semantics.valtype L1) (v3 : valtype L3) : Prop :=
+  exists v2, Semantics.fsim_match_val L1 L2 S12 v1 v2 /\ fsim_match_val L2 L3 S23 v2 v3.
 
 Lemma compose_notrace_mix_forward_simulation: mix_forward_simulation L1 L3.
 Proof.
-  apply Forward_simulation with (fsim_order := ff_order) (fsim_match_states := ff_match_states).
+  apply Forward_simulation with (fsim_order := ff_order) (fsim_match_states := ff_match_states)
+  (fsim_match_val := ff_match_values).
 (* well founded *)
   unfold ff_order. apply wf_lex_ord. apply wf_clos_trans. apply fsim_order_wf.
   apply Semantics.fsim_order_wf.
 (* initial states *)
-  intros. exploit (Semantics.fsim_match_initial_states _ _ S12); eauto. intros [i [s2 [A B]]].
-  exploit (fsim_match_initial_states _ _ S23); eauto. intros [i' [s3 [C D]]].
-  exists (i', i); exists s3; split; auto. exists s2; auto.
+  intros. subst ff_match_values. simpl in *. repeat break_exists. repeat break_and.
+  eapply (fsim_match_callstate L2 L3 S23) in H; eauto.
+  repeat break_exists; break_and.
+  eapply (Semantics.fsim_match_callstate L1 L2 S12) in H4; eauto.
+  break_exists; break_and.
+  exists x3. exists (x2,x4). split; eauto.
+  econstructor; eauto.
 (* final states *)
   intros. destruct H as [s3 [A B]].
-  eapply (fsim_match_final_states _ _ S23); eauto.
-  eapply (Semantics.fsim_match_final_states _ _ S12); eauto.
+  app (Semantics.fsim_match_final_states L1 L2 S12) Semantics.final_state.
+  app (fsim_match_final_states L2 L3 S23) (Semantics.final_state L2).
+  eexists; split; try econstructor; eauto.
 (* simulation *)
   intros. destruct H0 as [s3 [A B]]. destruct i as [i2 i1]; simpl in *.
   exploit (Semantics.fsim_simulation' _ _ S12); eauto. intros [[i1' [s3' [C D]]] | [i1' [C D]]].
@@ -199,22 +213,30 @@ Let ff_order : ff_index -> ff_index -> Prop :=
 Let ff_match_states (i: ff_index) (s1: Semantics.state L1) (s3: state L3) : Prop :=
   exists s2, S12 (snd i) s1 s2 /\ S23 (fst i) s2 s3.
 
+Let ff_match_values (v1 : Semantics.valtype L1) (v3 : valtype L3) : Prop :=
+  exists v2, fsim_match_val L1 L2 S12 v1 v2 /\ TraceSemantics.fsim_match_val S23 v2 v3.
+
 Lemma compose_mix_trace_forward_simulation: mix_forward_simulation L1 L3.
 Proof.
-  apply Forward_simulation with (fsim_order := ff_order) (fsim_match_states := ff_match_states).
+  apply Forward_simulation with (fsim_order := ff_order) (fsim_match_states := ff_match_states)
+                                                         (fsim_match_val := ff_match_values).
 (* well founded *)
   unfold ff_order. apply wf_lex_ord. apply wf_clos_trans.
   apply TraceSemantics.fsim_order_wf.
   apply fsim_order_wf.  
 (* initial states *)
-  intros. exploit (fsim_match_initial_states _ _ S12); eauto. intros [i [s2 [A B]]].
-  exploit (TraceSemantics.fsim_match_initial_states S23); eauto. intros [i' [s3 [C D]]].
-  exists (i', i); exists s3; split; auto. exists s2; auto.
+  intros. subst ff_match_values. simpl in *. repeat break_exists. repeat break_and.
+  eapply (TraceSemantics.fsim_match_callstate S23) in H; eauto.
+  repeat break_exists; break_and.
+  eapply (fsim_match_callstate L1 L2 S12) in H4; eauto.
+  break_exists; break_and.
+  exists x3. exists (x2,x4). split; eauto.
+  econstructor; eauto.
 (* final states *)
   intros. destruct H as [s3 [A B]].
-  edestruct (fsim_match_final_states _ _ S12); eauto.
-  eexists.
-  eapply (TraceSemantics.fsim_match_final_states S23); eauto.
+  app (fsim_match_final_states L1 L2 S12) Semantics.final_state.
+  app (TraceSemantics.fsim_match_final_states S23) (final_state L2).
+  eexists; split; try econstructor; eauto.
 (* simulation *)
   intros. destruct H0 as [s3 [A B]]. destruct i as [i2 i1]; simpl in *.
   exploit (fsim_simulation' _ _ S12); eauto. intros [[i1' [s3' [C D]]] | [i1' [C D]]].
