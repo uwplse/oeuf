@@ -3,6 +3,7 @@ Require Import Metadata.
 Require String.
 Require Switched SelfClose.
 Require Import ListLemmas.
+Require Import StepLib.
 
 Require Import Psatz.
 
@@ -263,6 +264,8 @@ inv Astep; invc II; try on (I_expr _ _), invc.
   + i_ctor. i_ctor.
 Qed.
 
+
+
 Require Semantics.
 
 Section Preservation.
@@ -272,26 +275,15 @@ Section Preservation.
 
   Hypothesis TRANSF : compile_cu prog = tprog.
 
-  
-  (* Inductive match_states (AE : A.env) (BE : B.env) : A.expr -> B.expr -> Prop := *)
-  (* | match_st : *)
-  (*     forall a b, *)
-  (*       R AE BE a b -> *)
-  (*       match_states AE BE a b. *)
-
-  (* Lemma step_sim : *)
-  (*   forall AE BE a b, *)
-  (*     match_states AE BE a b -> *)
-  (*     forall a', *)
-  (*       A.step AE a a' -> *)
-  (*       exists b', *)
-  (*         splus (B.step BE) b b'. *)
-  (* Proof. *)
-  (* Admitted. *)
-
   Theorem fsim :
     Semantics.forward_simulation (A.semantics prog) (B.semantics tprog).
   Proof.
-  Admitted.
+    eapply Semantics.forward_simulation_plus with (match_states := I).
+    - inversion 1. (* TODO - replace with callstate matching *)
+    - intros0 II Afinal. invc Afinal. invc II. constructor. eauto using I_expr_value.
+    - intros0 Astep. intros0 II.
+      eapply splus_semantics_sim, I_sim; eauto.
+      destruct prog, tprog. unfold compile_cu in *. inject_pair. auto.
+  Qed.
 
 End Preservation.
