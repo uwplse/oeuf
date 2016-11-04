@@ -60,7 +60,7 @@ Section Simulation.
   Proof.
     (* SourceLang to Untyped *)
     unfold transf_to_asm in TRANSF.
-    unfold Compiler.apply_partial in *.
+    unfold OeufCompcertCompiler.apply_partial in *.
     break_match_hyp; try congruence.
     simpl in Heqr. inversion Heqr. clear Heqr.
     intro.
@@ -71,12 +71,16 @@ Section Simulation.
     (* Break down structure of compiler *)
     unfold transf_untyped_to_asm in *.
     unfold transf_untyped_to_cminor in *.
+    unfold OeufCompcertCompiler.apply_partial in *.
+    unfold OeufCompcertCompiler.apply_total in *.
+    unfold print in *.
+    repeat (break_match_hyp; try congruence).
     break_result_chain.
 
     (* Untyped to Lifted *)
     eapply compose_notrace_mix_forward_simulation.
-    eapply LiftedComp.fsim; try eassumption.
-
+    eapply LiftedComp.fsim; solve [eauto].
+    
     (* Lifted to Tagged *)
     eapply compose_notrace_mix_forward_simulation.
     eapply TaggedComp.fsim; try eassumption.
@@ -157,16 +161,11 @@ Section Simulation.
     eapply Cmajortominor.fsim; try eassumption.
 
     (* Cminor to Asm *)
-    admit.
-
-    (*
-    rewrite print_identity in *. subst p0.
-    eapply transf_cminor_program_correct in TRANSF.
-    destruct TRANSF. eassumption.*)
+    eapply OeufCompcertSimulations.transf_cminor_program_correct.
+    rewrite print_identity in *. subst p0.    
+    eassumption.
     
   Admitted.
-
-
 
 
   

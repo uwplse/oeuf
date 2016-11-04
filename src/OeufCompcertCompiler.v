@@ -93,9 +93,9 @@ Definition transf_rtl_program (f: RTL.program) : res Asm.program :=
   @@@ partial_if Compopts.optim_CSE (time "CSE" CSE.transf_program)
    @@ print (print_RTL 6)
   @@@ partial_if Compopts.optim_redundancy (time "Redundancy elimination" Deadcode.transf_program)
+(*   @@ print (print_RTL 7)
+  @@@ time "Unused globals" Unusedglob.transform_program *)
    @@ print (print_RTL 7)
-  @@@ time "Unused globals" Unusedglob.transform_program
-   @@ print (print_RTL 8)
   @@@ time "Register allocation" Allocation.transf_program
    @@ print print_LTL
    @@ time "Branch tunneling" Tunneling.tunnel_program
