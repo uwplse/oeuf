@@ -256,6 +256,25 @@ Proof.
     + auto.
 Qed.
 
+Lemma constr_type_is_ctor_for_type :
+  forall c arg_tys tyn (ct : SourceLang.constr_type c arg_tys tyn),
+    is_ctor_for_type tyn c.
+Proof.
+  intros.
+  destruct ct;
+    try solve [exists 0; auto];
+    try solve [exists 1; auto];
+    try solve [exists 2; auto].
+Qed.
+
+Lemma constructor_arg_n_length :
+  forall c arg_tys tyn (ct : SourceLang.constr_type c arg_tys tyn),
+    constructor_arg_n c = length arg_tys.
+Proof.
+  intros.
+  destruct ct; auto.
+Qed.
+
 Theorem forward_simulation_closed :
   forall ty (e e' : S.expr [] ty),
     S.step e e' ->
@@ -282,10 +301,12 @@ Proof.
     rewrite elim_to_type_name_correct.
     rewrite compile_hlist_hmap_simple.
     apply U.Eliminate; auto using compile_hlist_Forall_value.
-    rewrite <- constructor_index_correct with (e := e) (ct := ct).
-    now rewrite nth_error_hmap_simple_hget.
+    + eauto using constr_type_is_ctor_for_type.
+    + rewrite compile_hlist_hmap_simple, hmap_simple_length.
+      eauto using constructor_arg_n_length.
+    + rewrite <- constructor_index_correct with (e := e) (ct := ct).
+      now rewrite nth_error_hmap_simple_hget.
 Qed.
-
 
 Lemma initial_state_exists :
   forall cu tprog,

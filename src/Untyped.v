@@ -151,6 +151,8 @@ Inductive step : expr -> expr -> Prop :=
             (Constr c (pre ++ [e'] ++ post))
 | ElimStep : forall t t' ty cases, step t t' -> step (Elim ty cases t) (Elim ty cases t')
 | Eliminate : forall c args ty cases case,
+    is_ctor_for_type ty c ->
+    constructor_arg_n c = length args ->
     nth_error cases (constructor_index c) = Some case ->
     Forall value args ->
     step (Elim ty cases (Constr c args))

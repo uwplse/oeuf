@@ -248,6 +248,13 @@ Proof.
   induction hl; simpl; auto using f_equal2.
 Qed.
 
+Lemma hmap_simple_length :
+  forall A (B : A -> Type) C (f : forall a, B a -> C) l (h : hlist B l),
+    length (hmap_simple f h) = length l.
+Proof.
+  induction h; simpl; auto.
+Qed.
+
 Lemma hget_insert :
   forall A (B : A -> Type) l a (m : member a l) n a' h (b' : B a'),
     hget (insert_hlist b' n h) (insert_member m n) = hget h m.
