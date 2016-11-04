@@ -19,8 +19,25 @@ Inductive state :=
 | Stop (e : expr)
 .
 
-Definition plug (e : expr) (k : cont) : state.
-Admitted.
+Definition plug_elt (e : expr) (ke : cont_elt) : expr :=
+  match ke with
+  | kAppL r => App e r
+  | kAppR l => App l e
+  | kConstrArg tag vs es => Constr tag (vs ++ [e] ++ es)
+  | kElim ty cases => Elim ty cases e
+  end.
+
+Definition plug (e : expr) (k : cont) : state :=
+  match List.rev k with
+  | [] => Stop e
+  | ke :: k => Run (plug_elt e ke) (List.rev k)
+  end.
+
+Fixpoint collapse (e : expr) (k : cont) : expr :=
+  match k with
+  | [] => e
+  | ke :: k => plug_elt (collapse e k) ke
+  end.
 
 Inductive kstep : state -> state -> Prop :=
 | KConstrStep : forall body vs e es k,
@@ -122,7 +139,6 @@ Inductive I : expr -> state -> Prop :=
     I (Elim ty cases target) (Run (Elim ty cases target) [])
 .
 
-
 Lemma value_no_step :
   forall e e', 
     step e e' ->
@@ -136,18 +152,61 @@ Hint Resolve value_no_step.
 
 Hint Constructors value.
 
-
 Definition extend (s : state) (k : cont) : state :=
   match s with
   | Run e k0 => Run e (k ++ k0)
   | Stop e => plug e k
   end.
 
+Lemma plug_Run_fold :
+  forall e ke k,
+    Run (plug_elt e ke) k = plug e (k ++ [ke]).
+Proof.
+  unfold plug.
+  intros.
+  rewrite rev_app_distr.
+  simpl.
+  rewrite rev_involutive.
+  reflexivity.
+Qed.
+
+Lemma kstep_Run_cons:
+  forall e k e' k' ke,
+    kstep (Run e k) (Run e' k') ->
+    kstep (Run e (ke :: k)) (Run e' (ke :: k')).
+Proof.
+  intros.
+  on >kstep, inv; try solve [econstructor; eauto].
+  unfold plug in *.
+  break_match; try discriminate.
+  find_inversion.
+  eapply eq_rect.
+  econstructor; auto.
+  rewrite plug_Run_fold.
+  f_equal. simpl. f_equal.
+  rewrite <- rev_involutive with (l := k).
+  now rewrite Heql.
+Qed.
+
 Lemma kstep_extend :
-  forall e k k' s,
+  forall k' e k s,
     kstep (Run e k) s ->
     kstep (Run e (k' ++ k)) (extend s k').
-Admitted.
+Proof.
+  intros.
+  destruct s.
+  - simpl.
+    induction k'; simpl; auto using kstep_Run_cons.
+  - simpl.
+    invc H.
+    eapply eq_rect.
+    econstructor. auto.
+    unfold plug in *.
+    break_match_hyp; try discriminate.
+    find_inversion.
+    rewrite rev_app_distr. rewrite Heql.
+    auto.
+Qed.
 
 Lemma I_AppL_extend:
   forall e1 e2 s, I e1 s -> I (App e1 e2) (extend s [kAppL e2]).
