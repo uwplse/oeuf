@@ -180,24 +180,26 @@ Definition compile_list :=
 
 Definition the_sig := AST.mksignature [AST.Tint; AST.Tint] (Some AST.Tint) AST.cc_default.
 
-Definition compile_func (f : A.stmt * A.expr) : option B.function :=
+Definition compile_func max_fname (f : A.stmt * A.expr) : option B.function :=
     let '(body, ret) := f in
+    (if A.check_fnames_below max_fname body then Some body else None) >>= fun body =>
+    (if A.check_switch_placement body then Some body else None) >>= fun body =>
     compile body >>= fun body' =>
     compile_expr ret >>= fun ret' =>
     get_id IkSelf >>= fun id_self =>
     get_id IkArg >>= fun id_arg =>
     Some (B.mkfunction [id_self; id_arg] the_sig 0%Z (body', ret')).
 
-Definition compile_gdef (nf : nat * (A.stmt * A.expr)) :
+Definition compile_gdef max_fname (nf : nat * (A.stmt * A.expr)) :
         option (ident * AST.globdef B.fundef unit) :=
     let '(n, f) := nf in
     get_id (IkFunc n) >>= fun id =>
-    compile_func f >>= fun f' =>
+    compile_func max_fname f >>= fun f' =>
     Some (id, AST.Gfun (Internal f')).
 
-Definition compile_gdefs (nfs : list (nat * (A.stmt * A.expr))) :
+Definition compile_gdefs max_fname (nfs : list (nat * (A.stmt * A.expr))) :
         option (list (ident * AST.globdef B.fundef unit)) :=
-    map_partial compile_gdef nfs.
+    map_partial (compile_gdef max_fname) nfs.
 
 End compile.
 
@@ -207,7 +209,7 @@ Open Scope option_monad.
 Definition compile_cu (cu : list (A.stmt * A.expr) * list metadata) : option B.program :=
     build_id_list cu >>= fun M =>
     let '(funcs, metas) := cu in
-    compile_gdefs M (numbered funcs) >>= fun gdefs =>
+    compile_gdefs M (length funcs) (numbered funcs) >>= fun gdefs =>
     let pub_fnames := map fst (filter (fun n_m => m_is_public (snd n_m)) (numbered metas)) in
     map_partial (fun fn => id_key_assoc M (IkFunc fn)) pub_fnames >>= fun pub_idents =>
     Some (AST.mkprogram gdefs pub_idents 1%positive).
@@ -607,11 +609,12 @@ try solve [constructor; eauto using compile_I_expr, compile_list_I_expr].
   constructor. eauto.
 Qed.
 
-Lemma compile_I_func : forall M a b,
-    compile_func M a = Some b ->
+Lemma compile_I_func : forall M max_fname a b,
+    compile_func M max_fname a = Some b ->
     I_func M a b.
 destruct a;
-intros0 Hcomp; simpl in Hcomp; break_bind_option; inject_some; refold_compile M;
+intros0 Hcomp; simpl in Hcomp; break_bind_option; break_if; break_if; try discriminate;
+inject_some; refold_compile M;
 try solve [constructor; eauto using compile_I_expr, compile_I_stmt].
 Qed.
 
@@ -632,6 +635,8 @@ intros0 Hcomp Hids.
 unfold compile_cu in *. break_bind_option. inject_some.
 rename l0 into bdefs. rename l1 into bpublic.
 
+remember (length a) as max_fname. clear Heqmax_fname.
+
 on (_ = Some bpublic), fun H => clear H.
 
 unfold compile_gdefs in *.
@@ -641,7 +646,7 @@ assert (HH : exists bdefs', bdefs = map (fun p => (fst p, AST.Gfun (Internal (sn
     generalize dependent bdefs. clear -base. make_first bdefs. induction bdefs; intros.
       { exists []. reflexivity. }
     destruct a0; simpl in *; on >Forall2, invc.
-    destruct (IHbdefs ?? ?? ?? **) as [bdefs' ?].  clear IHbdefs.
+    destruct (IHbdefs ?? ?? ?? ?? **) as [bdefs' ?].  clear IHbdefs.
     unfold compile_gdef in *. break_bind_option. destruct a. inject_some.
     exists ((i0, f) :: bdefs'). simpl. reflexivity. }
 destruct HH as (bdefs' & Hbdefs').
@@ -693,7 +698,6 @@ econstructor; eauto.
   congruence.
 Qed.
 
-
 Lemma I_prog_env : forall M A B,
     I_prog M A B ->
     I_env M A (Genv.globalenv B).
@@ -716,6 +720,90 @@ fwd eapply Genv.find_funct_ptr_exists with (p := B) as HH; eauto.
   destruct HH as (bsym & ? & ?).
 
 eauto.
+Qed.
+
+
+
+Lemma compile_func_fnames_below : forall M max_fname a b,
+    compile_func M max_fname a = Some b ->
+    A.fnames_below max_fname (fst a).
+destruct a;
+intros0 Hcomp; simpl in Hcomp; break_bind_option; break_if; break_if; try discriminate.
+auto.
+Qed.
+
+Lemma compile_gdef_fnames_below : forall M max_fname aid a bid b,
+    compile_gdef M max_fname (aid, a) = Some (bid, b) ->
+    A.fnames_below max_fname (fst a).
+destruct a. intros0 Hcomp.
+unfold compile_gdef in Hcomp. break_bind_option. repeat break_if; try discriminate.
+auto.
+Qed.
+
+Lemma compile_gdefs_fnames_below : forall M max_fname a b,
+    compile_gdefs M max_fname a = Some b ->
+    Forall (fun f => A.fnames_below max_fname (fst (snd f))) a.
+intros0 Hcomp.
+unfold compile_gdefs in Hcomp. on _, eapply_lem map_partial_Forall2.
+list_magic_on (a, (b, tt)).
+destruct a_i, b_i. eauto using compile_gdef_fnames_below.
+Qed.
+
+Theorem compile_prog_fnames_below : forall a metas b,
+    compile_cu (a, metas) = Some b ->
+    Forall (fun f => A.fnames_below (length a) (fst f)) a.
+intros0 Hcomp.
+unfold compile_cu in Hcomp; simpl in Hcomp; break_bind_option.
+on _, eapply_lem compile_gdefs_fnames_below.
+remember (numbered a) as na.
+assert (length na = length a).  { subst na. eapply numbered_length. }
+
+list_magic_on (a, (na, tt)).
+subst na. eapply numbered_nth_error in Ha_i.
+replace na_i with (i, a_i) in * by congruence.
+auto.
+Qed.
+
+
+
+Lemma compile_func_switch_placement : forall M max_fname a b,
+    compile_func M max_fname a = Some b ->
+    A.switch_placement (fst a).
+destruct a. intros0 Hcomp.
+simpl in Hcomp. break_bind_option. do 2 break_if; try discriminate. inject_some.
+auto.
+Qed.
+
+Lemma compile_gdef_switch_placement : forall M max_fname aid a bid b,
+    compile_gdef M max_fname (aid, a) = Some (bid, b) ->
+    A.switch_placement (fst a).
+destruct a. intros0 Hcomp.
+simpl in Hcomp. break_bind_option. do 2 break_if; try discriminate. inject_some.
+auto.
+Qed.
+
+Lemma compile_gdefs_switch_placement : forall M max_fname a b,
+    compile_gdefs M max_fname a = Some b ->
+    Forall (fun f => A.switch_placement (fst (snd f))) a.
+intros0 Hcomp.
+unfold compile_gdefs in Hcomp. on _, eapply_lem map_partial_Forall2.
+list_magic_on (a, (b, tt)).
+destruct a_i, b_i. eauto using compile_gdef_switch_placement.
+Qed.
+
+Theorem compile_prog_switch_placement : forall a metas b,
+    compile_cu (a, metas) = Some b ->
+    Forall (fun f => A.switch_placement (fst f)) a.
+intros0 Hcomp.
+unfold compile_cu in Hcomp; simpl in Hcomp; break_bind_option.
+on _, eapply_lem compile_gdefs_switch_placement.
+remember (numbered a) as na.
+assert (length na = length a).  { subst na. eapply numbered_length. }
+
+list_magic_on (a, (na, tt)).
+subst na. eapply numbered_nth_error in Ha_i.
+replace na_i with (i, a_i) in * by congruence.
+auto.
 Qed.
 
 
@@ -1072,8 +1160,8 @@ Qed.
       eapply I'_sim; try eassumption.
       + eauto using build_id_list_ok.
       + eapply I_prog_env. eapply compile_I_prog; eauto.
-      + admit. (* TODO: validate *)
-      + admit. (* TODO: validate *)
-  Admitted.
+      + eapply compile_prog_fnames_below. eauto.
+      + eapply compile_prog_switch_placement. eauto.
+  Qed.
 
 End Preservation.
