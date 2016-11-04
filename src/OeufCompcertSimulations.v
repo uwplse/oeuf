@@ -57,7 +57,9 @@ Require Import EricTact.
 
 (* Cminor bridge *)
 Require Import Cmajor.
-  
+
+Require Import OeufCompcertCompiler.
+
 Inductive cminorsel_final_state(p : CminorSel.program): CminorSel.state -> value -> Prop :=
 | cminorsel_final_state_intro: forall v v' m,
     value_inject (Genv.globalenv p) m v v' ->
@@ -312,20 +314,393 @@ Proof.
   eapply Constpropproof.transf_step_correct in H0; eauto.
 Admitted.
 
-
-
 (* CSE, CSEproof *)
+Lemma CSE_final_states :
+  forall prog tprog st st' v,
+    CSE.transf_program prog = OK tprog ->
+    CSEproof.match_states prog st st' ->
+    rtl_final_state prog st v ->
+    rtl_final_state tprog st' v.
+Proof.
+  intros.
+  inv H1. inv H0.
+  inv H6.
+  eapply value_inject_mem_extends in H9; eauto.
+  econstructor; eauto.
+  eapply value_inject_swap_ge; eauto.
+  intros.
+  eapply CSEproof.funct_ptr_translated in H3; eauto.
+  break_exists; break_and. eauto.
+  intros. erewrite CSEproof.symbols_preserved; eauto.
+Qed.
+
+Lemma CSE_transf_program_correct :
+  forall (prog tprog : RTL.program),
+    CSE.transf_program prog = OK tprog ->
+    forward_simulation (RTL_semantics prog) (RTL_semantics tprog).
+Proof.
+  intros. 
+  eapply forward_simulation_step.
+  intros. eapply CSEproof.transf_initial_states; eauto.
+  intros. eapply CSE_final_states; eauto.
+  intros. simpl in *.
+  eapply CSEproof.transf_step_correct in H0; eauto.
+  admit.
+Admitted.
+
 (* Deadcode, Deadcodeproof *)
+Lemma Deadcode_final_states :
+  forall prog tprog st st' v,
+    Deadcode.transf_program prog = OK tprog ->
+    Deadcodeproof.match_states prog st st' ->
+    rtl_final_state prog st v ->
+    rtl_final_state tprog st' v.
+Proof.
+  intros.
+  inv H1. inv H0.
+  inv STACKS.
+  econstructor; eauto.
+  eapply value_inject_mem_extends; eauto.
+  eapply value_inject_swap_ge; eauto.
+  intros.
+  eapply Deadcodeproof.function_ptr_translated in H3; eauto.
+  break_exists. break_and. eauto.
+  intros. erewrite Deadcodeproof.symbols_preserved; eauto.
+Qed.
+
+Lemma Deadcode_transf_program_correct :
+  forall (prog tprog : RTL.program),
+    Deadcode.transf_program prog = OK tprog ->
+    forward_simulation (RTL_semantics prog) (RTL_semantics tprog).
+Proof.
+  intros.
+  eapply forward_simulation_step.
+  intros. eapply Deadcodeproof.transf_initial_states; eauto.
+  intros. eapply Deadcode_final_states; eauto.
+  intros. simpl in *.
+  eapply Deadcodeproof.step_simulation in H0; eauto.
+  admit.
+Admitted.
+
 (* Unusedglob, Unusedglobproof *)
+(* This may be one pass we don't want to include *)
+(*
+Lemma unusedglob_final_states :
+  forall prog tprog st st' v,
+    Unusedglob.transform_program prog = OK tprog ->
+    Unusedglobproof.match_states prog tprog st st' ->
+    rtl_final_state prog st v ->
+    rtl_final_state tprog st' v.
+Proof.
+  intros.
+  inv H1. inv H0.
+  inv STACKS.
+  econstructor; eauto.
+  eapply value_val_inject; eauto.
+  eapply value_inject_swap_ge; eauto.
+  intros.
+Admitted.
+
+Lemma unusedglob_transf_program_correct :
+  forall (prog tprog : RTL.program),
+    Unusedglob.transf_program prog = tprog ->
+    forward_simulation (RTL_semantics prog) (RTL_semantics tprog).
+Proof.
+  intros. subst tprog.
+  eapply forward_simulation_step.
+  intros. eapply Unusedglobproof.transf_initial_states; eauto.
+  intros. eapply unusedglob_final_states; eauto.
+  intros. simpl in *.
+  eapply Unusedglobproof.step_simulation in H0; eauto.
+Qed.
+*)
+
+
 (* Allocation, Allocproof *)
+
+Inductive LTL_final_state (p : LTL.program) : LTL.state -> value -> Prop :=
+| LTL_final_state_intro :
+    forall (rs : Locations.loc -> Values.val) r m v v',
+      Conventions1.loc_result signature_main = r :: nil ->
+      rs (Locations.R r) = v' ->
+      value_inject (Genv.globalenv p) m v v' ->
+      LTL_final_state p (LTL.Returnstate nil rs m) v.
+
+Definition LTL_semantics (p : LTL.program) :=
+  Semantics (LTL.step) (LTL.initial_state p) (LTL_final_state p) (Genv.globalenv p).
+
+Lemma LTL_final_states :
+  forall prog tprog st st' v,
+    Allocation.transf_program prog = OK tprog ->
+    Allocproof.match_states tprog st st' ->
+    rtl_final_state prog st v ->
+    LTL_final_state tprog st' v.
+Proof.
+  intros.
+  inv H1. inv H0.
+  inv STACKS.
+  econstructor; eauto.
+  unfold signature_main. unfold Conventions1.loc_result. simpl.
+  reflexivity.
+  assert (exists b ofs, v' = Values.Vptr b ofs).
+  inv H2; eauto.
+  repeat break_exists; eauto. subst v'.
+  unfold Events.encode_long in *. rewrite H3 in *.
+  inv RES. inv H8. unfold Conventions1.loc_result in *.
+  rewrite H3 in *.
+  simpl in H6. inv H6. inv H7.
+  eapply value_inject_mem_extends; try eassumption.
+  eapply value_inject_swap_ge; eauto.
+  intros.
+  eapply Allocproof.function_ptr_translated in H4; eauto.
+  break_exists; break_and; eauto.
+  intros. erewrite Allocproof.symbols_preserved; eauto.
+  econstructor; eauto.
+Qed.
+
+Lemma LTL_transf_program_correct :
+  forall (prog : RTL.program) (tprog : LTL.program),
+    Allocation.transf_program prog = OK tprog ->
+    forward_simulation (RTL_semantics prog) (LTL_semantics tprog).
+Proof.
+  intros. 
+  eapply forward_simulation_plus.
+  intros.
+  eapply Allocproof.initial_states_simulation; eauto.
+  intros. eapply LTL_final_states; eauto.
+  intros. simpl in *.
+  eapply Allocproof.step_simulation in H0; eauto.
+  break_exists; break_and.
+  eexists; split; eauto.
+  eapply plus_plus; eauto.
+  admit.
+Admitted.
+
+
 (* Tunneling, Tunnelingproof *)
+Lemma Tunneling_final_states :
+  forall prog tprog st st' v,
+    Tunneling.tunnel_program prog = tprog ->
+    Tunnelingproof.match_states st st' ->
+    LTL_final_state prog st v ->
+    LTL_final_state tprog st' v.
+Proof.
+  intros.
+  inv H1. inv H0.
+  inv H7.
+  econstructor; eauto.
+  eapply value_inject_swap_ge; try eassumption.
+  intros.
+  eapply Tunnelingproof.function_ptr_translated in H; eauto.
+  intros.
+  erewrite Tunnelingproof.symbols_preserved; eauto.
+Qed.
+
+Lemma Tunneling_transf_program_correct :
+  forall (prog : LTL.program) (tprog : LTL.program),
+    Tunneling.tunnel_program prog = tprog ->
+    forward_simulation (LTL_semantics prog) (LTL_semantics tprog).
+Proof.
+  intros. subst tprog.
+  eapply forward_simulation_star.
+  intros.
+  eapply Tunnelingproof.transf_initial_states; eauto.
+  intros.
+  eapply Tunneling_final_states; eauto.
+  intros. simpl in *.
+  eapply Tunnelingproof.tunnel_step_correct in H0; eauto.
+  destruct H0.
+  break_exists; break_and. left. eexists; split; eauto.
+  eapply plus_one. eauto.
+  right. repeat break_and.
+  repeat split; eauto.
+Qed.
+
+
 (* Linearize, Linearizeproof *)
+Inductive Linear_final_state (p : Linear.program) : Linear.state -> value -> Prop :=
+| Linear_final_state_intro :
+    forall (rs : Locations.loc -> Values.val) r m v v',
+      Conventions1.loc_result signature_main = r :: nil ->
+      rs (Locations.R r) = v' ->
+      value_inject (Genv.globalenv p) m v v' ->
+      Linear_final_state p (Linear.Returnstate nil rs m) v.
+
+Definition Linear_semantics (p : Linear.program) :=
+  Semantics (Linear.step) (Linear.initial_state p) (Linear_final_state p) (Genv.globalenv p).
+
+Lemma Linearize_final_states :
+  forall prog tprog st st' v,
+    Linearize.transf_program prog = OK tprog ->
+    Linearizeproof.match_states st st' ->
+    LTL_final_state prog st v ->
+    Linear_final_state tprog st' v.
+Proof.
+  intros.
+  inv H1. inv H0.
+  inv H8.
+  econstructor; eauto.
+  eapply value_inject_swap_ge; try eassumption.
+  intros.
+  eapply Linearizeproof.function_ptr_translated in H; eauto.
+  break_exists; break_and. eauto.
+  intros.
+  erewrite Linearizeproof.symbols_preserved; eauto.
+Qed.
+
+Lemma Linearize_transf_program_correct :
+  forall (prog : LTL.program) (tprog : Linear.program),
+    Linearize.transf_program prog = OK tprog ->
+    forward_simulation (LTL_semantics prog) (Linear_semantics tprog).
+Proof.
+  intros. 
+  eapply forward_simulation_star.
+  intros.
+  eapply Linearizeproof.transf_initial_states; eauto.
+  intros.
+  eapply Linearize_final_states; eauto.
+  intros. simpl in *.
+  eapply Linearizeproof.transf_step_correct in H1; eauto.
+  destruct H1.
+  break_exists; break_and. left. eexists; split; eauto.
+  eapply plus_plus; eauto.
+  right. repeat break_and.
+  repeat split; eauto.
+Qed.
+
+
 (* CleanupLabels, CleanupLabelsproof *)
+Lemma CleanupLabels_final_states :
+  forall prog tprog st st' v,
+    CleanupLabels.transf_program prog = tprog ->
+    CleanupLabelsproof.match_states st st' ->
+    Linear_final_state prog st v ->
+    Linear_final_state tprog st' v.
+Proof.
+  intros.
+  inv H1. inv H0.
+  inv H7.
+  econstructor; eauto.
+  eapply value_inject_swap_ge; try eassumption.
+  intros.
+  eapply CleanupLabelsproof.function_ptr_translated in H; eauto.
+  intros.
+  erewrite CleanupLabelsproof.symbols_preserved; eauto.
+Qed.
+
+Lemma CleanupLabels_transf_program_correct :
+  forall (prog : Linear.program) (tprog : Linear.program),
+    CleanupLabels.transf_program prog = tprog ->
+    forward_simulation (Linear_semantics prog) (Linear_semantics tprog).
+Proof.
+  intros. subst tprog.
+  eapply forward_simulation_star.
+  intros. 
+  eapply CleanupLabelsproof.transf_initial_states; eauto.
+  intros.
+  eapply CleanupLabels_final_states; eauto.
+  intros. simpl in *.
+  eapply CleanupLabelsproof.transf_step_correct in H; eauto.
+  destruct H.
+  break_exists; break_and. left. eexists; split; eauto.
+  eapply plus_one; eauto.
+  right. repeat break_and.
+  repeat split; eauto.
+Qed.
+
+
 (* Debugvar, Debugvarproof *)
+Lemma Debugvar_final_states :
+  forall prog tprog st st' v,
+    Debugvar.transf_program prog = OK tprog ->
+    Debugvarproof.match_states st st' ->
+    Linear_final_state prog st v ->
+    Linear_final_state tprog st' v.
+Proof.
+  intros.
+  inv H1. inv H0.
+  inv H8.
+  econstructor; eauto.
+  eapply value_inject_swap_ge; try eassumption.
+  intros.
+  eapply Debugvarproof.function_ptr_translated in H; eauto.
+  break_exists. break_and. eauto.
+  intros.
+  erewrite Debugvarproof.symbols_preserved; eauto.
+Qed.
+
+Lemma Debugvar_transf_program_correct :
+  forall (prog : Linear.program) (tprog : Linear.program),
+    Debugvar.transf_program prog = OK tprog ->
+    forward_simulation (Linear_semantics prog) (Linear_semantics tprog).
+Proof.
+  intros.
+  eapply forward_simulation_plus.
+  intros. 
+  eapply Debugvarproof.transf_initial_states; eauto.
+  intros.
+  eapply Debugvar_final_states; eauto.
+  intros. simpl in *.
+  eapply Debugvarproof.transf_step_correct in H; eauto.
+  break_exists; break_and. eexists; split; try eapply plus_plus; eauto.
+Qed.
+
+
 (* Stacking, Stackingproof *)
+Inductive Mach_final_state (p : Mach.program) : Mach.state -> value -> Prop :=
+| Mach_final_state_intro :
+    forall (rs : Machregs.mreg -> Values.val) r m v v',
+      Conventions1.loc_result signature_main = r :: nil ->
+      rs r = v' ->
+      value_inject (Genv.globalenv p) m v v' ->
+      Mach_final_state p (Mach.Returnstate nil rs m) v.
+
+Definition Mach_semantics (p : Mach.program) :=
+  Semantics (Mach.step Asmgenproof0.return_address_offset) (Mach.initial_state p) (Mach_final_state p) (Genv.globalenv p).
+
+Lemma Stacking_final_states :
+  forall prog tprog st st' v,
+    Stacking.transf_program prog = OK tprog ->
+    Stackingproof.match_states prog tprog st st' ->
+    Linear_final_state prog st v ->
+    Mach_final_state tprog st' v.
+Proof.
+  intros.
+  inv H1. inv H0.
+  inv STACKS.
+  econstructor; eauto.
+  unfold Stackingproof.agree_regs in *.
+  specialize (AGREGS r).
+  eapply value_val_inject; eauto.
+  eapply value_inject_swap_ge; try eassumption.
+  intros.
+  eapply Stackingproof.function_ptr_translated in H; eauto.
+  break_exists. break_and. eauto.
+  intros.
+  erewrite Stackingproof.symbols_preserved; eauto.
+  admit.
+  admit.
+Admitted.
+
+Lemma Stacking_transf_program_correct :
+  forall (prog : Linear.program) (tprog : Mach.program),
+    Stacking.transf_program prog = OK tprog ->
+    forward_simulation (Linear_semantics prog) (Mach_semantics tprog).
+Proof.
+  intros. 
+  eapply forward_simulation_plus.
+  intros. 
+  eapply Stackingproof.transf_initial_states; eauto.
+  intros.
+  eapply Stacking_final_states; eauto.
+  intros. simpl in *.
+  eapply Stackingproof.transf_step_correct in H; eauto.
+  break_exists; break_and. eexists; split; try eapply plus_plus; eauto.
+  admit.
+  admit.
+Admitted.
+
 (* Asmgen, Asmgenproof *)
-
-
 Inductive asm_final_state (p : Asm.program) : Asm.state -> value -> Prop :=
 | asm_final_state_intro :
     forall (rs : Asm.regset) m v v',
@@ -335,3 +710,73 @@ Inductive asm_final_state (p : Asm.program) : Asm.state -> value -> Prop :=
 
 Definition Asm_semantics (p : Asm.program) :=
   Semantics (Asm.step) (Asm.initial_state p) (asm_final_state p) (Genv.globalenv p).
+
+Lemma Asmgen_final_states :
+  forall prog tprog st st' v,
+    Asmgen.transf_program prog = OK tprog ->
+    Asmgenproof.match_states prog st st' ->
+    Mach_final_state prog st v ->
+    asm_final_state tprog st' v.
+Proof.
+  intros.
+  inv H1. inv H0.
+  econstructor; eauto.
+  inversion AG. specialize (agree_mregs r).
+  eapply value_inject_swap_ge; try eassumption.
+  eapply value_inject_mem_extends; try eassumption.
+  simpl in *.
+  assert (Asm.preg_of r = Asm.IR Asm.EAX).
+  admit.
+  find_rewrite. eauto.
+  intros.
+  eapply Asmgenproof.functions_translated in H; eauto.
+  break_exists. break_and. eauto.
+  intros.
+  erewrite Asmgenproof.symbols_preserved; eauto.
+Admitted.
+
+Lemma Asmgen_transf_program_correct :
+  forall (prog : Mach.program) (tprog : Asm.program),
+    Asmgen.transf_program prog = OK tprog ->
+    forward_simulation (Mach_semantics prog) (Asm_semantics tprog).
+Proof.
+  intros. 
+  eapply forward_simulation_star.
+  intros. 
+  eapply Asmgenproof.transf_initial_states; eauto.
+  intros.
+  eapply Asmgen_final_states; eauto.
+  intros. simpl in *.
+  eapply Asmgenproof.step_simulation in H; eauto.
+  destruct H. left.
+  break_exists; break_and. eexists; split; try eapply plus_plus; eauto.
+  right. repeat break_and. repeat split; eauto.
+Qed.
+
+Require Import CompilerUtil.
+
+Lemma transf_rtl_program_correct :
+  forall (prog : RTL.program) (tprog : Asm.program),
+    transf_rtl_program prog = OK tprog ->
+    forward_simulation (RTL_semantics prog) (Asm_semantics tprog).
+Proof.
+  (* TODO use all lemmas above to prove *)
+Admitted.
+
+Lemma transf_cminor_program_correct :
+  forall (prog : Cminor.program) (tprog : Asm.program),
+    transf_cminor_program prog = OK tprog ->
+    forward_simulation (Cminor_semantics prog) (Asm_semantics tprog).
+Proof.
+  intros.
+  unfold transf_cminor_program in *.
+  invc H.
+  unfold time in *.
+  unfold apply_partial in *.
+  repeat (break_match_hyp; try congruence).
+  eapply compose_forward_simulation.
+  eapply cminorsel_transf_program_correct; eauto.
+  eapply compose_forward_simulation.
+  eapply rtl_transf_program_correct; eauto.
+  eapply transf_rtl_program_correct; eauto.
+Qed.
