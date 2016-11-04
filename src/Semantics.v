@@ -469,9 +469,11 @@ End CLOSURES.
 Record semantics : Type := Semantics_gen {
   state: Type;
   genvtype: Type;
+  valtype : Type;
+  is_callstate : valtype -> valtype -> state -> Prop;
   step : genvtype -> state -> state -> Prop;
-  initial_state: state -> Prop;
-  final_state: state -> Prop;
+  (* initial_state: vtype -> vtype -> state -> Prop;*)
+  final_state: state -> valtype -> Prop;
   globalenv: genvtype;
 (*  symbolenv: Senv.t *)
 }.
@@ -480,18 +482,29 @@ Notation " 'Step' L " := (step L (globalenv L)) (at level 1).
 Notation " 'Star' L " := (star _ _ (step L) (globalenv L)) (at level 1).
 Notation " 'Plus' L " := (plus _ _ (step L) (globalenv L)) (at level 1).
 
+
+
 Record forward_simulation (L1 L2: semantics) : Type :=
   Forward_simulation {
     fsim_index: Type;
     fsim_order: fsim_index -> fsim_index -> Prop;
     fsim_order_wf: well_founded fsim_order;
     fsim_match_states :> fsim_index -> state L1 -> state L2 -> Prop;
-    fsim_match_initial_states:
-      forall s1, initial_state L1 s1 ->
-      exists i, exists s2, initial_state L2 s2 /\ fsim_match_states i s1 s2;
+    fsim_match_val : valtype L1 -> valtype L2 -> Prop;
+    fsim_make_callstate :
+      forall fv1 av1 fv2 av2 s2,
+        is_callstate L2 fv2 av2 s2 ->
+        fsim_match_val fv1 fv2 ->
+        fsim_match_val av1 av2 ->
+        exists s1 i,
+          fsim_match_states i s1 s2 /\
+          is_callstate L1 fv1 av1 s1;
     fsim_match_final_states:
-      forall i s1 s2,
-      fsim_match_states i s1 s2 -> final_state L1 s1 -> final_state L2 s2;
+      forall i s1 s2 v1,
+        fsim_match_states i s1 s2 ->
+        final_state L1 s1 v1 ->
+        exists v2,
+          final_state L2 s2 v2 /\ fsim_match_val v1 v2;
     fsim_simulation:
       forall s1 s1', Step L1 s1 s1' ->
       forall i s2, fsim_match_states i s1 s2 ->
