@@ -316,7 +316,7 @@ Lemma I_ketchup :
       star s s' /\
       I e s'.
 Proof.
-
+Admitted.
 
 Theorem I_sim :
   forall e e',
@@ -327,39 +327,39 @@ Theorem I_sim :
 Proof.
 Admitted.
 
+(*
+Lemma initial_states_match :
+  forall e,
+    initial_state (subst.semantics prog) e ->
+    exists s,
+      initial_state (semantics prog) s /\ I e s.
+Proof.
+  simpl.
+  intros.
+  invc H.
+  eexists.
+  split.
+  - econstructor. eauto.
+  - econstructor.
+Admitted.
 
-  Lemma initial_states_match :
-    forall e,
-      initial_state (subst.semantics prog) e ->
-      exists s,
-        initial_state (semantics prog) s /\ I e s.
-  Proof.
-    simpl.
-    intros.
-    invc H.
-    eexists.
-    split.
-    - econstructor. eauto.
-    - econstructor.
-  Admitted.
-
-  Lemma match_final_state :
-    forall s s',
-      I s s' ->
-      final_state (subst.semantics prog) s ->
-      final_state (semantics prog) s'.
-  Proof.
-    simpl.
-    intros.
-    invc H0.
-    invc H.
-  Admitted.
+Lemma match_final_state :
+  forall s s',
+    I s s' ->
+    final_state (subst.semantics prog) s ->
+    final_state (semantics prog) s'.
+Proof.
+  simpl.
+  intros.
+  invc H0.
+  invc H.
+Admitted.
 
 
 
-  Theorem fsim :
-    Semantics.forward_simulation (subst.semantics prog) (ksubst.semantics prog).
-  Proof.
-    eapply Semantics.forward_simulation_step.
-
+Theorem fsim :
+  Semantics.forward_simulation (subst.semantics prog) (ksubst.semantics prog).
+Proof.
+  eapply Semantics.forward_simulation_step.
 *)
+
