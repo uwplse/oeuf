@@ -491,7 +491,7 @@ Record forward_simulation (L1 L2: semantics) : Type :=
     fsim_order_wf: well_founded fsim_order;
     fsim_match_states :> fsim_index -> state L1 -> state L2 -> Prop;
     fsim_match_val : valtype L1 -> valtype L2 -> Prop;
-    fsim_make_callstate :
+    fsim_match_callstate :
       forall fv1 av1 fv2 av2 s2,
         is_callstate L2 fv2 av2 s2 ->
         fsim_match_val fv1 fv2 ->
@@ -541,16 +541,24 @@ Variable L2: semantics.
   forall id, Senv.public_symbol (symbolenv L2) id = Senv.public_symbol (symbolenv L1) id. *)
 
 Variable match_states: state L1 -> state L2 -> Prop.
+Variable match_values: valtype L1 -> valtype L2 -> Prop.
 
-Hypothesis match_initial_states:
-  forall s1, initial_state L1 s1 ->
-  exists s2, initial_state L2 s2 /\ match_states s1 s2.
+Hypothesis match_callstate :
+      forall fv1 av1 fv2 av2 s2,
+        is_callstate L2 fv2 av2 s2 ->
+        match_values fv1 fv2 ->
+        match_values av1 av2 ->
+        exists s1,
+          match_states s1 s2 /\
+          is_callstate L1 fv1 av1 s1.
+
 
 Hypothesis match_final_states:
-  forall s1 s2,
+  forall s1 s2 v,
   match_states s1 s2 ->
-  final_state L1 s1 ->
-  final_state L2 s2.
+  final_state L1 s1 v ->
+  exists v',
+    final_state L2 s2 v' /\ match_values v v'.
 
 (** Simulation when one transition in the first program
     corresponds to zero, one or several transitions in the second program.
@@ -577,11 +585,14 @@ Hypothesis simulation:
 Lemma forward_simulation_star_wf: forward_simulation L1 L2.
 Proof.
   apply Forward_simulation with
-    (fsim_order := order)
+  (fsim_order := order)
+    (fsim_match_val := match_values)
     (fsim_match_states := fun idx s1 s2 => idx = s1 /\ match_states s1 s2);
   auto.
-  intros. exploit match_initial_states; eauto. intros [s2 [A B]].
-    exists s1; exists s2; auto.
+  intros.
+  exploit match_callstate; eauto.
+  intros. break_exists; break_and.
+  repeat eexists; eauto.
   intros. destruct H. eapply match_final_states; eauto.
   intros. destruct H0. subst i. exploit simulation; eauto. intros [s2' [A B]].
   exists s1'; exists s2'; intuition.
@@ -771,19 +782,27 @@ Let ff_order : ff_index -> ff_index -> Prop :=
 Let ff_match_states (i: ff_index) (s1: state L1) (s3: state L3) : Prop :=
   exists s2, S12 (snd i) s1 s2 /\ S23 (fst i) s2 s3.
 
+Let ff_match_values (v1 : valtype L1) (v3 : valtype L3) : Prop :=
+  exists v2, fsim_match_val L1 L2 S12 v1 v2 /\ fsim_match_val L2 L3 S23 v2 v3.
+
 Lemma compose_forward_simulation: forward_simulation L1 L3.
 Proof.
-  apply Forward_simulation with (fsim_order := ff_order) (fsim_match_states := ff_match_states).
+  apply Forward_simulation with (fsim_order := ff_order) (fsim_match_states := ff_match_states) (fsim_match_val := ff_match_values).
 (* well founded *)
   unfold ff_order. apply wf_lex_ord. apply wf_clos_trans. apply fsim_order_wf. apply fsim_order_wf.
 (* initial states *)
-  intros. exploit (fsim_match_initial_states _ _ S12); eauto. intros [i [s2 [A B]]].
-  exploit (fsim_match_initial_states _ _ S23); eauto. intros [i' [s3 [C D]]].
-  exists (i', i); exists s3; split; auto. exists s2; auto.
+  intros. subst ff_match_values. simpl in *. repeat break_exists. repeat break_and.
+  eapply (fsim_match_callstate L2 L3 S23) in H; eauto.
+  repeat break_exists; break_and.
+  eapply (fsim_match_callstate L1 L2 S12) in H4; eauto.
+  break_exists; break_and.
+  exists x3. exists (x2,x4). split; eauto.
+  econstructor; eauto.
 (* final states *)
   intros. destruct H as [s3 [A B]].
-  eapply (fsim_match_final_states _ _ S23); eauto.
-  eapply (fsim_match_final_states _ _ S12); eauto.
+  app (fsim_match_final_states L1 L2 S12) final_state.
+  app (fsim_match_final_states L2 L3 S23) (final_state L2).
+  eexists; split; try econstructor; eauto.
 (* simulation *)
   intros. destruct H0 as [s3 [A B]]. destruct i as [i2 i1]; simpl in *.
   exploit (fsim_simulation' _ _ S12); eauto. intros [[i1' [s3' [C D]]] | [i1' [C D]]].
@@ -800,7 +819,7 @@ Proof.
   right; split. apply star_refl. red. right. auto.
   exists s3; auto.
 (* symbols *)
-(*  intros. transitivity (Senv.public_symbol (symbolenv L2) id); apply fsim_public_preserved; auto. *)
+  (*  intros. transitivity (Senv.public_symbol (symbolenv L2) id); apply fsim_public_preserved; auto. *)
 Qed.
 
 End COMPOSE_SIMULATIONS.
