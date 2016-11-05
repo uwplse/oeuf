@@ -242,6 +242,7 @@ Proof.
   intros.
   on >cont_elt_wf, invc; simpl; auto.
 Qed.
+Hint Resolve closed_plug_elt.
 
 Lemma closed_collapse :
   forall h k,
@@ -249,7 +250,7 @@ Lemma closed_collapse :
     closed h ->
     closed (collapse h k).
 Proof.
-  induction 1; simpl; auto using closed_plug_elt.
+  induction 1; simpl; auto.
 Qed.
 Hint Resolve closed_collapse.
 
@@ -773,22 +774,40 @@ Inductive ready_to_focus : expr -> state -> Prop :=
 | RTFStop v :
     value v ->
     ready_to_focus v (Stop v)
-| RTFRun h k :
+| RTFRun h k e :
     ~ value h ->
     closed h ->
     Forall cont_elt_wf k ->
-    ready_to_focus (collapse h k) (Run h k)
+    e = collapse h k ->
+    ready_to_focus e (Run h k)
 .
+Hint Constructors ready_to_focus.
 
 Lemma unfocus :
   forall k h,
     closed h ->
+    Forall cont_elt_wf k ->
     exists s',
       star (Run h k) s' /\
       ready_to_focus (collapse h k) s'.
 Proof.
-  induction k; intros.
-Admitted.
+  induction k using rev_ind; intros.
+  - destruct (value_dec h).
+    + exists (Stop h). eauto.
+    + exists (Run h []). eauto.
+  - destruct (value_dec h).
+    + on (Forall _ (_ ++ _)), fun H => inversion H using Forall_app_inv; clear H; intros.
+      on (Forall _ (_ :: _)), invc.
+      fwd apply (IHk (plug_elt h x)); auto.
+      break_exists_name s'. break_and.
+      exists s'.
+      split.
+      * econstructor 2.
+        -- eapply KValueDone. auto.
+        -- rewrite <- plug_Run_fold. auto.
+      * rewrite collapse_snoc. auto.
+    + eauto.
+Qed.
 
 Lemma I_ketchup :
   forall e s,
@@ -806,7 +825,10 @@ Proof.
   - eauto.
   - fwd eapply refocus; eauto.
     break_exists_name s'. break_and.
+    exists s'.
+    split.
     eauto using star_trans.
+    congruence.
 Qed.
 
 Theorem I_sim :
