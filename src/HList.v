@@ -568,3 +568,12 @@ Proof.
   - destruct m using case_member_nil.
   - destruct a0, l, m using case_member_cons; simpl; auto.
 Qed.
+
+Lemma member_In :
+  forall A (a : A) l,
+    member a l ->
+    In a l.
+Proof.
+  induction 1; simpl; auto.
+Qed.
+

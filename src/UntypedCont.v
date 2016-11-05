@@ -331,16 +331,6 @@ Proof.
 Qed.
 Hint Resolve KValueDone.
 
-Lemma rev_nil :
-  forall A (l : list A),
-    rev l = [] -> l = [].
-Proof.
-  intros until l.
-  rewrite <- rev_involutive with (l := l).
-  rewrite rev_involutive.
-  intros H. rewrite H. auto.
-Qed.
-
 Lemma plug_stop_inv :
   forall h k e,
     plug h k = Stop e ->
@@ -396,11 +386,6 @@ Proof.
   on >almost_I, invc; cbn; auto.
 Qed.
 
-Lemma cons_app_singleton :
-  forall A (x : A) xs,
-    x :: xs = [x] ++ xs.
-Proof. reflexivity. Qed.
-
 Lemma almost_I_ConstrArg_extend:
   forall tag vs e es s,
     almost_I e s ->
@@ -422,15 +407,6 @@ Proof.
   intros.
   invc H; cbn; auto.
 Qed.
-
-Lemma member_In :
-  forall A (a : A) l,
-    HList.member a l ->
-    In a l.
-Proof.
-  induction 1; simpl; auto.
-Qed.
-
 
 Lemma shift'_closed_upto :
   forall e n c,
@@ -542,7 +518,7 @@ Proof.
     eauto using kstep_extend, almost_I_AppR_extend.
   - on _, fun H => apply HList.app_middle_member in H.
     intuition idtac.
-    + on >@HList.member, fun H => apply member_In in H.
+    + on >@HList.member, fun H => apply HList.member_In in H.
       on (Forall value vs), fun H => let H' := fresh in pose proof H as H';
                                                      rewrite Forall_forall in H'.
       exfalso. eauto.
@@ -554,7 +530,7 @@ Proof.
       break_exists_name s'. break_and.
       rewrite cons_app_singleton.
       eauto using kstep_extend, almost_I_ConstrArg_extend.
-    + on >@HList.member, fun H => apply member_In in H.
+    + on >@HList.member, fun H => apply HList.member_In in H.
       on (Forall value pre), fun H => rewrite Forall_forall in H.
       exfalso. eauto.
   - fwd eapply IHe; eauto.
@@ -627,26 +603,6 @@ Lemma collapse_snoc :
 Proof.
   induction k; simpl; auto using f_equal2.
 Qed.
-
-Lemma Forall_find_first :
-  forall A (P : A -> Prop) (P_dec : forall a, {P a} + {~ P a}) l,
-    {Forall P l} + {exists xs y zs, l = xs ++ y :: zs /\ Forall P xs /\ ~ P y}.
-Proof.
-  induction l.
-  - auto.
-  - destruct (P_dec a).
-    + destruct IHl.
-      * auto.
-      * right.
-        break_exists_name xs.
-        break_exists_name y.
-        break_exists_name zs.
-        break_and. subst.
-        exists (a :: xs), y, zs.
-        auto.
-    + right. exists [], a, l. auto.
-Qed.
-
 
 Lemma app_not_value :
   forall e1 e2,

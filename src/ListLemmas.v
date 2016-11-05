@@ -851,3 +851,36 @@ intros. split.
 Qed.
 
 
+Lemma rev_nil :
+  forall A (l : list A),
+    rev l = [] -> l = [].
+Proof.
+  intros until l.
+  rewrite <- rev_involutive with (l := l).
+  rewrite rev_involutive.
+  intros H. rewrite H. auto.
+Qed.
+
+Lemma cons_app_singleton :
+  forall A (x : A) xs,
+    x :: xs = [x] ++ xs.
+Proof. reflexivity. Qed.
+
+Lemma Forall_find_first :
+  forall A (P : A -> Prop) (P_dec : forall a, {P a} + {~ P a}) l,
+    {Forall P l} + {exists xs y zs, l = xs ++ y :: zs /\ Forall P xs /\ ~ P y}.
+Proof.
+  induction l.
+  - auto.
+  - destruct (P_dec a).
+    + destruct IHl.
+      * auto.
+      * right.
+        break_exists_name xs.
+        break_exists_name y.
+        break_exists_name zs.
+        break_and. subst.
+        exists (a :: xs), y, zs.
+        auto.
+    + right. exists [], a, l. auto.
+Qed.
