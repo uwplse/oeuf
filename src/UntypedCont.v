@@ -838,7 +838,13 @@ Theorem I_sim :
       I e s ->
       exists s', plus s s' /\ I e' s'.
 Proof.
-Admitted.
+  intros.
+  fwd eapply I_sim_almost; eauto.
+  break_exists_name s1. break_and.
+  fwd eapply I_ketchup; eauto.
+  break_exists_name s2. break_and.
+  eauto using plus_left.
+Qed.
 
 (*
 Lemma initial_states_match :
