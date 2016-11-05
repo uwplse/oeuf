@@ -157,14 +157,19 @@ Qed.
 
 Inductive cont_elt_wf : cont_elt -> Prop :=
 | KwfAppL r :
+    closed r ->
     cont_elt_wf (kAppL r)
 | KwfAppR l :
     value l ->
+    closed l ->
     cont_elt_wf (kAppR l)
 | KwfConstrArg c vs es :
     Forall value vs ->
+    Forall closed vs ->
+    Forall closed es ->
     cont_elt_wf (kConstrArg c vs es)
 | KwfElim ty cases :
+    Forall closed cases ->
     cont_elt_wf (kElim ty cases)
 .
 Hint Constructors cont_elt_wf.
@@ -173,58 +178,90 @@ Hint Constructors cont_elt_wf.
 Inductive I : expr -> state -> Prop :=
 | IAppL e1 e2 e k :
     ~ value e1 ->
+    closed e2 ->
     I e1 (Run e k) ->
     I (App e1 e2) (Run e (kAppL e2 :: k))
 | IAppR e1 e2 e k :
     value e1 ->
+    closed e1 ->
     ~ value e2 ->
     I e2 (Run e k) ->
     I (App e1 e2) (Run e (kAppR e1 :: k))
 | IBeta e1 e2 :
     value e1 ->
+    closed e1 ->
     value e2 ->
+    closed e2 ->
     I (App e1 e2) (Run (App e1 e2) [])
 | IConstrArg e tag vs es e' k :
     Forall value vs ->
+    Forall closed vs ->
+    Forall closed es ->
     ~ value e ->
     I e (Run e' k) ->
     I (Constr tag (vs ++ [e] ++ es)) (Run e' (kConstrArg tag vs es :: k))
 | IElimStep ty cases target k e' :
     ~ value target ->
+    Forall closed cases ->
     I target (Run e' k) ->
     I (Elim ty cases target) (Run e' (kElim ty cases :: k))
 | IEliminate ty cases target :
     value target ->
+    closed target ->
+    Forall closed cases ->
     I (Elim ty cases target) (Run (Elim ty cases target) [])
-
-| IStop v : value v -> I v (Stop v)
+| IStop v :
+    value v ->
+    closed v ->
+    I v (Stop v)
 .
 Hint Constructors I.
 
+Hint Resolve Forall_app.
+
+Lemma I_closed :
+  forall e s,
+    I e s ->
+    closed e.
+Proof.
+  induction 1; auto.
+Qed.
+Hint Resolve I_closed.
+
 Inductive almost_I : expr -> state -> Prop :=
-| AI_Stop : forall e, value e -> almost_I e (Stop e)
-| AI_Run : forall e h k, collapse h k = e -> almost_I e (Run h k).
+| AI_Stop : forall e, value e -> closed e -> almost_I e (Stop e)
+| AI_Run : forall e h k, closed h -> Forall cont_elt_wf k -> collapse h k = e -> almost_I e (Run h k).
 Hint Constructors almost_I.
 
 Lemma closed_plug_elt :
   forall e ke,
     closed e ->
-    False -> (* need to know that ke contains only closed terms,
-           let's see if we need it *)
+    cont_elt_wf ke ->
     closed (plug_elt e ke).
 Proof.
-  destruct ke; simpl; intros;
-  intuition.
+  intros.
+  on >cont_elt_wf, invc; simpl; auto.
 Qed.
 
 Lemma closed_collapse :
   forall h k,
+    Forall cont_elt_wf k ->
     closed h ->
-    False ->
     closed (collapse h k).
 Proof.
-  induction k; simpl; auto using closed_plug_elt.
+  induction 1; simpl; auto using closed_plug_elt.
 Qed.
+Hint Resolve closed_collapse.
+
+Lemma almost_I_closed :
+  forall e s,
+    almost_I e s ->
+    closed e.
+Proof.
+  intros.
+  on >almost_I, invc; auto using closed_collapse.
+Qed.
+Hint Resolve almost_I_closed.
 
 Lemma value_no_step :
   forall e e',
@@ -338,14 +375,21 @@ Proof.
 Qed.
 
 Lemma almost_I_AppL_extend:
-  forall e1 e2 s, almost_I e1 s -> almost_I (App e1 e2) (extend s [kAppL e2]).
+  forall e1 e2 s,
+    almost_I e1 s ->
+    closed e2 ->
+    almost_I (App e1 e2) (extend s [kAppL e2]).
 Proof.
   intros.
-  invc H; cbn; auto.
+  on >almost_I, invc; cbn; auto.
 Qed.
 
 Lemma almost_I_AppR_extend:
-  forall e1 e2 s, almost_I e2 s -> almost_I (App e1 e2) (extend s [kAppR e1]).
+  forall e1 e2 s,
+    almost_I e2 s ->
+    closed e1 ->
+    value e1 ->
+    almost_I (App e1 e2) (extend s [kAppR e1]).
 Proof.
   intros.
   on >almost_I, invc; cbn; auto.
@@ -358,7 +402,11 @@ Proof. reflexivity. Qed.
 
 Lemma almost_I_ConstrArg_extend:
   forall tag vs e es s,
-    almost_I e s -> almost_I (Constr tag (vs ++ [e] ++ es)) (extend s [kConstrArg tag vs es]).
+    almost_I e s ->
+    Forall value vs ->
+    Forall closed vs ->
+    Forall closed es ->
+    almost_I (Constr tag (vs ++ [e] ++ es)) (extend s [kConstrArg tag vs es]).
 Proof.
   intros.
   on >almost_I, invc; cbn; auto.
@@ -366,7 +414,9 @@ Qed.
 
 Lemma almost_I_Elim_extend:
   forall ty cases target s,
-    almost_I target s -> almost_I (Elim ty cases target) (extend s [kElim ty cases]).
+    almost_I target s ->
+    Forall closed cases ->
+    almost_I (Elim ty cases target) (extend s [kElim ty cases]).
 Proof.
   intros.
   invc H; cbn; auto.
@@ -378,6 +428,90 @@ Lemma member_In :
     In a l.
 Proof.
   induction 1; simpl; auto.
+Qed.
+
+
+Lemma shift'_closed_upto :
+  forall e n c,
+    closed_upto n e ->
+    closed_upto (S n) (shift' c e).
+Proof.
+  induction e using expr_ind'; simpl; intros;
+    on >closed_upto, invc; auto.
+  - break_if; auto with *.
+  - constructor. rewrite <- Forall_map.
+    list_magic_on (args, tt).
+  - constructor; auto.
+    rewrite <- Forall_map.
+    list_magic_on (cases, tt).
+Qed.
+
+Lemma shift_closed_upto :
+  forall n e,
+    closed_upto n e ->
+    closed_upto (S n) (shift e).
+Proof.
+  unfold shift.
+  auto using shift'_closed_upto.
+Qed.
+
+Lemma subst'_closed_upto :
+  forall e n to,
+    closed_upto n to ->
+    closed_upto (S n) e ->
+    closed_upto n (subst' n to e).
+Proof.
+  induction e using expr_ind'; simpl; intros;
+    on (closed_upto (S _) _), invc.
+  - repeat break_if; auto.
+    omega.
+  - auto using shift_closed_upto.
+  - auto.
+  - constructor. rewrite <- Forall_map.
+    list_magic_on (args, tt).
+  - constructor; auto.
+    rewrite <- Forall_map.
+    list_magic_on (cases, tt).
+Qed.
+
+Lemma subst_Lam_closed :
+  forall body e,
+    closed (Lam body) ->
+    closed e ->
+    closed (subst e body).
+Proof.
+  intros.
+  rewrite closed_closed_upto_0 in *.
+  on (closed_upto _ (Lam _)), invc.
+  unfold subst.
+  auto using subst'_closed_upto.
+Qed.
+
+Lemma unroll_elim'_closed:
+  forall case c args mk_rec n,
+    closed case ->
+    Forall closed args ->
+    (forall e : expr, closed e -> closed (mk_rec e)) ->
+    closed (unroll_elim' case c args mk_rec n).
+Proof.
+  intros.
+  generalize dependent case.
+  generalize dependent n.
+  on (Forall _ args), fun H => induction H; simpl; intros.
+  - auto.
+  - break_if; auto.
+Qed.
+
+Lemma unroll_elim_closed :
+  forall case c args mk_rec,
+    closed case ->
+    Forall closed args ->
+    (forall e, closed e -> closed (mk_rec e)) ->
+    closed (unroll_elim case c args mk_rec).
+Proof.
+  unfold unroll_elim.
+  intros.
+  auto using unroll_elim'_closed.
 Qed.
 
 Lemma I_sim_almost :
@@ -394,8 +528,7 @@ Proof.
   - eexists.
     split.
     apply KBeta; auto.
-    econstructor.
-    auto.
+    auto using subst_Lam_closed.
   - fwd eapply IHe1; eauto.
     break_exists_name s'.
     break_and.
@@ -430,8 +563,11 @@ Proof.
     eauto using kstep_extend, almost_I_Elim_extend.
   - eexists. split.
     eapply KEliminate; eauto.
-    econstructor.
-    auto.
+    econstructor; auto.
+
+    on (closed (Constr _ _)), invc.
+    apply unroll_elim_closed; auto.
+    eapply Forall_nth_error; [|eauto]. auto.
 Qed.
 
 Lemma value_dec :
@@ -523,16 +659,17 @@ Hint Resolve app_not_value.
 Lemma I_beta:
   forall h1 h2 k,
     value h1 ->
+    closed h1 ->
     value h2 ->
+    closed h2 ->
     Forall cont_elt_wf k ->
     I (collapse (App h1 h2) k) (Run (App h1 h2) k).
 Proof.
   induction k; simpl; intros.
   - auto.
   - on >Forall, invc.
-    destruct a; simpl; econstructor; eauto.
-    + on >cont_elt_wf, invc. auto.
-    + on >cont_elt_wf, invc. auto.
+    destruct a; simpl;
+      on >cont_elt_wf, invc; constructor; auto.
 Qed.
 
 Lemma elim_not_value :
@@ -547,18 +684,18 @@ Hint Resolve elim_not_value.
 Lemma I_eliminate:
   forall ty cases h k,
     value h ->
+    closed h ->
+    Forall closed cases ->
     Forall cont_elt_wf k ->
     I (collapse (Elim ty cases h) k) (Run (Elim ty cases h) k).
 Proof.
   induction k; simpl; intros.
   - auto.
   - on >Forall, invc.
-    destruct a; simpl; econstructor; eauto.
-    + on >cont_elt_wf, invc. auto.
-    + on >cont_elt_wf, invc. auto.
+    destruct a; simpl;
+      on >cont_elt_wf, invc; constructor; auto.
 Qed.
 
-Hint Resolve Forall_app.
 
 Hint Constructors Semantics.star.
 
@@ -574,10 +711,10 @@ Proof.
   - on >closed, invc.
   - exfalso. auto.
   - destruct (value_dec h1).
-    + destruct (value_dec h2).
+    + on >closed, invc.
+      destruct (value_dec h2).
       * eauto using I_beta.
-      * on >closed, invc.
-        fwd eapply IHh2; try assumption; cycle 1.
+      * fwd eapply IHh2; try assumption; cycle 1.
         -- break_exists. break_and.
            eexists.
            split.
@@ -618,10 +755,10 @@ Proof.
         -- on >I, fun H => rewrite collapse_snoc in H; simpl in H.
            auto.
       * auto.
-  - destruct (value_dec h).
+  - on >closed, invc.
+    destruct (value_dec h).
     + eauto using I_eliminate.
-    + on >closed, invc.
-      fwd eapply IHh; try assumption; cycle 1.
+    + fwd eapply IHh; try assumption; cycle 1.
       * break_exists_name s'. break_and.
         eexists. split.
         -- eapply star_step.
@@ -632,6 +769,26 @@ Proof.
       * auto.
 Qed.
 
+Inductive ready_to_focus : expr -> state -> Prop :=
+| RTFStop v :
+    value v ->
+    ready_to_focus v (Stop v)
+| RTFRun h k :
+    ~ value h ->
+    closed h ->
+    Forall cont_elt_wf k ->
+    ready_to_focus (collapse h k) (Run h k)
+.
+
+Lemma unfocus :
+  forall k h,
+    closed h ->
+    exists s',
+      star (Run h k) s' /\
+      ready_to_focus (collapse h k) s'.
+Proof.
+  induction k; intros.
+Admitted.
 
 Lemma I_ketchup :
   forall e s,
@@ -640,7 +797,17 @@ Lemma I_ketchup :
       star s s' /\
       I e s'.
 Proof.
-Admitted.
+  intros.
+  destruct s; invc H; eauto.
+  rename e0 into h.
+  fwd eapply (unfocus k h); auto.
+  break_exists_name s'. break_and.
+  on >ready_to_focus, invc.
+  - eauto.
+  - fwd eapply refocus; eauto.
+    break_exists_name s'. break_and.
+    eauto using star_trans.
+Qed.
 
 Theorem I_sim :
   forall e e',
