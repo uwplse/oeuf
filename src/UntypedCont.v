@@ -82,23 +82,8 @@ Inductive kstep : state -> state -> Prop :=
 Hint Constructors kstep.
 
 
-Inductive star : state -> state -> Prop :=
-| StarNil : forall e, star e e
-| StarCons : forall e e' e'',
-        kstep e e' ->
-        star e' e'' ->
-        star e e''.
-Hint Constructors star.
-
-Inductive plus : state -> state -> Prop :=
-| PlusOne : forall s s',
-        kstep s s' ->
-        plus s s'
-| PlusCons : forall s s' s'',
-        kstep s s' ->
-        plus s' s'' ->
-        plus s s''.
-Hint Constructors plus.
+Notation star := (Semantics.star unit state (fun _ => kstep) tt).
+Notation plus := (Semantics.plus unit state (fun _ => kstep) tt).
 
 Inductive initial_state (prog : list expr * list metadata) : state -> Prop :=
 | initial_intro :
@@ -575,6 +560,8 @@ Qed.
 
 Hint Resolve Forall_app.
 
+Hint Constructors Semantics.star.
+
 Lemma refocus :
   forall h k,
     ~ value h ->
@@ -594,7 +581,7 @@ Proof.
         -- break_exists. break_and.
            eexists.
            split.
-           ++ eapply StarCons.
+           ++ eapply star_step.
               ** apply KAppR; auto.
               ** eassumption.
            ++ on >I, fun H => rewrite collapse_snoc in H; simpl in H.
@@ -605,7 +592,7 @@ Proof.
       * break_exists. break_and.
         eexists.
         split.
-        -- eapply StarCons.
+        -- eapply star_step.
            ++ apply KAppL; auto.
            ++ eassumption.
         -- on >I, fun H => rewrite collapse_snoc in H; simpl in H.
@@ -625,7 +612,7 @@ Proof.
       * break_exists_name s'. break_and.
         eexists.
         split.
-        -- eapply StarCons.
+        -- eapply star_step.
            ++ on (Forall value vs), fun H' => apply KConstrStep; auto.
            ++ eassumption.
         -- on >I, fun H => rewrite collapse_snoc in H; simpl in H.
@@ -637,7 +624,7 @@ Proof.
       fwd eapply IHh; try assumption; cycle 1.
       * break_exists_name s'. break_and.
         eexists. split.
-        -- eapply StarCons.
+        -- eapply star_step.
            ++ apply KElimStep; auto.
            ++ eassumption.
         -- on >I, fun H => rewrite collapse_snoc in H; simpl in H.
