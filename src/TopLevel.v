@@ -80,8 +80,5 @@ Section Spec.
     eapply (MixSemantics.fsim_match_final_states) in H0; eauto.
   Qed.
 
-
-  (* Lemma only_answer :*)
-  (* TODO: prove something about not getting other answers *)
   
 End Spec.

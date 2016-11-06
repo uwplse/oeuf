@@ -338,22 +338,26 @@ Require Semantics.
 
 Definition initial_env (prog : prog_type) : env := fst prog.
 
-Inductive initial_state (prog : prog_type) : state -> Prop :=
-| init :
-    forall expr,
-      In expr (initial_env prog) ->
-      initial_state prog (Run expr nil (fun x => Stop x)).
+Inductive is_callstate (prog : prog_type) : unit -> unit -> state -> Prop := .
+(* TODO: stub *)
 
-Inductive final_state (prog : prog_type) : state -> Prop :=
+
+(* Inductive initial_state (prog : prog_type) : state -> Prop := *)
+(* | init : *)
+(*     forall expr, *)
+(*       In expr (initial_env prog) -> *)
+(*       initial_state prog (Run expr nil (fun x => Stop x)). *)
+
+Inductive final_state (prog : prog_type) : state -> unit -> Prop :=
 | fine :
     forall expr,
       value expr ->
-      final_state prog (Stop expr).
+      final_state prog (Stop expr) tt.
 
 Definition semantics (prog : prog_type) : Semantics.semantics :=
-  @Semantics.Semantics_gen state env
+  @Semantics.Semantics_gen state env unit
+                           (is_callstate prog)
                  (sstep)
-                 (initial_state prog)
                  (final_state prog)
                  (initial_env prog).
 

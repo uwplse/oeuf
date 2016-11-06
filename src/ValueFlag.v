@@ -118,17 +118,20 @@ Require Semantics.
 
 Definition prog_type : Type := env * list metadata.
 
-Inductive initial_state (prog : prog_type) : state -> Prop :=.
+Definition valtype := unit.
 
-Inductive final_state (prog : prog_type) : state -> Prop :=
-| FinalState : forall v, final_state prog (Stop v).
+Inductive is_callstate (prog : prog_type) : valtype -> valtype -> state -> Prop := .
+(* TODO: stub *)
+
+Inductive final_state (prog : prog_type) : state -> valtype -> Prop :=
+| FinalState : forall v, final_state prog (Stop v) tt.
 
 Definition initial_env (prog : prog_type) : env := fst prog.
 
 Definition semantics (prog : prog_type) : Semantics.semantics :=
-  @Semantics.Semantics_gen state env
+  @Semantics.Semantics_gen state env valtype
+                 (is_callstate prog)
                  (sstep)
-                 (initial_state prog)
                  (final_state prog)
                  (initial_env prog).
 

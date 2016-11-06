@@ -1,3 +1,5 @@
+(*
+
 (** Libraries. *)
 Require Import String.
 Require Import compcert.lib.Coqlib.
@@ -780,3 +782,4 @@ Proof.
   eapply rtl_transf_program_correct; eauto.
   eapply transf_rtl_program_correct; eauto.
 Qed.
+*)

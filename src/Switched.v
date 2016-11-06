@@ -218,18 +218,23 @@ Qed.
 Require Import Metadata.
 
 Definition prog_type : Type := list expr * list metadata.
+Definition valtype := unit.
 
 Require Semantics.
 
-Inductive initial_state (prog : prog_type) : state -> Prop :=.
 
-Inductive final_state (prog : prog_type) : state -> Prop :=.
+Definition initial_env (prog : prog_type) : env := fst prog.
 
-Definition initial_env (prog : prog_type) : env := nil. (* TODO: write this *)
+
+Inductive is_callstate (prog : prog_type) : valtype -> valtype -> state -> Prop := .
+(* TODO: stub *)
+
+
+Inductive final_state (prog : prog_type) : state -> valtype -> Prop :=.
 
 Definition semantics (prog : prog_type) : Semantics.semantics :=
-  @Semantics.Semantics_gen state env
+  @Semantics.Semantics_gen state env valtype
+                 (is_callstate prog)
                  (sstep)
-                 (initial_state prog)
                  (final_state prog)
                  (initial_env prog).

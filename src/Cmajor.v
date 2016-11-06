@@ -288,15 +288,8 @@ Inductive step: state -> trace -> state -> Prop :=
 
 End RELSEM.
 
-
-Inductive initial_state (p: program): state -> Prop :=
-  | initial_state_intro: forall b f m0,
-      let ge := Genv.globalenv p in
-      Genv.init_mem p = Some m0 ->
-      Genv.find_symbol ge p.(prog_main) = Some b ->
-      Genv.find_funct_ptr ge b = Some f ->
-      funsig f = signature_main ->
-      initial_state p (Callstate f nil Kstop m0).
+Inductive is_callstate (p : program) : value -> value -> state -> Prop := .
+(* TODO: stub *)
 
 (** A final state is a [Returnstate] with an empty continuation. *)
 
@@ -308,7 +301,7 @@ Inductive final_state (p : program) : state -> value -> Prop :=
 (** The corresponding small-step semantics. *)
 
 Definition semantics (p: program) :=
-  Semantics step (initial_state p) (final_state p) (Genv.globalenv p).
+  Semantics step (is_callstate p) (final_state p) (Genv.globalenv p).
 
 (** This semantics is receptive to changes in events. *)
 
@@ -337,5 +330,8 @@ Inductive cminor_final_state(p : Cminor.program): Cminor.state -> value -> Prop 
     value_inject (Genv.globalenv p) m v v' ->
     cminor_final_state p (Cminor.Returnstate v' Cminor.Kstop m) v.
 
+Inductive cminor_is_callstate (p : Cminor.program) : value -> value -> state -> Prop := .
+(* TODO: stub *)
+
 Definition Cminor_semantics (p: Cminor.program) :=
-  Semantics Cminor.step (Cminor.initial_state p) (cminor_final_state p) (Genv.globalenv p).
+  Semantics Cminor.step (cminor_is_callstate p) (cminor_final_state p) (Genv.globalenv p).

@@ -446,6 +446,7 @@ Proof.
   intros. rewrite Hst. eauto.
 Qed.
 
+(*
 Lemma initial_states_match :
   forall s1,
     initial_state prog s1 ->
@@ -463,16 +464,17 @@ Proof.
   eapply find_funct_ptr_transf; eauto.
   erewrite funsig_transf; eauto.  
 Qed.  
+*)
 
 Theorem fsim :
   TraceSemantics.forward_simulation (Cmajor.semantics prog) (Cminor_semantics tprog).
 Proof.
   intros.
   eapply TraceSemantics.forward_simulation_step with (match_states := match_states).
-  eapply initial_states_match; eauto.
-  eapply match_final_state; eauto.
+  admit.
+  intros. instantiate (1 := eq). eapply match_final_state in H0; eauto.
   eapply single_step_correct; eauto.
-Qed.
+Admitted.
 
 End PRESERVATION.
 
