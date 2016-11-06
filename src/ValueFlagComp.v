@@ -593,7 +593,6 @@ Lemma compile_not_value : forall a b,
 induction a using A.expr_ind'; intros0 Hcomp; simpl in *; refold_compile; subst; inversion 1.
 Qed.
 
-
 Lemma compile_cases_arent_values : forall a b,
     compile a = b ->
     B.cases_arent_values b.
@@ -611,23 +610,7 @@ simpl; B.refold_cases_arent_values; eauto.
   list_magic_on (cases, tt). eauto using compile_not_value.
 Qed.
 
-Lemma compile_list_cases_arent_values : forall a b,
-    compile_list a = b ->
-    Forall B.cases_arent_values b.
-induction a;
-intros0 Hcomp; simpl in *; refold_compile; subst; eauto using compile_cases_arent_values.
-Qed.
-
-Theorem compile_cu_cases_arent_values : forall a ameta b bmeta,
-    compile_cu (a, ameta) = (b, bmeta) ->
-    Forall B.cases_arent_values b.
-intros.
-simpl in *. inject_pair.
-eauto using compile_list_cases_arent_values.
-Qed.
-
-
-Lemma compile_no_values : forall a b,
+Theorem compile_cases_no_values : forall a b,
     compile a = b ->
     B.no_values b.
 induction a using A.expr_rect_mut with
@@ -638,26 +621,6 @@ intros0 Hcomp; simpl in *; refold_compile; subst;
 simpl; B.refold_no_values; eauto.
 Qed.
 
-Lemma compile_list_no_values : forall a b,
-    compile_list a = b ->
-    Forall B.no_values b.
-induction a;
-intros0 Hcomp; simpl in *; refold_compile; subst; eauto using compile_no_values.
-Qed.
-
-Theorem compile_cu_no_values : forall a ameta b bmeta,
-    compile_cu (a, ameta) = (b, bmeta) ->
-    Forall B.no_values b.
-intros.
-simpl in *. inject_pair.
-eauto using compile_list_no_values.
-Qed.
-
-Theorem compile_cu_no_values' : forall a b,
-    compile_cu a = b ->
-    Forall B.no_values (fst b).
-destruct a, b. intros. eauto using compile_cu_no_values.
-Qed.
 
 
 
@@ -911,29 +874,6 @@ all: simpl in *; B.refold_cases_arent_values; repeat break_and.
 Qed.
 
 
-Inductive I' : A.state -> B.state -> Prop :=
-| I'_intro : forall a b,
-        I a b ->
-        B.state_cases_arent_values b ->
-        I' a b.
-
-Theorem I'_sim : forall AE BE a a' b,
-    compile_list AE = BE ->
-    Forall B.cases_arent_values BE ->
-    I' a b ->
-    A.sstep AE a a' ->
-    exists b',
-        B.splus BE b b' /\
-        I' a' b'.
-intros. on >I', invc.
-fwd eapply I_sim; eauto.
-  { on >B.state_cases_arent_values, invc; simpl; auto. }
-break_exists; break_and.
-eexists; split; eauto. constructor; eauto.
-eapply B.state_cases_arent_values_inductive_plus; eassumption.
-Qed.
-
-
 
 Require Semantics.
 
@@ -944,17 +884,26 @@ Section Preservation.
 
   Hypothesis TRANSF : compile_cu prog = tprog.
 
+  
+  (* Inductive match_states (AE : A.env) (BE : B.env) : A.expr -> B.expr -> Prop := *)
+  (* | match_st : *)
+  (*     forall a b, *)
+  (*       R AE BE a b -> *)
+  (*       match_states AE BE a b. *)
+
+  (* Lemma step_sim : *)
+  (*   forall AE BE a b, *)
+  (*     match_states AE BE a b -> *)
+  (*     forall a', *)
+  (*       A.step AE a a' -> *)
+  (*       exists b', *)
+  (*         splus (B.step BE) b b'. *)
+  (* Proof. *)
+  (* Admitted. *)
+
   Theorem fsim :
     Semantics.forward_simulation (A.semantics prog) (B.semantics tprog).
   Proof.
-    eapply Semantics.forward_simulation_plus with (match_states := I').
-    - inversion 1. (* TODO - replace with callstate matching *)
-    - intros0 II Afinal. invc Afinal. invc II. on >I, invc. constructor.
-    - intros0 Astep. intros0 II.
-      eapply splus_semantics_sim, I'_sim; eauto.
-      + destruct prog, tprog. unfold compile_cu in *. inject_pair. auto.
-      + destruct prog, tprog. unfold compile_cu in *. inject_pair.
-        simpl. eauto using compile_list_cases_arent_values.
-  Qed.
+  Admitted.
 
 End Preservation.

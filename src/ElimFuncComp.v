@@ -962,7 +962,7 @@ Section Preservation.
     eapply compile_I_expr in H0; eauto;
       try eapply env_ok_compile.
   Qed.
-
+(*
   Lemma initial_state_match :
     forall s,
       Semantics.initial_state (T.semantics prog) s ->
@@ -985,18 +985,22 @@ Section Preservation.
     econstructor.
     eapply T.value_elims_match; eauto.
   Qed.
-
+ *)
+  Definition match_values (v v' : unit) := v = v'.
+  
   Lemma match_final_state :
-    forall s s',
+    forall s s' v,
       match_states (T.initial_env prog) (E.initial_env tprog) s s' ->
-      Semantics.final_state (T.semantics prog) s ->
-      Semantics.final_state (E.semantics tprog) s'.
+      Semantics.final_state (T.semantics prog) s v ->
+      exists v',
+        Semantics.final_state (E.semantics tprog) s' v' /\ match_values v v'.
   Proof.
     intros. inv H0. inv H.
-    inv H2.
+    inv H2. eexists. split.
     econstructor; eauto.
     inv H1; inv H5;
       eapply I_expr_value; eauto.
+    econstructor; eauto.
   Qed.
 
   Lemma step_sim :
@@ -1034,11 +1038,11 @@ Section Preservation.
   Proof.
     remember env_ok_compile as Henv_ok. clear HeqHenv_ok.
     eapply Semantics.forward_simulation_plus.
-    eapply initial_state_match; eauto.
+    admit.
     eapply match_final_state; eauto.
     intros.
     eapply step_sim; eauto.
-  Qed.
+  Admitted.
 
 End Preservation.
             

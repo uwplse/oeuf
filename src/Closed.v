@@ -169,21 +169,27 @@ Inductive splus : state -> state -> Prop :=
         splus s' s'' ->
         splus s s''.
 
+(*
 Inductive initial_state (prog : list expr * list metadata) : state -> Prop :=
 | initial_intro :
     forall expr,
       In expr (fst prog) ->
       initial_state prog (Run expr nil (fun x => Stop x)).
+ *)
 
-Inductive final_state (prog : list expr * list metadata) : state -> Prop :=
+Inductive is_callstate (prog : list expr * list metadata) : unit -> unit -> state -> Prop := .
+(* TODO: stub *)
+
+
+Inductive final_state (prog : list expr * list metadata) : state -> unit -> Prop :=
 | final_intro :
     forall expr,
       value expr ->
-      final_state prog (Stop expr).
+      final_state prog (Stop expr) tt.
 
 Definition semantics (prog : list expr * list metadata) : Semantics.semantics :=
-  @Semantics.Semantics_gen state unit
+  @Semantics.Semantics_gen state unit unit
+                           (is_callstate prog)
                  (fun _ => sstep)
-                 (initial_state prog)
                  (final_state prog)
                  tt.
