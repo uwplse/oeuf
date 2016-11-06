@@ -286,7 +286,7 @@ Proof.
     now rewrite nth_error_hmap_simple_hget.
 Qed.
 
-
+(*
 Lemma initial_state_exists :
   forall cu tprog,
     @compile_cu nil (types cu) (Metadata.init_metadata cu) = tprog ->
@@ -305,18 +305,25 @@ Proof.
   rewrite compile_hlist_hmap_simple.
   apply In_hget_hmap_simple.
 Qed.
+ *)
+
+Definition match_values {ty} (v : SourceLang.expr [] ty) (v' : Untyped.valtype) : Prop := v' = tt.
 
 Lemma final_states_match:
   forall (cu : compilation_unit) (tprog : list U.expr * list metadata)
-    (ty : SourceLang.type) (s1 : SourceLang.expr [] ty) (s2 : Untyped.expr),
-    compile s1 = s2 -> CompilationUnit.final_state cu [] ty s1 -> Untyped.final_state tprog s2.
+    (ty : SourceLang.type) (s1 : SourceLang.expr [] ty) (s2 : Untyped.expr) v,
+    compile s1 = s2 -> CompilationUnit.final_state cu [] ty s1 v ->
+    exists v',
+      Untyped.final_state tprog s2 v' /\ match_values v v'.
 Proof.
   intros.
   destruct cu; simpl in *.
+  eexists. split.
   destruct H0.
   subst.
   constructor.
   eauto using compile_value.
+  reflexivity.
 Qed.
 
 Theorem fsim:
@@ -326,9 +333,9 @@ Theorem fsim:
       forward_simulation (@CompilationUnit.source_semantics ty cu) (Untyped.semantics tprog).
 Proof.
   intros.
-  apply forward_simulation_step with (match_states := fun a b => compile a = b); simpl; intros.
-  - eapply initial_state_exists in H0; eauto.
+  apply forward_simulation_step with (match_states := fun a b => compile a = b) (match_values := match_values); simpl; intros.
+  - admit.
   - eauto using final_states_match.
   - subst. eexists. split; eauto.
     eauto using forward_simulation_closed.
-Qed.
+Admitted.

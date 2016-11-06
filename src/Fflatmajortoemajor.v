@@ -675,6 +675,7 @@ Proof.
   eapply step_sim_nil_trace; eauto.
 Qed.
 
+(*
 (* maybe don't need? *)
 Lemma initial_states_match :
   forall s1,
@@ -691,7 +692,7 @@ Proof.
   
   
 Admitted.
-
+*)
 
 Lemma match_final_states :
   forall s1 s2 r,
@@ -710,9 +711,11 @@ Theorem fsim :
   forward_simulation (Fflatmajor.semantics prog) (Emajor.semantics tprog).
 Proof.
   eapply forward_simulation_plus.
-  solve [eapply initial_states_match; eauto].
-  solve [eapply match_final_states; eauto].
+  (*solve [eapply initial_states_match; eauto].*) admit.
+  intros. eapply match_final_states in H0.
+  simpl in v1. simpl. exists v1. split; eauto. reflexivity.
+  eassumption.
   intros. eapply step_sim; eauto.
-Qed.
-
+Admitted.
+    
 End PRESERVATION.

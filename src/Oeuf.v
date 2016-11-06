@@ -12,6 +12,7 @@ Require Import compcert.common.AST.
 Require compcert.backend.SelectLong.
 
 
+
 Definition transf_untyped_to_cminor (l : list UntypedComp.U.expr * list Metadata.metadata) : res Cminor.program :=
   OK l
   @@ LiftedComp.compile_cu
@@ -35,15 +36,24 @@ Definition transf_untyped_to_cminor (l : list UntypedComp.U.expr * list Metadata
   @@ print print_Cminor
 .
 
+Definition transf_to_cminor (j : CompilationUnit.compilation_unit) : res Cminor.program :=
+  OK (Metadata.init_metadata j)
+  @@ UntypedComp.compile_cu
+ @@@ Metadata.check_length
+ @@@ transf_untyped_to_cminor.
 
+Definition transf_to_asm (j : CompilationUnit.compilation_unit) : res Asm.program :=
+  transf_to_cminor j
+ @@@ transf_cminor_program.
+(*
 Definition transf_untyped_to_asm (l : list UntypedComp.U.expr * list Metadata.metadata) : res Asm.program :=
   OK l
  @@@ Metadata.check_length
  @@@ transf_untyped_to_cminor
  @@@ transf_cminor_program
 .
-
-
+*)
+(*
 Definition transf_to_asm (j : CompilationUnit.compilation_unit) : res Asm.program :=
   OK (Metadata.init_metadata j)
   @@ UntypedComp.compile_cu
@@ -51,13 +61,7 @@ Definition transf_to_asm (j : CompilationUnit.compilation_unit) : res Asm.progra
  * `hlist`, not a `list`. *)
   @@@ transf_untyped_to_asm
   .
-
-Definition transf_to_cminor (j : CompilationUnit.compilation_unit) : res Cminor.program :=
-  OK (Metadata.init_metadata j)
-  @@ UntypedComp.compile_cu
-(* Delay check_length because prior to UntypedComp, the list of functions is an
- * `hlist`, not a `list`. *)
-  @@@ transf_untyped_to_cminor.
+*)
 
 (* Require SourceLang. *)
 (* Require String. *)

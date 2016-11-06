@@ -189,20 +189,15 @@ Inductive step : state -> trace -> state -> Prop :=
 
 End RELSEM.
 
-Inductive initial_state (p: program): state -> Prop :=
-  | initial_state_intro: forall b f,
-      let ge := Genv.globalenv p in
-      Genv.find_symbol ge p.(prog_main) = Some b ->
-      Genv.find_funct_ptr ge b = Some (Internal f) ->
-      let retexp := snd (fn_body f) in
-      initial_state p (State (fst (fn_body f)) (Kreturn retexp Kstop) (PTree.empty value)).
+Inductive is_callstate (p : program) : value -> value -> state -> Prop := .
+(* TODO: stub *)
 
 Inductive final_state: state -> value -> Prop :=
   | final_state_intro: forall v,
       final_state (Returnstate v Kstop) v.
 
 Definition semantics (p: program) :=
-  Semantics step (initial_state p) final_state (Genv.globalenv p).
+  Semantics step (is_callstate p) final_state (Genv.globalenv p).
 
 Lemma semantics_receptive:
   forall (p: program), receptive (semantics p).

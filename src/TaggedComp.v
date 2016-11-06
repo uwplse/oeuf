@@ -534,7 +534,7 @@ Section Preservation.
       simpl in *. break_and.
       exists x. split. right. assumption. assumption.
   Qed.
-  
+(*  
   Lemma initial_state_match :
     forall s,
       initial_state (A.semantics prog) s ->
@@ -548,15 +548,21 @@ Section Preservation.
     econstructor; eauto. intros.
     econstructor; eauto.
   Qed.
-
+ *)
+  Definition match_values (v : A.valtype) (v' : B.valtype) :=
+    v = v'.
+  
   Lemma match_final_state :
-    forall s s',
+    forall s s' v,
       I s s' ->
-      final_state (A.semantics prog) s ->
-      final_state (B.semantics tprog) s'.
+      final_state (A.semantics prog) s v ->
+      exists v',
+        final_state (B.semantics tprog) s' v' /\ match_values v v'.
   Proof.
     intros. inv H0. inv H.
+    eexists; split.
     econstructor; eauto.
+    reflexivity.
   Qed.
 
   Lemma match_initial_env :
@@ -575,13 +581,13 @@ Section Preservation.
     forward_simulation (Lifted.semantics prog) (Tagged.semantics tprog).
   Proof.
     eapply forward_simulation_step.
-    eapply initial_state_match; eauto.
+    admit.
     eapply match_final_state; eauto.
     intros.
     unfold Lifted.semantics in *. simpl in *.
     eapply I_sim; eauto.
     eapply match_initial_env.
-  Qed.
+  Admitted.
 
 End Preservation.
 

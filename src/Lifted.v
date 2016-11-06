@@ -446,23 +446,32 @@ induction e using expr_ind'; intros0 Ldat; invc Ldat.
 constructor. list_magic_on (args, tt).
 Qed.
 
+Definition prog_type : Type := list expr * list metadata.
+Definition valtype := unit.
+
 Definition initial_env (prog : list expr * list metadata) : env := fst prog.
 
+Inductive is_callstate (prog : prog_type) : valtype -> valtype -> state -> Prop := .
+(* TODO: stub *)
+
+(*
 Inductive initial_state (prog : list expr * list metadata) : state -> Prop :=
 | init :
     forall expr,
       In expr (initial_env prog) ->
       initial_state prog (Run expr nil (fun x => Stop x)).
+*)
 
-Inductive final_state (prog : list expr * list metadata) : state -> Prop :=
+Inductive final_state (prog : list expr * list metadata) : state -> valtype -> Prop :=
 | fine :
     forall expr,
       value expr ->
-      final_state prog (Stop expr).
+      final_state prog (Stop expr) tt.
 
 Definition semantics (prog : list expr * list metadata) : semantics :=
-  @Semantics_gen state env
+  @Semantics_gen state env unit
+                 (is_callstate prog)
                  (sstep)
-                 (initial_state prog)
+                 (* (initial_state prog) *)
                  (final_state prog)
                  (initial_env prog).

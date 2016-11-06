@@ -105,24 +105,33 @@ Definition SPlusCons := @StepLib.SPlusCons state.
 Require Import Metadata.
 
 Definition prog_type : Type := list expr * list metadata.
+Definition valtype := unit.
 
-Require Semantics.
+Inductive is_callstate (prog : prog_type) : valtype -> valtype -> state -> Prop := .
+(* TODO: stub *)
 
-Inductive initial_state (prog : prog_type) : state -> Prop :=.
-
-Inductive final_state (prog : prog_type) : state -> Prop :=
-| FinalState : forall v, value v -> final_state prog (Stop v).
-
+(*
+Inductive initial_state (prog : prog_type) : expr -> valtype -> Prop :=
+| initial_intro :
+    forall expr,
+      In expr (fst prog) ->
+      initial_state prog expr tt.
+ *)
 Definition initial_env (prog : prog_type) : env := fst prog.
 
+Inductive final_state (prog : prog_type) : state -> valtype -> Prop :=
+| final_intro : forall e,
+      value e ->
+      final_state prog (Stop e) tt.
+
+
+Require Semantics.
 Definition semantics (prog : prog_type) : Semantics.semantics :=
-  @Semantics.Semantics_gen state env
+  @Semantics.Semantics_gen state env valtype
+                 (is_callstate prog)
                  (sstep)
-                 (initial_state prog)
                  (final_state prog)
                  (initial_env prog).
-
-
 
 (*
  * Mutual recursion/induction schemes for expr
@@ -228,3 +237,5 @@ assert (i < n).
 rewrite upvar_list_nth_error in * by auto.
 inject_some. inversion 1.
 Qed.
+
+
