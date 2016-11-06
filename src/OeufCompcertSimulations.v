@@ -237,7 +237,7 @@ Proof.
   
 (*  intros. erewrite Inliningproof.symbols_preserved; eauto.
   eapply Inliningproof.function_ptr_translated in H2; eauto.*)
-Admitted.
+Admted.
 
 Lemma inlining_transf_program_correct :
   forall (prog tprog : RTL.program),
@@ -310,11 +310,11 @@ Lemma constprop_transf_program_correct :
 Proof.
   intros. subst tprog.
   eapply forward_simulation_star.
-  admit. (* weird thing with nats here *)
+  adm. (* weird thing with nats here *)
   intros. eapply constprop_final_states; eauto.
   intros. simpl in *.
   eapply Constpropproof.transf_step_correct in H0; eauto.
-Admitted.
+Admted.
 
 (* CSE, CSEproof *)
 Lemma CSE_final_states :
@@ -347,8 +347,8 @@ Proof.
   intros. eapply CSE_final_states; eauto.
   intros. simpl in *.
   eapply CSEproof.transf_step_correct in H0; eauto.
-  admit.
-Admitted.
+  adm.
+Admted.
 
 (* Deadcode, Deadcodeproof *)
 Lemma Deadcode_final_states :
@@ -381,8 +381,8 @@ Proof.
   intros. eapply Deadcode_final_states; eauto.
   intros. simpl in *.
   eapply Deadcodeproof.step_simulation in H0; eauto.
-  admit.
-Admitted.
+  adm.
+Admted.
 
 (* Unusedglob, Unusedglobproof *)
 (* This may be one pass we don't want to include *)
@@ -401,7 +401,7 @@ Proof.
   eapply value_val_inject; eauto.
   eapply value_inject_swap_ge; eauto.
   intros.
-Admitted.
+Admted.
 
 Lemma unusedglob_transf_program_correct :
   forall (prog tprog : RTL.program),
@@ -475,8 +475,8 @@ Proof.
   break_exists; break_and.
   eexists; split; eauto.
   eapply plus_plus; eauto.
-  admit.
-Admitted.
+  adm.
+Admted.
 
 
 (* Tunneling, Tunnelingproof *)
@@ -680,9 +680,9 @@ Proof.
   break_exists. break_and. eauto.
   intros.
   erewrite Stackingproof.symbols_preserved; eauto.
-  admit.
-  admit.
-Admitted.
+  adm.
+  adm.
+Admted.
 
 Lemma Stacking_transf_program_correct :
   forall (prog : Linear.program) (tprog : Mach.program),
@@ -698,9 +698,9 @@ Proof.
   intros. simpl in *.
   eapply Stackingproof.transf_step_correct in H; eauto.
   break_exists; break_and. eexists; split; try eapply plus_plus; eauto.
-  admit.
-  admit.
-Admitted.
+  adm.
+  adm.
+Admted.
 
 (* Asmgen, Asmgenproof *)
 Inductive asm_final_state (p : Asm.program) : Asm.state -> value -> Prop :=
@@ -728,14 +728,14 @@ Proof.
   eapply value_inject_mem_extends; try eassumption.
   simpl in *.
   assert (Asm.preg_of r = Asm.IR Asm.EAX).
-  admit.
+  adm.
   find_rewrite. eauto.
   intros.
   eapply Asmgenproof.functions_translated in H; eauto.
   break_exists. break_and. eauto.
   intros.
   erewrite Asmgenproof.symbols_preserved; eauto.
-Admitted.
+Admted.
 
 Lemma Asmgen_transf_program_correct :
   forall (prog : Mach.program) (tprog : Asm.program),
@@ -763,7 +763,7 @@ Lemma transf_rtl_program_correct :
     forward_simulation (RTL_semantics prog) (Asm_semantics tprog).
 Proof.
   (* TODO use all lemmas above to prove *)
-Admitted.
+Admted.
 
 Lemma transf_cminor_program_correct :
   forall (prog : Cminor.program) (tprog : Asm.program),
