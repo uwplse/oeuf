@@ -226,6 +226,73 @@ Lemma cases_arent_values_list_is_Forall : forall es,
 induction es; simpl; split; inversion 1; constructor; firstorder eauto.
 Qed.
 
+Inductive state_cases_arent_values : state -> Prop :=
+| SCAVRun : forall e a s k,
+        cases_arent_values e ->
+        (forall v, state_cases_arent_values (k v)) ->
+        state_cases_arent_values (Run e a s k)
+| SCAVStop : forall v,
+        state_cases_arent_values (Stop v).
+
+Theorem state_cases_arent_values_inductive : forall E s s',
+    Forall cases_arent_values E ->
+    state_cases_arent_values s ->
+    sstep E s s' ->
+    state_cases_arent_values s'.
+destruct s as [e a s k | v];
+intros0 Henv Hok Hstep; [ | solve [invc Hstep] ].
+
+inv Hstep;
+try on (state_cases_arent_values (Run _ _ _ _)), inv;
+try on (Forall _ (_ :: _)), invc;
+simpl in *; refold_cases_arent_values;
+try solve [eauto].
+
+- constructor; auto.
+  intros. constructor; eauto. simpl. auto.
+
+- rewrite cases_arent_values_list_is_Forall in *.
+  on _, invc_using Forall_app_inv.  on (Forall _ (_ :: _)), invc.
+
+  constructor; eauto.
+  intros. constructor; eauto.
+  simpl. rewrite cases_arent_values_list_is_Forall.
+  eapply Forall_app; eauto. constructor; eauto. simpl. auto.
+
+- rewrite cases_arent_values_list_is_Forall in *.
+  on _, invc_using Forall_app_inv.  on (Forall _ (_ :: _)), invc.
+
+  constructor; eauto.
+  intros. constructor; eauto.
+  simpl. rewrite cases_arent_values_list_is_Forall.
+  eapply Forall_app; eauto. constructor; eauto. simpl. auto.
+
+- break_and. constructor; eauto.
+  intros. constructor; eauto. simpl. auto.
+
+- break_and. constructor; eauto.
+  intros. constructor; eauto. simpl. auto.
+
+- constructor; eauto.
+  eapply Forall_nth_error; eauto.
+
+- break_and.
+  constructor; eauto.
+  rewrite cases_arent_values_list_is_Forall in *.
+  eapply Forall_nth_error; eauto.
+Qed.
+
+Theorem state_cases_arent_values_inductive_plus : forall E s s',
+    Forall cases_arent_values E ->
+    state_cases_arent_values s ->
+    splus E s s' ->
+    state_cases_arent_values s'.
+induction 3; eauto using state_cases_arent_values_inductive.
+Qed.
+
+
+
+
 
 Definition no_values : expr -> Prop :=
     let fix go e :=
