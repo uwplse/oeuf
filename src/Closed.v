@@ -48,10 +48,10 @@ Inductive state :=
 Inductive sstep : state -> state -> Prop :=
 | SArg : forall l k v,
         nth_error l 0 = Some v ->
-        sstep (Run Arg l k) (k v)
+        sstep (Run Arg l k) (Run v l k)
 | SUpVar : forall n l k v,
         nth_error l (S n) = Some v ->
-        sstep (Run (UpVar n) l k) (k v)
+        sstep (Run (UpVar n) l k) (Run v l k)
 
 | SCloseStep : forall tag vs e es l k,
         Forall value vs ->
