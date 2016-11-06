@@ -1039,9 +1039,8 @@ Definition semantics (prog : prog_type) : Semantics.semantics :=
                  (initial_state prog)
                  (final_state prog)
                  (initial_env prog).
+
 *)
-
-
 
 Theorem add_1_2_s : { x | sstar add_env
         (Run (Call (Call add_reflect (nat_reflect 1)) (nat_reflect 2)) [] Stop)
