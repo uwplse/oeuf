@@ -610,7 +610,7 @@ simpl; B.refold_cases_arent_values; eauto.
   list_magic_on (cases, tt). eauto using compile_not_value.
 Qed.
 
-Theorem compile_cases_no_values : forall a b,
+Lemma compile_no_values : forall a b,
     compile a = b ->
     B.no_values b.
 induction a using A.expr_rect_mut with
@@ -621,6 +621,26 @@ intros0 Hcomp; simpl in *; refold_compile; subst;
 simpl; B.refold_no_values; eauto.
 Qed.
 
+Lemma compile_list_no_values : forall a b,
+    compile_list a = b ->
+    Forall B.no_values b.
+induction a;
+intros0 Hcomp; simpl in *; refold_compile; subst; eauto using compile_no_values.
+Qed.
+
+Theorem compile_cu_no_values : forall a ameta b bmeta,
+    compile_cu (a, ameta) = (b, bmeta) ->
+    Forall B.no_values b.
+intros.
+simpl in *. inject_pair.
+eauto using compile_list_no_values.
+Qed.
+
+Theorem compile_cu_no_values' : forall a b,
+    compile_cu a = b ->
+    Forall B.no_values (fst b).
+destruct a, b. intros. eauto using compile_cu_no_values.
+Qed.
 
 
 
