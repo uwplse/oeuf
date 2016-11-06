@@ -233,24 +233,26 @@ Qed.
 
 Require Semantics.
 
-Definition initial_env (prog : list expr * list metadata) : env := fst prog.
+Definition prog_type : Type := list expr * list metadata.
+Definition valtype := unit.
 
-Inductive initial_state (prog : list expr * list metadata) : state -> Prop :=
-| init :
-    forall expr,
-      In expr (initial_env prog) ->
-      initial_state prog (Run expr nil (fun x => Stop x)).
+Definition initial_env (prog : prog_type) : env := fst prog.
 
-Inductive final_state (prog : list expr * list metadata) : state -> Prop :=
+
+Inductive is_callstate (prog : prog_type) : valtype -> valtype -> state -> Prop := .
+(* TODO: stub *)
+
+
+Inductive final_state (prog : prog_type) : state -> valtype -> Prop :=
 | fine :
     forall expr,
       value expr ->
-      final_state prog (Stop expr).
+      final_state prog (Stop expr) tt.
 
-Definition semantics (prog : list expr * list metadata) : Semantics.semantics :=
-  @Semantics.Semantics_gen state env
+Definition semantics (prog : prog_type) : Semantics.semantics :=
+  @Semantics.Semantics_gen state env valtype
+                 (is_callstate prog)
                  (sstep)
-                 (initial_state prog)
                  (final_state prog)
                  (initial_env prog).
 

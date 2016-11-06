@@ -1154,7 +1154,8 @@ Qed.
     - apply well_founded_ltof.
     - inversion 1. (* TODO - replace with callstate matching *)
     - intro. intros0 II Afinal.
-      invc Afinal. invc II. on >I, invc. on >I_cont, invc. eexists. constructor.
+      invc Afinal. invc II. on >I, invc. on >I_cont, invc. eexists. split. constructor.
+      admit.
     - intros0 Astep. intros0 II.
       eapply raw_sim_lockstep; eauto. simpl.
       eapply I'_sim; try eassumption.
@@ -1162,6 +1163,6 @@ Qed.
       + eapply I_prog_env. eapply compile_I_prog; eauto.
       + eapply compile_prog_fnames_below. eauto.
       + eapply compile_prog_switch_placement. eauto.
-  Qed.
+  Admitted.
 
 End Preservation.

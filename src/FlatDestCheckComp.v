@@ -404,7 +404,7 @@ Section Preservation.
   Proof.
     eapply Semantics.forward_simulation_step with (match_states := I').
     - inversion 1. (* TODO - replace with callstate matching *)
-    - intros0 II Afinal. invc Afinal. invc II. on >I, invc. on >I_cont, invc. constructor.
+    - intros0 II Afinal. invc Afinal. invc II. on >I, invc. on >I_cont, invc. eexists; split. constructor. reflexivity.
     - intros0 Astep. intros0 II.
       eapply I'_sim; try eassumption.
       + destruct prog, tprog. eapply compile_cu_I_env; eauto.

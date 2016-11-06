@@ -1698,7 +1698,7 @@ Lemma funsig_main :
 Proof.
 Admitted.
 
-Lemma initial_states_match :
+(*Lemma initial_states_match :
   forall st,
     Emajor.initial_state prog st ->
     exists st',
@@ -1716,7 +1716,7 @@ Proof.
   eapply symbols_transf; eauto.
   eapply funsig_main; eauto.
 Qed.
-
+*)
 Lemma match_final_states :
   forall st st' r,
     match_states st st' ->
@@ -1734,12 +1734,13 @@ Theorem fsim :
   forward_simulation (Emajor.semantics prog) (Dmajor.semantics tprog).
 Proof.
   eapply forward_simulation_plus.
-  eapply initial_states_match; eauto.
-  eapply match_final_states; eauto.
+  admit.
+  intros. instantiate (1 := eq).
+  eapply match_final_states in H0; eauto.
   
   intros. eapply step_sim; eauto.
   
-Qed.
+Admitted.
 
 
 End PRESERVATION.

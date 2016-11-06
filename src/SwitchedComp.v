@@ -4,7 +4,6 @@ Require Import ListLemmas.
 Require ElimFunc2 ElimFunc3 Switched String.
 Delimit Scope string_scope with string.
 Require Import Psatz.
-Require Import StepLib.
 
 Module A := ElimFunc3.
 Module AS := ElimFunc2.
@@ -473,6 +472,80 @@ Qed.
 
 
 
+Lemma B_sstar_snoc : forall E s s' s'',
+    B.sstar E s s' ->
+    B.sstep E s' s'' ->
+    B.sstar E s s''.
+induction 1; intros.
+- econstructor; try eassumption. econstructor.
+- specialize (IHsstar H1).
+  econstructor; eauto.
+Qed.
+
+Lemma B_splus_snoc : forall E s s' s'',
+    B.splus E s s' ->
+    B.sstep E s' s'' ->
+    B.splus E s s''.
+induction 1; intros.
+- econstructor 2; try eassumption.
+  econstructor 1; eassumption.
+- specialize (IHsplus H1).
+  econstructor; solve [eauto].
+Qed.
+
+Lemma B_splus_sstar : forall E s s',
+    B.splus E s s' ->
+    B.sstar E s s'.
+induction 1; intros.
+- econstructor; try eassumption. constructor.
+- 
+  econstructor; eauto.
+Qed.
+
+Lemma B_sstar_then_sstar : forall E s s' s'',
+    B.sstar E s s' ->
+    B.sstar E s' s'' ->
+    B.sstar E s s''.
+induction 1; intros.
+- assumption.
+- specialize (IHsstar H1). econstructor; solve [eauto].
+Qed.
+
+Lemma B_sstar_then_splus : forall E s s' s'',
+    B.sstar E s s' ->
+    B.splus E s' s'' ->
+    B.splus E s s''.
+induction 1; intros.
+- assumption.
+- specialize (IHsstar H1). econstructor; solve [eauto].
+Qed.
+
+Lemma B_splus_then_sstar' : forall E s s' s'',
+    B.sstar E s' s'' ->
+    B.splus E s s' ->
+    B.splus E s s''.
+induction 1; intros.
+- assumption.
+- eapply IHsstar. eapply B_splus_snoc; eauto.
+Qed.
+
+Lemma B_splus_then_sstar : forall E s s' s'',
+    B.splus E s s' ->
+    B.sstar E s' s'' ->
+    B.splus E s s''.
+intros. eauto using B_splus_then_sstar'.
+Qed.
+
+Lemma B_splus_then_splus : forall E s s' s'',
+    B.splus E s s' ->
+    B.splus E s' s'' ->
+    B.splus E s s''.
+  induction 1; intros; eauto using B.SPlusCons.
+  eapply B.SPlusCons; eauto.
+  specialize (IHsplus H1).
+  eapply B.SPlusCons; eauto.
+Qed.
+
 Ltac B_start HS :=
     match goal with
     | [ |- context [ ?pred ?E ?s _ ] ] =>
@@ -501,10 +574,10 @@ Ltac B_step HS :=
         | clear HS' ] in
     match type of HS with
     | B.sstar ?E ?s0 ?s1 => go E s0 s1 B.splus
-            ltac:(eapply sstar_then_splus with (1 := HS');
+            ltac:(eapply B_sstar_then_splus with (1 := HS');
                   eapply B.SPlusOne)
     | B.splus ?E ?s0 ?s1 => go E s0 s1 B.splus
-            ltac:(eapply splus_snoc with (1 := HS'))
+            ltac:(eapply B_splus_snoc with (1 := HS'))
     end.
 
 Ltac B_star HS :=
@@ -519,9 +592,9 @@ Ltac B_star HS :=
         | clear HS' ] in
     match type of HS with
     | B.sstar ?E ?s0 ?s1 => go E s0 s1 B.sstar
-            ltac:(eapply sstar_then_sstar with (1 := HS'))
+            ltac:(eapply B_sstar_then_sstar with (1 := HS'))
     | B.splus ?E ?s0 ?s1 => go E s0 s1 B.splus
-            ltac:(eapply splus_then_sstar with (1 := HS'))
+            ltac:(eapply B_splus_then_sstar with (1 := HS'))
     end.
 
 Ltac B_plus HS :=
@@ -536,9 +609,9 @@ Ltac B_plus HS :=
         | clear HS' ] in
     match type of HS with
     | B.sstar ?E ?s0 ?s1 => go E s0 s1 B.splus
-            ltac:(eapply sstar_then_splus with (1 := HS'))
+            ltac:(eapply B_sstar_then_splus with (1 := HS'))
     | B.splus ?E ?s0 ?s1 => go E s0 s1 B.splus
-            ltac:(eapply splus_then_splus with (1 := HS'))
+            ltac:(eapply B_splus_then_splus with (1 := HS'))
     end.
 
 (*
@@ -664,7 +737,7 @@ B_step HS.
 B_step HS.
   { eapply Hstep; eauto. }
 
-eapply splus_sstar in HS.
+eapply B_splus_sstar in HS.
 eexists. split. eapply HS.
 eapply sliding_app; eauto.
 eapply sliding_length in Hsld; eauto. congruence.
@@ -705,7 +778,7 @@ destruct (eq_nat_dec (S i) (length free)) as [Hlen' | Hlen'].
 
 specialize (IHj (S i) free' vs es ltac:(lia) ltac:(lia) ** ** ** ** **).
 
-eapply sstar_then_sstar; eassumption.
+eapply B_sstar_then_sstar; eassumption.
 Qed.
 
 Lemma B_close_upvars_eval : forall E fname n l k,
@@ -754,7 +827,7 @@ B_star HS.
 B_step HS.
   { eapply B.SCloseDone. eauto using Forall_firstn, Forall_skipn. }
 
-eapply splus_sstar. exact HS.
+eapply B_splus_sstar. exact HS.
 Qed.
 
 

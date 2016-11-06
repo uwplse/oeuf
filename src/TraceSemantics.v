@@ -29,6 +29,12 @@ Require Import HighValues.
 
 Set Implicit Arguments.
 
+Require Import StructTact.StructTactics.
+Require Import StructTact.Util.
+
+Require Import EricTact.
+
+
 (** * Closures of transitions relations *)
 
 Section CLOSURES.
@@ -333,7 +339,7 @@ CoInductive forever_N (ge: genv) : A -> state -> traceinf -> Prop :=
       forever_N ge a1 s1 T1.
 
 Hypothesis order_wf: well_founded order.
-
+(*
 Lemma forever_N_inv:
   forall ge a s T,
   forever_N ge a s T ->
@@ -354,7 +360,8 @@ Proof.
   inv H1.
   exists t1; exists s0; exists a2; exists (t2 *** T2).
   split. auto.
-  split. inv H3. auto.
+  split. 
+  inv H0. auto.
   eapply forever_N_plus. econstructor; eauto. eauto. auto.
   apply Eappinf_assoc.
 Qed.
@@ -467,7 +474,7 @@ Proof.
   red; intro. exploit Eapp_E0_inv; eauto. intros [P Q]. contradiction.
   auto.
 Qed.
-
+*)
 End CLOSURES.
 
 (** * Transition semantics *)
@@ -477,24 +484,26 @@ End CLOSURES.
 Record semantics : Type := Semantics_gen {
   state: Type;
   genvtype: Type;
+  valtype : Type;
+  is_callstate : valtype -> valtype -> state -> Prop;
   step : genvtype -> state -> trace -> state -> Prop;
-  initial_state: state -> Prop;
-  final_state: state -> value -> Prop;
+  final_state: state -> valtype -> Prop;
   globalenv: genvtype;
   symbolenv: Senv.t
 }.
 
+
 (** The form used in earlier CompCert versions, for backward compatibility. *)
 
-Definition Semantics {state funtype vartype: Type}
-                     (step: Genv.t funtype vartype -> state -> trace -> state -> Prop)
-                     (initial_state: state -> Prop)
-                     (final_state: state -> value -> Prop)
+Definition Semantics {state funtype vartype valtype: Type}
+           (step: Genv.t funtype vartype -> state -> trace -> state -> Prop)
+           (is_callstate : valtype -> valtype -> state -> Prop)
+                     (final_state: state -> valtype -> Prop)
                      (globalenv: Genv.t funtype vartype) :=
   {| state := state;
      genvtype := Genv.t funtype vartype;
      step := step;
-     initial_state := initial_state;
+     is_callstate := is_callstate;
      final_state := final_state;
      globalenv := globalenv;
      symbolenv := Genv.to_senv globalenv |}.
@@ -504,8 +513,8 @@ Definition Semantics {state funtype vartype: Type}
 Notation " 'Step' L " := (step L (globalenv L)) (at level 1) : smallstep_scope.
 Notation " 'Star' L " := (star (step L) (globalenv L)) (at level 1) : smallstep_scope.
 Notation " 'Plus' L " := (plus (step L) (globalenv L)) (at level 1) : smallstep_scope.
-Notation " 'Forever_silent' L " := (forever_silent (step L) (globalenv L)) (at level 1) : smallstep_scope.
-Notation " 'Forever_reactive' L " := (forever_reactive (step L) (globalenv L)) (at level 1) : smallstep_scope.
+(*Notation " 'Forever_silent' L " := (forever_silent (step L) (globalenv L)) (at level 1) : smallstep_scope.
+Notation " 'Forever_reactive' L " := (forever_reactive (step L) (globalenv L)) (at level 1) : smallstep_scope.*)
 Notation " 'Nostep' L " := (nostep (step L) (globalenv L)) (at level 1) : smallstep_scope.
 
 Open Scope smallstep_scope.
@@ -520,12 +529,21 @@ Record forward_simulation (L1 L2: semantics) : Type :=
     fsim_order: fsim_index -> fsim_index -> Prop;
     fsim_order_wf: well_founded fsim_order;
     fsim_match_states :> fsim_index -> state L1 -> state L2 -> Prop;
-    fsim_match_initial_states:
-      forall s1, initial_state L1 s1 ->
-      exists i, exists s2, initial_state L2 s2 /\ fsim_match_states i s1 s2;
+    fsim_match_val : valtype L1 -> valtype L2 -> Prop;
+    fsim_match_callstate :
+      forall fv1 av1 fv2 av2 s2,
+        is_callstate L2 fv2 av2 s2 ->
+        fsim_match_val fv1 fv2 ->
+        fsim_match_val av1 av2 ->
+        exists s1 i,
+          fsim_match_states i s1 s2 /\
+          is_callstate L1 fv1 av1 s1;
     fsim_match_final_states:
-      forall i s1 s2 r,
-      fsim_match_states i s1 s2 -> final_state L1 s1 r -> final_state L2 s2 r;
+      forall i s1 s2 v1,
+        fsim_match_states i s1 s2 ->
+        final_state L1 s1 v1 ->
+        exists v2,
+          final_state L2 s2 v2 /\ fsim_match_val v1 v2;
     fsim_simulation:
       forall s1 t s1', Step L1 s1 t s1' ->
       forall i s2, fsim_match_states i s1 s2 ->
@@ -535,6 +553,8 @@ Record forward_simulation (L1 L2: semantics) : Type :=
 (*    fsim_public_preserved:
       forall id, Senv.public_symbol (symbolenv L2) id = Senv.public_symbol (symbolenv L1) id *)
   }.
+
+
 
 Implicit Arguments forward_simulation [].
 
@@ -568,16 +588,23 @@ Hypothesis public_preserved:
   forall id, Senv.public_symbol (symbolenv L2) id = Senv.public_symbol (symbolenv L1) id.
 
 Variable match_states: state L1 -> state L2 -> Prop.
+Variable match_values: valtype L1 -> valtype L2 -> Prop.
 
-Hypothesis match_initial_states:
-  forall s1, initial_state L1 s1 ->
-  exists s2, initial_state L2 s2 /\ match_states s1 s2.
+Hypothesis match_callstate :
+  forall fv1 av1 fv2 av2 s2,
+    is_callstate L2 fv2 av2 s2 ->
+    match_values fv1 fv2 ->
+    match_values av1 av2 ->
+    exists s1,
+      match_states s1 s2 /\
+      is_callstate L1 fv1 av1 s1.
 
 Hypothesis match_final_states:
-  forall s1 s2 r,
+  forall s1 s2 v1,
   match_states s1 s2 ->
-  final_state L1 s1 r ->
-  final_state L2 s2 r.
+  final_state L1 s1 v1 ->
+  exists v2,
+    final_state L2 s2 v2 /\ match_values v1 v2.
 
 (** Simulation when one transition in the first program
     corresponds to zero, one or several transitions in the second program.
@@ -604,11 +631,14 @@ Hypothesis simulation:
 Lemma forward_simulation_star_wf: forward_simulation L1 L2.
 Proof.
   apply Forward_simulation with
-    (fsim_order := order)
+  (fsim_order := order)
+    (fsim_match_val := match_values)
     (fsim_match_states := fun idx s1 s2 => idx = s1 /\ match_states s1 s2);
   auto.
-  intros. exploit match_initial_states; eauto. intros [s2 [A B]].
-    exists s1; exists s2; auto.
+  intros.
+  exploit match_callstate; eauto.
+  intros. break_exists; break_and.
+  repeat eexists; eauto.
   intros. destruct H. eapply match_final_states; eauto.
   intros. destruct H0. subst i. exploit simulation; eauto. intros [s2' [A B]].
   exists s1'; exists s2'; intuition.
@@ -749,6 +779,7 @@ Proof.
   eapply t_trans; eauto. eapply t_step; eauto.
 Qed.
 
+(*
 Lemma simulation_forever_silent:
   forall i s1 s2,
   Forever_silent L1 s1 -> S i s1 s2 ->
@@ -775,7 +806,7 @@ Proof.
   destruct (simulation_star H1 i _ H0) as [i' [st2' [A B]]].
   econstructor; eauto.
 Qed.
-
+*)
 End SIMULATION_SEQUENCES.
 
 (** ** Composing two forward simulations *)
@@ -796,19 +827,27 @@ Let ff_order : ff_index -> ff_index -> Prop :=
 Let ff_match_states (i: ff_index) (s1: state L1) (s3: state L3) : Prop :=
   exists s2, S12 (snd i) s1 s2 /\ S23 (fst i) s2 s3.
 
+Let ff_match_values (v1 : valtype L1) (v3 : valtype L3) : Prop :=
+  exists v2, fsim_match_val S12 v1 v2 /\ fsim_match_val S23 v2 v3.
+
 Lemma compose_forward_simulation: forward_simulation L1 L3.
 Proof.
-  apply Forward_simulation with (fsim_order := ff_order) (fsim_match_states := ff_match_states).
+  apply Forward_simulation with (fsim_order := ff_order) (fsim_match_states := ff_match_states) (fsim_match_val := ff_match_values).
 (* well founded *)
   unfold ff_order. apply wf_lex_ord. apply wf_clos_trans. apply fsim_order_wf. apply fsim_order_wf.
 (* initial states *)
-  intros. exploit (fsim_match_initial_states S12); eauto. intros [i [s2 [A B]]].
-  exploit (fsim_match_initial_states S23); eauto. intros [i' [s3 [C D]]].
-  exists (i', i); exists s3; split; auto. exists s2; auto.
+  intros. subst ff_match_values. simpl in *. repeat break_exists. repeat break_and.
+  eapply (fsim_match_callstate S23) in H; eauto.
+  repeat break_exists; break_and.
+  eapply (fsim_match_callstate S12) in H4; eauto.
+  break_exists; break_and.
+  exists x3. exists (x2,x4). split; eauto.
+  econstructor; eauto.
 (* final states *)
   intros. destruct H as [s3 [A B]].
-  eapply (fsim_match_final_states S23); eauto.
-  eapply (fsim_match_final_states S12); eauto.
+  app (fsim_match_final_states S12) final_state.
+  app (fsim_match_final_states S23) (final_state L2).
+  eexists; split; try econstructor; eauto.
 (* simulation *)
   intros. destruct H0 as [s3 [A B]]. destruct i as [i2 i1]; simpl in *.
   exploit (fsim_simulation' S12); eauto. intros [[i1' [s3' [C D]]] | [i1' [C [D E]]]].
@@ -841,6 +880,7 @@ Record receptive (L: semantics) : Prop :=
       single_events L
   }.
 
+(*
 Record determinate (L: semantics) : Prop :=
   Determinate {
     sd_determ: forall s t1 s1 t2 s2,
@@ -1723,3 +1763,4 @@ Proof.
 Qed.
 
 End FACTOR_BACKWARD_SIMULATION.
+*)

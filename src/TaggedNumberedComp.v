@@ -614,7 +614,7 @@ Section Simulation.
   Qed.
     
       
-  
+(*  
   Lemma match_initial_state :
     forall s,
       Semantics.initial_state (A.semantics prog) s ->
@@ -630,23 +630,29 @@ Section Simulation.
     econstructor; eauto.
     intros. econstructor; eauto.
   Qed.
+ *)
+
+  Definition match_values (v : A.valtype) (v' : B.valtype) := v = v'.
 
   Lemma final_state_match :
-    forall s s',
-      Semantics.final_state (A.semantics prog) s ->
+    forall s s' v,
+      Semantics.final_state (A.semantics prog) s v ->
       I s s' ->
-      Semantics.final_state (B.semantics tprog) s'.
+      exists v',
+        Semantics.final_state (B.semantics tprog) s' v' /\ match_values v v'.
   Proof.
     intros. inv H. inv H0.
+    eexists; split.
     econstructor; eauto.
+    reflexivity.
   Qed.
   
   Theorem fsim :
     Semantics.forward_simulation (A.semantics prog) (TaggedNumbered.semantics tprog).
   Proof.
     eapply Semantics.forward_simulation_step.
-
-    intros. eapply match_initial_state; eauto.
+    admit.
+    (*intros. eapply match_initial_state; eauto.*)
     
     intros. eapply final_state_match; eauto.
 
@@ -654,8 +660,8 @@ Section Simulation.
     simpl in H.
 
     eapply I_sim in H; eauto.
-    simpl. eapply match_initial_env.    
-  Qed.
+    simpl. eapply match_initial_env.
+  Admitted.
   
 End Simulation.
 

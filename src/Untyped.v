@@ -156,22 +156,30 @@ Inductive step : expr -> expr -> Prop :=
     step (Elim ty cases (Constr c args))
         (unroll_elim case c args (Elim ty cases)).
 
+Definition prog_type : Type := list expr * list metadata.
+Definition state := expr.
+Definition valtype := unit.
 
-Inductive initial_state (prog : list expr * list metadata) : expr -> Prop :=
+Inductive is_callstate (prog : prog_type) : valtype -> valtype -> state -> Prop := .
+(* TODO: stub *)
+
+(*
+Inductive initial_state (prog : prog_type) : expr -> valtype -> Prop :=
 | initial_intro :
     forall expr,
       In expr (fst prog) ->
-      initial_state prog expr.
+      initial_state prog expr tt.
+ *)
 
-Inductive final_state (prog : list expr * list metadata) : expr -> Prop :=
+Inductive final_state (prog : prog_type) : expr -> valtype -> Prop :=
 | final_intro : forall e,
       value e ->
-      final_state prog e.
+      final_state prog e tt.
 
-Definition semantics (prog : list expr * list metadata) : semantics :=
-  @Semantics_gen expr unit
+Definition semantics (prog : prog_type) : semantics :=
+  @Semantics_gen expr unit unit 
+                 (is_callstate prog)
                  (fun _ => step)
-                 (initial_state prog)
                  (final_state prog)
                  (tt).
 

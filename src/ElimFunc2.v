@@ -293,17 +293,23 @@ Definition prog_type : Type := list expr * list metadata.
 
 Require Semantics.
 
-Inductive initial_state (prog : prog_type) : state -> Prop :=.
+Inductive is_callstate (prog : prog_type) : unit -> unit -> state -> Prop := .
+(* TODO: stub *)
 
-Inductive final_state (prog : prog_type) : state -> Prop :=
-| FinalState : forall v, value v -> final_state prog (Stop v).
+
+(* Inductive initial_state (prog : prog_type) : state -> Prop :=. *)
+
+Inductive final_state (prog : prog_type) : state -> unit -> Prop :=
+| FinalState : forall v, value v -> final_state prog (Stop v) tt.
 
 Definition initial_env (prog : prog_type) : env := fst prog.
 
 Definition semantics (prog : prog_type) : Semantics.semantics :=
-  @Semantics.Semantics_gen state env
+  @Semantics.Semantics_gen state env unit
+                           (is_callstate prog)
+                           
                  (sstep)
-                 (initial_state prog)
+                 (* (initial_state prog) *)
                  (final_state prog)
                  (initial_env prog).
 

@@ -1011,7 +1011,7 @@ Definition SPlusOne := @StepLib.SPlusOne state.
 Definition SPlusCons := @StepLib.SPlusCons state.
 
 
-
+(*
 Require Import Metadata.
 
 (* ugly return type of compile_cu *)
@@ -1039,7 +1039,7 @@ Definition semantics (prog : prog_type) : Semantics.semantics :=
                  (initial_state prog)
                  (final_state prog)
                  (initial_env prog).
-
+*)
 
 
 
@@ -1183,3 +1183,76 @@ induction e using expr_ind''; intros0 II.
 - invc II; constructor; eauto.
   list_magic_on (free, (free', tt)).
 Qed.
+
+Require Import Metadata.
+
+(* ugly return type of compile_cu *)
+Definition prog_type : Type := list expr * list metadata * list (list (expr * rec_info)) * list String.string.
+
+Require Semantics.
+
+Definition valtype := unit. 
+
+Definition initial_env (prog : prog_type) : env := fst (fst (fst prog)).
+
+Inductive is_callstate (prog : prog_type) : valtype -> valtype -> state -> Prop := .
+(* TODO: stub *)
+
+
+(* Inductive initial_state (prog : prog_type) : state -> Prop := *)
+(* | init : *)
+(*     forall expr, *)
+(*       In expr (initial_env prog) -> *)
+(*       initial_state prog (Run expr nil (fun x => Stop x)). *)
+
+Inductive final_state (prog : prog_type) : state -> valtype -> Prop :=
+| fine :
+    forall expr,
+      value expr ->
+      final_state prog (Stop expr) tt.
+
+Definition semantics (prog : prog_type) : Semantics.semantics :=
+  @Semantics.Semantics_gen state env valtype
+                 (is_callstate prog)
+                 (sstep)
+                 (* (initial_state prog) *)
+                 (final_state prog)
+                 (initial_env prog).
+
+
+(*
+Theorem step_sstep : forall E e e' s,
+    step E e e' ->
+    I e s ->
+    exists s',
+        splus E s s' /\
+        I e' s'.
+induction e using expr_ind''; intros0 Hstep II;
+match type of Hstep with | step _ ?e _ =>
+        assert (Hnval : ~ value e) by (eauto using step_not_value)
+end; invc Hstep.
+
+- admit.
+
+- admit.
+
+- admit.
+
+- invc II; try solve [ contradict Hnval; eauto ].
+
+    { on (value _), invc. on (Forall value _), invc_using Forall_3part_inv.
+      exfalso. eapply step_not_value; eauto. }
+  eexists. split. eapply SPlusOne.
+  eapply SConstrStep.
+
+  eexists. split. .
+  Focus 2.
+
+- admit.
+
+- admit.
+
+- admit.
+
+Admitted.
+*)

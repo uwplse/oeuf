@@ -128,6 +128,7 @@ Proof.
   intros. destruct x; simpl. rewrite print_identity. auto. auto.
 Qed.
 
+(*
 Remark forward_simulation_identity:
   forall sem, forward_simulation sem sem.
 Proof.
@@ -153,7 +154,7 @@ Lemma partial_if_simulation:
 Proof.
   intros. unfold partial_if in *. destruct (flag tt). eauto. inv H. apply forward_simulation_identity.
 Qed.
-
+ *)
 (*
 Theorem transf_rtl_program_correct:
   forall p tp,
