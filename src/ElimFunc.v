@@ -330,6 +330,18 @@ Inductive sstep (E : env) : state -> state -> Prop :=
                 (Run e' l k)
 .
 
+
+
+Definition sstar BE := StepLib.sstar (sstep BE).
+Definition SStarNil := @StepLib.SStarNil state.
+Definition SStarCons := @StepLib.SStarCons state.
+
+Definition splus BE := StepLib.splus (sstep BE).
+Definition SPlusOne := @StepLib.SPlusOne state.
+Definition SPlusCons := @StepLib.SPlusCons state.
+
+
+
 Require Import Metadata.
 
 Definition prog_type : Type := list expr * list metadata.
@@ -356,30 +368,6 @@ Definition semantics (prog : prog_type) : Semantics.semantics :=
                  (initial_state prog)
                  (final_state prog)
                  (initial_env prog).
-
-
-Definition sstar := Semantics.star _ _ sstep.
-Definition splus := Semantics.plus _ _ sstep.
-
-(*
-Inductive sstar (E : env) : state -> state -> Prop :=
-| SStarNil : forall e, sstar E e e
-| SStarCons : forall e e' e'',
-        sstep E e e' ->
-        sstar E e' e'' ->
-        sstar E e e''.
-
-Inductive splus (E : env) : state -> state -> Prop :=
-| SPlusOne : forall s s',
-        sstep E s s' ->
-        splus E s s'
-| SPlusCons : forall s s' s'',
-        sstep E s s' ->
-        splus E s' s'' ->
-        splus E s s''.
-
-
-*)
 
 
 

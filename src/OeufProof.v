@@ -92,8 +92,7 @@ Section Simulation.
     (* TaggedNumbered to ElimFunc *)
     eapply compose_notrace_mix_forward_simulation.
     eapply ElimFuncComp.fsim; try eassumption.
-
-    admit. 
+      { eapply TaggedNumberedComp.compile_cu_elims_match'. eassumption. }
 
     (* ElimFunc to ElimFunc2 *)
     eapply compose_notrace_mix_forward_simulation.

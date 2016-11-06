@@ -793,26 +793,6 @@ Defined.
 Definition A_matchable s := ~ is_close_dyn_zero_state s.
 
 
-Lemma A_splus_sstar : forall E s s',
-    A.splus E s s' ->
-    A.sstar E s s'.
-  eapply Semantics.plus_star.
-Qed.
-
-Lemma A_splus_inv : forall AE a_ a''_
-        (P : _ -> _ -> Prop),
-    (forall a a' a'',
-        a = a_ ->
-        a'' = a''_ ->
-        forall Astep : A.sstep AE a a',
-        forall Asteps : A.sstar AE a' a'',
-        P a a'') ->
-    A.splus AE a_ a''_ -> P a_ a''_.
-  
-intros0 HP Hstep.
-invc Hstep; eapply HP; eauto.
-Qed.
-
 Lemma compile_num_locals : forall a b,
     compile a = b ->
     A.num_locals a = B.num_locals b.
