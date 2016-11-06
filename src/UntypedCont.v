@@ -233,6 +233,14 @@ Inductive almost_I : expr -> state -> Prop :=
 | AI_Run : forall e h k, closed h -> Forall cont_elt_wf k -> collapse h k = e -> almost_I e (Run h k).
 Hint Constructors almost_I.
 
+Theorem almost_I_init :
+  forall e,
+    closed e ->
+    almost_I e (Run e []).
+Proof.
+  auto.
+Qed.
+
 Lemma closed_plug_elt :
   forall e ke,
     closed e ->
