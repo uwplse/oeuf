@@ -118,8 +118,8 @@ Section Simulation.
     (* ValueFlag to StackFlatter2 *)
     eapply compose_notrace_mix_forward_simulation.
     eapply StackCompCombined.fsim; try eassumption.
+      { eapply ValueFlagComp.compile_cu_no_values'. eassumption. }
 
-    admit.
     (* StackFlatter2 to LocalsOnly *)
     eapply compose_notrace_mix_forward_simulation.
     eapply LocalsCompCombined.fsim; try eassumption.
