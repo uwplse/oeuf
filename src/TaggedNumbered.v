@@ -1,4 +1,5 @@
 Require Import Common.
+Require StepLib.
 
 Require Import Utopia.
 Require Import Monads.
@@ -999,21 +1000,48 @@ Inductive sstep (E : env) : state -> state -> Prop :=
                 (Run e' l k)
 .
 
-Inductive sstar (E : env) : state -> state -> Prop :=
-| SStarNil : forall e, sstar E e e
-| SStarCons : forall e e' e'',
-        sstep E e e' ->
-        sstar E e' e'' ->
-        sstar E e e''.
 
-Inductive splus (E : env) : state -> state -> Prop :=
-| SPlusOne : forall s s',
-        sstep E s s' ->
-        splus E s s'
-| SPlusCons : forall s s' s'',
-        sstep E s s' ->
-        splus E s' s'' ->
-        splus E s s''.
+
+Definition sstar BE := StepLib.sstar (sstep BE).
+Definition SStarNil := @StepLib.SStarNil state.
+Definition SStarCons := @StepLib.SStarCons state.
+
+Definition splus BE := StepLib.splus (sstep BE).
+Definition SPlusOne := @StepLib.SPlusOne state.
+Definition SPlusCons := @StepLib.SPlusCons state.
+
+
+
+Require Import Metadata.
+
+(* ugly return type of compile_cu *)
+Definition prog_type : Type := list expr * list metadata * list (list (expr * rec_info)) * list String.string.
+
+Require Semantics.
+
+Definition initial_env (prog : prog_type) : env := fst (fst (fst prog)).
+
+Inductive initial_state (prog : prog_type) : state -> Prop :=
+| init :
+    forall expr,
+      In expr (initial_env prog) ->
+      initial_state prog (Run expr nil (fun x => Stop x)).
+
+Inductive final_state (prog : prog_type) : state -> Prop :=
+| fine :
+    forall expr,
+      value expr ->
+      final_state prog (Stop expr).
+
+Definition semantics (prog : prog_type) : Semantics.semantics :=
+  @Semantics.Semantics_gen state env
+                 (sstep)
+                 (initial_state prog)
+                 (final_state prog)
+                 (initial_env prog).
+
+
+
 
 Theorem add_1_2_s : { x | sstar add_env
         (Run (Call (Call add_reflect (nat_reflect 1)) (nat_reflect 2)) [] Stop)
@@ -1155,31 +1183,3 @@ induction e using expr_ind''; intros0 II.
 - invc II; constructor; eauto.
   list_magic_on (free, (free', tt)).
 Qed.
-
-Require Import Metadata.
-
-(* ugly return type of compile_cu *)
-Definition prog_type : Type := list expr * list metadata * list (list (expr * rec_info)) * list String.string.
-
-Require Semantics.
-
-Definition initial_env (prog : prog_type) : env := fst (fst (fst prog)).
-
-Inductive initial_state (prog : prog_type) : state -> Prop :=
-| init :
-    forall expr,
-      In expr (initial_env prog) ->
-      initial_state prog (Run expr nil (fun x => Stop x)).
-
-Inductive final_state (prog : prog_type) : state -> Prop :=
-| fine :
-    forall expr,
-      value expr ->
-      final_state prog (Stop expr).
-
-Definition semantics (prog : prog_type) : Semantics.semantics :=
-  @Semantics.Semantics_gen state env
-                 (sstep)
-                 (initial_state prog)
-                 (final_state prog)
-                 (initial_env prog).

@@ -313,7 +313,7 @@ simpl in *; refold_compile; break_bind_state.
   exists (s''1 ++ s''2). subst. eauto using app_assoc.
 Qed.
 
-Theorem compile_elims_match : forall ae be elims elims',
+Lemma compile_elims_match : forall ae be elims elims',
     compile ae elims = (be, elims') ->
     B.elims_match elims' be.
 induction ae using A.expr_rect_mut with
@@ -381,6 +381,33 @@ intros0 Hcomp; simpl in Hcomp; refold_compile; break_bind_state.
   + eapply B.elims_match_extend. eauto.
   + eauto.
 
+Qed.
+
+Lemma compile_list_elims_match : forall ae be elims elims',
+    compile_list ae elims = (be, elims') ->
+    Forall (B.elims_match elims') be.
+induction ae; intros0 Hcomp; simpl in *; break_bind_state.
+
+- constructor.
+
+- fwd eapply compile_list_extend as HH; eauto.  destruct HH.
+  subst. constructor.
+  + eapply B.elims_match_extend. eauto using compile_elims_match.
+  + eauto.
+Qed.
+
+Theorem compile_cu_elims_match : forall a ameta b bmeta belims bnames,
+    compile_cu (a, ameta) = (b, bmeta, belims, bnames) ->
+    Forall (B.elims_match belims) b.
+intros0 Hcomp; simpl in *. repeat (break_match; []). subst. inject_pair.
+eauto using compile_list_elims_match.
+Qed.
+
+Theorem compile_cu_elims_match' : forall a b,
+    compile_cu a = b ->
+    Forall (B.elims_match (snd (fst b))) (fst (fst (fst b))).
+intros. repeat on >@prod, fun H => destruct H.
+eauto using compile_cu_elims_match.
 Qed.
 
 
