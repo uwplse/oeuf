@@ -23,6 +23,7 @@ Inductive value : expr -> Prop :=
 | VConstr : forall ctor args, Forall value args -> value (Constr ctor args)
 | VClose : forall f free, Forall value free -> value (Close f free)
 .
+Hint Constructors value.
 
 Fixpoint unroll_elim' (case : expr)
                       (ctor : constr_name)
@@ -99,6 +100,7 @@ Inductive sstep : state -> state -> Prop :=
         sstep (Run (Elim ty cases (Constr c args)) l k)
               (Run e' l k)
 .
+Hint Constructors sstep.
 
 Notation star := (Semantics.star unit state (fun _ => sstep) tt).
 Notation plus := (Semantics.plus unit state (fun _ => sstep) tt).
