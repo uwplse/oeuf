@@ -438,13 +438,14 @@ Section Preservation.
   Proof.
     eapply Semantics.forward_simulation_plus with
         (match_states := I)
-        (match_values := fun _ _ => True).
-    - admit. (* TODO - callstate matching *)
+        (match_values := @eq value).
+    - simpl. intros. eexists. split. 2: econstructor.
+      on >B.is_callstate, invc. repeat i_ctor. all: firstorder discriminate.
     - intros0 II Afinal. invc Afinal; invc II. eexists; split; eauto.
       constructor.
     - intros0 Astep. intros0 II.
       eapply splus_semantics_sim, I_sim; eauto.
       destruct prog, tprog. eapply compile_cu_I_env; eauto.
-  Admitted.
+  Qed.
 
 End Preservation.

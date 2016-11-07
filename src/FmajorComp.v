@@ -1150,12 +1150,13 @@ Qed.
     eapply MixSemantics.Forward_simulation with
         (fsim_index := unit)
         (fsim_order := ltof _ (fun _ => 0))
-        (fsim_match_states := fun _ => I' M AE).
+        (fsim_match_states := fun _ => I' M AE)
+        (fsim_match_val := I_value M).
     - apply well_founded_ltof.
-    - inversion 1. (* TODO - replace with callstate matching *)
+    - admit. (* TODO - replace with callstate matching *)
     - intro. intros0 II Afinal.
       invc Afinal. invc II. on >I, invc. on >I_cont, invc. eexists. split. constructor.
-      admit.
+      assumption.
     - intros0 Astep. intros0 II.
       eapply raw_sim_lockstep; eauto. simpl.
       eapply I'_sim; try eassumption.
