@@ -69,6 +69,39 @@ Definition transf_program (p : Fmajor.program) : Fflatmajor.program :=
   AST.transform_program transf_fundef p.
 
 
+Lemma plus_left_e :
+  forall tge st st' P,
+    step tge st E0 st' ->
+    (exists ste,
+        star step tge st' E0 ste /\ P ste) ->
+    (exists ste,
+        plus step tge st E0 ste /\ P ste).
+Proof.
+  intros. break_exists. break_and.
+  eexists; split; try eassumption.
+  eapply plus_left; eauto.
+Qed.
+
+Lemma star_left_e :
+  forall tge st st' P,
+    step tge st E0 st' ->
+    (exists ste,
+        star step tge st' E0 ste /\ P ste) ->
+    (exists ste,
+        star step tge st E0 ste /\ P ste).
+Proof.
+  intros. break_exists. break_and.
+  eexists; split; try eassumption.
+  eapply star_left; eauto.
+Qed.
+
+Lemma transf_fn_body :
+  forall (fn : Fmajor.function),
+    fn_body (transf_function fn) = Sseq (transf_stmt (fst (Fmajor.fn_body fn))) (Sreturn (transf_expr (snd (Fmajor.fn_body fn)))).
+Proof.
+  intros. destruct fn; simpl. unfold transf_fun_body. break_let. simpl. reflexivity.
+Qed.
+
 Section PRESERVATION.
 
 Variable prog: Fmajor.program.
@@ -101,6 +134,19 @@ Inductive match_cont: Fmajor.cont -> Fflatmajor.cont -> Prop :=
       match_cont k k' ->
       match_cont (Fmajor.Kcall id env k) (Fflatmajor.Kcall id (transf_function f) env k').
 
+Lemma is_call_cont_transf :
+  forall k k',
+    match_cont k k' ->
+    Fmajor.is_call_cont k ->
+    is_call_cont k'.
+Proof.
+  induction k; intros; simpl in H0;
+    try solve [inv H0].
+  invp match_cont; eauto.
+  inv H; eauto.
+Qed.
+
+
 Inductive match_states: Fmajor.state -> Fflatmajor.state -> Prop :=
 | match_state :
     forall f f' s s' k k' env,
@@ -108,6 +154,12 @@ Inductive match_states: Fmajor.state -> Fflatmajor.state -> Prop :=
       transf_stmt s = s' ->
       match_cont k k' ->
       match_states (Fmajor.State s k env) (Fflatmajor.State f' s' k' env)
+| match_callstate : 
+    forall (f : Fmajor.function) k k' env args,
+      match_cont k k' ->
+      env = (set_params args (Fmajor.fn_params f)) ->
+      match_states (Fmajor.State (fst (Fmajor.fn_body f)) (Fmajor.Kreturn (snd (Fmajor.fn_body f)) k) env)
+                   (Fflatmajor.Callstate (transf_function f) args k')
 | match_returnstate :
     forall v k k',
       match_cont k k' ->
@@ -173,6 +225,8 @@ Proof.
   eapply IHcases; eauto.
 Qed.
 
+
+
 Lemma step_sim_nil_trace :
   forall (s1 s1' : Fmajor.state) (s2 : Fflatmajor.state),
     match_states s1 s2 ->
@@ -181,8 +235,8 @@ Lemma step_sim_nil_trace :
       plus Fflatmajor.step tge s2 E0 s2' /\ match_states s1' s2'.
 Proof.
   intros.
-  inversion H; inversion H0; remember tprog; subst;
-  repeat match goal with
+  inversion H. inversion H0; remember tprog; subst;
+  do 3 try match goal with
              | [ H : Fmajor.State _ _ _ = Fmajor.State _ _ _ |- _ ] => inversion H; remember tprog; subst
   end; try congruence.
   (* assign stmt *)
@@ -290,9 +344,51 @@ Proof.
     eapply plus_one.
     econstructor; eauto.
     econstructor; eauto.
+
+  + remember tprog; subst.
+    inversion H0;
+      remember tprog;
+      subst;
+      repeat match goal with
+             | [ H : Fmajor.eval_expr _ _ _ |- _ ] => eapply eval_expr_transf in H; eauto
+             | [ H : Fmajor.eval_exprlist _ _ _ |- _ ] => eapply eval_exprlist_transf in H; eauto
+             | [ H : Genv.find_funct_ptr _ _ = _ |- _ ] => eapply find_funct_ptr_transf in H; eauto
+             | [ H : Genv.find_symbol _ _ = _ |- _ ] => eapply find_symbol_transf in H; eauto
+             | [ H : Fmajor.find_case _ _ = _ |- _ ] => eapply find_case_transf in H; eauto
+             end;
+      destruct (Fmajor.fn_body f) eqn:?; simpl in *;
+      unfold transf_function; find_rewrite;
+        eapply plus_left_e; try solve [econstructor; eauto]; simpl;
+          eapply star_left_e; try solve [econstructor; eauto]; simpl;
+            try subst s; simpl;
+              eapply star_left_e;
+              try solve [econstructor; eauto];
+              try solve [subst s0; econstructor; eauto];
+              try solve [
+                    try (eexists; split; try eapply star_refl; repeat (econstructor; eauto));
+                    try solve [instantiate (1 := f); destruct f; simpl; simpl in Heqp; rewrite Heqp; reflexivity]].
+
+    eapply star_left_e. econstructor; eauto.
+    eapply is_call_cont_transf; eauto.
+    eexists; split; try eapply star_refl. econstructor; eauto.
+
+    replace ({|
+            fn_params := Fmajor.fn_params f;
+            fn_sig := Fmajor.fn_sig f;
+            fn_stackspace := Fmajor.fn_stackspace f;
+            fn_body := Sseq (Scall id (transf_expr efunc) (transf_expr earg)) (Sreturn (transf_expr e)) |}) with (transf_function f) by (unfold transf_function; rewrite Heqp; simpl; reflexivity).
+    eapply star_left_e. econstructor; eauto.
+    unfold transf_fun_body.
+    rewrite transf_fn_body.
+    eapply star_left_e. econstructor; eauto.
+    eexists; split; try eapply star_refl. econstructor; eauto.
+    econstructor; eauto.
+    econstructor; eauto.
+    econstructor; eauto.
+    
     
   (* Returnstate *)
-  + inv H5.
+  + subst. inv H0.
     invp match_cont.
     
     eexists. split.
