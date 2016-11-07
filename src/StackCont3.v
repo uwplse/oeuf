@@ -143,12 +143,14 @@ Require Semantics.
 
 
 Definition prog_type : Type := env * list metadata.
-Definition valtype := unit.
+Definition valtype := value.
 
-Inductive is_callstate (prog : prog_type) : valtype -> valtype -> state -> Prop :=.
+Inductive is_callstate (prog : prog_type) : valtype -> valtype -> state -> Prop :=
+| IsCallstate : forall fv av,
+        is_callstate prog fv av (Run [Call] (Frame av fv [av; fv]) Kstop).
 
 Inductive final_state (prog : prog_type) : state -> valtype -> Prop :=
-| FinalState : forall v, final_state prog (Stop v) tt.
+| FinalState : forall v, final_state prog (Stop v) v.
 
 Definition initial_env (prog : prog_type) : env := fst prog.
 
