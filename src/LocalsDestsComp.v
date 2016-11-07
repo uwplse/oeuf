@@ -602,8 +602,9 @@ Section Preservation.
   Proof.
     eapply Semantics.forward_simulation_step with
         (match_states := I)
-        (match_values := fun _ _ => True).
-    - inversion 1. (* TODO - replace with callstate matching *)
+        (match_values := @eq value).
+    - simpl. intros. eexists. split. 2: econstructor.
+      on >B.is_callstate, invc. repeat i_ctor. all: firstorder discriminate.
     - intros0 II Afinal. invc Afinal; invc II. eexists; split; eauto.
       constructor.
     - intros0 Astep. intros0 II.
