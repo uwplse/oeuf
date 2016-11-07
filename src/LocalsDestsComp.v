@@ -600,10 +600,12 @@ Section Preservation.
   Theorem fsim :
     Semantics.forward_simulation (A.semantics prog) (B.semantics tprog).
   Proof.
-    eapply Semantics.forward_simulation_step with (match_states := I).
+    eapply Semantics.forward_simulation_step with
+        (match_states := I)
+        (match_values := fun _ _ => True).
     - inversion 1. (* TODO - replace with callstate matching *)
-    - intros0 II Afinal. invc Afinal; invc II. eexists; split.
-      constructor. reflexivity.
+    - intros0 II Afinal. invc Afinal; invc II. eexists; split; eauto.
+      constructor.
     - intros0 Astep. intros0 II.
       eapply I_sim; eauto.
       + destruct prog, tprog. eapply compile_cu_I_env; eauto.

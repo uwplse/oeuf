@@ -117,14 +117,14 @@ Require Import Metadata.
 Require Semantics.
 
 Definition prog_type : Type := env * list metadata.
+Definition valtype := value.
 
-Definition valtype := unit.
-
-Inductive is_callstate (prog : prog_type) : valtype -> valtype -> state -> Prop := .
-(* TODO: stub *)
+Inductive is_callstate (prog : prog_type) : valtype -> valtype -> state -> Prop :=
+| IsCallstate : forall fv av,
+        is_callstate prog fv av (Run (Call (Value fv) (Value av)) av fv Stop).
 
 Inductive final_state (prog : prog_type) : state -> valtype -> Prop :=
-| FinalState : forall v, final_state prog (Stop v) tt.
+| FinalState : forall v, final_state prog (Stop v) v.
 
 Definition initial_env (prog : prog_type) : env := fst prog.
 
