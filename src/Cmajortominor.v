@@ -253,7 +253,18 @@ Proof.
   unfold tge. rewrite <- TRANSF.
   eapply Genv.find_funct_ptr_transf; eauto.
 Qed.
-  
+
+Lemma no_new_functions :
+  forall b tf,
+    Genv.find_funct_ptr tge b = Some tf ->
+    exists f,
+      Genv.find_funct_ptr ge b = Some f /\ (transf_fundef f) = tf.
+Proof.
+  intros.
+  unfold tge in *. subst tprog. unfold transf_prog in *.
+  eapply Genv.find_funct_ptr_rev_transf; eauto.
+Qed.
+
 Lemma funsig_transf :
   forall fd,
     Cminor.funsig (transf_fundef fd) = funsig fd.
@@ -446,35 +457,45 @@ Proof.
   intros. rewrite Hst. eauto.
 Qed.
 
-(*
-Lemma initial_states_match :
-  forall s1,
-    initial_state prog s1 ->
-    exists s2,
-      Cminor.initial_state tprog s2 /\ match_states s1 s2.
+Lemma is_callstate_match :
+  forall st fv av,
+    TraceSemantics.is_callstate (Cminor_semantics tprog) fv av st ->
+    exists st',
+      match_states st' st /\ TraceSemantics.is_callstate (semantics prog) fv av st'.
 Proof.
-  intros. 
-  inversion H.
-  eapply init_mem_transf in H0; try reflexivity.
-  break_exists; break_and.
-  eexists; split; econstructor; eauto;
-    simpl; try solve [econstructor; eauto].
-  erewrite find_symbol_transf; eauto.
-  rewrite <- TRANSF. simpl. eauto.
-  eapply find_funct_ptr_transf; eauto.
-  erewrite funsig_transf; eauto.  
-Qed.  
-*)
+  intros. inversion H.
+  remember no_new_functions as Hnn.
+  remember find_symbol_transf as Hfs.
+  eapply no_new_functions in H2. break_exists. break_and.
+  eexists; split; econstructor; try eapply Mem.extends_refl; try eassumption.
+  econstructor.
+  econstructor. econstructor.
+  econstructor. eapply Val.lessdef_refl.
+  econstructor.
+  eapply HighValues.value_inject_swap_ge. eauto.
+  intros.
+  eapply Hnn in H8. break_exists; break_and; eauto.
+  intros.
+  erewrite <- Hfs; eauto.
+  eapply HighValues.value_inject_swap_ge. eauto.
+  intros.
+  eapply Hnn in H8. break_exists; break_and; eauto.
+  intros.
+  erewrite <- Hfs; eauto.
+  erewrite <- Hfs; eauto.
+Qed.
 
 Theorem fsim :
   TraceSemantics.forward_simulation (Cmajor.semantics prog) (Cminor_semantics tprog).
 Proof.
   intros.
   eapply TraceSemantics.forward_simulation_step with (match_states := match_states).
-  admit.
-  intros. instantiate (1 := eq). eapply match_final_state in H0; eauto.
+  instantiate (1 := eq).
+  intros. eapply is_callstate_match; eauto.
+  congruence.
+  intros. eapply match_final_state in H0; eauto.
   eapply single_step_correct; eauto.
-Admitted.
+Qed.
 
 End PRESERVATION.
 
