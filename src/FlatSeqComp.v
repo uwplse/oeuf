@@ -521,7 +521,7 @@ Section Preservation.
         (match_states := I)
         (match_values := @eq value).
     - simpl. intros. eexists. split. 2: econstructor.
-      on >B.is_callstate, invc. repeat i_ctor. all: firstorder discriminate.
+      on >B.is_callstate, invc. repeat i_ctor.
     - intros0 II Afinal. invc Afinal; invc II. eexists; split.
       constructor. reflexivity.
     - intros0 Astep. intros0 II.

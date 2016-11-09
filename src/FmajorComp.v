@@ -4,6 +4,7 @@ Require Import compcert.lib.Coqlib.
 Require Import compcert.common.AST.
 Require Import compcert.common.Events.
 Require Import compcert.common.Globalenvs.
+Require compcert.backend.SelectLong.
 
 Require Import StructTact.Assoc.
 
@@ -51,13 +52,61 @@ Inductive id_key :=
 | IkSwitchTarget
 | IkVar (l : nat)
 | IkFunc (fname : nat)
+| IkRuntime (name : String.string)
+| IkMalloc
 .
 
 Definition id_key_eq_dec (a b : id_key) : { a = b } + { a <> b }.
-decide equality; eauto using eq_nat_dec.
+decide equality; eauto using eq_nat_dec, String.string_dec.
 Defined.
 
 Definition id_key_assoc {V} := assoc id_key_eq_dec (V := V).
+
+
+Definition crt_make_i64_def name sig : ((id_key * String.string) * Fmajor.fundef):=
+    let name' := String.append "__i64_" name in
+    ((IkRuntime name', name'), External (EF_external name' sig)).
+
+Definition crt_i64_funcs:=
+    [ crt_make_i64_def "dtos" SelectLong.sig_f_l
+    ; crt_make_i64_def "dtou" SelectLong.sig_f_l
+    ; crt_make_i64_def "stod" SelectLong.sig_l_f
+    ; crt_make_i64_def "utod" SelectLong.sig_l_f
+    ; crt_make_i64_def "stof" SelectLong.sig_l_s
+    ; crt_make_i64_def "utof" SelectLong.sig_l_s
+    ; crt_make_i64_def "sdiv" SelectLong.sig_ll_l
+    ; crt_make_i64_def "udiv" SelectLong.sig_ll_l
+    ; crt_make_i64_def "smod" SelectLong.sig_ll_l
+    ; crt_make_i64_def "umod" SelectLong.sig_ll_l
+    ; crt_make_i64_def "shl" SelectLong.sig_li_l
+    ; crt_make_i64_def "shr" SelectLong.sig_li_l
+    ; crt_make_i64_def "sar" SelectLong.sig_li_l
+    ]%string.
+
+Definition extra_funcs :=
+    crt_i64_funcs ++
+    [ ((IkMalloc, "malloc"), External EF_malloc) ]%string.
+
+Definition extra_keys := map fst (map fst extra_funcs).
+
+Lemma extra_keys_norepet : list_norepet extra_keys.
+compute.
+let rec go :=
+    (constructor; [ | go ]) || constructor
+in go.
+all: simpl.
+all: try firstorder discriminate.
+Qed.
+
+Lemma extra_keys_IkRuntime_IkMalloc : forall k,
+    In k extra_keys ->
+    (exists name, k = IkRuntime name) \/ k = IkMalloc.
+intros. compute in *.
+let rec go :=
+    (on (_ \/ _), fun H => destruct H; [ | go ]) || solve [exfalso; auto]
+in go.
+all: subst k; eauto.
+Qed.
 
 
 (* building the mapping from id_keys to idents *)
@@ -83,7 +132,8 @@ Definition build_id_list' (cu : list (A.stmt * A.expr) * list metadata) :
     ; (IkSwitchTarget, "_switch_target")
     ]%string
     ++ build_vars_id_list (fst cu)
-    ++ build_funcs_id_list (snd cu).
+    ++ build_funcs_id_list (snd cu)
+    ++ map fst extra_funcs.
 
 
 Axiom intern_string : String.string -> positive.
@@ -201,6 +251,14 @@ Definition compile_gdefs max_fname (nfs : list (nat * (A.stmt * A.expr))) :
         option (list (ident * AST.globdef B.fundef unit)) :=
     map_partial (compile_gdef max_fname) nfs.
 
+Definition extra_def (p : (id_key * String.string) * B.fundef) :
+        option (ident * globdef B.fundef unit) :=
+    let '((key, _), def) := p in
+    get_id key >>= fun id =>
+    Some (id, Gfun def).
+
+Definition extra_defs := map_partial extra_def extra_funcs.
+
 End compile.
 
 Section compile_cu.
@@ -210,9 +268,10 @@ Definition compile_cu (cu : list (A.stmt * A.expr) * list metadata) : option B.p
     build_id_list cu >>= fun M =>
     let '(funcs, metas) := cu in
     compile_gdefs M (length funcs) (numbered funcs) >>= fun gdefs =>
+    extra_defs M >>= fun gdefs' =>
     let pub_fnames := map fst (filter (fun n_m => m_is_public (snd n_m)) (numbered metas)) in
     map_partial (fun fn => id_key_assoc M (IkFunc fn)) pub_fnames >>= fun pub_idents =>
-    Some (AST.mkprogram gdefs pub_idents 1%positive).
+    Some (AST.mkprogram (gdefs ++ gdefs') pub_idents 1%positive).
 
 End compile_cu.
 
@@ -292,14 +351,13 @@ Inductive I_func : A.stmt * A.expr -> B.function -> Prop :=
 .
 
 Inductive I_prog : A.env -> B.program -> Prop :=
-| IProg : forall ae ae' bdefs bdefs' bpublic bmain,
-        ae' = numbered ae ->
-        bdefs = map (fun p => (fst p, AST.Gfun (Internal (snd p)))) bdefs' ->
-        Forall2 (fun a b =>
-            let '(an, af) := a in
-            let '(bid, bf) := b in
-            I_id (IkFunc an) bid /\
-            I_func af bf) ae' bdefs' ->
+| IProg : forall ae bdefs bpublic bmain,
+        (forall an af,
+            nth_error ae an = Some af ->
+            exists bid bf,
+                In (bid, Gfun (Internal bf)) bdefs /\
+                I_id (IkFunc an) bid /\
+                I_func af bf) ->
         list_norepet (map fst bdefs) ->
         I_prog ae (AST.mkprogram bdefs bpublic bmain).
 
@@ -480,7 +538,7 @@ contradict HH. eapply list_norepet_nth_error_unique.
 - invc Mok. auto.
 Qed.
 
-Lemma nth_error_unique_list_norepet  : forall A (xs : list A),
+Lemma nth_error_unique_list_norepet : forall A (xs : list A),
     (forall n1 n2 x,
         nth_error xs n1 = Some x ->
         nth_error xs n2 = Some x ->
@@ -575,6 +633,24 @@ eapply nth_error_Forall2.
   reflexivity.
 Qed.
 
+Lemma numbered_count_up_eq : forall A (xs : list A),
+    map fst (numbered xs) = count_up (length xs).
+intros.
+rewrite <- map_id with (xs := count_up _).
+eapply Forall2_map_eq. eauto using numbered_count_up.
+Qed.
+
+Lemma count_up_norepet : forall n,
+    list_norepet (count_up n).
+intro.
+eapply nth_error_unique_list_norepet. intros.
+assert (n1 < length (count_up n)) by (rewrite <- nth_error_Some; congruence).
+assert (n2 < length (count_up n)) by (rewrite <- nth_error_Some; congruence).
+rewrite count_up_length in *.
+rewrite count_up_nth_error in * by auto.
+congruence.
+Qed.
+
 
 
 Lemma compile_I_expr : forall M a b,
@@ -627,93 +703,271 @@ break_if; try discriminate.
 constructor. inject_some. eauto.
 Qed.
 
+Lemma compile_gdefs_bfunc_exists' : forall M max_fname base a b x an af,
+    compile_gdefs M max_fname (numbered' base a) = Some b ->
+    nth_error a an = Some af ->
+    exists bid bf,
+        In (bid, Gfun (Internal bf)) (b ++ x) /\
+        I_id M (IkFunc (base + an)) bid /\
+        I_func M af bf.
+first_induction a; intros0 Hgdefs Hnth.
+  { destruct an; discriminate. }
+
+unfold compile_gdefs in *. simpl in *.
+do 2 (break_match; try discriminate).
+break_bind_option. inject_some.
+
+destruct an; simpl in *.
+
+- inject_some.
+
+  do 2 eexists. split; [|split].
+  + left. reflexivity.
+  + replace (base + 0) with base by omega. auto.
+  + eapply compile_I_func; eauto.
+
+- replace (base + S an) with (S base + an) by omega.
+  fwd eapply IHa as HH; eauto. destruct HH as (bid & bf & ? & ? & ?).
+  firstorder eauto.
+Qed.
+
+Lemma compile_gdefs_bfunc_exists : forall M max_fname a b x an af,
+    compile_gdefs M max_fname (numbered a) = Some b ->
+    nth_error a an = Some af ->
+    exists bid bf,
+        In (bid, Gfun (Internal bf)) (b ++ x) /\
+        I_id M (IkFunc an) bid /\
+        I_func M af bf.
+intros.
+change (IkFunc an) with (IkFunc (0 + an)).
+unfold numbered in *.
+eapply compile_gdefs_bfunc_exists'; eauto.
+Qed.
+
+Lemma Forall2_norepet : forall A B (P : A -> B -> Prop) xs ys,
+    (forall x1 y1 x2 y2,
+        P x1 y1 ->
+        P x2 y2 ->
+        x1 = x2 <-> y1 = y2) ->
+    Forall2 P xs ys ->
+    list_norepet xs ->
+    list_norepet ys.
+first_induction xs; intros0 Hiff Hfa Hnr; invc Hfa.
+  { constructor. }
+
+rename a into x. rename l' into ys.
+invc Hnr. constructor; eauto.
+
+on (~ In _ _), contradict.
+on _, apply_lem In_nth_error. on >@ex, fun HH => destruct HH as (n & ?).
+eapply nth_error_in with (n := n).
+
+destruct (nth_error xs n) eqn:?; cycle 1.
+  { fwd eapply length_nth_error_Some with (ys := xs).
+      { symmetry. eapply Forall2_length. eassumption. }
+      { eassumption. }
+    firstorder congruence. }
+fwd eapply Forall2_nth_error; eauto. cbv beta in *.
+
+f_equal.
+rewrite Hiff; try eassumption. reflexivity.
+Qed.
+
+Lemma I_id_inj : forall M k id1 id2,
+    I_id M k id1 ->
+    I_id M k id2 ->
+    id1 = id2.
+intros0 II1 II2.
+unfold I_id in *.
+congruence.
+Qed.
+
+Lemma I_id_sur : forall M k1 k2 id,
+    id_map_ok M ->
+    I_id M k1 id ->
+    I_id M k2 id ->
+    k1 = k2.
+intros0 Mok II1 II2.
+unfold I_id in *.
+do 2 on _, eapply_lem id_key_assoc_nth_error.
+destruct II1 as [n1 Hn1].  destruct II2 as [n2 Hn2].
+on >id_map_ok, invc.
+
+fwd eapply map_nth_error with (n := n1) (f := snd); eauto.
+fwd eapply map_nth_error with (n := n1) (f := fst); eauto.
+fwd eapply map_nth_error with (n := n2) (f := snd); eauto.
+fwd eapply map_nth_error with (n := n2) (f := fst); eauto.
+simpl in *.
+
+cut (n1 = n2).  { intro. congruence. }
+
+eapply list_norepet_nth_error_unique with (xs := map snd M); eauto.
+Qed.
+
+Lemma I_id_norepet : forall M ns ids,
+    id_map_ok M ->
+    Forall2 (I_id M) (map IkFunc ns) ids ->
+    list_norepet ns ->
+    list_norepet ids.
+intros. eapply Forall2_norepet; eauto; cycle 1.
+  { eapply list_map_norepet; eauto. intros. congruence. }
+intros. split; intro; subst.
+- eauto using I_id_inj.
+- eauto using I_id_sur.
+Qed.
+
+Lemma compile_gdefs_norepet : forall M max_fname a b,
+    id_map_ok M ->
+    compile_gdefs M max_fname a = Some b ->
+    list_norepet (map fst a) ->
+    list_norepet (map fst b).
+intros.
+unfold compile_gdefs in *. on _, eapply_lem map_partial_Forall2.
+eapply I_id_norepet; eauto.
+
+rewrite <- Forall2_map_l, <- Forall2_map_l, <- Forall2_map_r.
+list_magic_on (a, (b, tt)).
+on >Forall2, fun H => clear H.
+unfold compile_gdef in *. break_match. break_bind_option. inject_some.
+simpl. unfold I_id. auto.
+Qed.
+
+Lemma extra_defs_norepet : forall M x,
+    id_map_ok M ->
+    extra_defs M = Some x ->
+    list_norepet (map fst x).
+intros.
+unfold extra_defs in *. on _, eapply_lem map_partial_Forall2.
+
+assert (Forall2 (fun f x => I_id M (fst (fst f)) (fst x)) extra_funcs x). {
+  remember extra_funcs as extra_funcs_.
+  list_magic_on (extra_funcs_, (x, tt)).
+  unfold extra_def in *. do 2 break_match. break_bind_option. inject_some.
+  simpl. auto.
+}
+
+assert (Forall2 (fun n id => I_id M n id) (map fst (map fst extra_funcs)) (map fst x)).
+  { rewrite <- Forall2_map_l, <- Forall2_map_l, <- Forall2_map_r. auto. }
+
+eapply Forall2_norepet; eauto using extra_keys_norepet.
+intros. cbv beta in *.
+split; intro; solve [subst; eauto using I_id_inj, I_id_sur].
+Qed.
+
+Lemma compile_gdefs_key_exists : forall M max_fname a b id,
+    compile_gdefs M max_fname a = Some b ->
+    In id (map fst b) ->
+    exists n,
+        In n (map fst a) /\
+        I_id M (IkFunc n) id.
+intros0 Hgdefs Hin.
+unfold compile_gdefs in *. on _, eapply_lem map_partial_Forall2.
+eapply In_nth_error in Hin. destruct Hin as [n ?].
+
+fwd eapply map_Forall2 with (xs := b) (f := fst); eauto.
+remember (map fst b) as bids.
+
+fwd eapply length_nth_error_Some with (ys := b) as HH; try eassumption.
+  { symmetry. eauto using Forall2_length. }
+destruct HH as ([bid bf] & ?).
+fwd eapply Forall2_nth_error with (xs := b); eauto.  simpl in *. subst id.
+
+fwd eapply length_nth_error_Some with (xs := b) (ys := a) as HH; try eassumption.
+  { symmetry. eauto using Forall2_length. }
+destruct HH as ([an af] & ?).
+fwd eapply Forall2_nth_error with (xs := a); eauto.  simpl in *.
+break_bind_option. inject_some.
+
+eexists. split.
+- eapply nth_error_in.
+  eapply map_nth_error.
+  eassumption.
+- simpl. auto.
+Qed.
+
+Lemma extra_defs_key_exists : forall M b id,
+    extra_defs M = Some b ->
+    In id (map fst b) ->
+    exists k,
+        In k extra_keys /\
+        I_id M k id.
+intros0 Hgdefs Hin.
+unfold compile_gdefs in *. on _, eapply_lem map_partial_Forall2.
+eapply In_nth_error in Hin. destruct Hin as [n ?].
+
+fwd eapply map_Forall2 with (xs := b) (f := fst); eauto.
+remember (map fst b) as bids.
+
+fwd eapply length_nth_error_Some with (ys := b) as HH; try eassumption.
+  { symmetry. eauto using Forall2_length. }
+destruct HH as ([bid bf] & ?).
+fwd eapply Forall2_nth_error with (xs := b); eauto.  simpl in * |-. subst id.
+
+fwd eapply length_nth_error_Some with (xs := b) (ys := extra_funcs) as HH;
+    try eassumption.
+  { symmetry. eauto using Forall2_length. }
+destruct HH as ([an af] & ?).
+fwd eapply Forall2_nth_error with (xs := extra_funcs); eauto.  simpl in * |-.
+break_match. break_bind_option. inject_some.
+
+eexists. split.
+- eapply nth_error_in.
+  eapply map_nth_error.
+  eapply map_nth_error.
+  eassumption.
+- simpl. auto.
+Qed.
+
 Lemma compile_I_prog : forall M a metas b,
     compile_cu (a, metas) = Some b ->
     build_id_list (a, metas) = Some M ->
     I_prog M a b.
 intros0 Hcomp Hids.
 unfold compile_cu in *. break_bind_option. inject_some.
-rename l0 into bdefs. rename l1 into bpublic.
+rename l0 into bdefs. rename l1 into xdefs. rename l2 into bpublic.
 
 remember (length a) as max_fname. clear Heqmax_fname.
-
 on (_ = Some bpublic), fun H => clear H.
+assert (id_map_ok M).  { eapply build_id_list_ok; eauto. }
 
-unfold compile_gdefs in *.
-on _, eapply_lem map_partial_Forall2.
-assert (HH : exists bdefs', bdefs = map (fun p => (fst p, AST.Gfun (Internal (snd p)))) bdefs').
-  { unfold numbered in *. remember 0 as base. clear Heqbase.
-    generalize dependent bdefs. clear -base. make_first bdefs. induction bdefs; intros.
-      { exists []. reflexivity. }
-    destruct a0; simpl in *; on >Forall2, invc.
-    destruct (IHbdefs ?? ?? ?? ?? **) as [bdefs' ?].  clear IHbdefs.
-    unfold compile_gdef in *. break_bind_option. destruct a. inject_some.
-    exists ((i0, f) :: bdefs'). simpl. reflexivity. }
-destruct HH as (bdefs' & Hbdefs').
+constructor.
 
+- intros. eapply compile_gdefs_bfunc_exists; eauto.
 
-econstructor; eauto.
+- rewrite map_app.
+  eapply list_norepet_append.
+  + eapply compile_gdefs_norepet; eauto.
+    rewrite numbered_count_up_eq.
+    eapply count_up_norepet.
+  + eapply extra_defs_norepet; eauto.
+  + unfold list_disjoint. intros.
+    fwd eapply compile_gdefs_key_exists; eauto.  break_exists. break_and.
+    fwd eapply extra_defs_key_exists; eauto.  break_exists. break_and.
+    fwd eapply extra_keys_IkRuntime_IkMalloc; eauto.
+    eapply I_id_ne; eauto.
 
-- remember (numbered a) as na.
-  symmetry in Hbdefs'.  eapply map_Forall2 in Hbdefs'.
+    on (_ \/ _), fun H => destruct H.
+    * break_exists. congruence.
+    * congruence.
 
-  list_magic_on (na, (bdefs, (bdefs', tt))); cycle 1.
-  destruct na_i as [an af]. destruct bdefs'_i as [bid bf].
-  unfold compile_gdef in *. break_bind_option. inject_some. simpl in *. inject_pair.
-  eauto using compile_I_func.
-
-- clear dependent bdefs'.
-  fwd eapply build_id_list_ok; eauto. on (_ = Some M), fun H => clear H.
-
-  cut (Forall2 (fun b n => I_id M (IkFunc n) b) (map fst bdefs) (count_up (length a))); cycle 1.
-    { fwd eapply numbered_count_up with (xs := a).
-      remember (numbered a) as na. remember (count_up _) as cu.
-      fwd eapply map_Forall2 with (f := fst) (xs := bdefs); eauto.
-      remember (map fst bdefs) as bdefs'.
-      list_magic_on (na, (cu, (bdefs, (bdefs', tt)))).
-      destruct na_i as [n af]. destruct bdefs_i as [bid bf].
-      simpl in *. break_bind_option. inject_some. eauto. }
-  intros Hid.
-
-  eapply nth_error_unique_list_norepet. intros.
-  destruct (eq_nat_dec n1 n2); eauto. exfalso.
-
-  fwd eapply Forall2_nth_error_ex with (i := n1) as HH; eauto. 
-    destruct HH as (b1 & ? & ?).
-  rewrite count_up_nth_error in *; cycle 1.
-    { erewrite <- count_up_length, <- Forall2_length by eauto.
-      rewrite <- nth_error_Some.
-      (* this unfold has no visible effect, but makes some implicits line up *)
-      unfold B.fundef.  congruence. }
-  inject_some.
-
-  fwd eapply Forall2_nth_error_ex with (i := n2) as HH; eauto. 
-    destruct HH as (b2 & ? & ?).
-  rewrite count_up_nth_error in *; cycle 1.
-    { erewrite <- count_up_length, <- Forall2_length by eauto.
-      rewrite <- nth_error_Some. unfold B.fundef. congruence. }
-  inject_some.
-
-  eapply I_id_ne with (k1 := IkFunc b1) (k2 := IkFunc b2); eauto.
-  congruence.
 Qed.
 
 Lemma I_prog_env : forall M A B,
     I_prog M A B ->
     I_env M A (Genv.globalenv B).
-intros0 II. invc II.
+intros0 II. invc II. rename H into HH.
 econstructor. intros.
-fwd eapply numbered_nth_error; eauto.
-fwd eapply Forall2_nth_error_ex as HH; eauto.
-  destruct HH as ([bfname' bf] & ? & ? & ?).
-replace bfname' with bfname in * by (repeat on >I_id, invc; congruence).
+specialize (HH ?? ?? **). destruct HH as (bid & bf & ? & ? & ?).
+
+on _, eapply_lem In_nth_error.
+on >@ex, fun H => destruct H as [n ?].
+
+assert (bid = bfname).  { eapply I_id_inj; eauto. }  subst bid.
 
 remember (AST.mkprogram _ _ _) as B.
 
 assert (In (bfname, Gfun (Internal bf)) (AST.prog_defs B)).
-  { eapply nth_error_in. on _, eapply_lem map_nth_error.
-    subst B. simpl. on _, fun H => rewrite H.
-    simpl. reflexivity. }
+  { eapply nth_error_in.  subst B. simpl.  eassumption. }
 
 fwd eapply Genv.find_funct_ptr_exists with (p := B) as HH; eauto.
   { subst B. unfold prog_defs_names. simpl in *. auto. }
