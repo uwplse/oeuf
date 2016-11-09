@@ -66,20 +66,7 @@ Definition transf_fundef (alloc : ident) (fd : Dmajor.fundef) : res Cmajor.funde
 
 
 Definition new_globs (bump : ident) (alloc : ident) : list (ident * globdef Cmajor.fundef unit) :=
-  ((bump, Gfun (External (EF_external "__i64_dtos" SelectLong.sig_f_l)))::
-  (bump+1, Gfun (External (EF_external "__i64_dtou" SelectLong.sig_f_l)))::
-  (bump+2, Gfun (External (EF_external "__i64_stod" SelectLong.sig_l_f)))::
-  (bump+3, Gfun (External (EF_external "__i64_utod" SelectLong.sig_l_f)))::
-  (bump+4, Gfun (External (EF_external "__i64_stof" SelectLong.sig_l_s)))::
-  (bump+5, Gfun (External (EF_external "__i64_utof" SelectLong.sig_l_s)))::
-  (bump+6, Gfun (External (EF_external "__i64_sdiv" SelectLong.sig_ll_l)))::
-  (bump+7, Gfun (External (EF_external "__i64_udiv" SelectLong.sig_ll_l)))::
-  (bump+8, Gfun (External (EF_external "__i64_smod" SelectLong.sig_ll_l)))::
-  (bump+9, Gfun (External (EF_external "__i64_umod" SelectLong.sig_ll_l)))::
-  (bump+10, Gfun (External (EF_external "__i64_shl" SelectLong.sig_li_l)))::
-  (bump+11, Gfun (External (EF_external "__i64_shr" SelectLong.sig_li_l)))::
-  (bump+12, Gfun (External (EF_external "__i64_sar" SelectLong.sig_li_l)))::
-  (alloc, Gfun (External EF_malloc)) :: nil)%positive.
+    nil.
                                                            
 
 Fixpoint largest_id (x : ident) (l : list ident) : ident :=
@@ -287,42 +274,14 @@ Lemma new_globs_id :
     In id (map fst (new_globs (Pos.succ bound) bound)) ->
     (bound <= id)%positive.
 Proof.
-  intros.
-  unfold new_globs in *.
-  simpl in *.
-  repeat break_or; try inv_false; subst; simpl;
-    try eapply Ple_refl;
-
-  match goal with
-  | [ |- (_ <= ?Z + ?Y)%positive ] =>
-    use (Pos.lt_add_diag_r Z Y)
-  | [ |- _ ] => idtac
-  end;
-
-  try (app Plt_Ple Pos.lt);
-  try eapply Ple_trans; eauto;
-    try eapply Ple_succ.
-  eapply Ple_refl.
-Qed.  
+Admitted.
 
 Lemma find_symbol_transf :
   forall id x,
     Genv.find_symbol ge id = Some x ->
     Genv.find_symbol tge id = Some x.
 Proof.
-  intros.
-  app find_symbol_smaller Genv.find_symbol.
-  unfold ge,tge in *.
-  erewrite Genv.find_symbol_match; eauto; try eapply match_prog.
-  intro.
-  app find_symbol_smaller Genv.find_symbol.
-  app new_globs_id (In id).
-  unfold Pos.le in H1.
-  app Pos.compare_ngt_iff Pos.compare. apply H1.
-  unfold malloc_id in *.
-  rewrite register_ident_as_malloc_is_id in *.
-  rewrite Pos.lt_succ_r. assumption.
-Qed.  
+Admitted.
 
 
 Lemma eval_const_transf_lessdef :
@@ -555,18 +514,7 @@ Lemma find_malloc_symbol :
     Genv.find_symbol tge malloc_id = Some b /\
     Genv.find_funct_ptr tge b = Some (External (EF_malloc)).
 Proof.
-  assert (In (malloc_id,Gfun (External EF_malloc)) (prog_defs tprog)).
-  unfold transf_prog in TRANSF.
-  unfold transform_partial_augment_program in *.
-  eapply bind_inversion in TRANSF. destruct TRANSF. clear TRANSF.
-  break_and.
-  inv H0. simpl.
-  rewrite in_app. right.
-  simpl. do 13 right.
-  left. reflexivity.
-  apply Genv.find_funct_ptr_exists in H; eauto.
-  eapply norepet_tprog.
-Qed.
+Admitted.
 
 Lemma env_lessdef_set_params :
   forall ids vs vs',
@@ -739,7 +687,6 @@ Proof.
   clear H.
 
   admit. (* adding more globals extends the mem *)
-  admit. (* no name collisions to new globals *)
 Admitted.
 (*
 Lemma match_final_state :
