@@ -21,8 +21,8 @@ Require Import StructTact.Util.
 
 Inductive constant : Type :=
   | Ointconst: int -> constant     (**r integer constant *)
-  | Oaddrsymbol: ident -> int -> constant (**r address of the symbol plus the offset *)
-  | Oaddrstack: int -> constant.   (**r stack pointer plus the given offset *)
+  | Oaddrsymbol: ident -> int -> constant. (**r address of the symbol plus the offset *)
+(*  | Oaddrstack: int -> constant.   (**r stack pointer plus the given offset *)*)
 
 
 Inductive expr : Type :=
@@ -130,7 +130,7 @@ Definition eval_constant (sp: val) (cst: constant) : option val :=
       Some(match Genv.find_symbol ge s with
            | None => Vundef
            | Some b => Vptr b ofs end)
-  | Oaddrstack ofs => Some (Val.add sp (Vint ofs))
+(*  | Oaddrstack ofs => Some (Val.add sp (Vint ofs))*)
   end.
 
 Inductive eval_expr(sp : val) : expr -> val -> Prop :=

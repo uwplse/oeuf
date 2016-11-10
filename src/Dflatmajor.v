@@ -262,9 +262,14 @@ Inductive step: state -> trace -> state -> Prop :=
 
 End RELSEM.
 
-
-Inductive is_callstate (p : program) : value -> value -> state -> Prop := .
-(* TODO: stub *)
+Inductive is_callstate (p : program) : value -> value -> state -> Prop := 
+| IsCallstate :
+    forall fname vs arg fb fofs argptr m fn z,
+      value_inject (Genv.globalenv p) m (Close fname vs) (Vptr fb fofs) ->
+      value_inject (Genv.globalenv p) m arg argptr ->
+      Genv.find_funct_ptr (Genv.globalenv p) fb = Some (Internal fn) ->
+      Genv.find_symbol (Genv.globalenv p) fname = Some fb ->
+      is_callstate p (Close fname vs) arg (Callstate fn ((Vptr fb fofs) :: argptr :: nil) Kstop m z).
 
 (** A final state is a [Returnstate] with an empty continuation. *)
 
