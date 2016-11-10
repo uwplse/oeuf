@@ -20,7 +20,6 @@ Definition transf_const (c : Cmajor.constant) : Cminor.constant :=
   match c with
   | Ointconst i => Cminor.Ointconst i
   | Oaddrsymbol id i => Cminor.Oaddrsymbol id i
-  | Oaddrstack i => Cminor.Oaddrstack i
   end.
 
 Fixpoint transf_expr (e : Cmajor.expr) : Cminor.expr :=
