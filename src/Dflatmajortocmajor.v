@@ -82,9 +82,64 @@ Axiom register_ident_as_malloc : positive -> positive.
 Axiom register_ident_as_malloc_is_id : forall p, register_ident_as_malloc p = p.
 Extract Inlined Constant register_ident_as_malloc => "Camlcoq.register_ident_as_malloc".
 
-Definition transf_prog (prog : Dmajor.program) (malloc_id : ident) : res Cmajor.program :=
+Definition transf_prog_malloc (prog : Dmajor.program) (malloc_id : ident) : res Cmajor.program :=
   transform_partial_program (transf_fundef malloc_id) prog.
 
+Lemma malloc_eq_dec :
+  forall ef,
+    {ef = EF_malloc } + {ef <> EF_malloc}.
+Proof.
+  intros.
+  eapply (external_function_eq ef EF_malloc); eauto.
+Defined.
+
+Fixpoint find_malloc_id (l : list (ident * globdef fundef unit)) : option ident :=
+  match l with
+  | nil => None
+  | (id,(Gfun (External ef))) :: l' => if external_function_eq ef EF_malloc then Some id else find_malloc_id l'
+  | (id,_) :: l' => find_malloc_id l'
+  end.
+
+Lemma find_malloc_some :
+  forall l id,
+    find_malloc_id l = Some id ->
+    In (id,Gfun (External EF_malloc)) l.
+Proof.
+  induction l; intros.
+  simpl in H. inv H.
+  simpl in H. destruct a.
+  repeat (break_match_hyp; try congruence); subst.
+  simpl. right. eauto.
+  inv H. simpl. left. reflexivity.
+  simpl. right. eauto.
+  simpl. right. eauto.
+Qed.
+
+Lemma find_malloc_id_malloc :
+  forall prog malloc_id,
+    find_malloc_id (prog_defs prog) = Some malloc_id ->
+    list_norepet (prog_defs_names prog) ->
+    exists b,
+      Genv.find_symbol (Genv.globalenv prog) malloc_id = Some b /\
+      Genv.find_funct_ptr (Genv.globalenv prog) b = Some (External EF_malloc).
+Proof.
+  intros.
+  
+  eapply find_malloc_some in H.
+  eapply Genv.find_funct_ptr_exists in H; eauto.
+  
+Qed.
+
+Require Import String.
+
+Definition transf_prog (prog : Dmajor.program) : res Cmajor.program :=
+  if list_norepet_dec peq (prog_defs_names prog) then
+    match find_malloc_id (prog_defs prog) with
+    | Some malloc_id => transf_prog_malloc prog malloc_id
+    | None => Error (MSG "No EF_malloc found in program"%string :: nil)
+    end
+  else
+    Error (MSG "program idents have repeats in them" :: nil).
 
 Lemma plus_left_e :
   forall {F V} {state : Type} (tge : Genv.t F V) (step : Genv.t F V -> state -> trace -> state -> Prop) (st st' : state) P,
@@ -119,13 +174,11 @@ Variable prog: Dmajor.program.
 Variable tprog: Cmajor.program.
 Let ge := Genv.globalenv prog.
 Let tge := Genv.globalenv tprog.
+Hypothesis TRANSF : transf_prog prog = OK tprog.
 Hypothesis malloc_id : ident.
-Hypothesis TRANSF : transf_prog prog malloc_id = OK tprog.
-Hypothesis malloc_block : block.
-Hypothesis malloc_id_malloc :
-  Genv.find_symbol ge malloc_id = Some malloc_block.
-Hypothesis malloc_block_malloc :
-  Genv.find_funct_ptr ge malloc_block = Some (External (EF_malloc)).
+Hypothesis malloc_id_found :
+  find_malloc_id (prog_defs prog) = Some malloc_id.
+
 
 Inductive match_cont: Dflatmajor.cont -> Cmajor.cont -> Prop :=
   | match_cont_stop:
@@ -200,93 +253,21 @@ Ltac break_or :=
   match goal with
   | [ H : _ \/ _ |- _ ] => destruct H
   end.
-(*
-Lemma largest_id_base :
-  forall l base,
-    (base <= (largest_id base l))%positive.
-Proof.
-  induction l; intros.
-  simpl. eapply Ple_refl.
-  simpl. break_match. specialize (IHl a).
-  eapply Ple_trans.
-  eapply Plt_Ple. eauto.
-  eapply IHl.
-  eapply IHl.
-Qed.
-*)
+
 Ltac use H :=
   let HH := fresh "H" in
   let H2 := fresh "H" in
   remember H as H2 eqn:HH;
   clear HH.
-(*
-Lemma not_Plt_Ple :
-  forall a b,
-    ~ Plt a b ->
-    Ple b a.
-Proof.
-  intros.
-  unfold Ple. unfold Plt in *.
-  unfold Pos.le. unfold Pos.lt in *.
-  intro. apply H.
-  apply Pos.compare_gt_iff in H0. assumption.
-Qed.
 
-Lemma largest_id_in :
-  forall l (id : ident) base,
-    In id l ->
-    (id <= largest_id base l)%positive.
-Proof.
-  induction l; intros.
-  simpl in H. inv_false.
-  simpl in H. break_or. subst a.
-  simpl. break_match.
-  eapply largest_id_base.
-  use (largest_id_base l base).
-  assert (Ple id base) by (eapply not_Plt_Ple; eauto).
-  eapply Ple_trans; eauto.
-  simpl. break_match; eapply IHl; eauto.
-Qed.
-
-Lemma find_symbol_smaller :
-  forall id x,
-    Genv.find_symbol ge id = Some x ->
-    (id <= largest_id_prog prog)%positive.
-Proof.
-  intros.
-  destruct prog.
-  unfold largest_id_prog.
-  simpl.
-  app Genv.find_symbol_inversion Genv.find_symbol.
-  unfold prog_defs_names in H. simpl in H.
-  eapply largest_id_in; eauto.
-Qed.
-
-Lemma id_larger_no_symbol :
-  forall id,
-    (id > largest_id_prog prog)%positive ->
-    Genv.find_symbol ge id = None.
-Proof.
-  intros.
-  destruct (Genv.find_symbol ge id) eqn:?; eauto.
-  app find_symbol_smaller Genv.find_symbol.
-  congruence.
-Qed.
-
-Lemma new_globs_id :
-  forall id bound,
-    In id (map fst (new_globs (Pos.succ bound) bound)) ->
-    (bound <= id)%positive.
-Proof.
-
-*)
 Lemma find_symbol_transf :
   forall id,
     Genv.find_symbol tge id = Genv.find_symbol ge id.
 Proof.
   intros.
   unfold ge, tge in *.
-  unfold transf_prog in *.
+  unfold transf_prog in *. unfold transf_prog_malloc in *.
+  repeat (break_match_hyp; try congruence). inv malloc_id_found.
   erewrite Genv.find_symbol_transf_partial; eauto.
 Qed.
 
@@ -329,27 +310,13 @@ Lemma find_funct_ptr_transf :
       transf_fundef malloc_id f = OK f'.
 Proof.
   intros.
+  unfold transf_prog in *.
+  unfold transf_prog_malloc in *.
+  repeat (break_match_hyp; try congruence).
+  inv malloc_id_found.
   eapply Genv.find_funct_ptr_transf_partial in H; eauto.
 Qed.
-(*
-Lemma find_funct_transf :
-  forall vf vf',
-    Val.lessdef vf vf' ->
-    forall fd,
-      Genv.find_funct ge vf = Some fd ->
-      exists fd',
-        transf_fundef malloc_id fd = OK fd' /\        
-        Genv.find_funct tge vf' = Some fd'.
-Proof.
-  intros.
-  unfold Genv.find_funct in *.
-  repeat (break_match_hyp; try congruence).
-  subst vf. subst i. inversion H.
-  subst v.
-  break_match; try congruence.
-  eapply find_funct_ptr_transf; eauto.
-Qed.
-*)  
+
 Lemma funsig_transf :
   forall fd fd',
     transf_fundef malloc_id (Internal fd) = OK fd' ->
@@ -360,28 +327,6 @@ Proof.
   simpl. reflexivity.
 Qed.
 
-(*
-Lemma nothing_public_added :
-  forall id x,
-    Genv.find_symbol ge id = None ->
-    Genv.find_symbol tge id = Some x ->
-    ~ In id (Genv.genv_public tge).
-Proof.
-  name match_prog MP.
-  intros.
-
-  destruct (in_dec ident_eq id (map fst ((new_globs (Pos.succ malloc_id) malloc_id)))).
-
-  Focus 2.
-  unfold ge in H. unfold tge in H0.
-  eapply Genv.find_symbol_match in MP.
-  rewrite MP in H0. congruence.
-  eassumption.
-
-  eauto.
-Qed.
- *)
-
 Lemma public_symbol_transf :
   forall id,
     Genv.public_symbol tge id = Genv.public_symbol ge id.
@@ -391,7 +336,9 @@ Proof.
   unfold Genv.public_symbol.
   erewrite find_symbol_transf.
   repeat rewrite Genv.globalenv_public.
-  unfold transf_prog in *. 
+  unfold transf_prog in *. unfold transf_prog_malloc in *.
+  repeat (break_match_hyp; try congruence).
+  inv malloc_id_found.
   erewrite transform_partial_program_public; eauto.
 Qed.  
 
@@ -404,36 +351,6 @@ Proof.
   inv H.
   econstructor; eauto.
 Qed.
-
-
-Lemma malloc_dec_eq :
-  forall ef,
-    {ef = EF_malloc } + {ef <> EF_malloc}.
-Proof.
-  intros.
-  eapply (external_function_eq ef EF_malloc); eauto.
-Defined.
-
-(*
-Lemma external_call_transf :
-  forall v m t vres m',
-    external_call EF_malloc ge (v :: nil) m t vres m' ->
-    forall m0 v0,
-      Val.lessdef v v0 ->
-      Mem.extends m m0 ->
-      exists vres0 m0',
-        external_call EF_malloc tge (v0 :: nil) m0 t vres0 m0' /\ Mem.extends m' m0' /\ Val.lessdef vres vres0.
-Proof.
-  intros.
-  simpl in H. inv H.
-  inv H0.
-  app Mem.alloc_extends Mem.alloc; try eapply Z.le_refl.
-  app Mem.store_within_extends Mem.store.
-  eexists. eexists. split.
-  econstructor; eauto.
-  split; eauto.
-Qed.
- *)
 
 Lemma match_call_cont :
   forall k k',
@@ -474,13 +391,17 @@ Proof.
 
   (* turn malloc into external function call *)
   * assert (t = E0) by (inv H0; congruence). subst t.
+    copy malloc_id_found.
+    eapply find_malloc_id_malloc in H2.
+    break_exists. break_and.
+    eapply find_funct_ptr_transf in H3.
+    break_exists. break_and. simpl.
+    unfold transf_fundef in *. inv H4. 
     eapply plus_left_e. simpl.
     repeat (econstructor; eauto).
-    erewrite find_symbol_transf; try collapse_match; eauto.
+    erewrite find_symbol_transf; try collapse_match; eauto.    
+    unfold ge. rewrite H2.
     simpl. break_match; try congruence.
-    eapply find_funct_ptr_transf in malloc_block_malloc.
-    destruct malloc_block_malloc.
-    break_and. unfold transf_fundef in *. simpl in H3. inv H3.
     eassumption.
     reflexivity.
 
@@ -490,6 +411,9 @@ Proof.
     econstructor; eauto.
     eexists; split. eapply star_refl.
     econstructor; eauto.
+
+    unfold transf_prog in TRANSF.
+    repeat break_match_hyp; try congruence. assumption.
 
   (* function call *)
   * unfold transf_fundef in *.
@@ -512,7 +436,6 @@ Proof.
   eexists; split; econstructor; eauto;
     try solve [repeat (econstructor; eauto)].
   
-  
 Admitted.
 
 Lemma match_final_states :
@@ -523,18 +446,22 @@ Lemma match_final_states :
 Proof.
 Admitted.
 
-Theorem fsim :
-  forward_simulation (Dflatmajor.semantics prog) (Cmajor.semantics tprog).
-Proof.
-  eapply forward_simulation_plus.
-  intros. eapply is_callstate_match; eauto.
-  instantiate (1 := eq) in H0. subst. eauto.
-  intros. exists v1; split; eauto. eapply match_final_states; eauto.
-  eapply single_step_correct; eauto.
-Qed.
 
 End PRESERVATION.
 
+Theorem fsim :
+  forall prog tprog,
+    transf_prog prog = OK tprog ->
+    forward_simulation (Dflatmajor.semantics prog) (Cmajor.semantics tprog).
+Proof.
+  intros. copy H. unfold transf_prog in H0.
+  repeat (break_match_hyp; try congruence).
+  eapply forward_simulation_plus.
+  intros. eapply is_callstate_match; eauto.
+  instantiate (1 := eq) in H2. subst. eauto.
+  intros. exists v1; split; eauto. eapply match_final_states; eauto.
+  eapply single_step_correct; eauto.
+Qed.
 
 
 

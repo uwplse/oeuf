@@ -163,7 +163,6 @@ Section Simulation.
     eapply TraceSemantics.compose_forward_simulation.
     eapply Dflatmajortocmajor.fsim; try eassumption.
 
-    admit. admit.
 
     (* Cmajor to Cminor *)
     eapply Cmajortominor.fsim; try eassumption.
