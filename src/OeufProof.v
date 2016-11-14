@@ -34,7 +34,7 @@ Require Shim. (* Dummy import to force build *)
 
 
 Require Import Cmajor. (* Cminor bridge *)
-Require Import OeufCompcertSimulations.
+(*Require Import OeufCompcertSimulations.*)
 Require Import TraceSemantics.
 
 Require Import compcert.lib.Coqlib.
