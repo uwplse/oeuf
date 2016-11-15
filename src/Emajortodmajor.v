@@ -35,18 +35,6 @@ Fixpoint transf_expr (e : Emajor.expr) : Dmajor.expr :=
     load ((transf_expr exp) + const (4 + 4 * (Z.of_nat n))%Z)
   end.
 
-(* Fixpoint make_cases (c : list (Z * Emajor.stmt)) (n : nat) : list (Z * nat) := *)
-(*   match c,n with *)
-(*   | (z,_) :: r, S n' => (z,n) :: make_cases r n' *)
-(*   | _,_ => nil *)
-(*   end. *)
-
-(* Definition transf_target (targid : ident) (target : Emajor.expr) (cases : list (Z * Emajor.stmt)) : Dmajor.stmt := *)
-(*   let e := load (transf_expr target) in *)
-(*   let len := length cases in *)
-(*   (Dmajor.Sassign targid e) ; *)
-(*     (Dmajor.Sswitch false e (make_cases cases len) len). *)
-
 Fixpoint store_args (id : ident) (l : list Emajor.expr) (z : Z) : Dmajor.stmt :=
   match l with
   | nil => Dmajor.Sskip
@@ -56,26 +44,6 @@ Fixpoint store_args (id : ident) (l : list Emajor.expr) (z : Z) : Dmajor.stmt :=
   end.
 
 Fixpoint transf_stmt (s : Emajor.stmt) : Dmajor.stmt :=
-  (* let transf_cases (targid : ident) (cases : list (Z * Emajor.stmt)) (target_d : Dmajor.expr) := *)
-  (*   let fix mk_cases (i : nat) (cases : list (Z * Emajor.stmt)) : list (Z * nat) := *)
-  (*       match cases with *)
-  (*       | [] => [] *)
-  (*       | (v, s) :: cases => (v, i) :: mk_cases (S i) cases *)
-  (*       end in *)
-  (*   let switch := Dmajor.Sswitch false target_d (mk_cases 0%nat cases) (length cases) in *)
-  (*   let swblock := Dmajor.Sblock switch in *)
-  (*   let fix mk_blocks (acc : Dmajor.stmt) (i : nat) (cases : list (Z * Emajor.stmt)) := *)
-  (*       match cases with *)
-  (*       | [] => acc *)
-  (*       | (v, s) :: cases => *)
-  (*               let acc' := *)
-  (*                   Dmajor.Sblock (Dmajor.Sseq acc *)
-  (*                                 (Dmajor.Sseq (transf_stmt s) *)
-  (*                                              (Dmajor.Sexit (length cases - i)))) in *)
-  (*               mk_blocks acc' (S i) cases *)
-  (*       end in *)
-  (*   mk_blocks swblock 0%nat cases in *)
-
   match s with
   | Emajor.Sskip => Dmajor.Sskip
   | Emajor.Sblock s => Dmajor.Sblock (transf_stmt s)
@@ -144,6 +112,54 @@ Section TF.
 Require Import String.
 Open Scope string.
 
+Definition bound := (two_power_nat (30%nat) - 2)%Z.
+
+Lemma bound_sound :
+  (Int.unsigned (Int.repr (4 + 4 * bound)) = 4 + 4 * bound)%Z.
+Proof.
+  unfold bound. simpl.
+  rewrite Int.unsigned_repr; eauto.
+  unfold Int.max_unsigned. unfold Int.modulus. simpl.
+  omega.
+Qed.
+
+Lemma bound_spec :
+  forall x,
+    0 <= x <= bound ->
+    (Int.unsigned (Int.repr (4 + 4 * x)) = 4 + 4 * x)%Z.
+Proof.
+  unfold bound. intros.
+  simpl in H.
+  rewrite Int.unsigned_repr; eauto.
+  unfold Int.max_unsigned. unfold Int.modulus. split; try omega.
+  unfold two_power_nat. unfold Int.wordsize. unfold Wordsize_32.wordsize.
+  unfold shift_nat. unfold nat_rect.
+  omega.
+Qed.
+
+Lemma nat_le_dec :
+  forall (n m : nat),
+    ({n <= m} + {n > m})%nat.
+Proof.
+  intros. destruct ((n ?= m)%nat) eqn:?.
+  left. eapply nat_compare_eq in Heqc. omega.
+  left. eapply nat_compare_lt in Heqc. omega.
+  right. eapply nat_compare_gt in Heqc. omega.
+Defined.
+
+(* Damnit string scope *)
+Definition length {A} (l : list A) := List.length l.
+
+Fixpoint lists_ok (s : Emajor.stmt) : bool :=
+  match s with
+  | SmakeConstr _ _ l => if Z_le_dec (Z.of_nat (length l)) bound then true else false
+  | SmakeClose _ _ l => if Z_le_dec (Z.of_nat (length l)) bound then true else false
+  | Emajor.Sseq s1 s2 => if lists_ok s1 then lists_ok s2 else false
+  | Emajor.Sblock s => lists_ok s
+  | _ => true
+  end.
+
+
 Definition transf_function (f : Emajor.function) : res Dmajor.function :=
   let s := Emajor.fn_body f in
   let ts := transf_stmt s in
@@ -152,7 +168,10 @@ Definition transf_function (f : Emajor.function) : res Dmajor.function :=
   let sig := Emajor.fn_sig f in
   let locs := collect_locals s in
   if list_disjoint_dec peq params locs then
-    OK (Dmajor.mkfunction sig params locs ss ts)
+    if lists_ok s then
+      OK (Dmajor.mkfunction sig params locs ss ts)
+    else
+      Error (MSG "too many arguments to a constructor or closure" :: nil)
   else
     Error (MSG "tried to use the same ID for a param and a local" :: nil).
 
@@ -815,7 +834,6 @@ Proof.
   rewrite Int.repr_unsigned; eauto.
 Qed.
 
-Definition length {A} (l : list A) := @List.length A l. (* OMG string get out of here *)
 
 (* key store_args lemma *)  
 Lemma step_store_args :
@@ -1399,7 +1417,8 @@ Proof.
   simpl. find_rewrite. inv H12.
   unfold bind in *. break_match_hyp; try congruence. inv H15.
   destruct fn; destruct f0; unfold transf_function in Heqr; simpl in Heqr.
-  break_match_hyp; try congruence. simpl. inv Heqr. simpl in H13. assumption.
+  repeat break_match_hyp; try congruence. simpl. inv Heqr. simpl in H13.
+  assumption.
   repeat (econstructor; eauto).
   unfold bind in *. break_match_hyp; try congruence.
   
@@ -1430,7 +1449,11 @@ Proof.
 
   (* make_constr *)
   + eapply SmakeConstr_sim; eauto.
-  (* need fact that lists in program aren't too long *)
+    
+    (* need fact that lists in program aren't too long *)
+
+    (* need a sort of code_of_prog definition *)
+    (* and a proof that whatever we step to is from the prog *)
     admit.
     
   (* make close *)
@@ -1501,15 +1524,14 @@ Proof.
   simpl.
   econstructor; eauto.
   econstructor; eauto.
-  unfold transf_function in H1. simpl in H1. break_match_hyp; try congruence.
+  unfold transf_function in H1. simpl in H1. repeat break_match_hyp; try congruence.
   unfold transf_function in H1. simpl in H1. inv H1. simpl. reflexivity.
 
   app env_inject_set_params_locals list_forall2.
-  unfold transf_function in H1. break_match_hyp; try congruence.
+  unfold transf_function in H1. repeat break_match_hyp; try congruence.
   assert (Emajor.fn_params f = fn_params f').
   {
-    invc H1. 
-    simpl. reflexivity.
+    invc H1. simpl. reflexivity.
   }
   rewrite H5.
   eapply disjoint_set_locals; eauto.
