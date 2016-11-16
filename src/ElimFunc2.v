@@ -910,3 +910,105 @@ Ltac refold_elim_rec_shape :=
     fold elim_rec_shape_list in *;
     fold elim_rec_shape_pair in *;
     fold elim_rec_shape_list_pair in *.
+
+Lemma elim_rec_shape_list_Forall : forall es,
+    elim_rec_shape_list es <-> Forall elim_rec_shape es.
+induction es; simpl in *; refold_elim_rec_shape; split; intro; eauto.
+- break_and. constructor; firstorder.
+- on >Forall, invc. firstorder.
+Qed.
+
+
+Definition rec_info_eq_dec (x y : rec_info) := list_eq_dec Bool.bool_dec x y.
+
+Definition expr_eq_dec (x y : expr) : { x = y } + { x <> y }.
+make_first x.
+induction x using expr_rect_mut with
+    (Pl := fun x => forall y, { x = y } + { x <> y })
+    (Pp := fun x => forall y, { x = y } + { x <> y })
+    (Plp := fun x => forall y, { x = y } + { x <> y });
+destruct y; try solve [right; inversion 1 | left; auto].
+
+- destruct (eq_nat_dec n n0); [ | right; inversion 1; auto ].
+  left. congruence.
+
+- destruct (IHx1 y1); [ | right; inversion 1; auto ].
+  destruct (IHx2 y2); [ | right; inversion 1; auto ].
+  left. congruence.
+
+- destruct (eq_nat_dec tag tag0); [ | right; inversion 1; auto ].
+  destruct (IHx args0); [ | right; inversion 1; auto ].
+  left. congruence.
+
+- destruct (IHx y); [ | right; inversion 1; auto ].
+  destruct (IHx0 cases0); [ | right; inversion 1; auto ].
+  left. congruence.
+
+- destruct (eq_nat_dec f f0); [ | right; inversion 1; auto ].
+  destruct (IHx free0); [ | right; inversion 1; auto ].
+  left. congruence.
+
+- destruct (IHx e); [ | right; inversion 1; auto ].
+  destruct (IHx0 y); [ | right; inversion 1; auto ].
+  left. congruence.
+
+- destruct (IHx e); [ | right; inversion 1; auto ].
+  destruct (rec_info_eq_dec r r0); [ | right; inversion 1; auto ].
+  left. congruence.
+
+- destruct (IHx p0); [ | right; inversion 1; auto ].
+  destruct (IHx0 y); [ | right; inversion 1; auto ].
+  left. congruence.
+
+Defined.
+
+Definition rec_shape_dec (e : expr) : { rec_shape e } + { ~ rec_shape e }.
+destruct e; try solve [right; inversion 1; break_exists; discriminate].
+
+remember (length free) as n.
+destruct (list_eq_dec expr_eq_dec free (upvar_list n)); cycle 1.
+  { right. inversion 1. break_exists.
+    replace x0 with n in *; [ congruence | ].
+    on >@eq, invc. eapply upvar_list_length. }
+left. exists f. exists n. congruence.
+Defined.
+
+Definition elim_rec_shape_dec (e : expr) : { elim_rec_shape e } + { ~ elim_rec_shape e }.
+induction e using expr_rect_mut with
+    (Pl := fun e => { elim_rec_shape_list e } + { ~ elim_rec_shape_list e })
+    (Pp := fun e => { elim_rec_shape_pair e } + { ~ elim_rec_shape_pair e })
+    (Plp := fun e => { elim_rec_shape_list_pair e } + { ~ elim_rec_shape_list_pair e });
+simpl in *; refold_elim_rec_shape; repeat break_and;
+try solve [ assumption | left; eauto ].
+
+- destruct IHe1; [ | right; firstorder ].
+  destruct IHe2; [ | right; firstorder ].
+  left; firstorder.
+
+- destruct (rec_shape_dec e); [ | right; firstorder ].
+  destruct IHe; [ | right; firstorder ].
+  destruct IHe0; [ | right; firstorder ].
+  left; firstorder.
+
+- destruct IHe; [ | right; firstorder ].
+  destruct IHe0; [ | right; firstorder ].
+  left; firstorder.
+
+- destruct IHe; [ | right; firstorder ].
+  destruct IHe0; [ | right; firstorder ].
+  left; firstorder.
+
+Defined.
+
+Definition elim_rec_shape_list_dec (es : list expr) :
+    { elim_rec_shape_list es } + { ~ elim_rec_shape_list es }.
+induction es;
+simpl in *; refold_elim_rec_shape; repeat break_and.
+
+- left. constructor.
+
+- destruct (elim_rec_shape_dec a); [ | right; firstorder ].
+  destruct IHes; [ | right; firstorder ].
+  left; firstorder.
+
+Defined.
