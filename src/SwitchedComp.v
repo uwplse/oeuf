@@ -4,6 +4,7 @@ Require Import ListLemmas.
 Require ElimFunc2 ElimFunc3 Switched String.
 Delimit Scope string_scope with string.
 Require Import Psatz.
+Require Import StepLib.
 
 Module A := ElimFunc3.
 Module AS := ElimFunc2.
@@ -67,10 +68,14 @@ Ltac refold_compile :=
     fold compile_list in *;
     fold compile_cases in *.
 
-Definition compile_cu (cu : list AS.expr * list metadata) : list B.expr * list metadata :=
+Definition compile_cu (cu : list AS.expr * list metadata) :
+        option (list B.expr * list metadata) :=
     let '(exprs, metas) := cu in
-    let exprs' := compile_list exprs in
-    (exprs', metas).
+    if AS.elim_rec_shape_list_dec exprs then
+        let exprs' := compile_list exprs in
+        Some (exprs', metas)
+    else
+        None.
 
 
 
@@ -112,7 +117,8 @@ Inductive I_expr (AE : AS.env) (BE : B.env) : AS.expr -> B.expr -> Prop :=
 | IConstr :forall tag aargs bargs,
         Forall2 (I_expr AE BE) aargs bargs ->
         I_expr AE BE (AS.Constr tag aargs) (B.Constr tag bargs)
-| IElimBody : forall arec acases brec bcases,
+| IElimBody : forall fname n acases brec bcases,
+        let arec := AS.Close fname (AS.upvar_list n) in
         I_expr AE BE arec brec ->
         Forall2 (I_case (I_expr AE BE) brec) acases bcases ->
         I_expr AE BE (AS.ElimBody arec acases) (B.Switch bcases)
@@ -253,33 +259,49 @@ Inductive I (AE : AS.env) (BE : B.env) : A.state -> B.state -> Prop :=
 
 
 Theorem compile_I_expr : forall AE BE ae be,
+    AS.elim_rec_shape ae ->
     compile ae = be ->
     I_expr AE BE ae be.
 intros AE BE.
 induction ae using AS.expr_rect_mut with
     (Pl := fun aes => forall bes,
+        AS.elim_rec_shape_list aes ->
         compile_list aes = bes ->
         Forall2 (I_expr AE BE) aes bes)
     (Pp := fun ap => forall be,
+        AS.elim_rec_shape_pair ap ->
         compile (fst ap) = be ->
         I_expr AE BE (fst ap) be)
     (Plp := fun aps => forall bes,
+        AS.elim_rec_shape_list_pair aps ->
         compile_list (map fst aps) = bes ->
         Forall2 (I_expr AE BE) (map fst aps) bes);
 simpl; eauto;
-intros0 Hcomp; simpl in Hcomp; refold_compile; try rewrite <- Hcomp; eauto.
+intros0 Arec Hcomp; simpl in *; refold_compile; AS.refold_elim_rec_shape;
+try rewrite <- Hcomp; eauto.
 
 - constructor.
 - constructor.
-- constructor; eauto.
-- constructor; eauto.
-- econstructor; eauto.
+- break_and. constructor; eauto.
+- break_and. constructor; eauto.
+- break_and. on >AS.rec_shape, invc. break_exists. subst.
+  econstructor; eauto.
   rewrite compile_cases_is_map. rewrite <- Forall2_map_r.
-  specialize (IHae0 ?? ***). rewrite compile_list_is_map in *.
+  specialize (IHae0 ?? ** ***). rewrite compile_list_is_map in *.
   rewrite <- Forall2_map, <- Forall2_map_r in *.  rewrite Forall2_same in *.
-  list_magic_on (cases, tt). destruct cases_i as [acase info].
+  list_magic_on (cases, tt). refold_compile. destruct cases_i as [acase info].
   unfold I_case. exists (compile acase). simpl. split; eauto.
 - constructor; eauto.
+
+- break_and. constructor; eauto.
+- break_and. constructor; eauto.
+Qed.
+
+Theorem compile_cu_elim_rec_shape : forall a ameta b bmeta,
+    compile_cu (a, ameta) = Some (b, bmeta) ->
+    Forall AS.elim_rec_shape a.
+intros0 Hcomp. unfold compile_cu in *. break_if; try discriminate.
+rewrite <- AS.elim_rec_shape_list_Forall. auto.
 Qed.
 
 
@@ -833,15 +855,17 @@ Qed.
 
 
 Lemma body_I_expr_ex : forall AE fname body,
+    Forall AS.elim_rec_shape AE ->
     nth_error AE fname = Some body ->
     exists bbody,
         nth_error (compile_list AE) fname = Some bbody /\
         I_expr AE (compile_list AE) body bbody.
-intros0 Hnth.
+intros0 Arec Hnth.
+fwd eapply Forall_nth_error; eauto.
 eapply map_nth_error with (f := compile) in Hnth.
 exists (compile body). split.
 - rewrite compile_list_is_map. assumption.
-- eapply compile_I_expr. reflexivity.
+- eapply compile_I_expr; eauto.
 Qed.
 
 Lemma AS_unroll_elim_is_call : forall rec case args info e',
@@ -973,7 +997,7 @@ Qed.
 
 Theorem I_sim : forall AE BE a a' b,
     compile_list AE = BE ->
-    AS.elim_rec_shape (A.state_expr a) ->
+    Forall AS.elim_rec_shape AE ->
     I AE BE a b ->
     A.sstep AE a a' ->
     exists b',
@@ -1016,11 +1040,13 @@ try solve [do 2 break_exists; discriminate].
   fwd eapply length_nth_error_Some with (xs := AE) (ys := compile_list AE) as HH;
     eauto using compile_list_length.
     destruct HH as [bbody ?].
-  
+  fwd eapply Forall_nth_error with (P := AS.elim_rec_shape); eauto.
+
   eexists. split. left. eapply B.SPlusOne, B.SMakeCall; eauto.
     { list_magic_on (free, (bfree, tt)). }
   constructor; eauto.
-    { eapply compile_I_expr. pattern body, bbody. eapply Forall2_nth_error; try eassumption.
+    { eapply compile_I_expr; eauto.
+      pattern body, bbody. eapply Forall2_nth_error; try eassumption.
       rewrite compile_list_is_map. rewrite <- Forall2_map_r.
       eapply nth_error_Forall2; eauto. intros. congruence. }
     { constructor; eauto. list_magic_on (free, (bfree, tt)). }
@@ -1041,9 +1067,6 @@ try solve [do 2 break_exists; discriminate].
   constructor; eauto.
 
 - (* SElimStepRec *)
-  simpl in Arec. AS.refold_elim_rec_shape. do 2 break_and.
-  on (AS.rec_shape _), fun H => destruct H as (fname & n & ?). subst ae.
-
   eexists. split. right. split. reflexivity.
     { unfold metric. break_if; try contradiction. simpl.
       rewrite AS.upvar_list_length.
@@ -1054,17 +1077,15 @@ try solve [do 2 break_exists; discriminate].
       erewrite <- I_expr_upvar_list; eauto. }
 
 - (* SEliminate *)
-  simpl in *. AS.refold_elim_rec_shape. do 2 break_and.
-  on (AS.rec_shape _), fun H => destruct H as (fname & n & ?).
   assert (n = 0).
-    { destruct n; eauto. subst ae. on (AS.value (AS.Close _ _)), invc.
+    { destruct n; eauto. on (AS.value (AS.Close _ _)), invc.
       fwd eapply AS.upvar_list_not_value with (n := S n).
       destruct (AS.upvar_list _) eqn:?.
         { assert (HH : length (AS.upvar_list (S n)) = @length AS.expr []) by congruence.
           rewrite AS.upvar_list_length in HH. simpl in HH. discriminate. }
       do 2 on (Forall _ (_ :: _)), invc.  contradiction. }
   subst n. replace (AS.upvar_list 0) with (@nil AS.expr) in * by reflexivity.
-  subst ae. on (I_expr _ _ (AS.Close _ _) _), invc. on (Forall2 _ [] _), invc.
+  on (I_expr _ _ (AS.Close _ _) _), invc. on (Forall2 _ [] _), invc.
 
   rename l into al. on (Forall2 _ _ bl), invc.
     on (I_expr _ _ (AS.Constr _ _) _), invc. rename l' into bl.
@@ -1300,28 +1321,23 @@ Section Preservation.
   Variable prog : A.prog_type.
   Variable tprog : B.prog_type.
 
-  Hypothesis TRANSF : compile_cu prog = tprog.
-
-  
-  (* Inductive match_states (AE : A.env) (BE : B.env) : A.expr -> B.expr -> Prop := *)
-  (* | match_st : *)
-  (*     forall a b, *)
-  (*       R AE BE a b -> *)
-  (*       match_states AE BE a b. *)
-
-  (* Lemma step_sim : *)
-  (*   forall AE BE a b, *)
-  (*     match_states AE BE a b -> *)
-  (*     forall a', *)
-  (*       A.step AE a a' -> *)
-  (*       exists b', *)
-  (*         splus (B.step BE) b b'. *)
-  (* Proof. *)
-  (* Admitted. *)
+  Hypothesis TRANSF : compile_cu prog = Some tprog.
 
   Theorem fsim :
     Semantics.forward_simulation (A.semantics prog) (B.semantics tprog).
   Proof.
-  Admitted.
+    eapply Semantics.forward_simulation_star with
+        (match_states := I (fst prog) (fst tprog)).
+    - inversion 1. (* TODO - replace with callstate matching *)
+    - intros0 II Afinal. invc Afinal. invc II.
+      eexists; split.
+      constructor. eauto using I_expr_value.
+      reflexivity.
+    - intros0 Astep. intros0 II.
+      eapply sstar_semantics_sim, I_sim; eauto.
+      + destruct prog, tprog. unfold compile_cu in *. break_if; try discriminate.
+        inject_some. simpl. reflexivity.
+      + destruct prog, tprog. simpl. eauto using compile_cu_elim_rec_shape.
+  Qed.
 
 End Preservation.

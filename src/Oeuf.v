@@ -21,13 +21,13 @@ Definition transf_untyped_to_cminor (l : list UntypedComp.U.expr * list Metadata
   @@ ElimFuncComp.compile_cu
  @@@ ElimFuncComp2.compile_cu ~~ "ElimFuncComp2"
  @@@ ElimFuncComp3.compile_cu ~~ "ElimFuncComp3"
-  @@ SwitchedComp.compile_cu
+ @@@ SwitchedComp.compile_cu ~~ "SwitchedComp"
   @@ SelfCloseComp.compile_cu
   @@ ValueFlagComp.compile_cu
  @@@ StackCompCombined.compile_cu
  @@@ LocalsCompCombined.compile_cu
  @@@ FlatCompCombined.compile_cu
- @@@ FmajorComp.compile_cu
+ @@@ FmajorComp.compile_cu ~~ "FmajorComp"
   @@ Fmajortofflatmajor.transf_program
   @@ Fflatmajortoemajor.transf_program
  @@@ Emajortodmajor.transf_prog
