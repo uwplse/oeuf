@@ -880,7 +880,6 @@ Record receptive (L: semantics) : Prop :=
       single_events L
   }.
 
-(*
 Record determinate (L: semantics) : Prop :=
   Determinate {
     sd_determ: forall s t1 s1 t2 s2,
@@ -888,8 +887,8 @@ Record determinate (L: semantics) : Prop :=
       match_traces (symbolenv L) t1 t2 /\ (t1 = t2 -> s1 = s2);
     sd_traces:
       single_events L;
-    sd_initial_determ: forall s1 s2,
-      initial_state L s1 -> initial_state L s2 -> s1 = s2;
+    sd_callstate_determ: forall fv av s1 s2,
+      is_callstate L fv av s1 -> is_callstate L fv av s2 -> s1 = s2;
     sd_final_nostep: forall s r,
       final_state L s r -> Nostep L s;
     sd_final_determ: forall s r1 r2,
@@ -939,7 +938,7 @@ Qed.
 End DETERMINACY.
 
 (** * Backward simulations between two transition semantics. *)
-
+(*
 Definition safe (L: semantics) (s: state L) : Prop :=
   forall s',
   Star L s E0 s' ->
@@ -960,9 +959,14 @@ Record backward_simulation (L1 L2: semantics) : Type :=
     bsim_index: Type;
     bsim_order: bsim_index -> bsim_index -> Prop;
     bsim_order_wf: well_founded bsim_order;
+    bsim_match_values : valtype L1 -> valtype L2 -> Prop;
     bsim_match_states :> bsim_index -> state L1 -> state L2 -> Prop;
-    bsim_initial_states_exist:
-      forall s1, initial_state L1 s1 -> exists s2, initial_state L2 s2;
+    bsim_is_callstate_exist:
+      forall fv1 av1 fv2 av2 s1,
+        is_callstate L1 fv1 a1 s1 ->
+        bsim_match_values fv1 fv2 ->
+        bsim_match_values av1 av2 ->
+        exists s2, is_callstate L2 fv2 av2 s2;
     bsim_match_initial_states:
       forall s1 s2, initial_state L1 s1 -> initial_state L2 s2 ->
       exists i, exists s1', initial_state L1 s1' /\ bsim_match_states i s1' s2;
