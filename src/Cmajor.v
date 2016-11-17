@@ -349,3 +349,99 @@ Inductive cminor_is_callstate (p : Cminor.program) : value -> value -> state -> 
 Definition Cminor_semantics (p: Cminor.program) :=
   Semantics Cminor.step (cminor_is_callstate p) (cminor_final_state p) (Genv.globalenv p).
 
+
+Lemma eval_unop_det :
+  forall a b v v',
+    eval_unop a b = Some v ->
+    eval_unop a b = Some v' ->
+    v = v'.
+Proof.
+Admitted.
+
+Lemma eval_binop_det :
+  forall op a b m v v',
+    eval_binop op a b m = Some v ->
+    eval_binop op a b m = Some v' ->
+    v = v'.
+Proof.
+Admitted.
+
+
+Lemma eval_expr_det :
+  forall a e ge sp m v v',
+    eval_expr ge sp e m a v ->
+    eval_expr ge sp e m a v' ->
+    v = v'.
+Proof.
+  induction a; intros; inv H; inv H0; try congruence.
+  eapply IHa in H3; try eapply H4. subst.
+  eapply eval_unop_det; eauto.
+  eapply IHa1 in H4; try eapply H5. subst.
+  eapply IHa2 in H6; try eapply H9. subst.
+  eapply eval_binop_det; eauto.
+  eapply IHa in H3; try eapply H4. subst.
+  congruence.
+Qed.
+
+Lemma eval_exprlist_det :
+  forall l l' ge sp e m a,
+    eval_exprlist ge sp e m a l ->
+    eval_exprlist ge sp e m a l' ->
+    l = l'.
+Proof.
+  induction l; intros;
+    inv H; inv H0; try congruence.
+
+  assert (l = vl) by (eapply IHl; eauto). subst.
+  f_equal.
+  eapply eval_expr_det; eauto.
+Qed.
+  
+Lemma semantics_determinate:
+  forall (p: Cminor.program), TraceSemantics.determinate (Cminor_semantics p).
+Proof.
+  intros.
+  econstructor.
+
+  - intros.
+    inv H; inv H0; try congruence;
+      simpl in *;
+      match goal with
+      | [ H : False |- _ ] => solve [inversion H]
+      | [ |- _ ] => idtac
+      end;
+      split; intros; try econstructor; eauto;
+        try congruence;
+    repeat match goal with
+           | [ H : eval_expr _ _ _ _ _ ?V , H2 : eval_expr _ _ _ _ _ ?X |- _ ] =>
+             assert (V = X) by (eapply eval_expr_det; eauto); clear H; clear H2; subst
+           | [ H : eval_exprlist _ _ _ _ _ ?V, H2 : eval_exprlist _ _ _ _ _ ?X |- _ ] =>
+             assert (V = X) by (eapply eval_exprlist_det; eauto); clear H; clear H2; subst
+           end;
+    try congruence.
+    eapply external_call_determ in H14; try eapply H2. break_and.
+    assumption.
+    eapply external_call_determ in H14; try eapply H2. break_and.
+    specialize (H3 eq_refl). break_and. congruence.
+    inv H14; inv H2; simpl in *; congruence.
+    inv H15; inv H2; simpl in *; congruence.
+    eapply external_call_determ in H8; try eapply H1. break_and.
+    assumption.
+    eapply external_call_determ in H8; try eapply H1. break_and.
+    specialize (H4 H2). break_and. congruence.
+
+  - unfold single_events. intros.
+    inv H; simpl; try omega;
+      eapply external_call_trace_length; eauto.
+  - admit. (* what to do about this? *)
+
+  - intros. inv H. simpl.
+    unfold nostep. intros. intro. inv H1; try congruence.
+
+  - intros.
+    inv H; inv H0; simpl in *.
+
+    (* again, value_inject could be a problem *)
+    admit.
+Admitted.
+

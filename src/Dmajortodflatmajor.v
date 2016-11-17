@@ -1432,24 +1432,8 @@ Proof.
   eexists; split. eauto.
   eapply wf_mem_refl; eauto.
 Qed.
-(*
-Lemma initial_states_match :
-  forall st,
-    Dmajor.initial_state prog st ->
-    exists st',
-      Dflatmajor.initial_state prog st' /\ match_states st st'.
-Proof.
-  intros.
-  inv H.
-  app init_mem_wf Genv.init_mem.
-  eexists; split.
-  econstructor; eauto.
-  econstructor; eauto;
-    try solve [simpl; econstructor; eauto].
-  simpl. eapply init_mem_nextblock; eauto.
-Qed.
 
-*)
+
 Lemma match_final_states :
   forall st st' r,
     match_states st st' ->
@@ -1466,13 +1450,27 @@ Proof.
   unfold wf_mem in *. unfold wf_inj in *. intuition.
 Qed.
 
+Lemma callstate_match :
+  forall fv av st',
+    Dflatmajor.is_callstate prog fv av st' ->
+    exists st,
+      match_states st st' /\ Dmajor.is_callstate prog fv av st.
+Proof.
+  intros. inv H.
+  eexists. split; econstructor; eauto.
+  
+Admitted.
+
 Theorem fsim :
   forward_simulation (Dmajor.semantics prog) (Dflatmajor.semantics prog).
 Proof.
   eapply forward_simulation_plus.
-  admit.
-  intros. instantiate (1 := eq). eapply match_final_states in H0; eauto.
+  instantiate (2 := eq).
+  intros.
+  eapply callstate_match; eauto.
+  subst. eauto.
+  intros. eapply match_final_states in H0; eauto.
   eapply single_step_correct.
-Admitted.
+Qed.
 
 End PRESERVATION.
