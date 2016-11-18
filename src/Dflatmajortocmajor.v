@@ -431,12 +431,36 @@ Lemma is_callstate_match :
       match_states st st' /\ is_callstate prog fv av st.
 Proof.
   intros. inv H.
+  unfold transf_prog in *.
+  repeat (break_match_hyp; try congruence).
+  unfold transf_prog_malloc in *.
   eapply Genv.find_funct_ptr_rev_transf_partial in H2; eauto.
   break_exists. break_and.
-  eexists; split; econstructor; eauto;
-    try solve [repeat (econstructor; eauto)].
+  erewrite Genv.find_symbol_transf_partial in H3; eauto.
+  inv malloc_id_found.
+  assert (Hffp : forall b f,
+             Genv.find_funct_ptr (Genv.globalenv tprog) b = Some f ->
+             exists f', Genv.find_funct_ptr (Genv.globalenv prog) b = Some f').
+  {
+    intros. 
+    eapply Genv.find_funct_ptr_rev_transf_partial in H5; eauto.
+    break_exists. break_and. eauto.
+  }
+  assert (Hfs : forall fname b,
+             Genv.find_symbol (Genv.globalenv tprog) fname = Some b ->
+             Genv.find_symbol (Genv.globalenv prog) fname = Some b).
+  {
+    intros. erewrite Genv.find_symbol_transf_partial in H5; eauto.
+  }
   
-Admitted.
+ destruct x; unfold transf_fundef in *; simpl in H4; try congruence.
+  eexists; split; econstructor; eauto;
+    try solve [repeat (econstructor; eauto)];
+    eapply value_inject_swap_ge; eauto.
+
+  Grab Existential Variables.
+  exact 0.
+Qed.
 
 Lemma match_final_states :
   forall st st' r,
@@ -444,8 +468,16 @@ Lemma match_final_states :
     final_state prog st r ->
     Cmajor.final_state tprog st' r.
 Proof.
-Admitted.
-
+  intros. inv H0. inv H.
+  inv MC.
+  econstructor; eauto.
+  eapply value_inject_swap_ge; eauto.
+  intros.
+  eapply find_funct_ptr_transf in H2.
+  break_exists. break_and. eauto.
+  intros.
+  erewrite find_symbol_transf; eauto.
+Qed.
 
 End PRESERVATION.
 

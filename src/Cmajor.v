@@ -293,9 +293,9 @@ Inductive is_callstate (p : program) : value -> value -> state -> Prop :=
     forall fname vs arg fb fofs argptr m fn,
       value_inject (Genv.globalenv p) m (Close fname vs) (Vptr fb fofs) ->
       value_inject (Genv.globalenv p) m arg argptr ->
-      Genv.find_funct_ptr (Genv.globalenv p) fb = Some fn ->
+      Genv.find_funct_ptr (Genv.globalenv p) fb = Some (Internal fn) ->
       Genv.find_symbol (Genv.globalenv p) fname = Some fb ->
-      is_callstate p (Close fname vs) arg (Callstate fn ((Vptr fb fofs) :: argptr :: nil) Kstop m).
+      is_callstate p (Close fname vs) arg (Callstate (Internal fn) ((Vptr fb fofs) :: argptr :: nil) Kstop m).
 
 (** A final state is a [Returnstate] with an empty continuation. *)
 
@@ -341,9 +341,9 @@ Inductive cminor_is_callstate (p : Cminor.program) : value -> value -> state -> 
     forall fname vs arg fb fofs argptr m fn,
       value_inject (Genv.globalenv p) m (Close fname vs) (Vptr fb fofs) ->
       value_inject (Genv.globalenv p) m arg argptr ->
-      Genv.find_funct_ptr (Genv.globalenv p) fb = Some fn ->
+      Genv.find_funct_ptr (Genv.globalenv p) fb = Some (Internal fn) ->
       Genv.find_symbol (Genv.globalenv p) fname = Some fb ->
-      cminor_is_callstate p (Close fname vs) arg (Callstate fn ((Vptr fb fofs) :: argptr :: nil) Kstop m).
+      cminor_is_callstate p (Close fname vs) arg (Callstate (Internal fn) ((Vptr fb fofs) :: argptr :: nil) Kstop m).
 
 
 Definition Cminor_semantics (p: Cminor.program) :=
