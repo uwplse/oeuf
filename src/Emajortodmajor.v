@@ -1596,17 +1596,39 @@ Proof.
   econstructor. eassumption.
 Qed.
 
+Lemma callstate_match :
+  forall fv av st',
+    Dmajor.is_callstate tprog fv av st' ->
+    exists st,
+      match_states st st' /\ Emajor.is_callstate prog fv av st.
+Proof.
+  intros. inv H.
+  unfold transf_prog in *.
+  eapply Genv.find_funct_ptr_rev_transf_partial in H2; eauto.
+  break_exists. break_and. copy H4.
+  erewrite Genv.find_symbol_transf_partial in H3; eauto.
+  destruct x; simpl in H4; unfold bind in H4; simpl in H4; try congruence.
+  break_match_hyp; try congruence. clear H4.
+  eexists; split; econstructor; eauto.
+  unfold transf_fundef in *.
+  simpl in *.
+  unfold bind in *.
+  break_match_hyp; try congruence.
+  repeat (econstructor; eauto).
+  econstructor; eauto.
+Qed.  
+
 Theorem fsim :
   forward_simulation (Emajor.semantics prog) (Dmajor.semantics tprog).
 Proof.
   eapply forward_simulation_plus.
-  admit.
-  intros. instantiate (1 := eq).
-  eapply match_final_states in H0; eauto.
-  
+  intros. 
+  eapply callstate_match; eauto.
+  instantiate (1 := eq) in H0. subst.
+  eauto.
+  intros. eapply match_final_states in H0; eauto.
   intros. eapply step_sim; eauto.
-  
-Admitted.
+Qed.
 
 
 End PRESERVATION.
