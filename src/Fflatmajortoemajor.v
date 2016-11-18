@@ -675,25 +675,6 @@ Proof.
   eapply step_sim_nil_trace; eauto.
 Qed.
 
-(*
-(* maybe don't need? *)
-Lemma initial_states_match :
-  forall s1,
-    Fflatmajor.initial_state prog s1 ->
-    exists s2, Emajor.initial_state tprog s2 /\ match_states s1 s2.
-Proof.
-  intros.
-  inv H. eexists; split.
-  econstructor; eauto.
-  unfold transf_program.
-  erewrite Genv.find_symbol_transf; eauto.
-  unfold transf_program.
-  erewrite Genv.find_funct_ptr_transf; eauto.
-  
-  
-Admitted.
-*)
-
 Lemma match_final_states :
   forall s1 s2 r,
     match_states s1 s2 ->
@@ -707,15 +688,34 @@ Proof.
   econstructor.
 Qed.
 
+Lemma is_callstate_match :
+  forall fv av s2,
+    Emajor.is_callstate tprog fv av s2 ->
+    exists s1,
+      match_states s1 s2 /\ Fflatmajor.is_callstate prog fv av s1.
+Proof.
+  intros. inv H.
+  unfold transf_program in *.
+  eapply Genv.find_funct_ptr_rev_transf in H1; eauto.
+  break_exists. break_and.
+  erewrite Genv.find_symbol_transf in H0; eauto.
+  destruct x; simpl in *; try congruence. inv H3.
+  assert (length (Fflatmajor.fn_params f) = 2%nat).
+  destruct f; simpl in *; eauto.
+  eexists; split; try econstructor; eauto.
+  econstructor; eauto.
+Qed.
+
 Theorem fsim :
   forward_simulation (Fflatmajor.semantics prog) (Emajor.semantics tprog).
 Proof.
   eapply forward_simulation_plus.
-  (*solve [eapply initial_states_match; eauto].*) admit.
+  intros. eapply is_callstate_match; eauto.
+  instantiate (1 := eq) in H0. subst. eauto.
   intros. eapply match_final_states in H0.
-  simpl in v1. simpl. exists v1. split; eauto. reflexivity.
-  eassumption.
+  simpl in v1. simpl. exists v1. split; eauto.
+  simpl in H. eauto.
   intros. eapply step_sim; eauto.
-Admitted.
+Qed.
     
 End PRESERVATION.
