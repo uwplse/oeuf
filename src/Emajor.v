@@ -211,6 +211,7 @@ Inductive is_callstate (p : program) : value -> value -> state -> Prop :=
     forall fn vs av fname bcode,
       Genv.find_symbol (Genv.globalenv p) fname = Some bcode ->
       Genv.find_funct_ptr (Genv.globalenv p) bcode = Some (Internal fn) ->
+      length (fn_params fn) = 2%nat ->
       is_callstate p (Close fname vs) av (Callstate fn ((Close fname vs) :: av :: nil) Kstop).
       
 Inductive final_state: state -> value -> Prop :=

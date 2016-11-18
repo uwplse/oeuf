@@ -443,21 +443,22 @@ Proof.
              exists f', Genv.find_funct_ptr (Genv.globalenv prog) b = Some f').
   {
     intros. 
-    eapply Genv.find_funct_ptr_rev_transf_partial in H5; eauto.
+    eapply Genv.find_funct_ptr_rev_transf_partial in H6; eauto.
     break_exists. break_and. eauto.
   }
   assert (Hfs : forall fname b,
              Genv.find_symbol (Genv.globalenv tprog) fname = Some b ->
              Genv.find_symbol (Genv.globalenv prog) fname = Some b).
   {
-    intros. erewrite Genv.find_symbol_transf_partial in H5; eauto.
+    intros. erewrite Genv.find_symbol_transf_partial in H6; eauto.
   }
   
- destruct x; unfold transf_fundef in *; simpl in H4; try congruence.
+  destruct x; unfold transf_fundef in *; simpl in H5; try congruence.
+  
   eexists; split; econstructor; eauto;
     try solve [repeat (econstructor; eauto)];
-    eapply value_inject_swap_ge; eauto.
-
+    try eapply value_inject_swap_ge; eauto.
+  destruct f; destruct fn; inversion H5; subst; simpl in *; eauto.
   Grab Existential Variables.
   exact 0.
 Qed.
