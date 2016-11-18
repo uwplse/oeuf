@@ -1450,6 +1450,34 @@ Proof.
   unfold wf_mem in *. unfold wf_inj in *. intuition.
 Qed.
 
+Lemma value_inject_not_empty :
+  forall m hv lv,
+    HighValues.value_inject ge m hv lv ->
+    Plt 1%positive (Mem.nextblock m).
+Proof.
+  intros. inv H;
+  unfold Mem.loadv in *;
+  app Mem.load_valid_access Mem.load;
+  try eapply Mem.valid_access_implies in H0;
+  try eapply Mem.valid_access_valid_block in H0;
+  try solve [econstructor];
+  unfold Mem.valid_block in *;
+  destruct (Mem.nextblock m); simpl;  
+  unfold Plt in *; unfold Pos.lt in *; simpl;
+    unfold Pos.compare in *; simpl in *; try reflexivity;
+      break_match_hyp; try congruence.
+Qed.
+
+Lemma meminj_value_inject :
+  forall {A B} (ge : Genv.t A B) m hv1 lv1 hv2 lv2,
+    HighValues.value_inject ge m hv1 lv1 ->
+    HighValues.value_inject ge m hv2 lv2 ->
+    exists mi,
+      Mem.inject mi m m /\ wf_mem mi m m /\ Val.inject_list mi (lv1 :: lv2 :: nil) (lv1 :: lv2 :: nil).
+Proof.
+  (* This is the challenge *)
+Admitted.
+
 Lemma callstate_match :
   forall fv av st',
     Dflatmajor.is_callstate prog fv av st' ->
@@ -1457,9 +1485,14 @@ Lemma callstate_match :
       match_states st st' /\ Dmajor.is_callstate prog fv av st.
 Proof.
   intros. inv H.
-  eexists. split; econstructor; eauto.
-  
-Admitted.
+  exists (Dmajor.Callstate fn (Vptr fb fofs :: argptr :: nil) Dmajor.Kstop m).
+  copy H1.
+  eapply meminj_value_inject in H1; try eapply H0; eauto.
+  break_exists; repeat break_and.
+  split; econstructor; eauto; simpl;
+    try eapply value_inject_not_empty; eauto;
+      try solve [econstructor; eauto].
+Qed.
 
 Theorem fsim :
   forward_simulation (Dmajor.semantics prog) (Dflatmajor.semantics prog).

@@ -466,6 +466,7 @@ Proof.
   remember no_new_functions as Hnn.
   remember find_symbol_transf as Hfs.
   eapply no_new_functions in H2. break_exists. break_and.
+  destruct x;  simpl in H7; try congruence.
   eexists; split; econstructor; try eapply Mem.extends_refl; try eassumption.
   econstructor.
   econstructor. econstructor.
