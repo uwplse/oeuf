@@ -1475,7 +1475,38 @@ Lemma meminj_value_inject :
     exists mi,
       Mem.inject mi m m /\ wf_mem mi m m /\ Val.inject_list mi (lv1 :: lv2 :: nil) (lv1 :: lv2 :: nil).
 Proof.
-  (* This is the challenge *)
+  intros.
+  exists (Mem.flat_inj (Mem.nextblock m)).
+  split.
+  eapply Mem.neutral_inject.
+  
+  simpl. econstructor; eauto.
+  intros.
+  unfold Mem.flat_inj in *. break_match_hyp; try congruence. inv H1.
+  rewrite Z.add_0_r. assumption.
+  intros.
+  unfold Mem.flat_inj in *. break_match_hyp; try congruence. inv H1.
+  eapply Z.divide_0_r.
+  intros.
+  unfold Mem.flat_inj in *. break_match_hyp; try congruence. inv H1.
+  rewrite Z.add_0_r.
+  destruct (ZMap.get ofs (Mem.mem_contents m) !! b2) eqn:?; econstructor; eauto.
+  destruct v; econstructor; eauto.
+  (* Mem needs to not contain pointers to not yet allocated blocks *)
+  (* How do we enforce that? *)
+  admit. admit.
+
+  split.
+  unfold wf_mem.
+  split. admit. (* is true *)
+
+  admit. (* is true *)
+
+  simpl. repeat (econstructor; eauto).
+
+  admit. (* is true *)
+  admit. (* is true *)
+  
 Admitted.
 
 Lemma callstate_match :
