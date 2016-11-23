@@ -887,12 +887,12 @@ Record determinate (L: semantics) : Prop :=
       match_traces (symbolenv L) t1 t2 /\ (t1 = t2 -> s1 = s2);
     sd_traces:
       single_events L;
-    sd_callstate_determ: forall fv av s1 s2,
-      is_callstate L fv av s1 -> is_callstate L fv av s2 -> s1 = s2;
+    (*sd_callstate_determ: forall fv av s1 s2,
+      is_callstate L fv av s1 -> is_callstate L fv av s2 -> s1 = s2;*)
     sd_final_nostep: forall s r,
-      final_state L s r -> Nostep L s;
-    sd_final_determ: forall s r1 r2,
-      final_state L s r1 -> final_state L s r2 -> r1 = r2
+      final_state L s r -> Nostep L s
+    (*sd_final_determ: forall s r1 r2,
+      final_state L s r1 -> final_state L s r2 -> r1 = r2*)
   }.
 
 Section DETERMINACY.
