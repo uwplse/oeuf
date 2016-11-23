@@ -30,7 +30,7 @@ Require Dmajortodflatmajor.
 Require Dflatmajortocmajor.
 Require Cmajortominor.
 
-Require Shim. (* Dummy import to force build *)
+Require NewCont. (* Dummy import to force build *)
 
 
 Require Import Cmajor. (* Cminor bridge *)
