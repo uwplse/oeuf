@@ -23,6 +23,9 @@ Require Import StructTact.Util.
 
 Require Import EricTact.
 
+Definition transf_prog (p : Dmajor.program) : Errors.res Dmajor.program :=
+  if (list_norepet_dec ident_eq (prog_defs_names p)) then OK p else Error (MSG "repeats found in prog defs" :: nil).
+
 Section PRESERVATION.
 
 Variable prog: Dmajor.program.
@@ -738,8 +741,6 @@ Proof.
   
 Qed.
 
-
-  
 Lemma wf_mem_store :
   forall mi m m0,
     wf_mem mi m m0 ->
@@ -865,7 +866,6 @@ Proof.
   econstructor.
 Qed.
 
-
 Lemma alloc_store_inject :
   forall m lo hi m' b c m'' v,
     Mem.alloc m lo hi = (m',b) ->
@@ -908,48 +908,6 @@ Proof.
   
 Qed.
   
-
-(* 
-
-
-(* TODO: Decompose this into smaller lemmas *)
-
-
-
-
-Lemma alloc_stack_frame :
-  forall mi m m',
-    Mem.inject mi m m' ->
-    wf_mem mi m ->
-    forall lo hi,
-    exists m0 b,
-      Mem.alloc m' lo hi = (m0,b) /\
-      Mem.inject mi m m0 /\
-      (lo = 0 -> stack_frame_wf b hi mi m0).
-Proof.
-  intros.
-  destruct (Mem.alloc m' lo hi) eqn:?.
-  eexists. eexists. split. eauto.
-  split.
-  eapply Mem.alloc_right_inject; eauto.
-  intros.
-  unfold stack_frame_wf. split. subst lo.
-  unfold Mem.range_perm.
-  intros.
-  eapply Mem.perm_alloc_2; eauto.
-  intros. unfold wf_mem in *.
-  intro.
-  break_and.
-  unfold minimal_inj in *.
-  app H4 (mi b').
-  unfold Mem.valid_block in *.
-  eapply H4 in H2.
-  SearchAbout Mem.alloc.
-  SearchAbout Mem.inject.
-
-*)
-
-
 Lemma wf_mem_free_right :
   forall mi m m',
     wf_mem mi m m' ->
@@ -1567,7 +1525,7 @@ Proof.
       try solve [econstructor; eauto].
 Qed.
 
-Theorem fsim :
+Theorem fsim' :
   forward_simulation (Dmajor.semantics prog) (Dflatmajor.semantics prog).
 Proof.
   eapply forward_simulation_plus.
@@ -1580,3 +1538,13 @@ Proof.
 Qed.
 
 End PRESERVATION.
+
+Theorem fsim :
+  forall prog tprog,
+    transf_prog prog = OK tprog ->
+    forward_simulation (Dmajor.semantics prog) (Dflatmajor.semantics tprog).
+Proof.
+  intros.
+  unfold transf_prog in *. break_match_hyp; try congruence. inv H.
+  eapply fsim'; eauto.
+Qed.
