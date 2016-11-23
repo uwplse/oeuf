@@ -296,6 +296,8 @@ Inductive is_callstate (p : program) : value -> value -> state -> Prop :=
       Genv.find_funct_ptr (Genv.globalenv p) fb = Some (Internal fn) ->
       Genv.find_symbol (Genv.globalenv p) fname = Some fb ->
       length (fn_params fn) = 2%nat ->
+      global_blocks_valid (Genv.globalenv p) m ->
+      no_future_pointers m ->
       is_callstate p (Close fname vs) arg (Callstate (Internal fn) ((Vptr fb fofs) :: argptr :: nil) Kstop m).
 
 (** A final state is a [Returnstate] with an empty continuation. *)
@@ -345,6 +347,8 @@ Inductive cminor_is_callstate (p : Cminor.program) : value -> value -> state -> 
       Genv.find_funct_ptr (Genv.globalenv p) fb = Some (Internal fn) ->
       Genv.find_symbol (Genv.globalenv p) fname = Some fb ->
       length (fn_params fn) = 2%nat ->
+      global_blocks_valid (Genv.globalenv p) m ->
+      no_future_pointers m ->
       cminor_is_callstate p (Close fname vs) arg (Callstate (Internal fn) ((Vptr fb fofs) :: argptr :: nil) Kstop m).
 
 

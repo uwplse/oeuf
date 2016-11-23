@@ -240,6 +240,16 @@ Proof.
   econstructor; eauto.
 Qed.
 
+Definition global_blocks_valid {A B} (ge : Genv.t A B) (m : mem) : Prop :=
+  forall b f v,
+    Genv.find_funct_ptr ge b = Some f \/ Genv.find_var_info ge b = Some v -> Plt b (Mem.nextblock m).
+
+Definition no_future_pointers (m : mem) : Prop :=
+  forall b ofs b' ofs' q n,
+    Plt b (Mem.nextblock m) ->
+    ZMap.get ofs (Mem.mem_contents m) !! b = Fragment (Vptr b' ofs') q n ->
+    Plt b' (Mem.nextblock m).
+
 
 Lemma value_inject_mem_extends :
   forall {F V} (ge : Genv.t F V) m m' v v' v0,
