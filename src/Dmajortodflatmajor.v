@@ -1468,10 +1468,31 @@ Proof.
       break_match_hyp; try congruence.
 Qed.
 
+Lemma value_inject_val_inject :
+  forall m hv lv,
+    HighValues.value_inject ge m hv lv ->
+    Val.inject (Mem.flat_inj (Mem.nextblock m)) lv lv.
+Proof.
+  intros.
+  unfold Mem.flat_inj.
+  inv H; unfold Mem.loadv in *;
+    eapply Mem.load_valid_access in H0;
+    eapply Mem.valid_access_implies in H0;
+    try eapply Mem.valid_access_valid_block in H0;
+    try solve [econstructor];
+    unfold Mem.valid_block in *;
+    econstructor; eauto;
+      try (break_match; try congruence; try reflexivity);
+      rewrite Int.add_zero; reflexivity.
+Qed.
+
+  
 Lemma meminj_value_inject :
-  forall {A B} (ge : Genv.t A B) m hv1 lv1 hv2 lv2,
+  forall m hv1 lv1 hv2 lv2,
     HighValues.value_inject ge m hv1 lv1 ->
     HighValues.value_inject ge m hv2 lv2 ->
+    HighValues.no_future_pointers m ->
+    HighValues.global_blocks_valid ge m ->
     exists mi,
       Mem.inject mi m m /\ wf_mem mi m m /\ Val.inject_list mi (lv1 :: lv2 :: nil) (lv1 :: lv2 :: nil).
 Proof.
@@ -1482,32 +1503,53 @@ Proof.
   
   simpl. econstructor; eauto.
   intros.
-  unfold Mem.flat_inj in *. break_match_hyp; try congruence. inv H1.
+  unfold Mem.flat_inj in *. break_match_hyp; try congruence. inv H3.
   rewrite Z.add_0_r. assumption.
   intros.
-  unfold Mem.flat_inj in *. break_match_hyp; try congruence. inv H1.
+  unfold Mem.flat_inj in *. break_match_hyp; try congruence. inv H3.
   eapply Z.divide_0_r.
   intros.
-  unfold Mem.flat_inj in *. break_match_hyp; try congruence. inv H1.
+  unfold Mem.flat_inj in *. break_match_hyp; try congruence. inv H3.
   rewrite Z.add_0_r.
   destruct (ZMap.get ofs (Mem.mem_contents m) !! b2) eqn:?; econstructor; eauto.
   destruct v; econstructor; eauto.
-  (* Mem needs to not contain pointers to not yet allocated blocks *)
-  (* How do we enforce that? *)
-  admit. admit.
+  eapply H1 in Heqm0; eauto.
+  break_match; try congruence. reflexivity.
+  rewrite Int.add_zero. reflexivity.
 
   split.
   unfold wf_mem.
-  split. admit. (* is true *)
-
-  admit. (* is true *)
-
+  split. unfold wf_inj.
+  split. unfold globals_inj_same. unfold HighValues.globals_inj_same. intros.
+  unfold Mem.flat_inj. break_match; try congruence.
+  eapply H2 in H3. congruence.
+  split. unfold meminj_injective. intros.
+  unfold Mem.flat_inj in *. repeat (break_match_hyp; try congruence).
+  unfold same_offsets. unfold HighValues.same_offsets.
+  intros. unfold Mem.flat_inj in *.
+  break_match_hyp; try congruence.
+  split. unfold total_inj.
+  intros. eapply Mem.load_valid_access in H3.
+  eapply Mem.valid_access_implies in H3.
+  eapply Mem.valid_access_valid_block in H3.
+  unfold Mem.valid_block in *.
+  exists b. unfold Mem.flat_inj.
+  break_match; try congruence.
+  solve [econstructor].
+  split.
+  unfold minimal_inj_domain. intros.
+  unfold Mem.flat_inj in *. unfold Mem.valid_block.
+  break_match_hyp; try congruence.
+  unfold minimal_inj_range. intros.
+  unfold Mem.valid_block.
+  unfold Mem.flat_inj in *.
+  break_match_hyp; try congruence.
   simpl. repeat (econstructor; eauto).
 
-  admit. (* is true *)
-  admit. (* is true *)
-  
-Admitted.
+  eapply value_inject_val_inject; eauto.
+  eapply value_inject_val_inject; eauto.
+Qed.
+
 
 Lemma callstate_match :
   forall fv av st',

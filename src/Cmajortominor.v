@@ -466,7 +466,7 @@ Proof.
   remember no_new_functions as Hnn.
   remember find_symbol_transf as Hfs.
   eapply no_new_functions in H2. break_exists. break_and.
-  destruct x;  simpl in H8; try congruence.
+  destruct x;  simpl in H10; try congruence.
   eexists; split; econstructor; try eapply Mem.extends_refl; try eassumption.
   econstructor.
   econstructor. econstructor.
@@ -474,18 +474,27 @@ Proof.
   econstructor.
   eapply HighValues.value_inject_swap_ge. eauto.
   intros.
-  eapply Hnn in H9. break_exists; break_and; eauto.
+  eapply Hnn in H11. break_exists; break_and; eauto.
   intros.
   erewrite <- Hfs; eauto.
   eapply HighValues.value_inject_swap_ge. eauto.
   intros.
-  eapply Hnn in H9. break_exists; break_and; eauto.
+  eapply Hnn in H11. break_exists; break_and; eauto.
   intros.
   erewrite <- Hfs; eauto.
   erewrite <- Hfs; eauto.
-  inversion H8. destruct f; destruct fn; simpl in *.
+  subst. destruct f; destruct fn; simpl in *.
   unfold transf_function in H10. simpl in H10. inv H10. 
   eauto.
+  unfold HighValues.global_blocks_valid in *.
+  intros. destruct H11.
+  eapply find_funct_ptr_transf in H11.
+  eapply H5; eauto.
+  erewrite <- find_var_info_transf in H11.
+  eapply H5; eauto.
+  Grab Existential Variables.
+  repeat (econstructor; eauto).
+  repeat (econstructor; eauto).
 Qed.
 
 Theorem fsim :

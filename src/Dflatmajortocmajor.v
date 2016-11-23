@@ -431,36 +431,54 @@ Lemma is_callstate_match :
       match_states st st' /\ is_callstate prog fv av st.
 Proof.
   intros. inv H.
-  unfold transf_prog in *.
-  repeat (break_match_hyp; try congruence).
-  unfold transf_prog_malloc in *.
+  copy TRANSF.
+  unfold transf_prog in H7.
+  break_match_hyp; try congruence.
+  rewrite malloc_id_found in *.
   eapply Genv.find_funct_ptr_rev_transf_partial in H2; eauto.
   break_exists. break_and.
   erewrite Genv.find_symbol_transf_partial in H3; eauto.
-  inv malloc_id_found.
+
   assert (Hffp : forall b f,
              Genv.find_funct_ptr (Genv.globalenv tprog) b = Some f ->
              exists f', Genv.find_funct_ptr (Genv.globalenv prog) b = Some f').
   {
     intros. 
-    eapply Genv.find_funct_ptr_rev_transf_partial in H6; eauto.
+    eapply Genv.find_funct_ptr_rev_transf_partial in H9; eauto.
     break_exists. break_and. eauto.
   }
   assert (Hfs : forall fname b,
              Genv.find_symbol (Genv.globalenv tprog) fname = Some b ->
              Genv.find_symbol (Genv.globalenv prog) fname = Some b).
   {
-    intros. erewrite Genv.find_symbol_transf_partial in H6; eauto.
+    intros. erewrite Genv.find_symbol_transf_partial in H9; eauto.
+  }
+
+  assert (global_blocks_valid (Genv.globalenv prog) m).
+  {
+    clear -H5 TRANSF ge tge malloc_id malloc_id_found.
+    unfold global_blocks_valid in *. intros.
+    break_or. eapply find_funct_ptr_transf in H.
+    break_exists. break_and.
+    eapply H5; eauto.
+    unfold transf_prog in TRANSF.
+    repeat (break_match_hyp; try congruence).
+    unfold transf_prog_malloc in *.
+    erewrite <- Genv.find_var_info_transf_partial in H; eauto.
+    
   }
   
-  destruct x; unfold transf_fundef in *; simpl in H5; try congruence.
+  destruct x; unfold transf_fundef in *; simpl in H8; try congruence.
   
   eexists; split; econstructor; eauto;
     try solve [repeat (econstructor; eauto)];
     try eapply value_inject_swap_ge; eauto.
-  destruct f; destruct fn; inversion H5; subst; simpl in *; eauto.
+  destruct f; destruct fn; inversion H8; subst; simpl in *; eauto.
+
   Grab Existential Variables.
   exact 0.
+  repeat (econstructor; eauto).
+  repeat (econstructor; eauto).
 Qed.
 
 Lemma match_final_states :
