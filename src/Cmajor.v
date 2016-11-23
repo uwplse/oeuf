@@ -362,7 +362,8 @@ Lemma eval_unop_det :
     eval_unop a b = Some v' ->
     v = v'.
 Proof.
-Admitted.
+  induction a; intros; destruct b; simpl in *; try congruence.
+Qed.
 
 Lemma eval_binop_det :
   forall op a b m v v',
@@ -370,8 +371,8 @@ Lemma eval_binop_det :
     eval_binop op a b m = Some v' ->
     v = v'.
 Proof.
-Admitted.
-
+  induction op; intros; destruct a; destruct b; try congruence.
+Qed.
 
 Lemma eval_expr_det :
   forall a e ge sp m v v',
@@ -439,15 +440,8 @@ Proof.
   - unfold single_events. intros.
     inv H; simpl; try omega;
       eapply external_call_trace_length; eauto.
-  - admit. (* what to do about this? *)
-
   - intros. inv H. simpl.
     unfold nostep. intros. intro. inv H1; try congruence.
 
-  - intros.
-    inv H; inv H0; simpl in *.
-
-    (* again, value_inject could be a problem *)
-    admit.
-Admitted.
+Qed.
 

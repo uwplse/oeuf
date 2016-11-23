@@ -251,6 +251,7 @@ Definition no_future_pointers (m : mem) : Prop :=
     Plt b' (Mem.nextblock m).
 
 
+(* Stuart: I need help with the induction here *)
 Lemma value_inject_mem_extends :
   forall {F V} (ge : Genv.t F V) m m' v v' v0,
     value_inject ge m v v' ->
