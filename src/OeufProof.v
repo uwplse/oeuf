@@ -158,7 +158,7 @@ Section Simulation.
     eapply TraceSemantics.compose_forward_simulation.
     eapply Dmajortodflatmajor.fsim; try eassumption.
 
-    admit. admit.
+    admit. 
 
     (* Dflatmajor to Cmajor *)
     eapply TraceSemantics.compose_forward_simulation.
