@@ -3,6 +3,7 @@ Require Import Arith List Omega StructTact.StructTactics StuartTact.
 Require Import ZArith.
 Import ListNotations.
 Require Import Psatz.
+Require Import StructTact.Assoc.
 
 Require Import Monads.
 
@@ -1210,3 +1211,71 @@ Fixpoint zlookup {A} (xs : list (Z * A)) (k : Z) : option A :=
                 else zlookup xs k
     end.
 
+
+
+(* assoc *)
+
+Lemma assoc_cons_l : forall A B eq_dec (x : A * B) xs k,
+    fst x = k ->
+    assoc eq_dec (x :: xs) k = Some (snd x).
+intros0 Heq.
+simpl. break_match. simpl in Heq. break_if; try congruence.
+reflexivity.
+Qed.
+
+Lemma assoc_cons_r : forall A B eq_dec (x : A * B) xs k,
+    fst x <> k ->
+    assoc eq_dec (x :: xs) k = assoc eq_dec xs k.
+intros0 Hne.
+simpl. break_match. simpl in Hne. break_if; try congruence.
+Qed.
+
+Lemma assoc_app_l : forall A B eq_dec (xs1 xs2 : list (A * B)) k,
+    In k (map fst xs1) ->
+    assoc eq_dec (xs1 ++ xs2) k = assoc eq_dec xs1 k.
+induction xs1; intros0 Heq; simpl in *.
+- contradiction.
+- break_match. simpl in Heq. break_if.
+  + reflexivity.
+  + destruct Heq; try congruence.
+    eauto.
+Qed.
+
+Lemma assoc_app_r : forall A B eq_dec (xs1 xs2 : list (A * B)) k,
+    ~ In k (map fst xs1) ->
+    assoc eq_dec (xs1 ++ xs2) k = assoc eq_dec xs2 k.
+induction xs1; intros0 Heq; simpl in *.
+- reflexivity.
+- break_match. simpl in Heq. break_if.
+  + exfalso. on _, eapply_. auto.
+  + eapply IHxs1. contradict Heq. auto.
+Qed.
+
+Lemma in_fst_assoc : forall A B eq_dec (xs : list (A * B)) k,
+    In k (map fst xs) ->
+    exists v, assoc eq_dec xs k = Some v.
+induction xs; intros0 Hin; simpl in *.
+- contradiction.
+- break_match. simpl in Hin. break_if.
+  + eauto.
+  + destruct Hin; try congruence.
+    auto.
+Qed.
+
+Lemma assoc_in_fst : forall A B eq_dec (xs : list (A * B)) k v,
+    assoc eq_dec xs k = Some v ->
+    In k (map fst xs).
+induction xs; intros0 Heq; simpl in *.
+- discriminate.
+- break_match. simpl. break_if.
+  + auto.
+  + right. eauto.
+Qed.
+
+Lemma assoc_in_fst' : forall A B eq_dec (xs : list (A * B)) k,
+    assoc eq_dec xs k <> None ->
+    In k (map fst xs).
+intros0 Hne.
+destruct (assoc _ _ _) eqn:?; try congruence.
+eauto using assoc_in_fst.
+Qed.
