@@ -459,27 +459,6 @@ Inductive id_map_ok : id_map -> Prop :=
         id_map_ok M.
 
 
-
-Lemma lookup_keys_nth_error : forall A xs k (x : A),
-    lookup xs k = Some x ->
-    exists n, nth_error (keys xs) n = Some k.
-intros.  eapply In_nth_error. eapply lookup_some_in_keys. eauto.
-Qed.
-
-Lemma lookup_some_in : forall A xs k (x : A),
-    lookup xs k = Some x ->
-    In (k, x) xs.
-first_induction xs; intros0 Hlook; simpl in *.
-- discriminate.
-- destruct a. break_if; inject_some; eauto.
-Qed.
-
-Lemma lookup_nth_error : forall A xs k (x : A),
-    lookup xs k = Some x ->
-    exists n, nth_error xs n = Some (k, x).
-intros.  eapply In_nth_error. eapply lookup_some_in. eauto.
-Qed.
-
 Lemma list_norepet_nth_error_unique' : forall A xs n (x : A),
     nth_error xs n = Some x ->
     list_norepet xs ->
@@ -519,27 +498,6 @@ induction M; intros0 Hassoc; simpl in *.
   + inject_some. exists 0. reflexivity.
   + fwd eapply IHM as HH; eauto.  destruct HH as [n' ?].
     exists (S n'). simpl. auto.
-Qed.
-
-Lemma I_id_ne : forall M k1 k2 i1 i2,
-    id_map_ok M ->
-    I_id M k1 i1 ->
-    I_id M k2 i2 ->
-    k1 <> k2 ->
-    i1 <> i2.
-intros0 Mok II1 II2 Hne.
-do 2 on >I_id, invc.
-unfold id_key_assoc in *.
-fwd eapply id_key_assoc_nth_error with (k := k1) as HH; eauto.
-  destruct HH as [n1 ?].
-fwd eapply id_key_assoc_nth_error with (k := k2) as HH; eauto.
-  destruct HH as [n2 ?].
-assert (HH : n1 <> n2) by congruence.
-contradict HH. eapply list_norepet_nth_error_unique.
-- eapply map_nth_error with (f := snd). eassumption.
-- change (snd (k1, i1)) with (snd (k2, i1)).
-  eapply map_nth_error. subst i1. assumption.
-- invc Mok. auto.
 Qed.
 
 Lemma nth_error_unique_list_norepet : forall A (xs : list A),
@@ -915,235 +873,6 @@ rewrite Hiff; try eassumption. reflexivity.
 Qed.
 
 
-
-
-Definition is_A_func (A : list (A.stmt * A.expr)) f := In f A.
-Definition is_A_fname (A : list (A.stmt * A.expr)) n := n < length A.
-Definition is_extra_key k := In k extra_keys.
-Definition is_id_map_key (M : list (id_key * ident)) k := In k (map fst M).
-Definition is_id_map_value (M : list (id_key * ident)) id := In id (map snd M).
-Definition is_B_ident (B : B.program) id := In id (map fst (prog_defs B)).
-Definition is_B_func (B : B.program) f := In (Gfun f) (map snd (prog_defs B)).
-Definition is_B_internal_func (B : B.program) f := In (Gfun (Internal f)) (map snd (prog_defs B)).
-
-Definition A_func_fname (A : list (A.stmt * A.expr)) f n := nth_error A n = Some f.
-Definition A_fname_key n k := k = IkFunc n.
-Definition A_extra_key (k k' : id_key) := k = k'.
-(* I_id M k id *)
-Definition B_value_ident (id id' : ident) := id = id'.
-Definition B_ident_func (B : B.program) id f := In (id, Gfun f) (prog_defs B).
-Definition B_ident_internal_func (B : B.program) id f := In (id, Gfun (Internal f)) (prog_defs B).
-
-
-
-(* A_func_fname_sur: does not hold *)
-
-Lemma A_func_fname_sur : forall A f1 f2 n,
-    A_func_fname A f1 n ->
-    A_func_fname A f2 n ->
-    f1 = f2.
-intros. unfold A_func_fname in *. congruence.
-Qed.
-
-Lemma A_func_fname_fwd : forall A f,
-    is_A_func A f ->
-    exists n, is_A_fname A n /\ A_func_fname A f n.
-intros. unfold is_A_func, is_A_fname, A_func_fname in *.
-on _, eapply_lem In_nth_error. break_exists.
-eexists. split.
-- rewrite <- nth_error_Some. on _, fun H => erewrite H. discriminate.
-- assumption.
-Qed.
-
-Lemma A_func_fname_rev : forall A n,
-    is_A_fname A n ->
-    exists f, is_A_func A f /\ A_func_fname A f n.
-intros. unfold is_A_func, is_A_fname, A_func_fname in *.
-rewrite <- nth_error_Some in *. destruct (nth_error _ _) eqn:?; try congruence.
-eauto using nth_error_in.
-Qed.
-
-
-Lemma A_fname_key_inj : forall n k1 k2,
-    A_fname_key n k1 ->
-    A_fname_key n k2 ->
-    k1 = k2.
-intros. unfold A_fname_key in *. congruence.
-Qed.
-
-Lemma A_fname_key_sur : forall n1 n2 k,
-    A_fname_key n1 k ->
-    A_fname_key n2 k ->
-    n1 = n2.
-intros. unfold A_fname_key in *. congruence.
-Qed.
-
-Lemma A_fname_key_fwd : forall A metas M n,
-    build_id_list (A, metas) = Some M ->
-    is_A_fname A n ->
-    exists k, is_id_map_key M k /\ A_fname_key n k.
-intros0 Hbuild Hlhs. unfold is_A_fname, is_id_map_key, A_fname_key in *.
-
-eexists. split; [| reflexivity ].
-
-unfold build_id_list, intern_id_list in *.
-do 2 (break_match; try discriminate).
-match type of Hbuild with
-| Some ?x = Some ?y => replace y with x by congruence
-end.
-rewrite intern_id_list'_map_fst. simpl.
-do 2 rewrite map_app.
-do 3 right.  eapply in_or_app; right. eapply in_or_app; left.
-
-eapply nth_error_in with (n := n).
-destruct (nth_error _ _) eqn:HH.
-
-- eapply map_nth_error' in HH. destruct HH as ([? ?] & HH & ?). subst. simpl.
-  unfold build_funcs_id_list in *.
-  eapply map_nth_error' in HH. destruct HH as ([? ?] & HH & ?).
-  unfold func_id_entry in *. inject_pair.
-  fwd eapply numbered_count_up with (xs := metas).
-  fwd eapply Forall2_nth_error_ex as HH'; eauto. destruct HH' as (? & ? & ?).
-  unfold fst, snd in *.
-  rewrite count_up_nth_error in * by omega.
-  congruence.
-
-- contradict HH.
-  rewrite nth_error_Some.
-  rewrite map_length. unfold build_funcs_id_list.
-  rewrite map_length. rewrite numbered_length.
-  unfold fst, snd in *.
-  omega.
-Qed.
-
-Lemma A_fname_key_rev_IkFunc : forall A metas M i,
-    build_id_list (A, metas) = Some M ->
-    is_id_map_key M (IkFunc i) ->
-    exists n, is_A_fname A n /\ A_fname_key n (IkFunc i).
-intros0 Hbuild Hlhs. unfold is_A_fname, is_id_map_key, A_fname_key in *.
-
-exists i. split; [| reflexivity ].
-
-unfold build_id_list, intern_id_list in *.
-do 2 (break_match; try discriminate).
-inject_some. simpl in Hlhs.
-do 3 (destruct Hlhs as [Hlhs | Hlhs]; [ discriminate | ]).
-rewrite intern_id_list'_map_fst in Hlhs.
-do 2 rewrite map_app in Hlhs.
-eapply in_app_or in Hlhs. destruct Hlhs as [Hlhs | Hlhs].
-  { exfalso. eapply vars_keys_IkVar in Hlhs. break_exists. discriminate. }
-eapply in_app_or in Hlhs. destruct Hlhs as [Hlhs | Hlhs]; cycle 1.
-  { exfalso. eapply extra_keys_IkRuntime_IkMalloc in Hlhs. destruct Hlhs.
-    - break_exists. discriminate.
-    - discriminate. }
-
-on >list_norepet, fun H => clear H. simpl in *. find_rewrite.
-on _, eapply_lem In_nth_error. destruct Hlhs as (n & ?).
-on _, eapply_lem map_nth_error'. break_exists. break_and.
-unfold build_funcs_id_list in *.
-on _, eapply_lem map_nth_error'. break_exists. break_and.
-do 2 on (_ * _)%type, fun x => destruct x.
-
-fwd eapply length_nth_error_Some; [ | eassumption | ].
-  { eapply numbered_length. }
-break_exists. on _, eapply_lem numbered_nth_error.
-
-unfold func_id_entry in *. simpl in *.
-replace i with n by congruence.
-rewrite <- numbered_length. rewrite <- nth_error_Some.
-congruence.
-Qed.
-
-
-Lemma A_extra_key_inj : forall k k'1 k'2,
-    A_extra_key k k'1 ->
-    A_extra_key k k'2 ->
-    k'1 = k'2.
-intros. unfold A_extra_key in *. congruence.
-Qed.
-
-Lemma A_extra_key_sur : forall k1 k2 k',
-    A_extra_key k1 k' ->
-    A_extra_key k2 k' ->
-    k1 = k2.
-intros. unfold A_extra_key in *. congruence.
-Qed.
-
-Lemma A_extra_key_fwd : forall A metas M k,
-    build_id_list (A, metas) = Some M ->
-    is_extra_key k ->
-    exists k', is_id_map_key M k' /\ A_extra_key k k'.
-intros0 Hbuild Hlhs. unfold is_extra_key, is_id_map_key, A_extra_key in *.
-
-eexists. split; [| reflexivity ].
-
-unfold build_id_list, intern_id_list in *.
-do 2 (break_match; try discriminate).
-match type of Hbuild with
-| Some ?x = Some ?y => replace y with x by congruence
-end.
-rewrite intern_id_list'_map_fst. unfold build_id_list'.
-do 3 rewrite map_app.
-do 3 (eapply in_or_app; right).
-
-assumption.
-Qed.
-
-Lemma A_extra_key_rev_IkRuntime : forall A metas M name,
-    build_id_list (A, metas) = Some M ->
-    is_id_map_key M (IkRuntime name) ->
-    exists k, is_extra_key k /\ A_extra_key k (IkRuntime name).
-intros0 Hbuild Hrhs. unfold is_extra_key, is_id_map_key, A_extra_key in *.
-
-eexists. split; [| reflexivity ].
-
-unfold build_id_list, intern_id_list in *.
-do 2 (break_match; try discriminate).
-match type of Hbuild with
-| Some ?x = Some ?y => replace y with x in * by congruence
-end.
-rewrite intern_id_list'_map_fst in Hrhs. unfold build_id_list' in Hrhs.
-do 3 rewrite map_app in Hrhs.
-
-eapply in_app_or in Hrhs. destruct Hrhs as [Hrhs | Hrhs].
-  { exfalso. simpl in Hrhs. do 3 try destruct Hrhs as [Hrhs | Hrhs]; eauto.
-    all: discriminate. }
-eapply in_app_or in Hrhs. destruct Hrhs as [Hrhs | Hrhs].
-  { eapply vars_keys_IkVar in Hrhs. destruct Hrhs. discriminate. }
-eapply in_app_or in Hrhs. destruct Hrhs as [Hrhs | Hrhs].
-  { eapply funcs_keys_IkFunc in Hrhs. destruct Hrhs. discriminate. }
-
-assumption.
-Qed.
-
-Lemma A_extra_key_rev_IkMalloc : forall A metas M,
-    build_id_list (A, metas) = Some M ->
-    is_id_map_key M IkMalloc ->
-    exists k, is_extra_key k /\ A_extra_key k IkMalloc.
-intros0 Hbuild Hrhs. unfold is_extra_key, is_id_map_key, A_extra_key in *.
-
-eexists. split; [| reflexivity ].
-
-unfold build_id_list, intern_id_list in *.
-do 2 (break_match; try discriminate).
-match type of Hbuild with
-| Some ?x = Some ?y => replace y with x in * by congruence
-end.
-rewrite intern_id_list'_map_fst in Hrhs. unfold build_id_list' in Hrhs.
-do 3 rewrite map_app in Hrhs.
-
-eapply in_app_or in Hrhs. destruct Hrhs as [Hrhs | Hrhs].
-  { exfalso. simpl in Hrhs. do 3 try destruct Hrhs as [Hrhs | Hrhs]; eauto.
-    all: discriminate. }
-eapply in_app_or in Hrhs. destruct Hrhs as [Hrhs | Hrhs].
-  { eapply vars_keys_IkVar in Hrhs. destruct Hrhs. discriminate. }
-eapply in_app_or in Hrhs. destruct Hrhs as [Hrhs | Hrhs].
-  { eapply funcs_keys_IkFunc in Hrhs. destruct Hrhs. discriminate. }
-
-assumption.
-Qed.
-
-
 Lemma I_id_inj : forall M k id1 id2,
     I_id M k id1 ->
     I_id M k id2 ->
@@ -1175,92 +904,17 @@ cut (n1 = n2).  { intro. congruence. }
 eapply list_norepet_nth_error_unique with (xs := map snd M); eauto.
 Qed.
 
-Lemma nth_error_id_key_assoc : forall M n k v,
+Lemma I_id_ne : forall M k1 k2 i1 i2,
     id_map_ok M ->
-    nth_error M n = Some (k, v) ->
-    id_key_assoc M k = Some v.
-induction M; intros0 Mok Hnth.
-  { destruct n; discriminate. }
-
-invc Mok. simpl in *.
-destruct n.
-- simpl in *. inject_some. break_if; try congruence.
-- simpl in *. do 2 on (list_norepet (_ :: _)), invc.
-  break_match. simpl in *. break_if.
-  + exfalso. subst.
-    eapply map_nth_error with (f := fst) in Hnth.
-    eapply nth_error_in in Hnth. simpl in *. contradiction.
-  + eapply IHM; eauto. constructor; eauto.
-Qed.
-
-Lemma I_id_fwd : forall M k,
-    id_map_ok M ->
-    is_id_map_key M k ->
-    exists id, is_id_map_value M id /\ I_id M k id.
-intros0 Mok Hlhs. unfold is_id_map_key, is_id_map_value, I_id in *.
-on _, eapply_lem In_nth_error. destruct Hlhs as [n ?].
-on _, eapply_lem map_nth_error'. break_exists. break_and.
-on (_ * _)%type, fun x => destruct x. simpl in *. subst.
-eexists. split.
-- eapply nth_error_In. eapply map_nth_error. eassumption.
-- simpl. eapply nth_error_id_key_assoc; eauto.
-Qed.
-
-Lemma I_id_rev : forall M id,
-    id_map_ok M ->
-    is_id_map_value M id ->
-    exists k, is_id_map_key M k /\ I_id M k id.
-intros0 Mok Hlhs. unfold is_id_map_key, is_id_map_value, I_id in *.
-on _, eapply_lem In_nth_error. destruct Hlhs as [n ?].
-on _, eapply_lem map_nth_error'. break_exists. break_and.
-on (_ * _)%type, fun x => destruct x. simpl in *. subst.
-eexists. split.
-- eapply nth_error_In. eapply map_nth_error. eassumption.
-- simpl. eapply nth_error_id_key_assoc; eauto.
+    I_id M k1 i1 ->
+    I_id M k2 i2 ->
+    k1 <> k2 ->
+    i1 <> i2.
+intros0 Mok II1 II2 Hk. contradict Hk.
+subst. eapply I_id_sur; eauto.
 Qed.
 
 
-Lemma B_value_ident_inj : forall id id'1 id'2,
-    B_value_ident id id'1 ->
-    B_value_ident id id'2 ->
-    id'1 = id'2.
-intros. unfold B_value_ident in *. congruence.
-Qed.
-
-Lemma B_value_ident_sur : forall id1 id2 id',
-    B_value_ident id1 id' ->
-    B_value_ident id2 id' ->
-    id1 = id2.
-intros. unfold B_value_ident in *. congruence.
-Qed.
-
-Inductive func_key : id_key -> Prop :=
-| FkFunc : forall i, func_key (IkFunc i)
-| FkRuntime : forall name, func_key (IkRuntime name)
-| FkMalloc : func_key IkMalloc.
-
-Lemma I_id_nth_error : forall M k id,
-    I_id M k id ->
-    exists n, nth_error M n = Some (k, id).
-induction M; intros0 Hid; unfold I_id in *; simpl in *.
-- discriminate.
-- break_match. break_if.
-  + inject_some. exists 0. reflexivity.
-  + destruct (IHM ?? ?? **) as [n' ?].
-    exists (S n'). simpl. auto.
-Qed.
-
-Lemma compile_gdefs_length' : forall M max_fname nfs defs,
-    compile_gdefs M max_fname nfs = Some defs ->
-    length defs = length nfs.
-intros0 Hcomp. eapply map_partial_length in Hcomp. eauto.
-Qed.
-
-Lemma compile_gdefs_length : forall M max_fname funcs defs,
-    compile_gdefs M max_fname (numbered funcs) = Some defs ->
-    length defs = length funcs.
-intros. erewrite compile_gdefs_length'; eauto. eapply numbered_length.
-Qed.
 
 Lemma gdefs_id_fwd : forall M max_fname nfs gdefs i,
     id_map_ok M ->
@@ -1411,75 +1065,6 @@ simpl. split; eauto.
 destruct 1; [ contradiction | eauto ].
 Qed.
 
-Lemma B_value_ident_fwd_func_key : forall A metas B M k id,
-    compile_cu (A, metas) = Some B ->
-    build_id_list (A, metas) = Some M ->
-    func_key k ->
-    I_id M k id ->
-    is_id_map_value M id ->
-    exists id', is_B_ident B id' /\ B_value_ident id id'.
-intros0 Hcomp Hbuild Hfk Hid Hlhs.
-fwd eapply build_id_list_ok as Mok; eauto.
-
-unfold compile_cu in *. break_bind_option. inject_some.
-rename l0 into bdefs. rename l1 into xdefs. rename l2 into bpublic.
-on (_ = Some bpublic), fun H => clear H.
-unfold is_B_ident. simpl.
-exists id. split; [ | reflexivity ].
-
-rewrite map_app. eapply in_or_app.
-
-invc Hfk.
-
-- left. eapply gdefs_id_fwd'; eauto.
-  rewrite numbered_count_up_eq. rewrite <- count_up_in.
-
-  fwd eapply I_id_rev as HH; eauto. destruct HH as (k & ? & ?).
-    replace k with (IkFunc i) in * by (eapply I_id_sur; eauto). clear k.
-  fwd eapply A_fname_key_rev_IkFunc as HH; eauto. destruct HH as (n & ? & ?).
-  unfold is_A_fname, A_fname_key in *.
-  congruence.
-
-- right. eapply xdefs_id_fwd'; eauto.
-  fwd eapply I_id_rev as HH; eauto. destruct HH as (k & ? & ?).
-    replace k with (IkRuntime name) in * by (eapply I_id_sur; eauto). clear k.
-  fwd eapply A_extra_key_rev_IkRuntime as HH; eauto. destruct HH as (n & ? & ?).
-  unfold is_extra_key, A_extra_key in *.
-  congruence.
-
-- right. eapply xdefs_id_fwd'; eauto.
-  fwd eapply I_id_rev as HH; eauto. destruct HH as (k & ? & ?).
-    replace k with IkMalloc in * by (eapply I_id_sur; eauto). clear k.
-  fwd eapply A_extra_key_rev_IkMalloc as HH; eauto. destruct HH as (n & ? & ?).
-  unfold is_extra_key, A_extra_key in *.
-  congruence.
-Qed.
-
-Lemma B_value_ident_rev : forall A metas B M id',
-    compile_cu (A, metas) = Some B ->
-    build_id_list (A, metas) = Some M ->
-    is_B_ident B id' ->
-    exists id, is_id_map_value M id /\ B_value_ident id id'.
-intros0 Hcomp Hbuild Hrhs.
-fwd eapply build_id_list_ok as Mok; eauto.
-
-unfold compile_cu in *. break_bind_option. inject_some.
-rename l0 into bdefs. rename l1 into xdefs. rename l2 into bpublic.
-on (_ = Some bpublic), fun H => clear H.
-unfold is_id_map_value, is_B_ident in *. simpl in *.
-exists id'. split; [ | reflexivity ].
-
-rewrite map_app in Hrhs. eapply in_app_or in Hrhs.
-destruct Hrhs as [Hrhs | Hrhs].
-
-- eapply gdefs_id_rev in Hrhs; eauto. destruct Hrhs as (i & Hid & ?).
-  unfold I_id in Hid. eapply id_key_assoc_nth_error in Hid. destruct Hid as [n ?].
-  eapply nth_error_in. erewrite map_nth_error; eauto. reflexivity.
-
-- eapply xdefs_id_rev in Hrhs; eauto. destruct Hrhs as (k & Hid & ?).
-  unfold I_id in Hid. eapply id_key_assoc_nth_error in Hid. destruct Hid as [n ?].
-  eapply nth_error_in. erewrite map_nth_error; eauto. reflexivity.
-Qed.
 
 
 Lemma I_id_norepet : forall M ns ids,
@@ -1562,109 +1147,6 @@ on _, eapply_lem extra_keys_IkRuntime_IkMalloc.
 on (_ \/ _), invc.
 - break_exists. discriminate.
 - discriminate.
-Qed.
-
-
-Lemma B_ident_func_inj : forall A metas B M id f1 f2,
-    compile_cu (A, metas) = Some B ->
-    build_id_list (A, metas) = Some M ->
-    B_ident_func B id f1 ->
-    B_ident_func B id f2 ->
-    f1 = f2.
-intros0 Hcomp Hbuild Hf1 Hf2.
-fwd eapply build_id_list_ok as Mok; eauto.
-fwd eapply prog_defs_norepet as Hnr; eauto.
-
-unfold compile_cu in *. break_bind_option. inject_some.
-rename l0 into bdefs. rename l1 into xdefs. rename l2 into bpublic.
-on (_ = Some bpublic), fun H => clear H.
-unfold B_ident_func in *. simpl in *.
-
-eapply In_nth_error in Hf1. destruct Hf1 as [n1 Hf1].
-eapply In_nth_error in Hf2. destruct Hf2 as [n2 Hf2].
-replace n2 with n1 in *; cycle 1.
-  { eapply map_nth_error with (f := fst) in Hf1.
-    eapply map_nth_error with (f := fst) in Hf2.
-    simpl in *.
-    eapply list_norepet_nth_error_unique; eauto. }
-
-congruence.
-Qed.
-
-(* B_ident_func_sur does not hold *)
-
-Lemma gdefs_Gfun : forall M max_fname nfs defs g,
-    compile_gdefs M max_fname nfs = Some defs ->
-    In g (map snd defs) ->
-    exists f, g = Gfun (Internal f).
-induction nfs; intros0 Hcomp Hin; unfold compile_gdefs in *; simpl in *.
-- inject_some. simpl in Hin. contradiction.
-- do 2 (break_match; try discriminate). inject_some. simpl in *.
-  destruct Hin.
-  + on (map_partial _ _ = Some _), fun H => clear H.
-    unfold compile_gdef in *. break_match. break_bind_option. inject_some.
-    simpl. eauto.
-  + eapply IHnfs; eauto.
-Qed.
-
-Lemma xdefs_Gfun : forall M funcs defs g,
-    map_partial (extra_def M) funcs = Some defs ->
-    In g (map snd defs) ->
-    exists f, g = Gfun f /\ In f (map snd funcs).
-induction funcs; intros0 Hmap Hin; simpl in *.
-- inject_some. simpl in Hin. contradiction.
-- do 2 (break_match; try discriminate). inject_some. simpl in *.
-  destruct Hin.
-  + on (map_partial _ _ = Some _), fun H => clear H.
-    unfold extra_def in *. do 2 break_match. break_bind_option. inject_some.
-    simpl. eauto.
-  + destruct (IHfuncs ?? ?? *** **) as (? & ? & ?).
-    eauto.
-Qed.
-
-Lemma B_ident_func_fwd : forall A metas B id,
-    compile_cu (A, metas) = Some B ->
-    is_B_ident B id ->
-    exists f, is_B_func B f /\ B_ident_func B id f.
-intros0 Hcomp Hlhs. unfold is_B_ident, is_B_func, B_ident_func in *.
-
-unfold compile_cu in *. break_bind_option. inject_some.
-rename l0 into bdefs. rename l1 into xdefs. rename l2 into bpublic.
-on (_ = Some bpublic), fun H => clear H.
-rename l into M. fwd eapply build_id_list_ok as Mok; eauto.
-simpl in *.
-
-eapply In_nth_error in Hlhs. destruct Hlhs as [n Hlhs].
-eapply map_nth_error' in Hlhs. destruct Hlhs as ([id' f] & Hlhs & Heq).
-simpl in Heq. subst.
-
-eapply nth_error_in in Hlhs.
-eapply in_app_or in Hlhs.
-destruct Hlhs as [Hlhs | Hlhs].
-all: fwd eapply in_map with (f := snd) as Hlhs'; eauto; simpl in Hlhs'.
-
-- fwd eapply gdefs_Gfun; eauto. break_exists. subst.
-  rewrite map_app.
-  eexists.
-  do 2 rewrite in_app_iff. eauto.
-
-- fwd eapply xdefs_Gfun; eauto. break_exists. break_and. subst.
-  rewrite map_app.
-  eexists.
-  do 2 rewrite in_app_iff. eauto.
-Qed.
-
-Lemma B_ident_func_rev : forall A metas B f,
-    compile_cu (A, metas) = Some B ->
-    is_B_func B f ->
-    exists id, is_B_ident B id /\ B_ident_func B id f.
-intros0 Hcomp Hrhs. unfold is_B_ident, is_B_func, B_ident_func in *.
-
-eapply In_nth_error in Hrhs. destruct Hrhs as [n Hrhs].
-eapply map_nth_error' in Hrhs. destruct Hrhs as ([id f'] & Hrhs & Heq).
-simpl in Heq. subst.
-eapply nth_error_in in Hrhs.
-fwd eapply in_map with (f := fst); eauto.
 Qed.
 
 
@@ -2245,16 +1727,6 @@ eexists; split; eauto. constructor; eauto.
 - eapply A.step_switch_placement; try eassumption.
 Qed.
 
-Lemma I_id_ne' : forall M k1 k2 i1 i2,
-    id_map_ok M ->
-    I_id M k1 i1 ->
-    I_id M k2 i2 ->
-    k1 <> k2 ->
-    i1 <> i2.
-intros0 Mok II1 II2 Hk. contradict Hk.
-subst. eapply I_id_sur; eauto.
-Qed.
-
 
 Lemma func_body_I : forall M,
     forall abody aret aarg afname afree,
@@ -2279,19 +1751,19 @@ intros.
 i_ctor.
 - i_ctor.
   + rewrite PTree.gso, PTree.gss; cycle 1.
-      { eapply I_id_ne'; eauto. discriminate. }
+      { eapply I_id_ne; eauto. discriminate. }
     i_ctor.
   + rewrite PTree.gss; eauto. i_ctor.
   + intros.
     rewrite PTree.gso, PTree.gso, PTree.gempty; cycle 1.
-      { eapply I_id_ne'; eauto. discriminate. }
-      { eapply I_id_ne'; eauto. discriminate. }
+      { eapply I_id_ne; eauto. discriminate. }
+      { eapply I_id_ne; eauto. discriminate. }
     i_ctor.
 - i_ctor. i_ctor.
 - left. intros.
   rewrite PTree.gso, PTree.gso, PTree.gempty; cycle 1.
-    { eapply I_id_ne'; eauto. discriminate. }
-    { eapply I_id_ne'; eauto. discriminate. }
+    { eapply I_id_ne; eauto. discriminate. }
+    { eapply I_id_ne; eauto. discriminate. }
   i_ctor.
 Qed.
 
