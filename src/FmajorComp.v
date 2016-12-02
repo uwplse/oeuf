@@ -459,6 +459,8 @@ Inductive id_map_ok : id_map -> Prop :=
         id_map_ok M.
 
 
+(* list lemmas *)
+
 Lemma list_norepet_nth_error_unique' : forall A xs n (x : A),
     nth_error xs n = Some x ->
     list_norepet xs ->
@@ -625,6 +627,97 @@ induction xs; intros0 Hnth; simpl in *.
   + eapply IHxs; eauto.
 Qed.
 
+Lemma list_disjoint_append_r : forall A (xs ys1 ys2 : list A),
+    list_disjoint xs ys1 ->
+    list_disjoint xs ys2 ->
+    list_disjoint xs (ys1 ++ ys2).
+intros0 Hys1 Hys2.
+unfold list_disjoint in *. intros0 Hx Hy.
+rewrite in_app_iff in Hy. destruct Hy; eauto.
+Qed.
+
+Lemma Forall2_norepet : forall A B (P : A -> B -> Prop) xs ys,
+    (forall x1 y1 x2 y2,
+        P x1 y1 ->
+        P x2 y2 ->
+        x1 = x2 <-> y1 = y2) ->
+    Forall2 P xs ys ->
+    list_norepet xs ->
+    list_norepet ys.
+first_induction xs; intros0 Hiff Hfa Hnr; invc Hfa.
+  { constructor. }
+
+rename a into x. rename l' into ys.
+invc Hnr. constructor; eauto.
+
+on (~ In _ _), contradict.
+on _, apply_lem In_nth_error. on >@ex, fun HH => destruct HH as (n & ?).
+eapply nth_error_in with (n := n).
+
+destruct (nth_error xs n) eqn:?; cycle 1.
+  { fwd eapply length_nth_error_Some with (ys := xs).
+      { symmetry. eapply Forall2_length. eassumption. }
+      { eassumption. }
+    firstorder congruence. }
+fwd eapply Forall2_nth_error; eauto. cbv beta in *.
+
+f_equal.
+rewrite Hiff; try eassumption. reflexivity.
+Qed.
+
+Lemma numbered_fst_norepet : forall A (xs : list A),
+    list_norepet (map fst (numbered xs)).
+intros. rewrite numbered_count_up_eq. eapply count_up_norepet.
+Qed.
+
+Lemma numbered'_nth_error_fst : forall A (xs : list A) n i x,
+    nth_error (numbered' n xs) i = Some x ->
+    fst x = n + i.
+induction xs; intros0 Hnth; simpl in *.
+- destruct i; discriminate Hnth.
+- destruct i; simpl in *.
+  + inject_some. simpl. omega.
+  + replace (n + S i) with (S n + i) by omega.
+    eauto.
+Qed.
+
+Lemma numbered_nth_error_fst : forall A (xs : list A) i x,
+    nth_error (numbered xs) i = Some x ->
+    fst x = i.
+intros. change i with (0 + i).  eapply numbered'_nth_error_fst; eauto.
+Qed.
+
+Lemma numbered'_nth_error_snd : forall A (xs : list A) n i x,
+    nth_error (numbered' n xs) i = Some x ->
+    nth_error xs i = Some (snd x).
+induction xs; intros0 Hnth; simpl in *.
+- destruct i; discriminate Hnth.
+- destruct i; simpl in *.
+  + inject_some. simpl. reflexivity.
+  + replace (n + S i) with (S n + i) by omega.
+    eauto.
+Qed.
+
+Lemma numbered_nth_error_snd : forall A (xs : list A) i x,
+    nth_error (numbered xs) i = Some x ->
+    nth_error xs i = Some (snd x).
+intros. change i with (0 + i).  eapply numbered'_nth_error_snd; eauto.
+Qed.
+
+Lemma numbered_nth_error_fst_snd : forall A (xs : list A) i x,
+    nth_error (numbered xs) i = Some x ->
+    nth_error xs (fst x) = Some (snd x).
+intros.
+erewrite numbered_nth_error_fst;
+  eauto using numbered_nth_error_snd.
+Qed.
+
+
+
+
+
+(* properties of id_map builders *)
+
 Lemma build_vars_id_list_IkVar : forall AE n k s,
     nth_error (build_vars_id_list AE) n = Some (k, s) ->
     k = IkVar n.
@@ -694,63 +787,11 @@ eapply build_funcs_id_list_IkFunc in Hin.
 unfold fst in *. subst. eauto.
 Qed.
 
-
-
-Lemma compile_I_expr : forall M a b,
-    compile_expr M a = Some b ->
-    I_expr M a b.
-induction a;
-intros0 Hcomp; simpl in Hcomp; break_bind_option; inject_some; refold_compile M;
-try solve [constructor; eauto].
-Qed.
-
-Lemma compile_list_I_expr : forall M a b,
-    compile_expr_list M a = Some b ->
-    Forall2 (I_expr M) a b.
-induction a;
-intros0 Hcomp; simpl in Hcomp; break_bind_option; inject_some; refold_compile M;
-try solve [constructor; eauto using compile_I_expr].
-Qed.
-
-Lemma compile_I_stmt : forall M a b,
-    compile M a = Some b ->
-    I_stmt M a b.
-intro M.
-induction a using A.stmt_rect_mut with
-    (Pl := fun a => forall b,
-        compile_list M a = Some b ->
-        Forall2 (fun a b => fst a = fst b /\ I_stmt M (snd a) (snd b)) a b);
-intros0 Hcomp; simpl in Hcomp; break_bind_option; inject_some; refold_compile M;
-try solve [constructor; eauto using compile_I_expr, compile_list_I_expr].
-
-- (* Switch *)
-  constructor; eauto using compile_I_expr.
-  constructor. eauto.
-Qed.
-
-Lemma compile_I_func : forall M max_fname a b,
-    compile_func M max_fname a = Some b ->
-    I_func M a b.
-destruct a;
-intros0 Hcomp; simpl in Hcomp; break_bind_option; break_if; break_if; try discriminate;
-inject_some; refold_compile M;
-try solve [constructor; eauto using compile_I_expr, compile_I_stmt].
-Qed.
-
 Lemma intern_id_list'_map_fst : forall xs,
     map fst (intern_id_list' xs) = map fst xs.
 induction xs.
 - simpl. reflexivity.
 - destruct a. simpl. rewrite IHxs. reflexivity.
-Qed.
-
-Lemma list_disjoint_append_r : forall A (xs ys1 ys2 : list A),
-    list_disjoint xs ys1 ->
-    list_disjoint xs ys2 ->
-    list_disjoint xs (ys1 ++ ys2).
-intros0 Hys1 Hys2.
-unfold list_disjoint in *. intros0 Hx Hy.
-rewrite in_app_iff in Hy. destruct Hy; eauto.
 Qed.
 
 Lemma build_id_list_ok : forall a metas M,
@@ -802,35 +843,54 @@ constructor.
 - inject_some. assumption.
 Qed.
 
-Lemma Forall2_norepet : forall A B (P : A -> B -> Prop) xs ys,
-    (forall x1 y1 x2 y2,
-        P x1 y1 ->
-        P x2 y2 ->
-        x1 = x2 <-> y1 = y2) ->
-    Forall2 P xs ys ->
-    list_norepet xs ->
-    list_norepet ys.
-first_induction xs; intros0 Hiff Hfa Hnr; invc Hfa.
-  { constructor. }
 
-rename a into x. rename l' into ys.
-invc Hnr. constructor; eauto.
 
-on (~ In _ _), contradict.
-on _, apply_lem In_nth_error. on >@ex, fun HH => destruct HH as (n & ?).
-eapply nth_error_in with (n := n).
+(* properties of compile *)
 
-destruct (nth_error xs n) eqn:?; cycle 1.
-  { fwd eapply length_nth_error_Some with (ys := xs).
-      { symmetry. eapply Forall2_length. eassumption. }
-      { eassumption. }
-    firstorder congruence. }
-fwd eapply Forall2_nth_error; eauto. cbv beta in *.
-
-f_equal.
-rewrite Hiff; try eassumption. reflexivity.
+Lemma compile_I_expr : forall M a b,
+    compile_expr M a = Some b ->
+    I_expr M a b.
+induction a;
+intros0 Hcomp; simpl in Hcomp; break_bind_option; inject_some; refold_compile M;
+try solve [constructor; eauto].
 Qed.
 
+Lemma compile_list_I_expr : forall M a b,
+    compile_expr_list M a = Some b ->
+    Forall2 (I_expr M) a b.
+induction a;
+intros0 Hcomp; simpl in Hcomp; break_bind_option; inject_some; refold_compile M;
+try solve [constructor; eauto using compile_I_expr].
+Qed.
+
+Lemma compile_I_stmt : forall M a b,
+    compile M a = Some b ->
+    I_stmt M a b.
+intro M.
+induction a using A.stmt_rect_mut with
+    (Pl := fun a => forall b,
+        compile_list M a = Some b ->
+        Forall2 (fun a b => fst a = fst b /\ I_stmt M (snd a) (snd b)) a b);
+intros0 Hcomp; simpl in Hcomp; break_bind_option; inject_some; refold_compile M;
+try solve [constructor; eauto using compile_I_expr, compile_list_I_expr].
+
+- (* Switch *)
+  constructor; eauto using compile_I_expr.
+  constructor. eauto.
+Qed.
+
+Lemma compile_I_func : forall M max_fname a b,
+    compile_func M max_fname a = Some b ->
+    I_func M a b.
+destruct a;
+intros0 Hcomp; simpl in Hcomp; break_bind_option; break_if; break_if; try discriminate;
+inject_some; refold_compile M;
+try solve [constructor; eauto using compile_I_expr, compile_I_stmt].
+Qed.
+
+
+
+(* properties of I_id *)
 
 Lemma I_id_inj : forall M k id1 id2,
     I_id M k id1 ->
@@ -873,7 +933,21 @@ intros0 Mok II1 II2 Hk. contradict Hk.
 subst. eapply I_id_sur; eauto.
 Qed.
 
+Lemma I_id_norepet : forall M ns ids,
+    id_map_ok M ->
+    Forall2 (I_id M) (map IkFunc ns) ids ->
+    list_norepet ns ->
+    list_norepet ids.
+intros. eapply Forall2_norepet; eauto; cycle 1.
+  { eapply list_map_norepet; eauto. intros. congruence. }
+intros. split; intro; subst.
+- eauto using I_id_inj.
+- eauto using I_id_sur.
+Qed.
 
+
+
+(* properties of compile_gdefs + extra_defs + compile_cu *)
 
 Lemma gdefs_id_rev : forall M max_fname nfs gdefs id,
     id_map_ok M ->
@@ -891,7 +965,6 @@ induction nfs; intros0 Mok Hcomp Hrhs; unfold compile_gdefs in Hcomp; simpl in *
   + destruct (IHnfs ?? ?? ** ** **) as (i & ? & ?).
     eauto.
 Qed.
-
 
 Lemma xdefs_id_rev_generic : forall M funcs xdefs id,
     id_map_ok M ->
@@ -917,19 +990,6 @@ Lemma xdefs_id_rev : forall M xdefs id,
 intros. eapply xdefs_id_rev_generic; eauto.
 Qed.
 
-
-
-Lemma I_id_norepet : forall M ns ids,
-    id_map_ok M ->
-    Forall2 (I_id M) (map IkFunc ns) ids ->
-    list_norepet ns ->
-    list_norepet ids.
-intros. eapply Forall2_norepet; eauto; cycle 1.
-  { eapply list_map_norepet; eauto. intros. congruence. }
-intros. split; intro; subst.
-- eauto using I_id_inj.
-- eauto using I_id_sur.
-Qed.
 
 Lemma compile_gdefs_norepet : forall M max_fname a b,
     id_map_ok M ->
@@ -969,10 +1029,6 @@ intros. cbv beta in *.
 split; intro; solve [subst; eauto using I_id_inj, I_id_sur].
 Qed.
 
-Lemma numbered_fst_norepet : forall A (xs : list A),
-    list_norepet (map fst (numbered xs)).
-intros. rewrite numbered_count_up_eq. eapply count_up_norepet.
-Qed.
 
 Lemma prog_defs_norepet : forall A metas B,
     compile_cu (A, metas) = Some B ->
@@ -1000,7 +1056,6 @@ on (_ \/ _), invc.
 - break_exists. discriminate.
 - discriminate.
 Qed.
-
 
 
 Lemma compile_gdefs_fwd : forall M max_fname nfs defs  an af,
@@ -1062,7 +1117,6 @@ auto.
 Qed.
 
 
-
 Lemma compile_gdefs_rev : forall M max_fname nfs defs  bid bf,
     compile_gdefs M max_fname nfs = Some defs ->
     In (bid, Gfun (Internal bf)) defs ->
@@ -1103,48 +1157,6 @@ Lemma xdefs_external : forall M defs bid bg,
 intros. eapply xdefs_external'; eauto.
 intros. simpl in *.
 intuition eauto.
-Qed.
-
-Lemma numbered'_nth_error_fst : forall A (xs : list A) n i x,
-    nth_error (numbered' n xs) i = Some x ->
-    fst x = n + i.
-induction xs; intros0 Hnth; simpl in *.
-- destruct i; discriminate Hnth.
-- destruct i; simpl in *.
-  + inject_some. simpl. omega.
-  + replace (n + S i) with (S n + i) by omega.
-    eauto.
-Qed.
-
-Lemma numbered_nth_error_fst : forall A (xs : list A) i x,
-    nth_error (numbered xs) i = Some x ->
-    fst x = i.
-intros. change i with (0 + i).  eapply numbered'_nth_error_fst; eauto.
-Qed.
-
-Lemma numbered'_nth_error_snd : forall A (xs : list A) n i x,
-    nth_error (numbered' n xs) i = Some x ->
-    nth_error xs i = Some (snd x).
-induction xs; intros0 Hnth; simpl in *.
-- destruct i; discriminate Hnth.
-- destruct i; simpl in *.
-  + inject_some. simpl. reflexivity.
-  + replace (n + S i) with (S n + i) by omega.
-    eauto.
-Qed.
-
-Lemma numbered_nth_error_snd : forall A (xs : list A) i x,
-    nth_error (numbered xs) i = Some x ->
-    nth_error xs i = Some (snd x).
-intros. change i with (0 + i).  eapply numbered'_nth_error_snd; eauto.
-Qed.
-
-Lemma numbered_nth_error_fst_snd : forall A (xs : list A) i x,
-    nth_error (numbered xs) i = Some x ->
-    nth_error xs (fst x) = Some (snd x).
-intros.
-erewrite numbered_nth_error_fst;
-  eauto using numbered_nth_error_snd.
 Qed.
 
 Lemma compile_I_env_rev : forall A metas BP B M bid bsym bf,
@@ -1195,6 +1207,8 @@ Qed.
 
 
 
+(* translation validation *)
+
 Lemma compile_func_fnames_below : forall M max_fname a b,
     compile_func M max_fname a = Some b ->
     A.fnames_below max_fname (fst a).
@@ -1234,7 +1248,6 @@ subst na. eapply numbered_nth_error in Ha_i.
 replace na_i with (i, a_i) in * by congruence.
 auto.
 Qed.
-
 
 
 Lemma compile_func_switch_placement : forall M max_fname a b,
@@ -1278,6 +1291,8 @@ auto.
 Qed.
 
 
+
+(* I_sim *)
 
 Ltac i_ctor := intros; econstructor; simpl; eauto.
 Ltac i_lem H := intros; eapply H; simpl; eauto.
@@ -1572,6 +1587,18 @@ eexists; split; eauto. constructor; eauto.
 Qed.
 
 
+
+
+Require Semantics.
+Require MixSemantics.
+
+Section Preservation.
+
+  Variable prog : A.prog_type.
+  Variable tprog : B.program.
+
+  Hypothesis TRANSF : compile_cu prog = Some tprog.
+
 Lemma func_body_I : forall M,
     forall abody aret aarg afname afree,
     forall bid_self bid_arg,
@@ -1610,19 +1637,6 @@ i_ctor.
     { eapply I_id_ne; eauto. discriminate. }
   i_ctor.
 Qed.
-
-
-
-
-Require Semantics.
-Require MixSemantics.
-
-Section Preservation.
-
-  Variable prog : A.prog_type.
-  Variable tprog : B.program.
-
-  Hypothesis TRANSF : compile_cu prog = Some tprog.
 
 Lemma raw_sim_lockstep : forall (index : Type) (order : index -> index -> Prop)
           (state_a state_b : Type) (match_states : state_a -> state_b -> Prop)
