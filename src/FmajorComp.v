@@ -802,47 +802,6 @@ constructor.
 - inject_some. assumption.
 Qed.
 
-Lemma compile_gdefs_bfunc_exists' : forall M max_fname base a b x an af,
-    compile_gdefs M max_fname (numbered' base a) = Some b ->
-    nth_error a an = Some af ->
-    exists bid bf,
-        In (bid, Gfun (Internal bf)) (b ++ x) /\
-        I_id M (IkFunc (base + an)) bid /\
-        I_func M af bf.
-first_induction a; intros0 Hgdefs Hnth.
-  { destruct an; discriminate. }
-
-unfold compile_gdefs in *. simpl in *.
-do 2 (break_match; try discriminate).
-break_bind_option. inject_some.
-
-destruct an; simpl in *.
-
-- inject_some.
-
-  do 2 eexists. split; [|split].
-  + left. reflexivity.
-  + replace (base + 0) with base by omega. auto.
-  + eapply compile_I_func; eauto.
-
-- replace (base + S an) with (S base + an) by omega.
-  fwd eapply IHa as HH; eauto. destruct HH as (bid & bf & ? & ? & ?).
-  firstorder eauto.
-Qed.
-
-Lemma compile_gdefs_bfunc_exists : forall M max_fname a b x an af,
-    compile_gdefs M max_fname (numbered a) = Some b ->
-    nth_error a an = Some af ->
-    exists bid bf,
-        In (bid, Gfun (Internal bf)) (b ++ x) /\
-        I_id M (IkFunc an) bid /\
-        I_func M af bf.
-intros.
-change (IkFunc an) with (IkFunc (0 + an)).
-unfold numbered in *.
-eapply compile_gdefs_bfunc_exists'; eauto.
-Qed.
-
 Lemma Forall2_norepet : forall A B (P : A -> B -> Prop) xs ys,
     (forall x1 y1 x2 y2,
         P x1 y1 ->
@@ -916,33 +875,6 @@ Qed.
 
 
 
-Lemma gdefs_id_fwd : forall M max_fname nfs gdefs i,
-    id_map_ok M ->
-    compile_gdefs M max_fname nfs = Some gdefs ->
-    In i (map fst nfs) ->
-    exists id, I_id M (IkFunc i) id /\ In id (map fst gdefs).
-induction nfs; intros0 Mok Hcomp Hlhs; unfold compile_gdefs in Hcomp; simpl in *.
-- inject_some. contradiction.
-- do 2 (break_match; try discriminate). inject_some. simpl in *.
-  destruct Hlhs.
-  + on (map_partial _ _ = Some _), fun H => clear H.
-    unfold compile_gdef in *. break_match. break_bind_option. inject_some.
-    simpl in *. eexists; split; [ | left; reflexivity ].
-    assumption.
-  + destruct (IHnfs ?? ?? ** ** **) as (id & ? & ?).
-    eauto.
-Qed.
-
-Lemma gdefs_id_fwd' : forall M max_fname nfs gdefs i id,
-    id_map_ok M ->
-    compile_gdefs M max_fname nfs = Some gdefs ->
-    In i (map fst nfs) ->
-    I_id M (IkFunc i) id ->
-    In id (map fst gdefs).
-intros. fwd eapply gdefs_id_fwd; eauto. break_exists. break_and.
-remvar id as id_. eassumption.  eapply I_id_inj; eauto.
-Qed.
-
 Lemma gdefs_id_rev : forall M max_fname nfs gdefs id,
     id_map_ok M ->
     compile_gdefs M max_fname nfs = Some gdefs ->
@@ -960,34 +892,6 @@ induction nfs; intros0 Mok Hcomp Hrhs; unfold compile_gdefs in Hcomp; simpl in *
     eauto.
 Qed.
 
-Lemma gdefs_id_rev' : forall M max_fname nfs gdefs i id,
-    id_map_ok M ->
-    compile_gdefs M max_fname nfs = Some gdefs ->
-    In id (map fst gdefs) ->
-    I_id M (IkFunc i) id ->
-    In i (map fst nfs).
-intros. fwd eapply gdefs_id_rev; eauto. break_exists. break_and.
-remvar i as i_. eassumption.
-cut (IkFunc i = IkFunc x). { intro. congruence. }
-eapply I_id_sur; eauto.
-Qed.
-
-
-Lemma xdefs_id_fwd_generic : forall M funcs xdefs k,
-    id_map_ok M ->
-    map_partial (extra_def M) funcs = Some xdefs ->
-    In k (map fst (map fst funcs)) ->
-    exists id, I_id M k id /\ In id (map fst xdefs).
-induction funcs; intros0 Mok Hmap Hlhs; simpl in *.
-- inject_some. contradiction.
-- do 2 (break_match; try discriminate). inject_some. simpl in *.
-  unfold extra_def in *. do 2 break_match. break_bind_option. inject_some.
-  simpl.  destruct Hlhs.
-  + eexists; split; [| left; reflexivity ].
-    subst. simpl. assumption.
-  + destruct (IHfuncs ?? ?? ** *** **) as (id & ? & ?).
-    eauto.
-Qed.
 
 Lemma xdefs_id_rev_generic : forall M funcs xdefs id,
     id_map_ok M ->
@@ -1005,64 +909,12 @@ induction funcs; intros0 Mok Hmap Hrhs; simpl in *.
     eauto.
 Qed.
 
-Lemma xdefs_id_fwd : forall M xdefs k,
-    id_map_ok M ->
-    extra_defs M = Some xdefs ->
-    In k extra_keys ->
-    exists id, I_id M k id /\ In id (map fst xdefs).
-intros. eapply xdefs_id_fwd_generic; eauto.
-Qed.
-
-Lemma xdefs_id_fwd' : forall M xdefs k id,
-    id_map_ok M ->
-    extra_defs M = Some xdefs ->
-    In k extra_keys ->
-    I_id M k id ->
-    In id (map fst xdefs).
-intros. fwd eapply xdefs_id_fwd; eauto. break_exists. break_and.
-remvar id as id_. eassumption.  eapply I_id_inj; eauto.
-Qed.
-
 Lemma xdefs_id_rev : forall M xdefs id,
     id_map_ok M ->
     extra_defs M = Some xdefs ->
     In id (map fst xdefs) ->
     exists k, I_id M k id /\ In k extra_keys.
 intros. eapply xdefs_id_rev_generic; eauto.
-Qed.
-
-Lemma xdefs_id_rev' : forall M xdefs k id,
-    id_map_ok M ->
-    extra_defs M = Some xdefs ->
-    In id (map fst xdefs) ->
-    I_id M k id ->
-    In k extra_keys.
-intros. fwd eapply xdefs_id_rev; eauto. break_exists. break_and.
-remvar k as k_. eassumption. eapply I_id_sur; eauto.
-Qed.
-
-
-Lemma count_up'_in : forall i acc n,
-    (i < length acc + n <-> In i acc \/ i < n) ->
-    (i < length acc + n <-> In i (count_up' acc n)).
-first_induction n; intros0 HH; simpl in *.
-- rewrite HH. split.
-  + destruct 1; eauto. exfalso. omega.
-  + intro. left. auto.
-- replace (length acc + S n) with (length (n :: acc) + n) in * by (simpl; omega).
-  eapply IHn. rewrite HH. split.
-  + destruct 1; simpl; eauto.
-    destruct (eq_nat_dec i n); eauto.
-    right. omega.
-  + destruct 1; simpl in *; eauto.
-    on (_ \/ _), invc; eauto.
-Qed.
-
-Lemma count_up_in : forall i n,
-    i < n <-> In i (count_up n).
-intros. eapply count_up'_in with (acc := []); eauto.
-simpl. split; eauto.
-destruct 1; [ contradiction | eauto ].
 Qed.
 
 
@@ -1429,14 +1281,6 @@ Qed.
 
 Ltac i_ctor := intros; econstructor; simpl; eauto.
 Ltac i_lem H := intros; eapply H; simpl; eauto.
-
-Lemma set_I_opt_value : forall M v bf bid bid' v',
-    I_opt_value M v (bf ! bid) ->
-    bid' <> bid ->
-    I_opt_value M v ((PTree.set bid' v' bf) ! bid).
-intros0 II Hne.
-rewrite PTree.gso; eauto.
-Qed.
 
 Lemma set_I_frame : forall M af adst av bf bdst bv,
     id_map_ok M ->
