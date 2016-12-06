@@ -600,17 +600,27 @@ Section Preservation.
   Theorem fsim :
     Semantics.forward_simulation (A.semantics prog) (B.semantics tprog).
   Proof.
+    destruct prog as [A Ameta], tprog as [B Bmeta].
+    fwd eapply compile_cu_I_env; eauto.
+    fwd eapply compile_cu_dests_distinct; eauto.
+
     eapply Semantics.forward_simulation_step with
         (match_states := I)
         (match_values := @eq value).
-    - simpl. intros. eexists. split. 2: econstructor.
-      on >B.is_callstate, invc. repeat i_ctor. all: firstorder discriminate.
-    - intros0 II Afinal. invc Afinal; invc II. eexists; split; eauto.
-      constructor.
+
+    - simpl. intros. on >B.is_callstate, invc. simpl in *.
+      destruct ltac:(i_lem Forall2_nth_error_ex') as (abody & ? & ?).
+      fwd eapply Forall_nth_error; try eassumption. simpl in *.
+
+      eexists. split; repeat i_ctor.
+      + rewrite app_nil_r. assumption.
+
+    - intros0 II Afinal. invc Afinal. invc II.
+      eexists; split; i_ctor.
+
     - intros0 Astep. intros0 II.
-      eapply I_sim; eauto.
-      + destruct prog, tprog. eapply compile_cu_I_env; eauto.
-      + destruct prog, tprog. eapply compile_cu_dests_distinct; eauto.
+      eapply I_sim; try eassumption.
+
   Qed.
 
 End Preservation.
