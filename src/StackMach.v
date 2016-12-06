@@ -101,8 +101,13 @@ Definition prog_type : Type := env * list metadata.
 Definition valtype := value.
 
 Inductive is_callstate (prog : prog_type) : valtype -> valtype -> state -> Prop :=
-| IsCallstate : forall fv av,
-        is_callstate prog fv av (Run [Call] (Frame av fv [av; fv]) Stop).
+| IsCallstate : forall fname free av body,
+        nth_error (fst prog) fname = Some body ->
+        let fv := Close fname free in
+        is_callstate prog fv av
+            (Run body
+                 (Frame av fv [])
+                 Stop).
 
 Inductive final_state (prog : prog_type) : state -> valtype -> Prop :=
 | FinalState : forall v, final_state prog (Stop v) v.

@@ -352,6 +352,23 @@ eexists. split; eauto.
 eapply Forall2_nth_error; eauto.
 Qed.
 
+Lemma Forall2_swap : forall A B (P : A -> B -> Prop) xs ys,
+    Forall2 P xs ys ->
+    Forall2 (fun y x => P x y) ys xs.
+induction xs; destruct ys; intros0 Hfa; invc Hfa; simpl in *; eauto.
+Qed.
+
+Lemma Forall2_nth_error_ex' : forall A B (P : A -> B -> Prop) xs ys i y,
+    Forall2 P xs ys ->
+    nth_error ys i = Some y ->
+    exists x,
+        nth_error xs i = Some x /\
+        P x y.
+intros0 Hfa Hnth.
+eapply Forall2_swap in Hfa.
+fwd eapply Forall2_nth_error_ex; eauto.
+Qed.
+
 
 (* misc *)
 

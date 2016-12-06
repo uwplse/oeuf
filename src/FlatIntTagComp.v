@@ -471,6 +471,11 @@ Qed.
 
 
 
+Lemma nat_pos_nat : forall n,
+    pred (Pos.to_nat (Pos.of_succ_nat n)) = n.
+intros.  rewrite SuccNat2Pos.id_succ. reflexivity.
+Qed.
+
 Require Semantics.
 
 Section Preservation.
@@ -486,13 +491,28 @@ Section Preservation.
     eapply Semantics.forward_simulation_step with
         (match_states := I)
         (match_values := I_value).
-    - (*simpl. intros. eexists. split. 2: econstructor.
-      on >B.is_callstate, invc. repeat i_ctor.*) admit.
+
+    - simpl. intros. on >B.is_callstate, invc. on >I_value, inv.
+      destruct prog as [A Ameta], tprog as [B Bmeta]. simpl in *.
+
+      rewrite nat_pos_nat in *.
+
+      fwd eapply compile_cu_I_env; eauto.
+      fwd eapply length_nth_error_Some with (xs := B) (ys := A) as HH;
+        eauto using Forall2_length, eq_sym.
+        destruct HH as ([abody aret] & ?).
+      fwd eapply Forall2_nth_error with (xs := A) (ys := B); eauto.
+
+      on >I_func, invc.
+      eexists. split; repeat i_ctor.
+
     - intros0 II Afinal. invc Afinal. invc II. on >I_cont, invc. eexists; split; eauto.
       constructor.
+
     - intros0 Astep. intros0 II.
       eapply I_sim; eauto.
       destruct prog, tprog. eapply compile_cu_I_env; eauto.
-  Admitted.
+
+  Qed.
 
 End Preservation.
