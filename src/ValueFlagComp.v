@@ -610,6 +610,14 @@ simpl; B.refold_cases_arent_values; eauto.
   list_magic_on (cases, tt). eauto using compile_not_value.
 Qed.
 
+Lemma compile_cases_arent_values_list : forall a b,
+    compile_list a = b ->
+    Forall B.cases_arent_values b.
+intros0 Hcomp. eapply compile_list_Forall in Hcomp.
+list_magic_on (b, (a, tt)).
+eauto using compile_cases_arent_values.
+Qed.
+
 Theorem compile_cases_no_values : forall a b,
     compile a = b ->
     B.no_values b.
@@ -874,6 +882,89 @@ all: simpl in *; B.refold_cases_arent_values; repeat break_and.
 Qed.
 
 
+Inductive I' : A.state -> B.state -> Prop :=
+| I'_intro : forall a b,
+        I a b ->
+        B.cases_arent_values_state b ->
+        I' a b.
+
+Theorem I'_sim : forall AE BE a a' b,
+    compile_list AE = BE ->
+    I' a b ->
+    A.sstep AE a a' ->
+    exists b',
+        B.splus BE b b' /\
+        I' a' b'.
+intros. on >I', invc.
+
+fwd eapply I_sim; eauto.
+  { on >B.cases_arent_values_state, invc; eauto. simpl. auto. }
+break_exists; break_and.
+
+eexists; split; eauto. constructor; eauto.
+eapply B.splus_cases_arent_values; try eassumption.
+- eapply compile_cases_arent_values_list. reflexivity.
+Qed.
+
+
+
+Lemma compile_cu_Forall : forall A Ameta B Bmeta,
+    compile_cu (A, Ameta) = (B, Bmeta) ->
+    Forall2 (fun a b => compile a = b) A B.
+intros. simpl in *. inject_pair.
+eapply compile_list_Forall. auto.
+Qed.
+
+Lemma value_conv : forall v,
+    exists e, A.expr_value e v.
+induction v using value_rect_mut with
+    (Pl := fun vs => exists es, Forall2 A.expr_value es vs);
+break_exists; eauto using A.EvConstr, A.EvClose.
+Qed.
+
+Lemma value_conv_list : forall vs,
+    exists es, Forall2 A.expr_value es vs.
+induction vs; break_exists; eauto.
+destruct (value_conv **). eauto.
+Qed.
+
+Lemma expr_value_I_value : forall e v,
+    A.expr_value e v ->
+    I_value e v.
+make_first v.
+induction v using value_rect_mut with
+    (Pl := fun vs => forall es, Forall2 A.expr_value es vs -> Forall2 I_value es vs);
+intros.
+
+- on >A.expr_value, invc. econstructor; eauto.
+- on >A.expr_value, invc. econstructor; eauto.
+- on >Forall2, invc. eauto.
+- on >Forall2, invc. eauto.
+Qed.
+Hint Resolve expr_value_I_value.
+
+Lemma expr_value_I_value_eq : forall e v1 v2,
+    A.expr_value e v1 ->
+    I_value e v2 ->
+    v1 = v2.
+induction e using A.expr_rect_mut with
+    (Pl := fun es => forall vs1 vs2,
+        Forall2 A.expr_value es vs1 ->
+        Forall2 I_value es vs2 ->
+        vs1 = vs2);
+intros;
+try on >A.expr_value, invc;
+try on >I_value, invc.
+
+- specialize (IHe ?? ?? ** **). congruence.
+- specialize (IHe ?? ?? ** **). congruence.
+- do 2 on >Forall2, invc. reflexivity.
+- do 2 on (Forall2 _ (_ :: _) _), invc.
+  specialize (IHe ?? ?? ** **).
+  specialize (IHe0 ?? ?? ** **).
+  subst. reflexivity.
+Qed.
+
 
 Require Semantics.
 
@@ -884,26 +975,36 @@ Section Preservation.
 
   Hypothesis TRANSF : compile_cu prog = tprog.
 
-  
-  (* Inductive match_states (AE : A.env) (BE : B.env) : A.expr -> B.expr -> Prop := *)
-  (* | match_st : *)
-  (*     forall a b, *)
-  (*       R AE BE a b -> *)
-  (*       match_states AE BE a b. *)
-
-  (* Lemma step_sim : *)
-  (*   forall AE BE a b, *)
-  (*     match_states AE BE a b -> *)
-  (*     forall a', *)
-  (*       A.step AE a a' -> *)
-  (*       exists b', *)
-  (*         splus (B.step BE) b b'. *)
-  (* Proof. *)
-  (* Admitted. *)
-
   Theorem fsim :
     Semantics.forward_simulation (A.semantics prog) (B.semantics tprog).
   Proof.
-  Admitted.
+    destruct prog as [A Ameta], tprog as [B Bmeta].
+    fwd eapply compile_cu_Forall; eauto.
+
+    eapply Semantics.forward_simulation_plus with
+        (match_states := I')
+        (match_values := @eq value).
+
+    - simpl. intros. on >B.is_callstate, invc. simpl in *.
+      destruct ltac:(i_lem Forall2_nth_error_ex') as (abody & ? & ?).
+      destruct (value_conv_list free) as (afree & ?).
+      destruct (value_conv av2) as (av1 & ?).
+
+      eexists. split; repeat i_ctor.
+      + i_lem compile_I_expr.
+      + list_magic_on (afree, (free, tt)).
+      + i_lem compile_not_value.
+      + i_lem compile_cases_arent_values.
+
+    - intros0 II Afinal. invc Afinal. invc II. on >I, invc.
+      eexists; split.
+      + econstructor.
+      + i_lem expr_value_I_value_eq.
+
+    - intros0 Astep. intros0 II.
+      eapply splus_semantics_sim, I'_sim; try eassumption.
+      simpl. simpl in TRANSF. congruence.
+
+  Qed.
 
 End Preservation.
