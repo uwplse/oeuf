@@ -232,6 +232,80 @@ Lemma cases_arent_values_list_is_Forall : forall es,
 induction es; simpl; split; inversion 1; constructor; firstorder eauto.
 Qed.
 
+Inductive cases_arent_values_state : state -> Prop :=
+| CavsRun : forall e a s k,
+        cases_arent_values e ->
+        (forall v, cases_arent_values_state (k v)) ->
+        cases_arent_values_state (Run e a s k)
+| CavsStop : forall v,
+        cases_arent_values_state (Stop v)
+.
+
+
+Ltac i_ctor := intros; constructor; simpl; eauto.
+Ltac i_lem H := intros; eapply H; simpl; eauto.
+
+Lemma step_cases_arent_values : forall E s s',
+    Forall cases_arent_values E ->
+    cases_arent_values_state s ->
+    sstep E s s' ->
+    cases_arent_values_state s'.
+intros0 Henv Hcases Hstep; invc Hstep; invc Hcases;
+simpl in *; refold_cases_arent_values.
+
+- eauto.
+
+- eauto.
+
+- i_ctor. i_ctor.
+
+- eauto.
+
+- eauto.
+
+- rewrite cases_arent_values_list_is_Forall in *.
+  on _, invc_using Forall_app_inv.
+  on (Forall _ (_ :: _)), invc.
+
+  i_ctor. i_ctor. refold_cases_arent_values.
+
+  rewrite cases_arent_values_list_is_Forall.
+  i_lem Forall_app. i_ctor.
+
+- eauto.
+
+- rewrite cases_arent_values_list_is_Forall in *.
+  on _, invc_using Forall_app_inv.
+  on (Forall _ (_ :: _)), invc.
+
+  i_ctor. i_ctor. refold_cases_arent_values.
+
+  rewrite cases_arent_values_list_is_Forall.
+  i_lem Forall_app. i_ctor.
+
+- eauto.
+
+- break_and. i_ctor. i_ctor.
+
+- break_and. i_ctor. i_ctor.
+
+- i_ctor. i_lem Forall_nth_error.
+
+- break_and. i_ctor.
+  rewrite cases_arent_values_list_is_Forall in *.
+  i_lem Forall_nth_error.
+
+Qed.
+
+Lemma splus_cases_arent_values : forall E s s',
+    Forall cases_arent_values E ->
+    cases_arent_values_state s ->
+    splus E s s' ->
+    cases_arent_values_state s'.
+induction 3; eauto using step_cases_arent_values.
+Qed.
+
+
 
 Definition no_values : expr -> Prop :=
     let fix go e :=

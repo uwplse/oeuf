@@ -4,6 +4,7 @@ Require Import Psatz.
 
 Require Import Utopia.
 Require Import Monads.
+Require HigherValue.
 
 Definition function_name := nat.
 
@@ -103,16 +104,36 @@ Definition SPlusCons := @StepLib.SPlusCons state.
 Require Import Metadata.
 
 Definition prog_type : Type := list expr * list metadata.
-Definition valtype := unit.
-Require Semantics.
+Definition valtype := HigherValue.value.
 
-Inductive is_callstate (prog : prog_type) : valtype -> valtype -> state -> Prop := .
+Inductive expr_value : expr -> valtype -> Prop :=
+| EvConstr : forall tag args1 args2,
+        Forall2 expr_value args1 args2 ->
+        expr_value (Constr tag args1)
+                   (HigherValue.Constr tag args2)
+| EvClose : forall tag free1 free2,
+        Forall2 expr_value free1 free2 ->
+        expr_value (Close tag free1)
+                   (HigherValue.Close tag free2)
+.
+
+Inductive is_callstate (prog : prog_type) : valtype -> valtype -> state -> Prop :=
+| IsCallstate : forall fname free av fe ae body,
+        nth_error (fst prog) fname = Some body ->
+        let fv := HigherValue.Close fname free in
+        expr_value fe fv ->
+        expr_value ae av ->
+        is_callstate prog fv av
+            (Run body ae fe Stop).
 
 Inductive final_state (prog : prog_type) : state -> valtype -> Prop :=
-| FinalState : forall v, value v -> final_state prog (Stop v) tt.
+| FinalState : forall v e,
+        expr_value e v ->
+        final_state prog (Stop e) v.
 
 Definition initial_env (prog : prog_type) : env := fst prog.
 
+Require Semantics.
 Definition semantics (prog : prog_type) : Semantics.semantics :=
   @Semantics.Semantics_gen state env valtype
                  (is_callstate prog)
