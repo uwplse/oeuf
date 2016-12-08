@@ -1328,16 +1328,19 @@ Section Preservation.
   Proof.
     eapply Semantics.forward_simulation_star with
         (match_states := I (fst prog) (fst tprog)).
-    - inversion 1. (* TODO - replace with callstate matching *)
+    - admit. (* TODO - replace with callstate matching *)
     - intros0 II Afinal. invc Afinal. invc II.
+      admit.
+      (*
       eexists; split.
       constructor. eauto using I_expr_value.
       reflexivity.
+      *)
     - intros0 Astep. intros0 II.
       eapply sstar_semantics_sim, I_sim; eauto.
       + destruct prog, tprog. unfold compile_cu in *. break_if; try discriminate.
         inject_some. simpl. reflexivity.
       + destruct prog, tprog. simpl. eauto using compile_cu_elim_rec_shape.
-  Qed.
+  Admitted.
 
 End Preservation.
