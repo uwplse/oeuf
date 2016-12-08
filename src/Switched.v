@@ -4,6 +4,7 @@ Require Import Psatz.
 
 Require Import Utopia.
 Require Import Monads.
+Require HigherValue.
 
 Definition function_name := nat.
 
@@ -105,24 +106,34 @@ Definition SPlusCons := @StepLib.SPlusCons state.
 Require Import Metadata.
 
 Definition prog_type : Type := list expr * list metadata.
-Definition valtype := unit.
+Definition valtype := HigherValue.value.
 
-Inductive is_callstate (prog : prog_type) : valtype -> valtype -> state -> Prop := .
-(* TODO: stub *)
+Inductive expr_value : expr -> valtype -> Prop :=
+| EvConstr : forall tag args1 args2,
+        Forall2 expr_value args1 args2 ->
+        expr_value (Constr tag args1)
+                   (HigherValue.Constr tag args2)
+| EvClose : forall tag free1 free2,
+        Forall2 expr_value free1 free2 ->
+        expr_value (Close tag free1)
+                   (HigherValue.Close tag free2)
+.
 
-(*
-Inductive initial_state (prog : prog_type) : expr -> valtype -> Prop :=
-| initial_intro :
-    forall expr,
-      In expr (fst prog) ->
-      initial_state prog expr tt.
- *)
+Inductive is_callstate (prog : prog_type) : valtype -> valtype -> state -> Prop :=
+| IsCallstate : forall fname free free_e av ae body,
+        nth_error (fst prog) fname = Some body ->
+        let fv := HigherValue.Close fname free in
+        expr_value ae av ->
+        Forall2 expr_value free_e free ->
+        is_callstate prog fv av
+            (Run body (ae :: free_e) Stop).
+
 Definition initial_env (prog : prog_type) : env := fst prog.
 
 Inductive final_state (prog : prog_type) : state -> valtype -> Prop :=
-| final_intro : forall e,
-      value e ->
-      final_state prog (Stop e) tt.
+| FinalState : forall v e,
+        expr_value e v ->
+        final_state prog (Stop e) v.
 
 
 Require Semantics.
@@ -238,4 +249,25 @@ rewrite upvar_list_nth_error in * by auto.
 inject_some. inversion 1.
 Qed.
 
+
+Lemma expr_value_value : forall e v,
+    expr_value e v ->
+    value e.
+induction e using expr_rect_mut with
+    (Pl := fun es => forall vs,
+        Forall2 expr_value es vs ->
+        Forall value es);
+intros0 Hev; invc Hev; eauto.
+
+- constructor. eauto.
+- constructor. eauto.
+Qed.
+Hint Resolve expr_value_value.
+
+Lemma expr_value_value_list : forall e v,
+    Forall2 expr_value e v ->
+    Forall value e.
+induction e; intros0 Hev; invc Hev; eauto using expr_value_value.
+Qed.
+Hint Resolve expr_value_value_list.
 

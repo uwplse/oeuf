@@ -4,6 +4,7 @@ Require String.
 Require Switched SelfClose.
 Require Import ListLemmas.
 Require Import StepLib.
+Require Import HigherValue.
 
 Require Import Psatz.
 
@@ -266,6 +267,68 @@ Qed.
 
 
 
+
+
+Lemma compile_cu_Forall : forall A Ameta B Bmeta,
+    compile_cu (A, Ameta) = (B, Bmeta) ->
+    Forall2 (fun a b => compile a = b) A B.
+intros. simpl in *. inject_pair.
+eapply compile_list_Forall. auto.
+Qed.
+
+Lemma expr_value_I_expr : forall be v,
+    B.expr_value be v ->
+    exists ae,
+        A.expr_value ae v /\
+        I_expr ae be.
+make_first v. induction v using value_rect_mut with
+    (Pl := fun vs => forall bes,
+        Forall2 B.expr_value bes vs ->
+        exists aes,
+            Forall2 A.expr_value aes vs /\
+            Forall2 I_expr aes bes);
+intros0 Hev; invc Hev.
+
+- destruct (IHv ?? **) as (? & ? & ?).
+  eauto using A.EvConstr, IConstr.
+
+- destruct (IHv ?? **) as (? & ? & ?).
+  eauto using A.EvClose, IClose.
+
+- eauto.
+
+- destruct (IHv ?? **) as (? & ? & ?).
+  destruct (IHv0 ?? **) as (? & ? & ?).
+  eauto.
+Qed.
+
+Lemma expr_value_I_expr_list : forall bes vs,
+    Forall2 B.expr_value bes vs ->
+    exists aes,
+        Forall2 A.expr_value aes vs /\
+        Forall2 I_expr aes bes.
+induction bes; intros0 Hev; invc Hev.
+
+- eauto.
+- destruct (IHbes ?? **) as (? & ? & ?).
+  destruct (expr_value_I_expr ?? ?? **) as (? & ? & ?).
+  eauto.
+Qed.
+
+Lemma expr_value_I_expr' : forall ae be v,
+    A.expr_value ae v ->
+    I_expr ae be ->
+    B.expr_value be v.
+induction ae using A.expr_rect_mut with
+    (Pl := fun ae => forall be v,
+        Forall2 A.expr_value ae v ->
+        Forall2 I_expr ae be ->
+        Forall2 B.expr_value be v);
+intros0 Hae II; invc Hae; invc II; i_ctor.
+Qed.
+        
+
+
 Require Semantics.
 
 Section Preservation.
@@ -278,16 +341,32 @@ Section Preservation.
   Theorem fsim :
     Semantics.forward_simulation (A.semantics prog) (B.semantics tprog).
   Proof.
-    eapply Semantics.forward_simulation_plus with (match_states := I).
-    - admit.
+    destruct prog as [A Ameta], tprog as [B Bmeta].
+    fwd eapply compile_cu_Forall; eauto.
+
+    eapply Semantics.forward_simulation_plus with
+        (match_states := I)
+        (match_values := @eq value).
+
+    - simpl. intros. on >B.is_callstate, invc. simpl in *.
+      destruct ltac:(i_lem Forall2_nth_error_ex') as (abody & ? & ?).
+      destruct (expr_value_I_expr ae ?? **) as (? & ? & ?).
+      on (B.expr_value fe _), invc.
+      destruct ltac:(i_lem expr_value_I_expr_list) as (? & ? & ?).
+
+      eexists. split. 1: econstructor. all: eauto.
+      + i_lem compile_I_expr.
+      + i_ctor.
+      + i_ctor.
+
     - intros0 II Afinal. invc Afinal. invc II.
-      admit.
-      (* eexists; split.
-      constructor. eauto using I_expr_value.
-      reflexivity. *)
+      eexists; split; eauto.
+      i_ctor. i_lem expr_value_I_expr'.
+
     - intros0 Astep. intros0 II.
-      eapply splus_semantics_sim, I_sim; eauto.
-      destruct prog, tprog. unfold compile_cu in *. inject_pair. auto.
-  Admitted.
+      eapply splus_semantics_sim, I_sim; try eassumption.
+      simpl. simpl in TRANSF. congruence.
+
+  Qed.
 
 End Preservation.
