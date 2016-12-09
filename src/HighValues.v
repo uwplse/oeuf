@@ -251,20 +251,62 @@ Definition no_future_pointers (m : mem) : Prop :=
     Plt b' (Mem.nextblock m).
 
 
-(* Stuart: I need help with the induction here *)
-Lemma value_inject_mem_extends :
-  forall {F V} (ge : Genv.t F V) m m' v v' v0,
-    value_inject ge m v v' ->
-    Mem.extends m m' ->
-    Val.lessdef v' v0 ->
-    value_inject ge m' v v0.
+Lemma load_all_extends :
+  forall {F V} (ge : Genv.t F V) l m l',
+    load_all l m = Some l' ->
+    (forall a b, In (a,b) l' -> value_inject ge m a b) ->
+    forall m',
+      Mem.extends m m' ->
+      exists l0,
+        load_all l m' = Some l0 /\ (forall a b, In (a,b) l0 -> value_inject ge m' a b).
 Proof.
-  induction 1; intros.
-  inv H4. app Mem.loadv_extends Mem.loadv.
-  inv H6.
-  econstructor; eauto.
+  induction l; intros.
+  - simpl in H. inv H. exists nil.
+    simpl. split; auto. intros. solve [inv H2].
+  - simpl in H.
+    repeat (break_match_hyp; try congruence).
+    subst.
+    invc H.
+    eapply IHl in Heqo0; eauto.
+    app Mem.loadv_extends Mem.loadv.
+    break_exists; break_and. eexists; split.
+    simpl. repeat collapse_match. reflexivity.
+    Focus 2. intros. eapply H0. simpl. right. assumption.
+    
+    intros. simpl in H6. destruct H6.
+    Focus 2. eapply H5. assumption.
+
+    assert (value_inject ge m a v1).
+    eapply H0. simpl. left. congruence.
+    destruct v1; try solve [inv H7; inv H4].
+    inv H4. invc H6.
+
+    (* pass things around, add precondition *)
+    admit.
+
 Admitted.
 
+(* Stuart: I need help with the induction here *)
+Lemma value_inject_mem_extends' :
+  forall {F V} (ge : Genv.t F V) m m' v v',
+    value_inject ge m v v' ->
+    Mem.extends m m' ->
+    value_inject ge m' v v'.
+Proof.
+  intros until v.
+  induction v using value_rect_mut with (Pl := fun vs => forall vs',
+                                                   list_forall2 (value_inject ge m) vs vs' ->
+                                                   Mem.extends m m' ->
+                                                   list_forall2 (value_inject ge m') vs vs'
+                                        ); intros;
+    inv H;
+    try solve [econstructor; eauto];
+    app Mem.loadv_extends Mem.loadv;
+    app (@load_all_extends F V) load_all;
+  try solve [econstructor; eauto;
+             inv H3; eauto].
+  
+Qed.
 
 Definition env_inject {A B} (hlenv : PTree.t value) (llenv : PTree.t val) (ge : Genv.t A B)(m : mem) : Prop :=
   forall id v,
