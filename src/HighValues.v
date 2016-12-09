@@ -287,7 +287,7 @@ Proof.
 Admitted.
 
 (* Stuart: I need help with the induction here *)
-Lemma value_inject_mem_extends' :
+Lemma value_inject_mem_extends :
   forall {F V} (ge : Genv.t F V) m m' v v',
     value_inject ge m v v' ->
     Mem.extends m m' ->
