@@ -257,12 +257,13 @@ Lemma load_all_extends :
     (forall a b, In (a,b) l' -> value_inject ge m a b) ->
     forall m',
       Mem.extends m m' ->
+      (forall a b, In (a,b) l' -> value_inject ge m' a b) ->
       exists l0,
         load_all l m' = Some l0 /\ (forall a b, In (a,b) l0 -> value_inject ge m' a b).
 Proof.
-  induction l; intros.
+    induction l; intros.
   - simpl in H. inv H. exists nil.
-    simpl. split; auto. intros. solve [inv H2].
+    simpl. split; auto. 
   - simpl in H.
     repeat (break_match_hyp; try congruence).
     subst.
@@ -273,20 +274,58 @@ Proof.
     simpl. repeat collapse_match. reflexivity.
     Focus 2. intros. eapply H0. simpl. right. assumption.
     
-    intros. simpl in H6. destruct H6.
-    Focus 2. eapply H5. assumption.
+    intros. simpl in H7. destruct H7.
+    Focus 2. eapply H6. assumption.
 
-    assert (value_inject ge m a v1).
-    eapply H0. simpl. left. congruence.
-    destruct v1; try solve [inv H7; inv H4].
-    inv H4. invc H6.
+    invc H7.
+    assert (value_inject ge m' a v1). {
+      eapply H2. simpl. left. auto.
+    }
+    assert (v1 = b) by (inv H7; inv H5; congruence). subst.
+    assumption.
 
-    (* pass things around, add precondition *)
-    admit.
 
-Admitted.
+    intros. eapply H2. simpl. right. auto.
+Qed.
 
-(* Stuart: I need help with the induction here *)
+Lemma load_all_result_decomp :
+  forall args b ofs m l,
+    load_all (arg_addrs b ofs args) m = Some l ->
+    exists r',
+      split l = (args,r') /\ length args = length r'.
+Proof.
+  induction args; intros.
+  simpl in *. inv H. simpl. eauto.
+  simpl in *. repeat (break_match_hyp; try congruence).
+  inv H. simpl.
+  eapply IHargs in Heqo0.
+  break_exists. break_and. rewrite H0.
+  eexists; split; eauto. simpl. eauto.
+Qed.
+
+Lemma list_forall2_combine :
+  forall {A B : Type}  l r,
+    length l = length r ->
+  forall (P : A -> B -> Prop),
+    (list_forall2 P l r <->
+    (forall (x : A) (y : B),
+      In (x,y) (combine l r) ->
+      P x y)).
+Proof.
+  intros; split.
+  induction 1; intros.
+  simpl in H0. inversion H0. simpl.
+  simpl in H2. destruct H2; try inv H2;
+                 eauto.
+  generalize dependent r.
+  induction l; intros;
+  destruct r; simpl in H; try congruence;
+  econstructor; eauto.
+  eapply H0. simpl. left. auto.
+  eapply IHl. inv H. eauto.
+  intros. eapply H0. simpl. right. auto.
+Qed.
+
 Lemma value_inject_mem_extends :
   forall {F V} (ge : Genv.t F V) m m' v v',
     value_inject ge m v v' ->
@@ -305,7 +344,26 @@ Proof.
     app (@load_all_extends F V) load_all;
   try solve [econstructor; eauto;
              inv H3; eauto].
-  
+
+  intros.
+  eapply load_all_result_decomp in H5.
+  break_exists. break_and.
+  specialize (IHv x0).
+  copy (split_combine l').
+  rewrite H5 in H9. subst l'.
+  eapply list_forall2_combine; eauto. 
+  eapply IHv; eauto.
+  erewrite list_forall2_combine; eauto. 
+
+  intros.
+  eapply load_all_result_decomp in H6.
+  break_exists. break_and.
+  specialize (IHv x0).
+  copy (split_combine l').
+  rewrite H6 in H11. subst l'.
+  eapply list_forall2_combine; eauto. 
+  eapply IHv; eauto.
+  erewrite list_forall2_combine; eauto. 
 Qed.
 
 Definition env_inject {A B} (hlenv : PTree.t value) (llenv : PTree.t val) (ge : Genv.t A B)(m : mem) : Prop :=
