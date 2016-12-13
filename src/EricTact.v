@@ -149,3 +149,10 @@ Ltac collapse_match :=
   end.
 
 
+Ltac break_or :=
+  match goal with
+  | [ H : _ \/ _ |- _ ] => destruct H
+  end.
+
+  
+  
