@@ -681,17 +681,20 @@ Section Preservation.
     Semantics.forward_simulation (A.semantics prog) (B.semantics tprog).
   Proof.
     eapply Semantics.forward_simulation_step with (match_states := I (fst prog) (fst tprog)).
-    - inversion 1. (* TODO - replace with callstate matching *)
+    - admit. (* TODO - replace with callstate matching *)
     - intros0 II Afinal. invc Afinal. invc II.
+      admit.
+      (*
       eexists; split.
       constructor. eauto using I_expr_value.
       reflexivity.
+      *)
     - intros0 Astep. intros0 II.
       eapply I_sim; try eassumption.
       + destruct prog, tprog. simpl in *. unfold compile_cu in *.
         break_if; try discriminate. simpl in *. inject_some. auto.
       + destruct prog, tprog. simpl in *. unfold compile_cu in *.
         break_if; try discriminate. auto.
-  Qed.
+  Admitted.
 
 End Preservation.
