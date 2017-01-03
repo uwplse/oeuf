@@ -116,10 +116,6 @@ Inductive is_callstate (prog : prog_type) : valtype -> valtype -> state -> Prop 
         is_callstate prog fv av
             (Run body (ae :: free_e) Stop).
 
-
-
-(* Inductive initial_state (prog : prog_type) : state -> Prop :=. *)
-
 Inductive final_state (prog : prog_type) : state -> valtype -> Prop :=
 | FinalState : forall e v,
         expr_value e v ->
