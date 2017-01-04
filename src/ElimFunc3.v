@@ -160,4 +160,3 @@ Lemma expr_value_value_list : forall e v,
 induction e; intros0 Hev; invc Hev; eauto using expr_value_value.
 Qed.
 Hint Resolve expr_value_value_list.
-
