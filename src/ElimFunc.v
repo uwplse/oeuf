@@ -5,6 +5,7 @@ Require Import Monads.
 Require Import ListLemmas.
 Require Import Psatz.
 Require Import StepLib.
+Require HigherValue.
 
 Definition function_name := nat.
 
@@ -142,6 +143,45 @@ Definition expr_rect_mut
         | Close f free => HClose f free (go_list free)
         | CloseDyn f drop expect => HCloseDyn f drop expect
         end in go e.
+
+Definition expr_rect_mut'
+        (P : expr -> Type)
+        (Pl : list expr -> Type)
+        (Pp : expr * rec_info -> Type)
+        (Plp : list (expr * rec_info) -> Type)
+    (HArg :     P Arg)
+    (HUpVar :   forall n, P (UpVar n))
+    (HCall :    forall f a, P f -> P a -> P (Call f a))
+    (HConstr :  forall tag args, Pl args -> P (Constr tag args))
+    (HElimBody : forall rec cases, P rec -> Plp cases -> P (ElimBody rec cases))
+    (HClose :   forall f free, Pl free -> P (Close f free))
+    (HCloseDyn : forall f drop expect, P (CloseDyn f drop expect))
+    (Hnil :     Pl [])
+    (Hcons :    forall e es, P e -> Pl es -> Pl (e :: es))
+    (Hpair :    forall e r, P e -> Pp (e, r))
+    (Hnil_p :   Plp [])
+    (Hcons_p :  forall p ps, Pp p -> Plp ps -> Plp (p :: ps)) :
+    (forall e, P e) *
+    (forall es, Pl es) *
+    (forall p, Pp p) *
+    (forall ps, Plp ps) :=
+    let go := expr_rect_mut P Pl Pp Plp
+        HArg HUpVar HCall HConstr HElimBody HClose HCloseDyn
+        Hnil Hcons Hpair Hnil_p Hcons_p in
+    let fix go_list es :=
+        match es as es_ return Pl es_ with
+        | [] => Hnil
+        | e :: es => Hcons e es (go e) (go_list es)
+        end in
+    let go_pair p :=
+        let '(e, r) := p in
+        Hpair e r (go e) in
+    let fix go_list_pair ps :=
+        match ps as ps_ return Plp ps_ with
+        | [] => Hnil_p
+        | p :: ps => Hcons_p p ps (go_pair p) (go_list_pair ps)
+        end in
+    (go, go_list, go_pair, go_list_pair).
 
 (* Useful wrapper for `expr_rect_mut with (Pl := Forall P)` *)
 Definition expr_ind' (P : expr -> Prop) (Pp : (expr * rec_info) -> Prop)
@@ -345,29 +385,37 @@ Definition SPlusCons := @StepLib.SPlusCons state.
 Require Import Metadata.
 
 Definition prog_type : Type := list expr * list metadata.
+Definition valtype := HigherValue.value.
 
-Require Semantics.
+Inductive expr_value : expr -> valtype -> Prop :=
+| EvConstr : forall tag args1 args2,
+        Forall2 expr_value args1 args2 ->
+        expr_value (Constr tag args1)
+                   (HigherValue.Constr tag args2)
+| EvClose : forall tag free1 free2,
+        Forall2 expr_value free1 free2 ->
+        expr_value (Close tag free1)
+                   (HigherValue.Close tag free2)
+.
+
+Inductive is_callstate (prog : prog_type) : valtype -> valtype -> state -> Prop :=
+| IsCallstate : forall fname free free_e av ae body,
+        nth_error (fst prog) fname = Some body ->
+        let fv := HigherValue.Close fname free in
+        expr_value ae av ->
+        Forall2 expr_value free_e free ->
+        is_callstate prog fv av
+            (Run body (ae :: free_e) Stop).
+
+Inductive final_state (prog : prog_type) : state -> valtype -> Prop :=
+| FinalState : forall e v,
+        expr_value e v ->
+        final_state prog (Stop e) v.
 
 Definition initial_env (prog : prog_type) : env := fst prog.
 
-Inductive is_callstate (prog : prog_type) : unit -> unit -> state -> Prop := .
-(* TODO: stub *)
-
-
-(* Inductive initial_state (prog : prog_type) : state -> Prop := *)
-(* | init : *)
-(*     forall expr, *)
-(*       In expr (initial_env prog) -> *)
-(*       initial_state prog (Run expr nil (fun x => Stop x)). *)
-
-Inductive final_state (prog : prog_type) : state -> unit -> Prop :=
-| fine :
-    forall expr,
-      value expr ->
-      final_state prog (Stop expr) tt.
-
 Definition semantics (prog : prog_type) : Semantics.semantics :=
-  @Semantics.Semantics_gen state env unit
+  @Semantics.Semantics_gen state env valtype
                            (is_callstate prog)
                  (sstep)
                  (final_state prog)
@@ -481,3 +529,59 @@ induction e using expr_rect_mut with
   left. constructor; auto.
 
 Defined.
+
+
+
+
+Lemma expr_value_value : forall e v,
+    expr_value e v ->
+    value e.
+mut_induction e using expr_rect_mut' with
+    (Pl := fun es => forall vs,
+        Forall2 expr_value es vs ->
+        Forall value es)
+    (Pp := fun e : _ * rec_info => forall v,
+        expr_value (fst e) v ->
+        value (fst e))
+    (Plp := fun (es : list (_ * rec_info)) => forall vs,
+        Forall2 (fun e v => expr_value (fst e) v) es vs ->
+        Forall (fun e => value (fst e)) es);
+[intros0 Hev; try solve [invc Hev + simpl in *; eauto].. | ].
+
+- invc Hev. constructor. eauto.
+- invc Hev. constructor. eauto.
+
+- finish_mut_induction expr_value_value using list pair list_pair.
+Qed exporting.
+Hint Resolve expr_value_value.
+Hint Resolve expr_value_value_list.
+
+Lemma expr_value_inj : forall e v1 v2,
+    expr_value e v1 ->
+    expr_value e v2 ->
+    v1 = v2.
+mut_induction e using expr_rect_mut' with
+    (Pl := fun es => forall vs1 vs2,
+        Forall2 expr_value es vs1 ->
+        Forall2 expr_value es vs2 ->
+        vs1 = vs2)
+    (Pp := fun (p : expr * rec_info) => True)
+    (Plp := fun (ps : list (expr * rec_info)) => True);
+[ eauto; intros0 Hv1 Hv2; invc Hv1; invc Hv2; f_equal; eauto.. | ].
+
+- finish_mut_induction expr_value_inj using list pair list_pair.
+Qed exporting.
+
+Lemma expr_value_sur : forall v e1 e2,
+    expr_value e1 v ->
+    expr_value e2 v ->
+    e1 = e2.
+mut_induction v using HigherValue.value_rect_mut' with
+    (Pl := fun vs => forall es1 es2,
+        Forall2 expr_value es1 vs ->
+        Forall2 expr_value es2 vs ->
+        es1 = es2);
+[ eauto; intros0 Hv1 Hv2; invc Hv1; invc Hv2; f_equal; eauto.. | ].
+
+- finish_mut_induction expr_value_sur using list.
+Qed exporting.

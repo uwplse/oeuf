@@ -1092,3 +1092,34 @@ Qed exporting.
 Hint Resolve expr_value_value.
 Hint Resolve expr_value_value_list.
 
+Lemma expr_value_inj : forall e v1 v2,
+    expr_value e v1 ->
+    expr_value e v2 ->
+    v1 = v2.
+mut_induction e using expr_rect_mut' with
+    (Pl := fun es => forall vs1 vs2,
+        Forall2 expr_value es vs1 ->
+        Forall2 expr_value es vs2 ->
+        vs1 = vs2)
+    (Pp := fun (p : expr * rec_info) => True)
+    (Plp := fun (ps : list (expr * rec_info)) => True);
+[ eauto; intros0 Hv1 Hv2; invc Hv1; invc Hv2; f_equal; eauto.. | ].
+
+- finish_mut_induction expr_value_inj using list pair list_pair.
+Qed exporting.
+
+Lemma expr_value_sur : forall v e1 e2,
+    expr_value e1 v ->
+    expr_value e2 v ->
+    e1 = e2.
+mut_induction v using HigherValue.value_rect_mut' with
+    (Pl := fun vs => forall es1 es2,
+        Forall2 expr_value es1 vs ->
+        Forall2 expr_value es2 vs ->
+        es1 = es2);
+[ eauto; intros0 Hv1 Hv2; invc Hv1; invc Hv2; f_equal; eauto.. | ].
+
+- finish_mut_induction expr_value_sur using list.
+Qed exporting.
+
+
