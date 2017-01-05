@@ -421,7 +421,8 @@ Ltac rewrite_rev lem H := rewrite <- lem in H.
 (* `remvar` ("remember as evar") - replaces a chunk of your goal with an evar,
    This may make it easier to apply some lemmas.  After solving the main goal,
    you must also prove that the evar's instantiation is compatible with the
-   original value. *)
+   original value.
+ *)
 
 Tactic Notation "remvar" uconstr(u) "as" ident(x) :=
     let x' := fresh x "'" in
@@ -434,3 +435,237 @@ Tactic Notation "remvar" uconstr(u) "as" ident(x) :=
     unfold x in *; clear x;
     [ rewrite H in Heq |- *; clear H
     | rewrite Heq; clear Heq; clear x' ].
+
+
+
+
+(* mut_induction tactic.  Allows exporting facts about all the relevant types
+   from a single proof by mutual induction.
+
+   Rationale: Proving a fact by mutual induction over two or more types
+   typically requires proving multiple related facts.  For example, proving `P`
+   for all trees may additionally require proving `Pl` for all forests (under
+   the assumption that `P` holds on all trees).  However, these side proofs are
+   discarded, and must be re-proved after finishing the main proof if they are
+   needed.  The `mut_induction` tactic can instead export these additional
+   proofs for separate use after finishing the main proof.
+
+   Usage:
+
+   Use `mut_induction` in place of `induction`, and replace the ordinary mutual
+   induction scheme with a combined scheme (one whose conclusion has the form
+   `(forall x, P x) * (forall y, P' y) * ...`).  The `mut_induction` tactic
+   supports the usual `... using ty_rect_mut with (x := ...) (y := ...)`
+   syntax.
+
+   Running `mut_induction` will produce the same subgoals as the corresponding
+   call to `induction`, plus one additional subgoal which will be used for
+   exporting the side lemmas.  Be careful not to run tactics such as `simpl` or
+   `eauto` on the final subgoal, as this will break the `finish_mut_induction`
+   tactic.
+
+   After finishing the standard goals, only the final "cleanup" goal will
+   remain.  Use `finish_mut_induction my_lemma using suffix1 suffix2 ...` to
+   export the side lemmas (as `my_lemma_suffix1`, `my_lemma_suffix2`, etc) and
+   solve the final goal.  Provide a suffix for each type in the mutual
+   induction aside from the one in the primary goal.
+ *)
+
+Ltac build_induction_helper_type TARGET ty_rect :=
+    let rec go T :=
+        match T with
+        | forall x : ?A, @?body x => 
+                refine (forall x : A, _);
+                let body' := eval cbv beta in (body x) in
+                go body'
+        | (_ * forall x : TARGET, @?body x)%type =>
+                let T' := eval cbv beta in (forall x, body x) in
+                exact T'
+        | (?l * _)%type => go l
+        | _ => exact T
+        end in
+    let T := type of ty_rect in
+    go T.
+
+Ltac build_induction_helper ty_rect :=
+    let HH := fresh "HH" in
+    let rec go e :=
+      match goal with
+      | [ |- forall x : ?A, _ ] =>
+            intro x;
+            go (e x)
+      | [ |- _ ] => pose proof e as HH
+      end in
+    go ty_rect;
+    repeat destruct HH as [HH ?];
+    assumption.
+
+Ltac mut_induction_base x ty_rect do_induction :=
+    try intros until x;
+
+    (* Remember the target type of this induction, for use by  
+       "finish_mut_induction". *)
+    let TARGET_ := type of x in
+    let TARGET_id := fresh "TARGET" in
+    pose TARGET_ as TARGET;
+
+    let helper := fresh "helper" in
+    simple refine (let helper : _ := _ in _);
+      [ build_induction_helper_type TARGET ty_rect
+      | hide; build_induction_helper ty_rect
+      | ];
+
+    (* Split into two identical subgoals.  The proof term produced in the first
+       subgoal will be available in the context of the second subgoal . *)
+    match goal with
+    | [ |- ?G ] => simple refine (let g : G := _ in _)
+    end;
+    [
+        unfold ty_rect in helper; compute in helper;
+        do_induction helper;
+        clear helper TARGET; hide
+    |
+    ].
+
+Tactic Notation "mut_induction" ident(x) "using" constr(ty_rect) :=
+    mut_induction_base x ty_rect
+        ltac:(fun helper =>
+            induction x using helper).
+
+Tactic Notation "mut_induction" ident(x) "using" constr(ty_rect) "with"
+        "(" ident(name1) ":=" operconstr(bnd1) ")" :=
+    mut_induction_base x ty_rect
+        ltac:(fun helper =>
+            induction x using helper with
+                (name1 := bnd1)).
+
+Tactic Notation "mut_induction" ident(x) "using" constr(ty_rect) "with"
+        "(" ident(name1) ":=" operconstr(bnd1) ")"
+        "(" ident(name2) ":=" operconstr(bnd2) ")" :=
+    mut_induction_base x ty_rect
+        ltac:(fun helper =>
+            induction x using helper with
+                (name1 := bnd1)
+                (name2 := bnd2)).
+
+Tactic Notation "mut_induction" ident(x) "using" constr(ty_rect) "with"
+        "(" ident(name1) ":=" operconstr(bnd1) ")"
+        "(" ident(name2) ":=" operconstr(bnd2) ")"
+        "(" ident(name3) ":=" operconstr(bnd3) ")" :=
+    mut_induction_base x ty_rect
+        ltac:(fun helper =>
+            induction x using helper with
+                (name1 := bnd1)
+                (name2 := bnd2)
+                (name3 := bnd3)).
+
+
+
+(* Process a proof term to find the innermost chain of call expressions.
+   This may required making some minor progress toward the current goal
+   (`intros` and such), in order to obtain the required arguments to `pf`.
+*)
+Ltac on_innermost_call pf k :=
+    (* Recurse on the structure of `pf`.  As we go, move pieces of `pf` into
+       `k`.  We also keep the original continuation `k0`, so that we can reset
+       `k` to `k0` in order to "throw away" anything collected so far.
+
+       The goal is to collect the entire innermost chain of call expressions
+       (as in `f a b c`), but nothing outside of that. *)
+    let k0 := k in
+    let rec go pf k :=
+        lazymatch pf with
+        | fun x : ?T => _ =>
+                (* Find an argument to use *)
+                match goal with
+                | [ |- forall y : T, _ ] =>
+                        let y' := fresh y in
+                        intro y';
+                        let pf' := eval cbv beta in (pf y') in
+                        go pf' k0
+                | [ H : T |- _ ] =>
+                        let pf' := eval cbv beta in (pf H) in
+                        go pf' k0
+                end
+        | let x : _ := ?pf' in _ => go pf' k0
+        | match ?pf' with _ => _ end => go pf' k0
+        | ?pf' ?x =>
+                go pf' ltac:(fun f => k (f x))
+        | _ => k pf
+        end in
+    go pf k0.
+
+Ltac collect_results_except target pf :=
+    let target := eval compute in target in
+    let rec go pf k :=
+        match type of pf with
+        | (?l * ?r)%type =>
+                let k' :=
+                    match r with
+                    | forall x : target, _ => k
+                    | _ => fun tail =>
+                            let tail' := k tail in
+                            constr:(snd pf, tail')
+                    end in
+                go (fst pf) k'
+        | ?t =>
+                let k' :=
+                    match t with
+                    | forall x : target, _ => k
+                    | _ => fun tail =>
+                            let tail' := k tail in
+                            constr:(pf, tail')
+                    end in
+                k' tt
+        end in
+    go pf ltac:(fun x => x).
+
+Ltac ident_list_to_fun xs :=
+    let rec go :=
+        instantiate (1 := unit -> _);
+        ((intros xs; exact tt) || go) in go.
+
+Ltac on_idents_and_constrs names values tac :=
+    lazymatch names with
+    | fun name : _ => ?names' =>
+            lazymatch values with
+            | (?value, ?values') =>
+                    tac name value;
+                    on_idents_and_constrs names' values' tac
+            | tt => fail "more names than values"
+            end
+    | tt =>
+            lazymatch values with
+            | (_, _) => fail "more values than names"
+            | tt => idtac
+            end
+    end.
+
+Tactic Notation "finish_mut_induction" ident(prefix) "using" ident_list(suffixes) :=
+    (* This `constr:(ltac:(...))` business causes it to actually run the tactic,
+       under a new goal, and return the resulting `constr` to be stored in an ltac
+       variable. *)
+    let suffixes := constr:(ltac:(ident_list_to_fun suffixes)) in
+    match goal with
+    | [ TARGET := _ : _,
+        helper := HIDDEN : _,
+        g := _ : _
+        |- _ ] =>
+            let g' := eval unfold g, helper, HIDDEN in g in
+            let target := eval unfold TARGET in TARGET in
+            on_innermost_call g' ltac:(fun pf =>
+                let values := collect_results_except target pf in
+                on_idents_and_constrs suffixes values ltac:(fun suffix value =>
+                    let thm := fresh prefix "_" suffix in
+                    let T := type of value in
+                    let T := eval unfold HIDDEN in T in
+                    let HH := fresh "HH" in
+                    idtac "generating" thm ":" T;
+                    assert (HH : T) by (
+                        pose value as HH;
+                        clear -HH; clear HH;
+                        abstract (exact value) using thm);
+                    clear HH
+                ));
+            eapply g; eauto
+    end.

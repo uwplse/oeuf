@@ -4,6 +4,7 @@ Require String.
 Require ElimFunc ElimFunc2.
 Require Import ListLemmas.
 Require Import StepLib.
+Require Import HigherValue.
 
 Require Import Psatz.
 
@@ -1374,6 +1375,13 @@ Qed.
 
 
 
+
+
+Require Semantics.
+
+Ltac i_ctor := intros; econstructor; eauto.
+Ltac i_lem H := intros; eapply H; eauto.
+
 Lemma compile_cu_compile_list : forall a ameta b bmeta,
     compile_cu (a, ameta) = Some (b, bmeta) ->
     compile_list a = b.
@@ -1387,9 +1395,185 @@ generalize dependent b. induction a; intros; on >Forall2, invc.
   unfold compile_func in *. break_if; try discriminate. inject_some. reflexivity.
 Qed.
 
+Lemma compile_cu_Forall : forall A Ameta B Bmeta,
+    compile_cu (A, Ameta) = Some (B, Bmeta) ->
+    Forall2 (fun a b => compile a = b) A B.
+intros.
+eapply compile_list_Forall.
+eapply compile_cu_compile_list. eauto.
+Qed.
+
+(* `match_values` is the relevant parts of `I_expr` lifted to `HigherValue.value`s *)
+Inductive match_values (AE : A.env) (BE : B.env) : value -> value -> Prop :=
+| MvConstr : forall tag aargs bargs,
+        Forall2 (match_values AE BE) aargs bargs ->
+        match_values AE BE (Constr tag aargs) (Constr tag bargs)
+| MvClose : forall fname afree bfree body,
+        nth_error BE fname = Some body ->
+        let n := length bfree in
+        B.num_locals body <= S n ->
+        n <= length afree ->
+        Forall2 (match_values AE BE) (firstn n afree) bfree ->
+        match_values AE BE (Close fname afree) (Close fname bfree)
+.
 
 
-Require Semantics.
+
+Lemma match_values_enough_free : forall A B,
+    Forall2 (fun a b => compile a = b) A B ->
+    forall av bv be,
+    match_values A B av bv ->
+    B.expr_value be bv ->
+    B.enough_free B be.
+intros0 Hcomp.
+mut_induction av using value_rect_mut' with
+    (Pl := fun avs => forall n bvs bes,
+        Forall2 (match_values A B) (firstn n avs) bvs ->
+        Forall2 B.expr_value bes bvs ->
+        Forall (B.enough_free B) bes);
+[ intros0 Hmval Bev.. | ];
+[ invc Hmval; invc Bev.. | | | ].
+
+- simpl. B.refold_enough_free B. rewrite B.enough_free_list_Forall.
+  fwd eapply IHav; eauto.
+  erewrite firstn_all by eauto. auto.
+
+- simpl. B.refold_enough_free B. rewrite B.enough_free_list_Forall.
+  fwd eapply IHav; eauto.
+  split; eauto.
+  eexists. split; eauto.
+  collect_length_hyps. subst n. omega.
+
+- destruct n; invc Hmval; invc Bev; auto.
+
+- destruct n; invc Hmval; invc Bev; eauto.
+
+- finish_mut_induction match_values_enough_free using list.
+Qed exporting.
+
+
+Lemma A_expr_value_ex : forall av,
+    exists ae, A.expr_value ae av.
+mut_induction av using value_rect_mut' with
+    (Pl := fun avs => exists aes, Forall2 A.expr_value aes avs).
+
+- destruct IHav.
+  eexists. i_ctor.
+
+- destruct IHav.
+  eexists. i_ctor.
+
+- eauto.
+
+- destruct IHav, IHav0.
+  eauto.
+
+- finish_mut_induction A_expr_value_ex using list.
+Qed exporting.
+
+Lemma match_values_I_expr : forall A B,
+    Forall2 (fun a b => compile a = b) A B ->
+    forall av be bv,
+    B.expr_value be bv ->
+    match_values A B av bv ->
+    exists ae,
+        A.expr_value ae av /\
+        I_expr A B ae be.
+make_first bv. intros0 Hcomp. move bv at bottom.
+mut_induction bv using value_rect_mut' with
+    (Pl := fun bvs => forall n avs bes,
+        Forall2 B.expr_value bes bvs ->
+        Forall2 (match_values A B) (firstn n avs) bvs ->
+        exists aes,
+            Forall2 A.expr_value aes avs /\
+            Forall2 (I_expr A B) (firstn n aes) bes);
+[intros0 Bev Hmval.. | ].
+
+- invc Bev. invc Hmval.
+  fwd eapply IHbv as HH ; eauto.
+    { erewrite firstn_all by eauto. eauto. }
+    destruct HH as (? & ? & Hfa).
+  eexists. split; i_ctor.
+  + rewrite firstn_all in Hfa by (collect_length_hyps; congruence).
+    auto.
+
+- invc Bev. invc Hmval.
+  fwd eapply IHbv as HH; eauto.
+    destruct HH as (? & ? & Hfa).
+  eexists. split; i_ctor.
+  + collect_length_hyps. rewrite firstn_length, min_l in * by auto. omega.
+  + collect_length_hyps. rewrite firstn_length, min_l in * by auto. omega.
+  + subst n. collect_length_hyps. congruence.
+  + eapply Forall_skipn. eapply A.expr_value_value_list. eauto.
+
+- destruct (A_expr_value_ex_list avs) as (aes & ?).
+  eexists; split; eauto.
+  assert (HH : firstn n aes = []).
+    { destruct aes. { destruct n; reflexivity. }
+      on (Forall2 _ (_ :: _) _), invc.
+      destruct n; simpl in *. { reflexivity. }
+      invc Hmval. }
+  rewrite HH. invc Bev. constructor.
+
+- destruct n; try solve [invc Hmval].
+  destruct avs as [| av avs]; try solve [invc Hmval]. simpl in Hmval.
+  invc Bev. invc Hmval.
+
+  destruct (IHbv ?? ?? ** **) as (? & ? & ?).
+  destruct (IHbv0 ?? ?? ?? ** **) as (? & ? & ?).
+  eexists (_ :: _). simpl. eauto.
+
+- finish_mut_induction match_values_I_expr using list.
+Qed exporting.
+
+Lemma I_expr_match_values : forall A B,
+    Forall2 (fun a b => compile a = b) A B ->
+    forall ae av be,
+    A.expr_value ae av ->
+    I_expr A B ae be ->
+    exists bv,
+        B.expr_value be bv /\
+        match_values A B av bv.
+make_first av. intros0 Hcomp. move av at bottom.
+mut_induction av using value_rect_mut' with
+    (Pl := fun avs => forall n aes bes,
+        Forall2 A.expr_value aes avs ->
+        Forall2 (I_expr A B) (firstn n aes) bes ->
+        exists bvs,
+            Forall2 B.expr_value bes bvs /\
+            Forall2 (match_values A B) (firstn n avs) bvs);
+[intros0 Aev II.. | ].
+
+all: unfold A.valtype, B.valtype in *.
+
+- invc Aev. invc II.
+  fwd eapply IHav as HH ; eauto.
+    { erewrite firstn_all by eauto. eauto. }
+    destruct HH as (? & ? & Hfa).
+  eexists. split; i_ctor.
+  + rewrite firstn_all in Hfa by (collect_length_hyps; congruence).
+    auto.
+
+- invc Aev. invc II.
+  fwd eapply IHav as HH; eauto.
+    destruct HH as (? & ? & Hfa).
+  eexists. split; i_ctor.
+  + collect_length_hyps. rewrite firstn_length, min_l in * by auto. omega.
+  + collect_length_hyps. rewrite firstn_length, min_l in * by auto. omega.
+  + subst n. collect_length_hyps. congruence.
+
+- invc Aev. destruct n; invc II; simpl; eauto.
+
+- invc Aev. destruct n; invc II; simpl; eauto.
+  destruct (IHav ?? ?? ** **) as (? & ? & ?).
+  destruct (IHav0 ?? ?? ?? ** **) as (? & ? & ?).
+  eauto.
+
+- finish_mut_induction I_expr_match_values using list.
+Qed exporting.
+
+
+
 
 Section Preservation.
 
@@ -1401,17 +1585,57 @@ Section Preservation.
   Theorem fsim :
     Semantics.forward_simulation (A.semantics prog) (B.semantics tprog).
   Proof.
-    eapply Semantics.forward_simulation_star with (match_states := I' (fst prog) (fst tprog)).
-    - admit. (* TODO - replace with callstate matching *)
+    destruct prog as [A Ameta], tprog as [B Bmeta].
+    fwd eapply compile_cu_close_dyn_placement; eauto.
+    fwd eapply compile_cu_enough_free; eauto.
+    fwd eapply compile_cu_Forall; eauto.
+
+    eapply Semantics.forward_simulation_star with
+        (match_states := I' A B)
+        (match_values := match_values A B).
+
+    - simpl. intros. on >B.is_callstate, invc. simpl in *.
+      fwd eapply Forall2_nth_error_ex' with (xs := A) (ys := B) as HH; eauto.
+        destruct HH as (abody & ? & ?).
+
+      fwd eapply match_values_I_expr with (bv := av2) as HH; eauto.
+        destruct HH as (av1_e & ? & ?).
+      on (match_values _ _ _ (Close _ _)), invc.
+      fwd eapply match_values_I_expr_list with (avs := afree) as HH; eauto.
+        destruct HH as (afree_e & ? & ?).
+
+      eexists. split. 1: econstructor.
+      + econstructor.
+        * i_lem compile_I_expr; i_lem Forall_nth_error.
+        * instantiate (1 := av1_e :: afree_e).
+          eauto using A.expr_value_value_list.
+        * eauto using B.expr_value_value, B.expr_value_value_list.
+        * simpl. subst n. collect_length_hyps. congruence.
+        * simpl. collect_length_hyps.
+          rewrite firstn_length, min_l in * by auto. omega.
+        * simpl. i_ctor.
+          collect_length_hyps. subst n. congruence.
+        * i_ctor.
+
+
+      + i_ctor.
+        * i_lem Forall_nth_error.
+        * constructor.
+          -- eapply match_values_enough_free; [ | | eassumption ]; eauto.
+          -- eapply match_values_enough_free_list; eauto.
+        * i_ctor.
+
+      + i_ctor.
+
     - intros0 II Afinal. invc Afinal. invc II. on >I, invc.
-      eexists. split.
-      constructor. eauto using I_expr_value.
-      reflexivity.
+      fwd eapply I_expr_match_values as HH; eauto.
+        destruct HH as (bv & ? & ?).
+      eexists. split; eauto.
+      i_ctor.
+
     - intros0 Astep. intros0 II.
       eapply sstar_semantics_sim, I'_sim; try eassumption.
-      + destruct prog, tprog. eapply compile_cu_compile_list; eauto.
-      + destruct prog, tprog. eapply compile_cu_close_dyn_placement; eauto.
-      + destruct prog, tprog. eapply compile_cu_enough_free; eauto.
-  Admitted.
+      + eapply compile_cu_compile_list; eauto.
+  Qed.
 
 End Preservation.
