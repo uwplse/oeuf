@@ -3,6 +3,7 @@ Require Import Metadata.
 Require String.
 Require ElimFunc2 ElimFunc3.
 Require Import ListLemmas.
+Require Import HigherValue.
 
 Require Import Psatz.
 
@@ -244,6 +245,12 @@ try solve [eauto | constructor; eauto].
   eapply shift_list_pair_I_pair. eauto.
 Qed.
 
+Lemma compile_cu_elim_body_placement : forall a ameta b bmeta,
+    compile_cu (a, ameta) = Some (b, bmeta) ->
+    Forall S.elim_body_placement a.
+intros0 Hcomp. unfold compile_cu in *. break_if; try discriminate.
+inject_some. assumption.
+Qed.
 
 
 Lemma I_expr_value : forall AE BE a b,
@@ -668,7 +675,70 @@ destruct ae; inv Astep; invc II; try on (I_expr _ _ _ _), invc.
 
 Qed.
 
+
+
 Require Semantics.
+
+Ltac i_ctor := intros; constructor; eauto.
+Ltac i_lem H := intros; eapply H; eauto.
+
+Lemma compile_cu_Forall : forall A Ameta B Bmeta,
+    compile_cu (A, Ameta) = Some (B, Bmeta) ->
+    Forall2 (fun a b => compile a = b) A B.
+intros. unfold compile_cu in *. break_if; try discriminate. inject_some.
+eapply compile_list_Forall. auto.
+Qed.
+
+Lemma expr_value_I_expr : forall AE BE be v,
+    B.expr_value be v ->
+    exists ae,
+        A.expr_value ae v /\
+        I_expr AE BE ae be.
+make_first v. intros v AE BE. revert v.
+mut_induction v using value_rect_mut' with
+    (Pl := fun vs => forall bes,
+        Forall2 B.expr_value bes vs ->
+        exists aes,
+            Forall2 A.expr_value aes vs /\
+            Forall2 (I_expr AE BE) aes bes);
+[intros0 Hev; invc Hev.. | ].
+
+- destruct (IHv ?? **) as (? & ? & ?).
+  eauto using A.EvConstr, IConstr.
+
+- destruct (IHv ?? **) as (? & ? & ?).
+  eauto using A.EvClose, IClose.
+
+- eauto.
+
+- destruct (IHv ?? **) as (? & ? & ?).
+  destruct (IHv0 ?? **) as (? & ? & ?).
+  eauto.
+
+- finish_mut_induction expr_value_I_expr using list.
+Qed exporting.
+
+Lemma expr_value_I_expr' : forall AE BE ae be v,
+    A.expr_value ae v ->
+    I_expr AE BE ae be ->
+    B.expr_value be v.
+intros AE BE.
+induction ae using S.expr_rect_mut with
+    (Pl := fun ae => forall be v,
+        Forall2 A.expr_value ae v ->
+        Forall2 (I_expr AE BE) ae be ->
+        Forall2 B.expr_value be v)
+    (Pp := fun ap => forall be v,
+        A.expr_value (fst ap) v ->
+        I_expr AE BE (fst ap) be ->
+        B.expr_value be v)
+    (Plp := fun aps => forall bes vs,
+        Forall2 (fun ap v => A.expr_value (fst ap) v) aps vs ->
+        Forall2 (fun ap be => I_expr AE BE (fst ap) be) aps bes ->
+        Forall2 (fun be v => B.expr_value be v) bes vs);
+intros0 Hae II; try solve [invc Hae; invc II; i_ctor | simpl in *; eauto].
+Qed.
+
 
 Section Preservation.
 
@@ -680,18 +750,36 @@ Section Preservation.
   Theorem fsim :
     Semantics.forward_simulation (A.semantics prog) (B.semantics tprog).
   Proof.
-    eapply Semantics.forward_simulation_step with (match_states := I (fst prog) (fst tprog)).
-    - inversion 1. (* TODO - replace with callstate matching *)
+    destruct prog as [A Ameta], tprog as [B Bmeta].
+    fwd eapply compile_cu_elim_body_placement; eauto.
+    fwd eapply compile_cu_Forall; eauto.
+
+    eapply Semantics.forward_simulation_step with
+        (match_states := I A B)
+        (match_values := @eq value).
+
+    - simpl. intros. on >B.is_callstate, invc. simpl in *.
+      fwd eapply Forall2_nth_error_ex' with (xs := A) (ys := B) as HH; eauto.
+        destruct HH as (abody & ? & ?).
+      destruct (expr_value_I_expr A B ae ?? **) as (? & ? & ?).
+      fwd eapply expr_value_I_expr_list with (AE := A) (BE := B) as HH; eauto.
+        destruct HH as (? & ? & ?).
+
+      eexists. split. 1: econstructor; eauto.
+      + i_lem Forall_nth_error.
+      + i_lem compile_I_expr.
+      + i_ctor.
+      + i_ctor.
+
+
     - intros0 II Afinal. invc Afinal. invc II.
       eexists; split.
-      constructor. eauto using I_expr_value.
+      constructor. eauto using expr_value_I_expr'.
       reflexivity.
+
     - intros0 Astep. intros0 II.
-      eapply I_sim; try eassumption.
-      + destruct prog, tprog. simpl in *. unfold compile_cu in *.
-        break_if; try discriminate. simpl in *. inject_some. auto.
-      + destruct prog, tprog. simpl in *. unfold compile_cu in *.
-        break_if; try discriminate. auto.
+      eapply I_sim; eauto.
+      unfold compile_cu in *. simpl in *. break_if; try discriminate. congruence.
   Qed.
 
 End Preservation.
