@@ -368,7 +368,7 @@ Section GENVSWAP.
     break_match; congruence.
     econstructor.
 
-    
+    (* needs fact that v/v' doesn't point to new unallocated block *)
     
   Admitted.
   
@@ -383,6 +383,8 @@ Section GENVSWAP.
           Mem.inject (Mem.flat_inj (Mem.nextblock m0)) m0 m0' /\
           Mem.nextblock m0 = Mem.nextblock m0'.
   Proof.
+    intros.
+    (* needs copy pasta from memory.v *)
   Admitted.
 
   Lemma match_env_set :
@@ -429,7 +431,7 @@ Section GENVSWAP.
         exists k0',
           find_label lbl fb (Cminor.call_cont k') = Some (s,k0') /\ match_cont k0 k0'.
   Proof.
-    
+    (* needs induction on probably k0 *)
   Admitted.
 
   Lemma match_env_set_params :
