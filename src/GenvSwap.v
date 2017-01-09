@@ -423,17 +423,58 @@ Section GENVSWAP.
   Admitted.
 
 
+  Lemma find_label_none :
+    forall lbl s k,
+      find_label lbl s k = None ->
+      forall k',
+        find_label lbl s k' = None.
+  Proof.
+    induction s; intros; simpl in *; eauto;
+      repeat (break_match_hyp; try congruence);
+      eauto.
+    erewrite IHs1; eauto.
+    erewrite IHs1; eauto.
+  Qed.
+  
+  Lemma find_label_transf' :
+    forall fb lbl s k0 k,
+      find_label lbl fb k = Some (s,k0) ->
+      forall k',
+        match_cont k k' ->
+        exists k0',
+          find_label lbl fb k' = Some (s,k0') /\ match_cont k0 k0'.
+  Proof.
+    induction fb; intros;
+      simpl in *; try congruence;
+        repeat (break_match_hyp; try congruence; try find_inversion).
+    eapply IHfb1 in Heqo; try solve [econstructor; eauto].
+    break_exists; break_and.
+    eexists.
+    collapse_match; eauto.
+    erewrite find_label_none by eauto; eauto.
+    eapply IHfb1 in Heqo; try solve [econstructor; eauto].
+    break_exists; break_and.
+    rewrite H. eauto. eauto.
+    erewrite find_label_none; eauto.
+    eapply IHfb in H; eauto. econstructor; eauto.
+    eapply IHfb in H; eauto. econstructor; eauto.
+    eauto.
+    eauto.
+  Qed.
+
   Lemma find_label_transf :
-    forall k k',
-      match_cont k k' ->
-      forall lbl fb s k0,
-        find_label lbl fb (Cminor.call_cont k) = Some (s,k0) ->
+    forall fb lbl s k0 k,
+      find_label lbl fb (Cminor.call_cont k) = Some (s,k0) ->
+      forall k',
+        match_cont k k' ->
         exists k0',
           find_label lbl fb (Cminor.call_cont k') = Some (s,k0') /\ match_cont k0 k0'.
   Proof.
-    (* needs induction on probably k0 *)
-  Admitted.
-
+    intros.
+    eapply find_label_transf'; eauto.
+    eapply match_call_cont; eauto.
+  Qed.
+  
   Lemma match_env_set_params :
     forall parms vargs vargs',
       Val.lessdef_list vargs vargs' ->
