@@ -339,6 +339,9 @@ Inductive cminor_final_state(p : Cminor.program): Cminor.state -> value -> Prop 
     value_inject (Genv.globalenv p) m v v' ->
     cminor_final_state p (Cminor.Returnstate v' Cminor.Kstop m) v.
 
+(* TODO *)
+(* need a different block here *)
+(* fb not result of find_symbol *)
 Inductive cminor_is_callstate (p : Cminor.program) : value -> value -> state -> Prop := 
 | CmIsCallstate :
     forall fname vs arg fb fofs argptr m fn,
