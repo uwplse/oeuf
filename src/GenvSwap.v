@@ -20,6 +20,7 @@ Require Import StructTact.Util.
 Require Import EricTact.
 
 Require Import Cmajor.
+Require Import OeufMem.
 
 Definition mem_of_state (st : Cminor.state) : mem :=
   match st with
@@ -371,6 +372,46 @@ Section GENVSWAP.
     (* needs fact that v/v' doesn't point to new unallocated block *)
     
   Admitted.
+
+  Lemma memval_inject_extensional :
+    forall f v v',
+      memval_inject f v v' ->
+      forall f',
+        (forall b,
+            f b = f' b) ->
+        memval_inject f' v v'.
+  Proof.
+    intros. inv H.
+    econstructor; eauto.
+    econstructor; eauto.
+    inv H1; try econstructor; eauto.
+    rewrite H0 in H2; eauto.
+    econstructor; eauto.
+  Qed.
+
+  Lemma inject_extensional :
+    forall f m m',
+      Mem.inject f m m' ->
+      forall f',
+        (forall b,
+            f b = f' b) ->
+        Mem.inject f' m m'.
+  Proof.
+    intros.
+    inv H; econstructor; intros; eauto;
+      try rewrite <- H0 in *;
+      eauto.
+    inv mi_inj; econstructor; intros; eauto;
+      try rewrite <- H0 in *;
+      eauto.
+    copy H1.
+    eapply mi_memval in H1; eauto.
+    eapply memval_inject_extensional; eauto.
+    unfold Mem.meminj_no_overlap in *.
+    intros.
+    rewrite <- H0 in *.
+    eapply mi_no_overlap; eauto.
+  Qed.
   
   Lemma mem_alloc :
     forall m m',
@@ -383,9 +424,44 @@ Section GENVSWAP.
           Mem.inject (Mem.flat_inj (Mem.nextblock m0)) m0 m0' /\
           Mem.nextblock m0 = Mem.nextblock m0'.
   Proof.
-    intros.
-    (* needs copy pasta from memory.v *)
-  Admitted.
+    intros. copy H1.
+    eapply alloc_parallel_inject in H1; eauto.
+    Focus 2.
+    instantiate (1 := lo). omega.
+    Focus 2.
+    instantiate (1 := hi). omega.
+    repeat break_exists.
+    destruct H1.
+    assert (b = x0).
+    eapply Mem.alloc_result in H2.
+    eapply Mem.alloc_result in H1.
+    congruence.
+    subst.
+    exists x. split; eauto.
+    split.
+    eapply inject_extensional; eauto.
+
+    intros. assert (Hnb : Mem.nextblock m0 = Pos.succ (Mem.nextblock m)).
+    eapply Mem.nextblock_alloc in H2; eauto.
+    rewrite Hnb.
+    assert (x0 = Mem.nextblock m).
+    eapply Mem.alloc_result in H2; eauto.
+    subst.
+    break_match. subst.
+    unfold Mem.flat_inj. break_match; try reflexivity.
+    exfalso. apply n.
+    eapply Plt_succ.
+    unfold Mem.flat_inj.
+    break_match. eapply Plt_trans_succ in p.
+    break_match; try congruence.
+    break_match; try congruence.
+    exfalso. apply n0.
+    eapply Plt_succ_inv in p.
+    destruct p; eauto; congruence.
+    eapply Mem.nextblock_alloc in H1.
+    eapply Mem.nextblock_alloc in H2. congruence.
+  Qed.
+    
 
   Lemma match_env_set :
     forall e e',
