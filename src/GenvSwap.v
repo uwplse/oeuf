@@ -1,3 +1,4 @@
+
 Require Import compcert.lib.Coqlib.
 Require Import compcert.lib.Maps.
 Require Import compcert.lib.Integers.
@@ -21,6 +22,7 @@ Require Import EricTact.
 
 Require Import Cmajor.
 Require Import OeufMem.
+Require Import Inject.
 
 Definition mem_of_state (st : Cminor.state) : mem :=
   match st with
@@ -37,16 +39,8 @@ Section GENVSWAP.
   Variable t : trace.
   Definition ge := Genv.globalenv prog.
 
-  (* execution of the original Oeuf program *)
-  Hypothesis start : cminor_is_callstate prog fv av st.
-  Hypothesis finish : cminor_final_state prog st' rv.
-  Hypothesis exec : star Cminor.step ge st t st'.
-
   (* new wider global environment *)
   Variable tge : Genv.t Cminor.fundef unit.
-
-  (* widening obligations *)
-  Hypothesis nfp : no_future_pointers (mem_of_state st).
 
   Hypothesis pos_stack_space :
     forall v fd,
@@ -64,112 +58,58 @@ Section GENVSWAP.
       Genv.find_funct_ptr ge b = Some f ->
       Genv.find_funct_ptr tge b = Some f.
 
-
+  Lemma global_block_find_symbol :
+    forall id b m,
+      Genv.find_symbol ge id = Some b ->
+      global_blocks_valid ge m ->
+      Plt b (Mem.nextblock m).
+  Proof.
+    intros.
+    unfold global_blocks_valid in *.
+    eapply Genv.find_symbol_inversion in H.
+    unfold prog_defs_names in *.
+    eapply list_in_map_inv in H.
+  Admitted.
+  
   Lemma eval_constant_transf :
-    forall sp cst v,
+    forall sp cst v m,
+      global_blocks_valid ge m ->
       Cminor.eval_constant ge sp cst = Some v ->
       exists v',
-        Cminor.eval_constant tge sp cst = Some v' /\ Val.lessdef v v'.
+        Cminor.eval_constant tge sp cst = Some v' /\ Val.inject (Mem.flat_inj (Mem.nextblock m)) v v'.
   Proof.
-    intros. destruct cst; simpl in *; eauto.
-    break_match; 
-      break_match_hyp;
-      inv H;
-      eauto.
-    eapply symb in Heqo0.
-    rewrite Heqo0 in Heqo. inv Heqo.
+    intros. destruct cst; simpl in *; eauto; try find_inversion;
+              try solve [eexists; split; try reflexivity; try econstructor; eauto].
+    destruct (Genv.find_symbol ge i) eqn:?.
+    copy Heqo.
+    eapply global_block_find_symbol in Heqo; eauto.
+    erewrite symb; eauto.
     eexists; split; eauto.
-    eapply symb in Heqo0. congruence.
-  Qed.
+    econstructor; eauto.
+    unfold Mem.flat_inj.
+    break_match; try congruence.
+    reflexivity.
+    rewrite Int.add_zero. reflexivity.
+    break_match; eexists; split; econstructor; eauto.
+    eexists; split; eauto.
+    (* sp *)
 
-  Lemma lessdef_unop :
-    forall op arg arg' res,
-      eval_unop op arg = Some res ->
-      Val.lessdef arg arg' ->
-      exists res',
-        eval_unop op arg' = Some res' /\ Val.lessdef res res'.
-  Proof.
-    intros. destruct arg; simpl in H; inv H; inv H0; eauto.
-    destruct arg'; destruct op; simpl in *; try congruence; eexists; split; try reflexivity; inv H; eauto.
-  Qed.
+  Admitted.
 
-  Lemma lessdef_cmpu :
-    forall m m',
-      Mem.inject (Mem.flat_inj (Mem.nextblock m)) m m' ->
-      forall a b c,
-        Val.lessdef (Val.cmpu (Mem.valid_pointer m) c a b) (Val.cmpu (Mem.valid_pointer m') c a b).
-  Proof.
-    intros.
-    assert (Hvp : forall b ofs, Mem.valid_pointer m b ofs = true -> Mem.valid_pointer m' b ofs = true). {
-      intros.
-      eapply Mem.valid_pointer_inject in H0; try eassumption.
-      erewrite Z.add_0_r in H0. eassumption.
-      unfold Mem.flat_inj.
-      unfold Mem.valid_pointer in *.
-      unfold Mem.perm_dec in *.
-      unfold Mem.perm_order'_dec in *.
-      unfold proj_sumbool in *.
-      break_match_hyp; try congruence.
-      unfold Mem.perm_order' in *.
-      break_match_hyp; try solve [inv p].
-      break_match; try reflexivity.
-      eapply Mem.nextblock_noaccess in n.
-      erewrite n in Heqo. congruence.
-    }
-    
-    destruct c eqn:?; unfold Val.cmpu; unfold Val.cmpu_bool; simpl;
-    repeat (break_match; try congruence; simpl);
-    try solve [try econstructor; eauto];
-    repeat 
-      (try rewrite andb_true_iff in *;
-       try rewrite andb_false_iff in *;
-       try rewrite orb_false_iff in *;
-       try rewrite orb_true_iff in *);
-       repeat progress (try break_or; try break_and);
-         try congruence;
-       match goal with
-       | [ H : Mem.valid_pointer m ?X ?Y = true, H2 : Mem.valid_pointer m' ?X ?Y = false |- _ ] => eapply Hvp in H; congruence
-       end.
-  Qed.
-
-  Lemma lessdef_binop :
-    forall op a a' b b' res m m',
-      eval_binop op a b m = Some res ->
-      Val.lessdef a a' ->
-      Val.lessdef b b' ->
-      Mem.inject (Mem.flat_inj (Mem.nextblock m)) m m' ->
-      exists res',
-        eval_binop op a' b' m' = Some res' /\ Val.lessdef res res'.
-  Proof.
-    intros.
-    destruct op; inv H0; inv H1; simpl in H; inv H;
-    try solve [
-          try destruct a'; try destruct b';
-        simpl in H; inv H;
-          eexists; split;
-            match goal with
-            | [ |- Val.lessdef _ _ ] => idtac
-            | [ |- _ ] => simpl; try reflexivity
-            end;
-            eauto].
-
-    simpl. eexists; split; try reflexivity.
-    eapply lessdef_cmpu; eauto.
-  Qed.
-
-  Definition match_env (e e' : Cminor.env) : Prop :=
+  Definition match_env (e e' : Cminor.env) (b : block) : Prop :=
     forall id v,
       PTree.get id e = Some v ->
       exists v',
-        PTree.get id e' = Some v' /\ Val.lessdef v v'.
+        PTree.get id e' = Some v' /\ Val.inject (Mem.flat_inj b) v v'.
 
   Lemma eval_expr_transf :
     forall sp e m a v m' e',
       Cminor.eval_expr ge sp e m a v ->
       Mem.inject (Mem.flat_inj (Mem.nextblock m)) m m' ->
-      match_env e e' ->
+      match_env e e' (Mem.nextblock m) ->
+      global_blocks_valid ge m ->
       exists v',
-        Cminor.eval_expr tge sp e' m' a v' /\ Val.lessdef v v'.
+        Cminor.eval_expr tge sp e' m' a v' /\ Val.inject (Mem.flat_inj (Mem.nextblock m)) v v'.
   Proof.
     induction 1; intros.
     - eapply H1 in H; repeat break_exists; break_and; eauto.    
@@ -178,23 +118,24 @@ Section GENVSWAP.
     - app eval_constant_transf Cminor.eval_constant.
       exists x.
       split; try econstructor; eauto.
-
-    - specialize (IHeval_expr H1 H2).
+      
+    - specialize (IHeval_expr H1 H2 H3).
       break_exists; break_and.
-      eapply lessdef_unop in H0.
+      eapply inject_unop in H0.
       break_exists; break_and.
       eexists; split. econstructor; eauto.
-      assumption.
-      assumption.
-    - specialize (IHeval_expr1 H2 H3).
-      specialize (IHeval_expr2 H2 H3).
+      eassumption.
+      eassumption.
+      eassumption.
+    - specialize (IHeval_expr1 H2 H3 H4).
+      specialize (IHeval_expr2 H2 H3 H4).
       repeat break_exists; repeat break_and.
-      eapply lessdef_binop in H1; eauto.
+      eapply inject_binop in H1; eauto.
       break_exists; break_and.
       eexists; split. econstructor; eauto.
       eauto.
 
-    - specialize (IHeval_expr H1 H2).
+    - specialize (IHeval_expr H1 H2 H3).
       break_exists. break_and.
       destruct vaddr; simpl in H0; try congruence.
       eapply Mem.load_inject in H0; eauto.
@@ -207,26 +148,26 @@ Section GENVSWAP.
       break_match; try congruence. reflexivity.
       break_exists. break_and.
       eexists; split. econstructor; eauto.
-      invp Val.lessdef. simpl. rewrite Z.add_0_r in *. eauto.
-      invp Val.inject; try econstructor; eauto.
-    unfold Mem.flat_inj in *. 
-    break_match_hyp; invp (Some (b2, delta)).
-    rewrite Int.add_zero. econstructor; eauto.
+      inv H5. simpl. rewrite Z.add_0_r in *.
+      unfold Mem.flat_inj in *. break_match_hyp; inv H9.
+      rewrite Int.add_zero in *. eauto.
+      eauto.
   Qed.
     
   Lemma eval_exprlist_transf :
     forall l sp e m vs m' e',
       Cminor.eval_exprlist ge sp e m l vs ->
       Mem.inject (Mem.flat_inj (Mem.nextblock m)) m m' ->
-      match_env e e' ->
+      match_env e e' (Mem.nextblock m) ->
+      global_blocks_valid ge m ->
       exists vs',
-        Cminor.eval_exprlist tge sp e' m' l vs' /\ Val.lessdef_list vs vs'.
+        Cminor.eval_exprlist tge sp e' m' l vs' /\ Val.inject_list (Mem.flat_inj (Mem.nextblock m)) vs vs'.
   Proof.
     induction l; intros; inv H;
       try solve [eexists; split; try econstructor; eauto].
-    eapply eval_expr_transf in H4; eauto.
+    eapply eval_expr_transf in H5; eauto.
     break_exists; break_and.
-    eapply IHl in H6; eauto.
+    eapply IHl in H7; eauto.
     break_exists; break_and.
     eexists; split.
     econstructor; eauto.
@@ -276,7 +217,7 @@ Section GENVSWAP.
       forall fd vs k k' m vs' m',
         Mem.inject (Mem.flat_inj (Mem.nextblock m)) m m' ->
         Mem.nextblock m = Mem.nextblock m' ->
-        Val.lessdef_list vs vs' ->
+        Val.inject (Mem.flat_inj (Mem.nextblock m))_list vs vs' ->
         match_cont k k' ->
         match fd with
         | Internal f => Cminor.fn_stackspace f > 0
@@ -286,7 +227,7 @@ Section GENVSWAP.
                      (Cminor.Callstate fd vs' k' m')
   | match_returstate :
       forall v v' k k' m m',
-        Val.lessdef v v' ->
+        Val.inject (Mem.flat_inj (Mem.nextblock m)) v v' ->
         match_cont k k' ->
         Mem.nextblock m = Mem.nextblock m' ->
         Mem.inject (Mem.flat_inj (Mem.nextblock m)) m m' ->
@@ -347,13 +288,14 @@ Section GENVSWAP.
       Mem.inject (Mem.flat_inj (Mem.nextblock m)) m m' ->
       Mem.nextblock m = Mem.nextblock m' ->
       forall c vaddr vaddr' v v' m0,
-        Val.lessdef v v' ->
-        Val.lessdef vaddr vaddr' ->
+        Val.inject (Mem.flat_inj (Mem.nextblock m)) v v' ->
+        Val.inject (Mem.flat_inj (Mem.nextblock m)) vaddr vaddr' ->
         Mem.storev c m vaddr v = Some m0 ->
         exists m0',
           Mem.storev c m' vaddr' v' = Some m0' /\ Mem.inject (Mem.flat_inj (Mem.nextblock m0)) m0 m0' /\ Mem.nextblock m0 = Mem.nextblock m0'.
   Proof.
     intros.
+    copy H3. rename H4 into Hstore_orig.
     eapply Mem.storev_mapped_inject in H3; eauto.
     Focus 2. instantiate (1 := vaddr').
     destruct vaddr; simpl in H3; try congruence.
@@ -368,10 +310,22 @@ Section GENVSWAP.
     unfold Mem.valid_block in *.
     break_match; congruence.
     econstructor.
-
-    (* needs fact that v/v' doesn't point to new unallocated block *)
-    
-  Admitted.
+    break_exists. break_and.
+    eexists; split. eassumption.
+    assert (Hnb : Mem.nextblock m0 = Mem.nextblock x).
+    {
+      unfold Mem.storev in *.
+      repeat (break_match_hyp; try congruence).
+      eapply Mem.nextblock_store in Hstore_orig.
+      eapply Mem.nextblock_store in H3.
+      congruence.
+    }
+    split; eauto.
+    unfold Mem.storev in *.
+    repeat break_match_hyp; try congruence.
+    eapply Mem.nextblock_store in H3.
+    congruence.
+  Qed.
 
   Lemma memval_inject_extensional :
     forall f v v',
@@ -467,7 +421,7 @@ Section GENVSWAP.
     forall e e',
       match_env e e' ->
       forall id v x,
-        Val.lessdef v x ->
+        Val.inject (Mem.flat_inj (Mem.nextblock m)) v x ->
         match_env (PTree.set id v e) (PTree.set id x e').
   Proof.
     intros.
@@ -484,18 +438,20 @@ Section GENVSWAP.
     forall ef vargs m t vres m',
       external_call ef ge vargs m t vres m' ->
       forall vargs',
-        Val.lessdef_list vargs vargs' ->
+        Val.inject (Mem.flat_inj (Mem.nextblock m))_list vargs vargs' ->
         forall m0,
           Mem.inject (Mem.flat_inj (Mem.nextblock m)) m m0 ->
           Mem.nextblock m = Mem.nextblock m0 ->
           exists m0' vres',
             external_call ef tge vargs' m0 t vres' m0' /\
-            Val.lessdef vres vres' /\
+            Val.inject (Mem.flat_inj (Mem.nextblock m)) vres vres' /\
             Mem.inject (Mem.flat_inj (Mem.nextblock m')) m' m0' /\
             Mem.nextblock m' = Mem.nextblock m0'.
   Proof.
     intros.
+    eapply external_call_mem_inject_gen in H1; eauto.
     (* This will need copy pasta out of the compcert libs *)
+    (* TODO *)
   Admitted.
 
 
@@ -553,7 +509,7 @@ Section GENVSWAP.
   
   Lemma match_env_set_params :
     forall parms vargs vargs',
-      Val.lessdef_list vargs vargs' ->
+      Val.inject (Mem.flat_inj (Mem.nextblock m))_list vargs vargs' ->
       match_env (Cminor.set_params vargs parms)
                 (Cminor.set_params vargs' parms).
   Proof.
@@ -645,6 +601,17 @@ Section GENVSWAP.
 
   Qed.
 
+  (* execution of the original Oeuf program *)
+  Hypothesis start : cminor_is_callstate prog fv av st.
+  Hypothesis finish : cminor_final_state prog st' rv.
+  Hypothesis exec : star Cminor.step ge st t st'.
+
+
+  (* widening obligations *)
+  Hypothesis nfp : no_future_pointers (mem_of_state st).
+  Hypothesis gbv : global_blocks_valid ge (mem_of_state st).
+
+  
   Theorem exec' :
     exists st0 st0',
       star Cminor.step tge st0 t st0' /\ match_states st st0 /\ match_states st' st0'.
