@@ -185,31 +185,81 @@ Section GENVSWAP.
     subst. eapply ffp; eauto.
   Qed.
 
-  Inductive match_cont : Cminor.cont -> Cminor.cont -> Prop :=
+  Inductive match_cont : Cminor.cont -> Cminor.cont -> block -> Prop :=
   | match_stop :
-      match_cont Cminor.Kstop Cminor.Kstop
+      forall b,
+        match_cont Cminor.Kstop Cminor.Kstop b
   | match_seq :
-      forall k k' s,
-        match_cont k k' ->
-        match_cont (Cminor.Kseq s k) (Cminor.Kseq s k')
+      forall k k' s b,
+        match_cont k k' b ->
+        match_cont (Cminor.Kseq s k) (Cminor.Kseq s k') b
   | match_block :
-      forall k k',
-        match_cont k k' ->
-        match_cont (Cminor.Kblock k) (Cminor.Kblock k')
+      forall k k' b,
+        match_cont k k' b ->
+        match_cont (Cminor.Kblock k) (Cminor.Kblock k') b
   | match_call :
-      forall k k' e e' oid f sp,
-        match_cont k k' ->
-        match_env e e' ->
+      forall k k' e e' oid f sp b,
+        match_cont k k' b ->
+        match_env e e' b ->
         Cminor.fn_stackspace f > 0 ->
-        match_cont (Cminor.Kcall oid f sp e k) (Cminor.Kcall oid f sp e' k').
+        match_cont (Cminor.Kcall oid f sp e k) (Cminor.Kcall oid f sp e' k') b.
+
+  Lemma val_inject_succ :
+    forall v v' b,
+      Val.inject (Mem.flat_inj b) v v' ->
+      Val.inject (Mem.flat_inj (Pos.succ b)) v v'.
+  Proof.
+    intros. inv H; econstructor; eauto.
+    unfold Mem.flat_inj in *.
+    break_match_hyp; try congruence. inv H0.
+    break_match; try reflexivity.
+    eapply Plt_trans_succ in p. congruence.
+  Qed.
+
+
+  Lemma val_inject_list_succ :
+    forall vs vs' b,
+      Val.inject_list (Mem.flat_inj b) vs vs' ->
+      Val.inject_list (Mem.flat_inj (Pos.succ b)) vs vs'.
+  Proof.
+    induction 1; intros; econstructor; eauto.
+    eapply val_inject_succ; eauto.
+  Qed.
+    
+  Lemma match_env_next :
+    forall e e' b,
+      match_env e e' b ->
+      match_env e e' (Pos.succ b).
+  Proof.
+    intros.
+    unfold match_env in *.
+    intros.
+    eapply H in H0.
+    break_exists. break_and.
+    eexists x.
+    split; eauto.
+    eapply val_inject_succ; eauto.
+  Qed.
+
+  Lemma match_cont_next :
+    forall k k' b,
+      match_cont k k' b ->
+      match_cont k k' (Pos.succ b).
+  Proof.
+    induction 1; intros;
+      try solve [econstructor; eauto].
+    econstructor; eauto.
+    eapply match_env_next; eauto.
+  Qed.
   
   Inductive match_states : Cminor.state -> Cminor.state -> Prop :=
   | match_state :
       forall f s k k' v e e' m m',
-        match_env e e' ->
-        match_cont k k' ->
+        match_env e e' (Mem.nextblock m) ->
+        match_cont k k' (Mem.nextblock m) ->
         Mem.inject (Mem.flat_inj (Mem.nextblock m)) m m' ->
         Mem.nextblock m = Mem.nextblock m' ->
+        global_blocks_valid ge m ->
         (Cminor.fn_stackspace f) > 0 ->
         match_states (Cminor.State f s k v e m)
                      (Cminor.State f s k' v e' m')
@@ -217,8 +267,9 @@ Section GENVSWAP.
       forall fd vs k k' m vs' m',
         Mem.inject (Mem.flat_inj (Mem.nextblock m)) m m' ->
         Mem.nextblock m = Mem.nextblock m' ->
-        Val.inject (Mem.flat_inj (Mem.nextblock m))_list vs vs' ->
-        match_cont k k' ->
+        Val.inject_list (Mem.flat_inj (Mem.nextblock m)) vs vs' ->
+        match_cont k k' (Mem.nextblock m) ->
+        global_blocks_valid ge m ->
         match fd with
         | Internal f => Cminor.fn_stackspace f > 0
         | _ => True
@@ -228,15 +279,16 @@ Section GENVSWAP.
   | match_returstate :
       forall v v' k k' m m',
         Val.inject (Mem.flat_inj (Mem.nextblock m)) v v' ->
-        match_cont k k' ->
+        match_cont k k' (Mem.nextblock m) ->
         Mem.nextblock m = Mem.nextblock m' ->
         Mem.inject (Mem.flat_inj (Mem.nextblock m)) m m' ->
+        global_blocks_valid ge m ->
         match_states (Cminor.Returnstate v k m)
                      (Cminor.Returnstate v' k' m').
 
   Lemma match_is_call_cont :
-    forall k k',
-      match_cont k k' ->
+    forall k k' b,
+      match_cont k k' b ->
       Cminor.is_call_cont k ->
       Cminor.is_call_cont k'.
   Proof.
@@ -244,9 +296,9 @@ Section GENVSWAP.
   Qed.
 
   Lemma match_call_cont :
-    forall k k',
-      match_cont k k' ->
-      match_cont (Cminor.call_cont k) (Cminor.call_cont k').
+    forall k k' b,
+      match_cont k k' b ->
+      match_cont (Cminor.call_cont k) (Cminor.call_cont k') b.
   Proof.
     induction 1; intros; simpl; try econstructor; eauto.
   Qed.
@@ -259,7 +311,7 @@ Section GENVSWAP.
         hi > 0 ->
         Mem.free m b 0 hi = Some m0 ->
         exists m0',
-          Mem.free m' b 0 hi = Some m0' /\ Mem.inject (Mem.flat_inj (Mem.nextblock m0)) m0 m0' /\ Mem.nextblock m0 = Mem.nextblock m0'.
+          Mem.free m' b 0 hi = Some m0' /\ Mem.inject (Mem.flat_inj (Mem.nextblock m0)) m0 m0' /\ Mem.nextblock m0 = Mem.nextblock m0' /\ Mem.nextblock m = Mem.nextblock m0.
   Proof.
     intros.
     assert (Hfree : Mem.nextblock m = Mem.nextblock m0) by (eapply Mem.nextblock_free in H2; congruence).
@@ -280,6 +332,7 @@ Section GENVSWAP.
       eapply Mem.nextblock_free in H2.
       congruence.
       eapply Mem.nextblock_free in H2.
+      split. congruence.
       congruence.
   Qed.
 
@@ -292,24 +345,11 @@ Section GENVSWAP.
         Val.inject (Mem.flat_inj (Mem.nextblock m)) vaddr vaddr' ->
         Mem.storev c m vaddr v = Some m0 ->
         exists m0',
-          Mem.storev c m' vaddr' v' = Some m0' /\ Mem.inject (Mem.flat_inj (Mem.nextblock m0)) m0 m0' /\ Mem.nextblock m0 = Mem.nextblock m0'.
+          Mem.storev c m' vaddr' v' = Some m0' /\ Mem.inject (Mem.flat_inj (Mem.nextblock m0)) m0 m0' /\ Mem.nextblock m0 = Mem.nextblock m0' /\ Mem.nextblock m = Mem.nextblock m0.
   Proof.
     intros.
     copy H3. rename H4 into Hstore_orig.
     eapply Mem.storev_mapped_inject in H3; eauto.
-    Focus 2. instantiate (1 := vaddr').
-    destruct vaddr; simpl in H3; try congruence.
-    inv H2.
-    econstructor; eauto.
-    Focus 2. instantiate (1 := 0).
-    rewrite Int.add_zero. reflexivity.
-    unfold Mem.flat_inj.
-    eapply Mem.store_valid_access_3 in H3.
-    eapply Mem.valid_access_implies in H3.
-    eapply Mem.valid_access_valid_block in H3.
-    unfold Mem.valid_block in *.
-    break_match; congruence.
-    econstructor.
     break_exists. break_and.
     eexists; split. eassumption.
     assert (Hnb : Mem.nextblock m0 = Mem.nextblock x).
@@ -325,6 +365,10 @@ Section GENVSWAP.
     repeat break_match_hyp; try congruence.
     eapply Mem.nextblock_store in H3.
     congruence.
+    split. congruence.
+    unfold Mem.storev in *.
+    repeat (break_match_hyp; try congruence).
+    eapply Mem.nextblock_store in Hstore_orig; eauto.
   Qed.
 
   Lemma memval_inject_extensional :
@@ -418,11 +462,11 @@ Section GENVSWAP.
     
 
   Lemma match_env_set :
-    forall e e',
-      match_env e e' ->
+    forall e e' b,
+      match_env e e' b ->
       forall id v x,
-        Val.inject (Mem.flat_inj (Mem.nextblock m)) v x ->
-        match_env (PTree.set id v e) (PTree.set id x e').
+        Val.inject (Mem.flat_inj b) v x ->
+        match_env (PTree.set id v e) (PTree.set id x e') b.
   Proof.
     intros.
     unfold match_env.
@@ -433,12 +477,11 @@ Section GENVSWAP.
       try find_inversion; eauto.
   Qed.
 
-
   Lemma external_call_transf :
     forall ef vargs m t vres m',
       external_call ef ge vargs m t vres m' ->
       forall vargs',
-        Val.inject (Mem.flat_inj (Mem.nextblock m))_list vargs vargs' ->
+        Val.inject_list (Mem.flat_inj (Mem.nextblock m)) vargs vargs' ->
         forall m0,
           Mem.inject (Mem.flat_inj (Mem.nextblock m)) m m0 ->
           Mem.nextblock m = Mem.nextblock m0 ->
@@ -446,7 +489,9 @@ Section GENVSWAP.
             external_call ef tge vargs' m0 t vres' m0' /\
             Val.inject (Mem.flat_inj (Mem.nextblock m)) vres vres' /\
             Mem.inject (Mem.flat_inj (Mem.nextblock m')) m' m0' /\
-            Mem.nextblock m' = Mem.nextblock m0'.
+            Mem.nextblock m' = Mem.nextblock m0' /\
+            Mem.nextblock m = Mem.nextblock m'.
+  
   Proof.
     intros.
     eapply external_call_mem_inject_gen in H1; eauto.
@@ -471,10 +516,10 @@ Section GENVSWAP.
   Lemma find_label_transf' :
     forall fb lbl s k0 k,
       find_label lbl fb k = Some (s,k0) ->
-      forall k',
-        match_cont k k' ->
+      forall k' b,
+        match_cont k k' b ->
         exists k0',
-          find_label lbl fb k' = Some (s,k0') /\ match_cont k0 k0'.
+          find_label lbl fb k' = Some (s,k0') /\ match_cont k0 k0' b.
   Proof.
     induction fb; intros;
       simpl in *; try congruence;
@@ -497,10 +542,10 @@ Section GENVSWAP.
   Lemma find_label_transf :
     forall fb lbl s k0 k,
       find_label lbl fb (Cminor.call_cont k) = Some (s,k0) ->
-      forall k',
-        match_cont k k' ->
+      forall k' b,
+        match_cont k k' b ->
         exists k0',
-          find_label lbl fb (Cminor.call_cont k') = Some (s,k0') /\ match_cont k0 k0'.
+          find_label lbl fb (Cminor.call_cont k') = Some (s,k0') /\ match_cont k0 k0' b.
   Proof.
     intros.
     eapply find_label_transf'; eauto.
@@ -508,28 +553,42 @@ Section GENVSWAP.
   Qed.
   
   Lemma match_env_set_params :
-    forall parms vargs vargs',
-      Val.inject (Mem.flat_inj (Mem.nextblock m))_list vargs vargs' ->
+    forall parms vargs vargs' b,
+      Val.inject_list (Mem.flat_inj b) vargs vargs' ->
       match_env (Cminor.set_params vargs parms)
-                (Cminor.set_params vargs' parms).
+                (Cminor.set_params vargs' parms) b.
   Proof.
     induction parms; intros; simpl.
-    econstructor; eauto.
-    inv H. eapply match_env_set; eauto.
+    unfold match_env. intros.
+    rewrite PTree.gempty in *. congruence.
+    break_match; subst.
+    inv H.
+    eapply match_env_set; eauto.
+    inv H.
     eapply match_env_set; eauto.
   Qed.
 
   Lemma match_env_set_locals :
-    forall vars e e',
-      match_env e e' ->
+    forall vars e e' b,
+      match_env e e' b ->
       match_env (Cminor.set_locals vars e)
-                (Cminor.set_locals vars e').
+                (Cminor.set_locals vars e') b.
   Proof.
     induction vars; intros.
     simpl. eauto.
     simpl. eapply match_env_set; eauto.
   Qed.
-  
+
+  Lemma global_blocks_nextblock :
+    forall m m',
+      global_blocks_valid ge m ->
+      Mem.nextblock m = Mem.nextblock m' ->
+      global_blocks_valid ge m'.
+  Proof.
+    intros. unfold global_blocks_valid in *.
+    intros. rewrite <- H0.
+    eapply H; eauto.
+  Qed.
   
   Lemma step_sim :
     forall st t st' st0,
@@ -541,7 +600,7 @@ Section GENVSWAP.
     intros.
     inv H; inv H0;
       match goal with
-      | [ H : match_cont _ _ |- _ ] => inversion H; [idtac]
+      | [ H : match_cont _ _ _ |- _ ] => inversion H; [idtac]
       | [ |- _ ] => idtac
       end;
       try subst;
@@ -558,13 +617,20 @@ Section GENVSWAP.
       try app mem_free Mem.free;
       try app mem_storev Mem.storev;
       try app mem_alloc Mem.alloc;
-      try solve [eexists; split; simpl; try econstructor; eauto; try eapply match_is_call_cont; eauto; try eapply match_env_set; eauto; try econstructor; eauto; try eapply match_call_cont; eauto].
+      try solve [eexists; split; simpl; try econstructor; eauto; try eapply match_is_call_cont; eauto; try eapply match_env_set; eauto; try econstructor; eauto; try eapply match_call_cont; eauto; try eapply global_blocks_nextblock; eauto; try congruence].
 
+
+    - rewrite H9 in *.
+      eexists; split; simpl; try econstructor; eauto; try eapply match_is_call_cont; eauto; try eapply match_env_set; eauto; try econstructor; eauto; try eapply match_call_cont; eauto; try eapply global_blocks_nextblock; eauto; try congruence.
     
-    - eexists; split; simpl; try econstructor; eauto.
+    - 
+      eexists; split; simpl; try econstructor; eauto.
       unfold Genv.find_funct in *.
       repeat break_match_hyp; try congruence.
       inv H5.
+      unfold Mem.flat_inj in *.
+      repeat break_match_hyp; try congruence. inv H8.
+      rewrite Int.add_zero in *.
       break_match; try congruence.
       eapply ffp; eauto.
       econstructor; eauto.
@@ -572,11 +638,17 @@ Section GENVSWAP.
 
     - eexists; split; try econstructor; eauto.
       unfold Genv.find_funct in *.
-      repeat (break_match_hyp; try congruence).
+      repeat break_match_hyp; try congruence.
       inv H6.
+      unfold Mem.flat_inj in *.
+      repeat break_match_hyp; try congruence. inv H19.
+      rewrite Int.add_zero in *.
       break_match; try congruence.
-      solve [eauto].
+      eapply ffp; eauto.
+      congruence.
       eapply match_call_cont; eauto.
+      congruence.
+      eapply global_blocks_nextblock; eauto.
       eapply pos_stack_space; eauto.
       
     - eexists; split.
@@ -584,6 +656,11 @@ Section GENVSWAP.
       econstructor; eauto.
       destruct optid; simpl; eauto.
       eapply match_env_set; eauto.
+      rewrite <- H7. eassumption.
+      rewrite <- H7. eassumption.
+      rewrite <- H7. eassumption.
+      rewrite <- H7. eassumption.
+      eapply global_blocks_nextblock; eauto.
 
     - eexists; split; try econstructor; eauto.
       inv H2; inv H3; econstructor; eauto.
@@ -594,6 +671,21 @@ Section GENVSWAP.
       eapply match_env_set_locals; eauto.
       eapply match_env_set_params; eauto.
 
+      eapply Mem.nextblock_alloc in H2.
+      rewrite H2 in *.
+      eapply val_inject_list_succ; eauto.
+      
+      eapply Mem.nextblock_alloc in H2.
+      rewrite H2 in *.
+      eapply match_cont_next; eauto.
+      
+      eapply Mem.nextblock_alloc in H2.
+      rewrite H2 in *.
+      unfold global_blocks_valid in *. intros.
+      eapply H11 in H5.
+      rewrite H2 in *.
+      eapply Plt_trans_succ; eauto.
+      
     - eexists; split. econstructor; eauto.
       econstructor; eauto.
       destruct optid; simpl; eauto.
