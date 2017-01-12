@@ -474,8 +474,6 @@ Proof.
 
   Grab Existential Variables.
   exact 0.
-  repeat (econstructor; eauto).
-  repeat (econstructor; eauto).
 Qed.
 
 Lemma match_final_states :

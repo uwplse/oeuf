@@ -27,7 +27,7 @@ Section GENV.
 
 Lemma inject_unop :
   forall op arg arg' res m,
-    global_blocks_valid ge m ->
+    global_blocks_valid ge (Mem.nextblock m) ->
     eval_unop op arg = Some res ->
     Val.inject (Mem.flat_inj (Mem.nextblock m)) arg arg' ->
     exists res',
