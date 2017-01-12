@@ -58,22 +58,10 @@ Section GENVSWAP.
       Genv.find_funct_ptr ge b = Some f ->
       Genv.find_funct_ptr tge b = Some f.
 
-  Lemma global_block_find_symbol :
-    forall id b m,
-      Genv.find_symbol ge id = Some b ->
-      global_blocks_valid ge m ->
-      Plt b (Mem.nextblock m).
-  Proof.
-    intros.
-    unfold global_blocks_valid in *.
-    eapply Genv.find_symbol_inversion in H.
-    unfold prog_defs_names in *.
-    eapply list_in_map_inv in H.
-  Admitted.
   
   Lemma eval_constant_transf :
     forall sp cst v m,
-      global_blocks_valid ge m ->
+      global_blocks_valid ge (Mem.nextblock m) ->
       Cminor.eval_constant ge sp cst = Some v ->
       exists v',
         Cminor.eval_constant tge sp cst = Some v' /\ Val.inject (Mem.flat_inj (Mem.nextblock m)) v v'.
@@ -107,7 +95,7 @@ Section GENVSWAP.
       Cminor.eval_expr ge sp e m a v ->
       Mem.inject (Mem.flat_inj (Mem.nextblock m)) m m' ->
       match_env e e' (Mem.nextblock m) ->
-      global_blocks_valid ge m ->
+      global_blocks_valid ge (Mem.nextblock m) ->
       exists v',
         Cminor.eval_expr tge sp e' m' a v' /\ Val.inject (Mem.flat_inj (Mem.nextblock m)) v v'.
   Proof.
@@ -693,6 +681,16 @@ Section GENVSWAP.
 
   Qed.
 
+  (* NEED: *)
+  (* is_callstate -> matchstates *)
+  (* match states -> final_state *)
+  (* Kill admits *)
+  (* build mock shim in coq, prove correct using oeuf *)
+
+  (* Things mock shim will need: *)
+  (* - mem_locked exposed *)
+  (* - nice commuting lemmas about no future pointers stuff *)
+  
   (* execution of the original Oeuf program *)
   Hypothesis start : cminor_is_callstate prog fv av st.
   Hypothesis finish : cminor_final_state prog st' rv.

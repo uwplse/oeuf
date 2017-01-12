@@ -454,17 +454,14 @@ Proof.
     intros. erewrite Genv.find_symbol_transf_partial in H9; eauto.
   }
 
-  assert (global_blocks_valid (Genv.globalenv prog) m).
+  assert (global_blocks_valid (Genv.globalenv prog) (Mem.nextblock m)).
   {
-    clear -H5 TRANSF ge tge malloc_id malloc_id_found.
-    unfold global_blocks_valid in *. intros.
-    break_or. eapply find_funct_ptr_transf in H.
-    break_exists. break_and.
-    eapply H5; eauto.
-    unfold transf_prog in TRANSF.
+    unfold global_blocks_valid in *.
+    unfold transf_prog in *.
     repeat (break_match_hyp; try congruence).
     unfold transf_prog_malloc in *.
-    erewrite <- Genv.find_var_info_transf_partial in H; eauto.
+    (* HERE *)
+    erewrite genv_next_transf_partial; eauto.
     
   }
   

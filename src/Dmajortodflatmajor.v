@@ -1338,7 +1338,7 @@ Lemma meminj_value_inject :
     HighValues.value_inject ge m hv1 lv1 ->
     HighValues.value_inject ge m hv2 lv2 ->
     HighValues.no_future_pointers m ->
-    HighValues.global_blocks_valid ge m ->
+    HighValues.global_blocks_valid ge (Mem.nextblock m) ->
     exists mi,
       Mem.inject mi m m /\ wf_mem mi m m /\ Val.inject_list mi (lv1 :: lv2 :: nil) (lv1 :: lv2 :: nil).
 Proof.
@@ -1368,7 +1368,14 @@ Proof.
   split. unfold wf_inj.
   split. unfold globals_inj_same. unfold HighValues.globals_inj_same. intros.
   unfold Mem.flat_inj. break_match; try congruence.
-  eapply H2 in H3. congruence.
+
+  destruct H3. unfold Genv.find_funct_ptr in *.
+  eapply Genv.genv_funs_range in H3. unfold HighValues.global_blocks_valid in H2.
+  exfalso. eapply n. eapply Plt_trans; eauto.
+  unfold Genv.find_var_info in *.
+  eapply Genv.genv_vars_range in H3. unfold HighValues.global_blocks_valid in H2.
+  exfalso. eapply n. eapply Plt_trans; eauto.
+  
   split. unfold meminj_injective. intros.
   unfold Mem.flat_inj in *. repeat (break_match_hyp; try congruence).
   unfold same_offsets. unfold HighValues.same_offsets.
@@ -1436,3 +1443,4 @@ Proof.
   unfold transf_prog in *. break_match_hyp; try congruence. inv H.
   eapply fsim'; eauto.
 Qed.
+
