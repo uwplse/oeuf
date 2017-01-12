@@ -147,7 +147,7 @@ Section GENVSWAP.
       Cminor.eval_exprlist ge sp e m l vs ->
       Mem.inject (Mem.flat_inj (Mem.nextblock m)) m m' ->
       match_env e e' (Mem.nextblock m) ->
-      global_blocks_valid ge m ->
+      global_blocks_valid ge (Mem.nextblock m) ->
       exists vs',
         Cminor.eval_exprlist tge sp e' m' l vs' /\ Val.inject_list (Mem.flat_inj (Mem.nextblock m)) vs vs'.
   Proof.
@@ -247,7 +247,7 @@ Section GENVSWAP.
         match_cont k k' (Mem.nextblock m) ->
         Mem.inject (Mem.flat_inj (Mem.nextblock m)) m m' ->
         Mem.nextblock m = Mem.nextblock m' ->
-        global_blocks_valid ge m ->
+        global_blocks_valid ge (Mem.nextblock m) ->
         (Cminor.fn_stackspace f) > 0 ->
         match_states (Cminor.State f s k v e m)
                      (Cminor.State f s k' v e' m')
@@ -257,7 +257,7 @@ Section GENVSWAP.
         Mem.nextblock m = Mem.nextblock m' ->
         Val.inject_list (Mem.flat_inj (Mem.nextblock m)) vs vs' ->
         match_cont k k' (Mem.nextblock m) ->
-        global_blocks_valid ge m ->
+        global_blocks_valid ge (Mem.nextblock m) ->
         match fd with
         | Internal f => Cminor.fn_stackspace f > 0
         | _ => True
@@ -270,7 +270,7 @@ Section GENVSWAP.
         match_cont k k' (Mem.nextblock m) ->
         Mem.nextblock m = Mem.nextblock m' ->
         Mem.inject (Mem.flat_inj (Mem.nextblock m)) m m' ->
-        global_blocks_valid ge m ->
+        global_blocks_valid ge (Mem.nextblock m) ->
         match_states (Cminor.Returnstate v k m)
                      (Cminor.Returnstate v' k' m').
 
@@ -567,16 +567,16 @@ Section GENVSWAP.
     simpl. eapply match_env_set; eauto.
   Qed.
 
-  Lemma global_blocks_nextblock :
+(*  Lemma global_blocks_nextblock :
     forall m m',
-      global_blocks_valid ge m ->
+      global_blocks_valid ge (Mem.nextblock m) ->
       Mem.nextblock m = Mem.nextblock m' ->
-      global_blocks_valid ge m'.
+      global_blocks_valid ge (Mem.nextblm'.
   Proof.
     intros. unfold global_blocks_valid in *.
     intros. rewrite <- H0.
     eapply H; eauto.
-  Qed.
+  Qed.*)
   
   Lemma step_sim :
     forall st t st' st0,
@@ -605,7 +605,7 @@ Section GENVSWAP.
       try app mem_free Mem.free;
       try app mem_storev Mem.storev;
       try app mem_alloc Mem.alloc;
-      try solve [eexists; split; simpl; try econstructor; eauto; try eapply match_is_call_cont; eauto; try eapply match_env_set; eauto; try econstructor; eauto; try eapply match_call_cont; eauto; try eapply global_blocks_nextblock; eauto; try congruence].
+      try solve [eexists; split; simpl; try econstructor; eauto; try eapply match_is_call_cont; eauto; try eapply match_env_set; eauto; try econstructor; eauto; try eapply match_call_cont; eauto; try congruence].
 
 
     - rewrite H9 in *.
@@ -636,7 +636,7 @@ Section GENVSWAP.
       congruence.
       eapply match_call_cont; eauto.
       congruence.
-      eapply global_blocks_nextblock; eauto.
+      congruence.
       eapply pos_stack_space; eauto.
       
     - eexists; split.
@@ -648,7 +648,7 @@ Section GENVSWAP.
       rewrite <- H7. eassumption.
       rewrite <- H7. eassumption.
       rewrite <- H7. eassumption.
-      eapply global_blocks_nextblock; eauto.
+      congruence.
 
     - eexists; split; try econstructor; eauto.
       inv H2; inv H3; econstructor; eauto.
@@ -670,8 +670,6 @@ Section GENVSWAP.
       eapply Mem.nextblock_alloc in H2.
       rewrite H2 in *.
       unfold global_blocks_valid in *. intros.
-      eapply H11 in H5.
-      rewrite H2 in *.
       eapply Plt_trans_succ; eauto.
       
     - eexists; split. econstructor; eauto.
@@ -699,7 +697,7 @@ Section GENVSWAP.
 
   (* widening obligations *)
   Hypothesis nfp : no_future_pointers (mem_of_state st).
-  Hypothesis gbv : global_blocks_valid ge (mem_of_state st).
+  Hypothesis gbv : global_blocks_valid ge (Mem.nextblock (mem_of_state st)).
 
   
   Theorem exec' :

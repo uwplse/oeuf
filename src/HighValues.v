@@ -283,6 +283,22 @@ Proof.
   rewrite list_length_map; reflexivity.
 Qed.
 
+Lemma transf_globdefs_length :
+  forall {A B V W} l l' (tf : A -> Errors.res B) (tv : V -> Errors.res W),
+    transf_globdefs tf tv l = Errors.OK l' ->
+    length l = length l'.
+Proof.
+  induction l; intros.
+  simpl in H. inv H. reflexivity.
+  simpl in *. repeat (break_match_hyp; try congruence; inv H).
+  eapply Errors.bind_inversion in H3. break_exists. break_and.
+  inv H3. simpl.
+  erewrite IHl; eauto.
+  eapply Errors.bind_inversion in H3. break_exists. break_and.
+  inv H3. simpl.
+  erewrite IHl; eauto.
+Qed.    
+
 Lemma genv_next_transf_partial :
   forall {A B V} (p : AST.program A V) (tp : AST.program B V) (tf : A -> Errors.res B),
     transform_partial_program tf p = Errors.OK tp ->
@@ -292,11 +308,11 @@ Proof.
   erewrite genv_next_ind; try reflexivity.
   unfold transform_partial_program in *.
   unfold transform_partial_program2 in *.
-  (* HERE *)
-  subst tp. simpl.
-  rewrite list_length_map; reflexivity.
-  
-  
+  eapply Errors.bind_inversion in H.
+  break_exists. break_and.
+  inv H0. simpl.
+  eapply transf_globdefs_length; eauto.
+Qed.
 
 (*Definition global_blocks_valid {A B} (ge : Genv.t A B) (m : mem) : Prop :=
   forall b f v,
