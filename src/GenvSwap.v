@@ -192,18 +192,43 @@ Section GENVSWAP.
         Cminor.fn_stackspace f > 0 ->
         match_cont (Cminor.Kcall oid f sp e k) (Cminor.Kcall oid f sp e' k') b.
 
+
+  Lemma val_inject_lt :
+    forall v v' b b',
+      Val.inject (Mem.flat_inj b) v v' ->
+      Plt b b' ->
+      Val.inject (Mem.flat_inj b') v v'.
+  Proof.
+    intros.
+    inv H; econstructor; eauto.
+    unfold Mem.flat_inj in *.
+    break_match_hyp; inv H1.
+    break_match; try reflexivity.
+    exfalso; eapply n.
+    eapply Plt_trans; eauto.
+  Qed.
+  
+  Lemma match_env_lt :
+    forall e e' b b',
+      match_env e e' b ->
+      Plt b b' ->
+      match_env e e' b'.
+  Proof.
+    unfold match_env in *. intros.
+    eapply H in H1; repeat break_exists; repeat break_and.
+    eexists; split; eauto.
+    eapply val_inject_lt; eauto.
+  Qed.
+  
   Lemma val_inject_succ :
     forall v v' b,
       Val.inject (Mem.flat_inj b) v v' ->
       Val.inject (Mem.flat_inj (Pos.succ b)) v v'.
   Proof.
-    intros. inv H; econstructor; eauto.
-    unfold Mem.flat_inj in *.
-    break_match_hyp; try congruence. inv H0.
-    break_match; try reflexivity.
-    eapply Plt_trans_succ in p. congruence.
+    intros.
+    eapply val_inject_lt; eauto.
+    eapply Plt_succ.
   Qed.
-
 
   Lemma val_inject_list_succ :
     forall vs vs' b,
@@ -220,13 +245,20 @@ Section GENVSWAP.
       match_env e e' (Pos.succ b).
   Proof.
     intros.
-    unfold match_env in *.
-    intros.
-    eapply H in H0.
-    break_exists. break_and.
-    eexists x.
-    split; eauto.
-    eapply val_inject_succ; eauto.
+    eapply match_env_lt; eauto.
+    eapply Plt_succ.
+  Qed.
+
+  Lemma match_cont_lt :
+    forall k k' b b',
+      match_cont k k' b ->
+      Plt b b' ->
+      match_cont k k' b'.
+  Proof.
+    induction 1; intros;
+      try solve [econstructor; eauto].
+    econstructor; eauto.
+    eapply match_env_lt; eauto.
   Qed.
 
   Lemma match_cont_next :
@@ -234,10 +266,9 @@ Section GENVSWAP.
       match_cont k k' b ->
       match_cont k k' (Pos.succ b).
   Proof.
-    induction 1; intros;
-      try solve [econstructor; eauto].
-    econstructor; eauto.
-    eapply match_env_next; eauto.
+    intros.
+    eapply match_cont_lt; eauto.
+    eapply Plt_succ.
   Qed.
   
   Inductive match_states : Cminor.state -> Cminor.state -> Prop :=
@@ -475,15 +506,14 @@ Section GENVSWAP.
           Mem.nextblock m = Mem.nextblock m0 ->
           exists m0' vres',
             external_call ef tge vargs' m0 t vres' m0' /\
-            Val.inject (Mem.flat_inj (Mem.nextblock m)) vres vres' /\
+            Val.inject (Mem.flat_inj (Mem.nextblock m')) vres vres' /\
             Mem.inject (Mem.flat_inj (Mem.nextblock m')) m' m0' /\
             Mem.nextblock m' = Mem.nextblock m0' /\
-            Mem.nextblock m = Mem.nextblock m'.
-  
+            Plt (Mem.nextblock m) (Mem.nextblock m').
   Proof.
     intros.
-    eapply external_call_mem_inject_gen in H1; eauto.
     (* This will need copy pasta out of the compcert libs *)
+    (* This will need hacking in Events lib *)
     (* TODO *)
   Admitted.
 
@@ -567,16 +597,6 @@ Section GENVSWAP.
     simpl. eapply match_env_set; eauto.
   Qed.
 
-(*  Lemma global_blocks_nextblock :
-    forall m m',
-      global_blocks_valid ge (Mem.nextblock m) ->
-      Mem.nextblock m = Mem.nextblock m' ->
-      global_blocks_valid ge (Mem.nextblm'.
-  Proof.
-    intros. unfold global_blocks_valid in *.
-    intros. rewrite <- H0.
-    eapply H; eauto.
-  Qed.*)
   
   Lemma step_sim :
     forall st t st' st0,
@@ -644,11 +664,11 @@ Section GENVSWAP.
       econstructor; eauto.
       destruct optid; simpl; eauto.
       eapply match_env_set; eauto.
-      rewrite <- H7. eassumption.
-      rewrite <- H7. eassumption.
-      rewrite <- H7. eassumption.
-      rewrite <- H7. eassumption.
-      congruence.
+      eapply match_env_lt; eauto.
+      eapply match_env_lt; eauto.
+      eapply match_cont_lt; eauto.
+      unfold global_blocks_valid in *.
+      eapply Plt_trans; eauto.
 
     - eexists; split; try econstructor; eauto.
       inv H2; inv H3; econstructor; eauto.
@@ -674,9 +694,14 @@ Section GENVSWAP.
       
     - eexists; split. econstructor; eauto.
       econstructor; eauto.
+      eapply match_cont_lt; eauto.
+      unfold global_blocks_valid in *.
+      eapply Plt_trans; eauto.
+
+    - eexists; split. econstructor; eauto.
+      econstructor; eauto.
       destruct optid; simpl; eauto.
       eapply match_env_set; eauto.
-
   Qed.
 
   (* NEED: *)
