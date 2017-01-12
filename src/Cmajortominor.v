@@ -487,14 +487,8 @@ Proof.
   unfold transf_function in H10. simpl in H10. inv H10. 
   eauto.
   unfold HighValues.global_blocks_valid in *.
-  intros. destruct H11.
-  eapply find_funct_ptr_transf in H11.
-  eapply H5; eauto.
-  erewrite <- find_var_info_transf in H11.
-  eapply H5; eauto.
-  Grab Existential Variables.
-  repeat (econstructor; eauto).
-  repeat (econstructor; eauto).
+  unfold transf_prog in TRANSF.
+  erewrite HighValues.genv_next_transf in *; eauto.
 Qed.
 
 Theorem fsim :

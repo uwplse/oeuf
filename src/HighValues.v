@@ -240,9 +240,67 @@ Proof.
   econstructor; eauto.
 Qed.
 
-Definition global_blocks_valid {A B} (ge : Genv.t A B) (m : mem) : Prop :=
+Definition global_blocks_valid {A B : Type} (ge : Genv.t A B) (b : block) :=
+  Plt (Genv.genv_next ge) b.
+
+Lemma global_block_find_symbol :
+  forall {A B} (ge : Genv.t A B) id b m,
+    Genv.find_symbol ge id = Some b ->
+    global_blocks_valid ge (Mem.nextblock m) ->
+    Plt b (Mem.nextblock m).
+Proof.
+  intros.
+  unfold global_blocks_valid in *.
+  unfold Genv.find_symbol in H.
+  eapply Genv.genv_symb_range in H.
+  eapply Plt_trans; eauto.
+Qed.
+
+Lemma genv_next_ind :
+  forall {A B V} l l',
+    length l = length l' ->
+    forall  (ge : Genv.t A V) (tge : Genv.t B V),
+      Genv.genv_next ge = Genv.genv_next tge ->
+      Genv.genv_next (Genv.add_globals ge l) = Genv.genv_next (Genv.add_globals tge l').
+Proof.
+  induction l; intros;
+    destruct l' eqn:?; simpl in *; try omega;
+      eauto.
+  subst.
+  eapply IHl; eauto.
+  unfold Genv.add_global. simpl. congruence.
+Qed.
+
+Lemma genv_next_transf :
+  forall {A B V} (p : AST.program A V) (tp : AST.program B V) (tf : A -> B),
+    transform_program tf p = tp ->
+    Genv.genv_next (Genv.globalenv p) = Genv.genv_next (Genv.globalenv tp).
+Proof.
+  intros. unfold Genv.globalenv.
+  erewrite genv_next_ind; try reflexivity.
+  unfold transform_program in *.
+  subst tp. simpl.
+  rewrite list_length_map; reflexivity.
+Qed.
+
+Lemma genv_next_transf_partial :
+  forall {A B V} (p : AST.program A V) (tp : AST.program B V) (tf : A -> Errors.res B),
+    transform_partial_program tf p = Errors.OK tp ->
+    Genv.genv_next (Genv.globalenv p) = Genv.genv_next (Genv.globalenv tp).
+Proof.
+  intros. unfold Genv.globalenv.
+  erewrite genv_next_ind; try reflexivity.
+  unfold transform_partial_program in *.
+  unfold transform_partial_program2 in *.
+  (* HERE *)
+  subst tp. simpl.
+  rewrite list_length_map; reflexivity.
+  
+  
+
+(*Definition global_blocks_valid {A B} (ge : Genv.t A B) (m : mem) : Prop :=
   forall b f v,
-    Genv.find_funct_ptr ge b = Some f \/ Genv.find_var_info ge b = Some v -> Plt b (Mem.nextblock m).
+    Genv.find_funct_ptr ge b = Some f \/ Genv.find_var_info ge b = Some v -> Plt b (Mem.nextblock m).*)
 
 Definition no_future_pointers (m : mem) : Prop :=
   forall b ofs b' ofs' q n,
