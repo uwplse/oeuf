@@ -502,6 +502,21 @@ induction M; intros0 Hassoc; simpl in *.
     exists (S n'). simpl. auto.
 Qed.
 
+Lemma nth_error_id_key_assoc : forall M n k v,
+    id_map_ok M ->
+    nth_error M n = Some (k, v) ->
+    id_key_assoc M k = Some v.
+induction M; intros0 Mok Hnth; simpl in *.
+- destruct n; discriminate.
+- destruct n; simpl in *.
+  + inject_some. break_if; [ | exfalso; congruence ]. auto.
+  + invc Mok. simpl in *. do 2 on (list_norepet (_ :: _)), invc.
+    destruct a; break_if.
+    * eapply nth_error_in in Hnth. eapply in_map with (f := fst) in Hnth.
+      subst k. simpl in *. contradiction.
+    * eapply IHM; eauto. constructor; auto.
+Qed.
+
 Lemma nth_error_unique_list_norepet : forall A (xs : list A),
     (forall n1 n2 x,
         nth_error xs n1 = Some x ->
@@ -1710,3 +1725,74 @@ Qed.
   Qed.
 
 End Preservation.
+
+
+Lemma intern_id_list'_is_map : forall xs,
+    intern_id_list' xs = map (fun ks => let '(k, s) := ks in (k, intern_string s)) xs.
+induction xs; intros; simpl.
+- reflexivity.
+- destruct a. rewrite IHxs. reflexivity.
+Qed.
+
+Lemma intern_id_list'_app : forall xs ys,
+    intern_id_list' (xs ++ ys) = intern_id_list' xs ++ intern_id_list' ys.
+induction xs; intros; simpl.
+- reflexivity.
+- destruct a. simpl. rewrite IHxs. reflexivity.
+Qed.
+
+Lemma intern_id_list'_fst : forall xs,
+    map fst (intern_id_list' xs) = map fst xs.
+induction xs; intros; simpl.
+- reflexivity.
+- destruct a. simpl. rewrite IHxs. reflexivity.
+Qed.
+
+(* This provides the difficult piece of IClose, for building I_value proofs *)
+Theorem build_id_list_fname_map : forall A Ameta M fname,
+    build_id_list (A, Ameta) = Some M ->
+    fname < length A ->
+    exists id, I_id M (IkFunc fname) id.
+intros0 Hmap Hfname.
+fwd eapply build_id_list_ok as Mok; eauto.
+unfold build_id_list in *. break_if; try discriminate. simpl in *.
+unfold intern_id_list in *. break_if; try discriminate.
+
+assert (Hnth : exists n, nth_error (map fst M) n = Some (IkFunc fname)). {
+  eapply In_nth_error.
+
+  unfold build_id_list' in Hmap. repeat rewrite intern_id_list'_app in Hmap.
+  match type of Hmap with
+  | Some ?x = Some ?y => assert (Hmap' : x = y) by (injection Hmap; auto)
+  end.
+  clear Hmap.
+
+  rewrite <- Hmap'. repeat rewrite map_app. repeat rewrite intern_id_list'_fst.
+  eapply in_or_app, or_intror, in_or_app, or_intror, in_or_app, or_introl.
+
+  destruct (nth_error (map fst (build_funcs_id_list Ameta)) fname) eqn:Hnth; cycle 1.
+    { rewrite nth_error_None in Hnth. unfold build_funcs_id_list in Hnth.
+      rewrite map_length, map_length, numbered_length in Hnth. omega. }
+  fwd eapply funcs_keys_IkFunc as HH; eauto using nth_error_in.
+    destruct HH as [fname' ?]. subst.
+  assert (fname' = fname).
+    { eapply map_nth_error' in Hnth. destruct Hnth as ([? ?] & Hnth & ?).
+      unfold build_funcs_id_list in Hnth.
+      eapply map_nth_error' in Hnth. destruct Hnth as ([? ?] & Hnth & ?).
+      eapply map_nth_error with (f := fst) in Hnth.
+      rewrite numbered_count_up_eq in Hnth.
+      rewrite count_up_nth_error in Hnth by omega.
+      on >list_norepet, fun H => clear H. unfold func_id_entry in *. simpl in *.
+      congruence. }
+  subst fname'.
+
+  eauto using nth_error_in.
+}
+
+destruct Hnth as [n Hnth].
+eapply map_nth_error' in Hnth. destruct Hnth as ([k id] & ? & ?).
+compute [fst] in *. subst k.
+
+exists id.
+eapply nth_error_id_key_assoc; eauto.
+Qed.
