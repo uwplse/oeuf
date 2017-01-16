@@ -129,7 +129,6 @@ Section Simulation.
     eapply compose_notrace_mix_forward_simulation.
     eapply StackCompCombined.fsim; try eassumption.
 
-    admit.
     (* StackFlatter2 to LocalsOnly *)
     eapply compose_notrace_mix_forward_simulation.
     eapply LocalsCompCombined.fsim; try eassumption.
@@ -168,7 +167,7 @@ Section Simulation.
     rewrite OeufCompcertCompiler.print_identity in *.
     congruence.
     
-  Admitted.
+  Qed.
 
 
   (* TODO: use TopLevel.v to get concrete versions of our top level theorems here *)

@@ -20,7 +20,7 @@ Module B := StackFlatter2.
 
 Definition compile_cu (cu : A.env * list metadata) : res (B.env * list metadata) :=
   OK cu
-  @@ StackMachComp.compile_cu
+ @@@ StackMachComp.compile_cu
   @@ StackContComp.compile_cu
   @@ StackContComp2.compile_cu
   @@ StackContComp3.compile_cu
@@ -70,16 +70,15 @@ Qed.
 
 
 Theorem compile_I_func : forall a ameta b bmeta,
-    Forall ValueFlag.no_values a ->
     compile_cu (a, ameta) = OK (b, bmeta) ->
     Forall2 I_func a b.
-intros0 Hnval Hcomp. unfold compile_cu in *.
+intros0 Hcomp. unfold compile_cu in *.
 
 remember (a, ameta) as aprog.
 break_result_chain.
 subst aprog.  repeat on (_ * _)%type, fun x => destruct x.
 
-on _, eapply_lem StackMachComp.compile_cu_I_env; [ | auto ].
+on _, eapply_lem StackMachComp.compile_cu_I_env.
 on _, eapply_lem StackContComp.compile_cu_I_env.
 on _, eapply_lem StackContComp2.compile_cu_I_env.
 on _, eapply_lem StackContComp3.compile_cu_I_env.
@@ -100,7 +99,6 @@ Section Preservation.
   Variable tprog : B.prog_type.
 
   Hypothesis TRANSF : compile_cu prog = OK tprog.
-  Hypothesis Anval : Forall A.no_values (fst prog).
 
   Theorem fsim :
     Semantics.forward_simulation (A.semantics prog) (B.semantics tprog).
