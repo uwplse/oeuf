@@ -1604,12 +1604,13 @@ Lemma callstate_match :
 Proof.
   intros. inv H.
   unfold transf_prog in *.
-  eapply Genv.find_funct_ptr_rev_transf_partial in H2; eauto.
-  break_exists. break_and. copy H4.
-  erewrite Genv.find_symbol_transf_partial in H3; eauto.
-  destruct x; simpl in H5; unfold bind in H5; simpl in H5; try congruence.
+  eapply Genv.find_funct_ptr_rev_transf_partial in H3; eauto.
+  break_exists. break_and. copy H5.
+  erewrite Genv.find_symbol_transf_partial in H4; eauto.
+  destruct x; simpl in H6; unfold bind in H6; simpl in H6; try congruence.
   break_match_hyp; try congruence. invc H5.
   eexists; split; econstructor; eauto.
+  congruence.
   repeat (econstructor; eauto).
   econstructor; eauto.
   destruct f; destruct fn; unfold transf_function in *; simpl in *.

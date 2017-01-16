@@ -290,11 +290,12 @@ End RELSEM.
 
 Inductive is_callstate (p : program) : value -> value -> state -> Prop := 
 | IsCallstate :
-    forall fname vs arg fb fofs argptr m fn,
+    forall fname vs arg fb fofs argptr m fn fnb,
       value_inject (Genv.globalenv p) m (Close fname vs) (Vptr fb fofs) ->
       value_inject (Genv.globalenv p) m arg argptr ->
-      Genv.find_funct_ptr (Genv.globalenv p) fb = Some (Internal fn) ->
-      Genv.find_symbol (Genv.globalenv p) fname = Some fb ->
+      Mem.loadv Mint32 m (Vptr fb fofs) = Some (Vptr fnb Int.zero) ->
+      Genv.find_funct_ptr (Genv.globalenv p) fnb = Some (Internal fn) ->
+      Genv.find_symbol (Genv.globalenv p) fname = Some fnb ->
       length (fn_params fn) = 2%nat ->
       global_blocks_valid (Genv.globalenv p) (Mem.nextblock m) ->
       no_future_pointers m ->
@@ -339,16 +340,15 @@ Inductive cminor_final_state(p : Cminor.program): Cminor.state -> value -> Prop 
     value_inject (Genv.globalenv p) m v v' ->
     cminor_final_state p (Cminor.Returnstate v' Cminor.Kstop m) v.
 
-(* TODO *)
-(* need a different block here *)
-(* fb not result of find_symbol *)
+
 Inductive cminor_is_callstate (p : Cminor.program) : value -> value -> state -> Prop := 
 | CmIsCallstate :
-    forall fname vs arg fb fofs argptr m fn,
+    forall fname vs arg fb fofs argptr m fn fnb,
       value_inject (Genv.globalenv p) m (Close fname vs) (Vptr fb fofs) ->
       value_inject (Genv.globalenv p) m arg argptr ->
-      Genv.find_funct_ptr (Genv.globalenv p) fb = Some (Internal fn) ->
-      Genv.find_symbol (Genv.globalenv p) fname = Some fb ->
+      Mem.loadv Mint32 m (Vptr fb fofs) = Some (Vptr fnb Int.zero) ->
+      Genv.find_funct_ptr (Genv.globalenv p) fnb = Some (Internal fn) ->
+      Genv.find_symbol (Genv.globalenv p) fname = Some fnb ->
       length (fn_params fn) = 2%nat ->
       global_blocks_valid (Genv.globalenv p) (Mem.nextblock m) ->
       no_future_pointers m ->

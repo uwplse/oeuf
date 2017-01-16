@@ -432,26 +432,26 @@ Lemma is_callstate_match :
 Proof.
   intros. inv H.
   copy TRANSF.
-  unfold transf_prog in H7.
+  unfold transf_prog in H8.
   break_match_hyp; try congruence.
   rewrite malloc_id_found in *.
-  eapply Genv.find_funct_ptr_rev_transf_partial in H2; eauto.
+  eapply Genv.find_funct_ptr_rev_transf_partial in H3; eauto.
   break_exists. break_and.
-  erewrite Genv.find_symbol_transf_partial in H3; eauto.
+  erewrite Genv.find_symbol_transf_partial in H4; eauto.
 
   assert (Hffp : forall b f,
              Genv.find_funct_ptr (Genv.globalenv tprog) b = Some f ->
              exists f', Genv.find_funct_ptr (Genv.globalenv prog) b = Some f').
   {
     intros. 
-    eapply Genv.find_funct_ptr_rev_transf_partial in H9; eauto.
+    eapply Genv.find_funct_ptr_rev_transf_partial in H10; eauto.
     break_exists. break_and. eauto.
   }
   assert (Hfs : forall fname b,
              Genv.find_symbol (Genv.globalenv tprog) fname = Some b ->
              Genv.find_symbol (Genv.globalenv prog) fname = Some b).
   {
-    intros. erewrite Genv.find_symbol_transf_partial in H9; eauto.
+    intros. erewrite Genv.find_symbol_transf_partial in H10; eauto.
   }
 
   assert (global_blocks_valid (Genv.globalenv prog) (Mem.nextblock m)).
@@ -460,17 +460,16 @@ Proof.
     unfold transf_prog in *.
     repeat (break_match_hyp; try congruence).
     unfold transf_prog_malloc in *.
-    (* HERE *)
     erewrite genv_next_transf_partial; eauto.
     
   }
   
-  destruct x; unfold transf_fundef in *; simpl in H8; try congruence.
+  destruct x; unfold transf_fundef in *; simpl in H9; try congruence.
   
   eexists; split; econstructor; eauto;
     try solve [repeat (econstructor; eauto)];
     try eapply value_inject_swap_ge; eauto.
-  destruct f; destruct fn; inversion H8; subst; simpl in *; eauto.
+  destruct f; destruct fn; inversion H9; subst; simpl in *; eauto.
 
   Grab Existential Variables.
   exact 0.
