@@ -257,13 +257,15 @@ End RELSEM.
 
 Inductive is_callstate (p : program) : value -> value -> state -> Prop := 
 | IsCallstate :
-    forall fname vs arg fb fofs argptr m fn,
+    forall fname vs arg fb fofs argptr m fn fnb,
       value_inject (Genv.globalenv p) m (Close fname vs) (Vptr fb fofs) ->
       value_inject (Genv.globalenv p) m arg argptr ->
-      Genv.find_funct_ptr (Genv.globalenv p) fb = Some (Internal fn) ->
-      Genv.find_symbol (Genv.globalenv p) fname = Some fb ->
+      Mem.loadv Mint32 m (Vptr fb fofs) = Some (Vptr fnb Int.zero) ->
+      Genv.find_funct_ptr (Genv.globalenv p) fnb = Some (Internal fn) ->
+      Genv.find_symbol (Genv.globalenv p) fname = Some fnb ->
       length (fn_params fn) = 2%nat ->
       is_callstate p (Close fname vs) arg (Callstate fn ((Vptr fb fofs) :: argptr :: nil) Kstop m).
+
 
 (** A final state is a [Returnstate] with an empty continuation. *)
 Inductive final_state (p : program): state -> value -> Prop :=
