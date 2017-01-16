@@ -46,9 +46,11 @@ Definition compile_func (f : A.expr) : list B.insn :=
     compile f.
 
 Definition compile_cu (cu : list A.expr * list metadata) :
-        list (list B.insn) * list metadata :=
-    let '(funcs, metas) := cu in
-    (map compile_func funcs, metas).
+        option (list (list B.insn) * list metadata) :=
+    if A.no_values_list_dec (fst cu) then
+        let '(funcs, metas) := cu in
+        Some (map compile_func funcs, metas)
+    else None.
 
 
 
@@ -137,11 +139,21 @@ Lemma compile_I_func : forall a b,
 intros. eapply compile_I_expr; eauto.
 Qed.
 
+Theorem compile_cu_no_values : forall a ameta b bmeta,
+    compile_cu (a, ameta) = Some (b, bmeta) ->
+    Forall A.no_values a.
+intros0 Hcomp. unfold compile_cu in *.
+break_match; try discriminate.
+rewrite A.no_values_list_is_Forall in *. auto.
+Qed.
+
 Theorem compile_cu_I_env : forall a ameta b bmeta,
-    Forall A.no_values a ->
-    compile_cu (a, ameta) = (b, bmeta) ->
+    compile_cu (a, ameta) = Some (b, bmeta) ->
     Forall2 (I_expr []) a b.
-intros0 Hnval Hcomp. unfold compile_cu in *. inject_pair.
+intros0 Hcomp. unfold compile_cu in *.
+break_match; try discriminate. inject_some.
+rewrite A.no_values_list_is_Forall in *.
+
 remember (map compile_func a) as b.
 symmetry in Heqb. apply map_Forall2 in Heqb.
 list_magic_on (a, (b, tt)). eauto using compile_I_func.
@@ -356,14 +368,14 @@ Section Preservation.
   Variable prog : A.prog_type.
   Variable tprog : B.prog_type.
 
-  Hypothesis TRANSF : compile_cu prog = tprog.
-  Hypothesis Anval : Forall A.no_values (fst prog).
+  Hypothesis TRANSF : compile_cu prog = Some tprog.
 
   Theorem fsim :
     Semantics.forward_simulation (A.semantics prog) (B.semantics tprog).
   Proof.
     destruct prog as [A Ameta], tprog as [B Bmeta].
     fwd eapply compile_cu_I_env; eauto.
+    fwd eapply compile_cu_no_values; eauto.
 
     eapply Semantics.forward_simulation_step with
         (match_states := I)

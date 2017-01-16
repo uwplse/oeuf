@@ -355,3 +355,12 @@ try solve [ assumption | left; constructor | right; inversion 1 ].
   destruct IHe0; [ | right; inversion 1; intuition ].
   left. constructor; auto.
 Defined.
+
+Definition no_values_list_dec es : { no_values_list es } + { ~ no_values_list es }.
+induction es.
+- left. constructor.
+- simpl; refold_no_values.  rename a into e.
+  destruct (no_values_dec e); [ | right; intuition ].
+  destruct IHes; [ | right; intuition ].
+  left. auto.
+Defined.
