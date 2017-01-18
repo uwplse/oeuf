@@ -23,6 +23,7 @@ Require Import EricTact.
 Require Import Cmajor.
 Require Import OeufMem.
 Require Import Inject.
+Require Import Linker.
 
 Definition mem_of_state (st : Cminor.state) : mem :=
   match st with

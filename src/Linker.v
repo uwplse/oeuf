@@ -182,7 +182,7 @@ Proof.
     repeat (break_match_hyp; try congruence).
 Qed.
 
-Lemma prog_def_link_fundefs :
+Lemma prog_def_link_fundefs_l :
   forall a b c,
     link_fundefs a b = Some c ->
     forall id fd,
@@ -200,9 +200,66 @@ Proof.
   simpl. right.
   eapply IHa; eauto.
 Qed.
-      
 
-Lemma prog_def_transf :
+Lemma lookup_norepet :
+  forall {A} x (y:A) id,
+    list_norepet (map fst x) ->
+    In (id,y) x ->
+    lookup id x = Some y.
+Proof.
+  induction x; intros;
+    simpl in *.
+  inv H0.
+  destruct a.
+  break_or. inv H0. break_match; try congruence.
+  inv H.
+  break_match.
+  subst.
+  eapply in_map in H0. instantiate (1 := fst) in H0.
+  simpl in H0. congruence.
+  eapply IHx; eauto.
+Qed.
+
+Lemma remove_id_preserve_in :
+  forall {A} l id (x : A),
+    In (id,x) l ->
+    forall i,
+      id <> i ->
+      In (id,x) (remove_id i l).
+Proof.
+  induction l; intros.
+  simpl in *. eauto.
+  simpl in *. break_or; try subst.
+  break_match; try congruence.
+  simpl. left. eauto.
+  destruct a. break_match; try congruence; try subst.
+  eapply IHl; eauto.
+  simpl. right.
+  eapply IHl; eauto.
+Qed.
+
+Lemma prog_def_link_fundefs_r :
+  forall a b c,
+    list_norepet (map fst b) ->
+    link_fundefs a b = Some c ->
+    forall id fd,
+      In (id,Gfun (Internal fd)) b ->
+      In (id,Gfun (Internal fd)) c.
+Proof.
+  induction a; intros; simpl in *.
+  inv H0. solve [eauto].
+  repeat (break_match_hyp; try congruence). subst.
+  destruct (peq id i). subst.
+  erewrite lookup_norepet in Heqo; eauto.
+  inv Heqo. unfold link_fundef in Heqo0.
+  break_match_hyp; try congruence.
+  invc H0. simpl. right.
+  eapply IHa in Heqo1; eauto.
+  eapply list_norepet_remove_id; eauto.
+  eapply remove_id_preserve_in; eauto.
+Qed.
+
+Lemma prog_def_transf_l :
   forall a b c,
     shim_link a b = Some c ->
     forall id fd,
@@ -213,7 +270,21 @@ Proof.
   unfold shim_link in *.
   repeat (break_match_hyp; try congruence).
   inv H. simpl.
-  eapply prog_def_link_fundefs; eauto.
+  eapply prog_def_link_fundefs_l; eauto.
+Qed.
+
+Lemma prog_def_transf_r :
+  forall a b c,
+    shim_link a b = Some c ->
+    forall id fd,
+      In (id,Gfun (Internal fd)) (prog_defs b) ->
+      In (id,Gfun (Internal fd)) (prog_defs c).
+Proof.
+  intros.
+  unfold shim_link in *.
+  repeat (break_match_hyp; try congruence).
+  inv H. simpl.
+  eapply prog_def_link_fundefs_r; eauto.
 Qed.
 
 Section LINKED.
@@ -235,7 +306,20 @@ Section LINKED.
     app Genv.find_funct_ptr_symbol_inversion Genv.find_symbol.
     eapply Genv.find_funct_ptr_exists; eauto.
     eapply list_norepet_link; eauto.
-    eapply prog_def_transf; eauto.
+    eapply prog_def_transf_l; eauto.
+  Qed.
+
+  Lemma shim_ident_transf :
+    forall id f,
+      (exists b, Genv.find_symbol shim_ge id = Some b /\ Genv.find_funct_ptr shim_ge b = Some (Internal f)) ->
+      (exists b, Genv.find_symbol link_ge id = Some b /\ Genv.find_funct_ptr link_ge b = Some (Internal f)).
+  Proof.
+    intros.
+    break_exists. break_and.
+    app Genv.find_funct_ptr_symbol_inversion Genv.find_symbol.
+    eapply Genv.find_funct_ptr_exists; eauto.
+    eapply list_norepet_link; eauto.
+    eapply prog_def_transf_r; eauto.
   Qed.
 
 End LINKED.
