@@ -10,7 +10,7 @@ Require Import CompilerUtil.
 
 Require Import compcert.common.AST.
 Require compcert.backend.SelectLong.
-
+Require Import Linker.
 
 
 Definition transf_untyped_to_cminor (l : list UntypedComp.U.expr * list Metadata.metadata) : res Cminor.program :=
@@ -37,11 +37,45 @@ Definition transf_untyped_to_cminor (l : list UntypedComp.U.expr * list Metadata
   @@ print print_Cminor
 .
 
+Definition transf_oeuf_to_cminor (j : CompilationUnit.compilation_unit) : res Cminor.program :=
+  OK (Metadata.init_metadata j)
+  @@ UntypedComp.compile_cu
+ @@@ Metadata.check_length
+ @@@ transf_untyped_to_cminor.
+
+Definition transf_c_to_cminor (p : Csyntax.program) : res Cminor.program :=
+  OK p
+  @@@ SimplExpr.transl_program
+  @@@ SimplLocals.transf_program
+  @@@ Cshmgen.transl_program
+  @@@ Cminorgen.transl_program.
+
+Definition transf_whole_program (oeuf_code : CompilationUnit.compilation_unit) (shim_code : Csyntax.program) : res (Cminor.program * Asm.program) :=
+  match transf_oeuf_to_cminor oeuf_code with
+  | OK oeuf_cm =>
+    match transf_c_to_cminor shim_code with
+    | OK shim_cm =>
+      match shim_link oeuf_cm shim_cm with
+      | Some all_cm =>
+        match transf_cminor_program all_cm with
+        | OK all_asm =>
+          OK (all_cm, all_asm)
+        | Error m => Error m
+        end
+      | None => Error ((MSG "Linking failed") :: nil)
+      end
+    | Error m => Error m
+    end
+  | Error m => Error m
+  end.
+                                    
+(* LEGACY BELOW *)  
 Definition transf_to_cminor (j : CompilationUnit.compilation_unit) : res Cminor.program :=
   OK (Metadata.init_metadata j)
   @@ UntypedComp.compile_cu
  @@@ Metadata.check_length
  @@@ transf_untyped_to_cminor.
+
 
 Definition transf_to_asm (j : CompilationUnit.compilation_unit) : res Asm.program :=
   transf_to_cminor j
