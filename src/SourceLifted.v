@@ -51,32 +51,187 @@ Inductive elim : list type -> type -> type -> Type :=
 .
 
 Section expr.
-(* since this type makes hlists of recursive calls, the auto-generated schemes are garbage. *)
+(* since these types make hlists of recursive calls, the auto-generated schemes are garbage. *)
 Local Unset Elimination Schemes.
-Inductive expr {G : list (type * list type * type)} : list type -> type -> Type :=
-| Var : forall {L ty}, member ty L -> expr L ty
-| App : forall {L ty1 ty2}, expr L (Arrow ty1 ty2) -> expr L ty1 -> expr L ty2
-| Constr : forall {L ty ctor arg_tys} (ct : constr_type ctor arg_tys ty),
-        hlist (expr L) arg_tys ->
-        expr L (ADT ty)
-| Close : forall {L arg_ty free_tys ret_ty},
+
+Inductive value {G : list (type * list type * type)} : type -> Type :=
+| VConstr : forall {ty ctor arg_tys} (ct : constr_type ctor arg_tys ty),
+        hlist (value) arg_tys ->
+        value (ADT ty)
+| VClose : forall {arg_ty free_tys ret_ty},
         member (arg_ty, free_tys, ret_ty) G ->
-        hlist (expr L) free_tys ->
-        expr L (Arrow arg_ty ret_ty)
-| Elim : forall {L case_tys target_tyn ty} (e : elim case_tys (ADT target_tyn) ty),
-    hlist (expr L) case_tys ->
-    expr L (ADT target_tyn) ->
-    expr L ty
+        hlist (value) free_tys ->
+        value (Arrow arg_ty ret_ty)
 .
+
+Inductive expr {G : list (type * list type * type)} {L : list type} : type -> Type :=
+| Value : forall {ty}, @value G ty -> expr ty
+| Var : forall {ty}, member ty L -> expr ty
+| App : forall {ty1 ty2}, expr (Arrow ty1 ty2) -> expr ty1 -> expr ty2
+| Constr : forall {ty ctor arg_tys} (ct : constr_type ctor arg_tys ty),
+        hlist (expr) arg_tys ->
+        expr (ADT ty)
+| Close : forall {arg_ty free_tys ret_ty},
+        member (arg_ty, free_tys, ret_ty) G ->
+        hlist (expr) free_tys ->
+        expr (Arrow arg_ty ret_ty)
+| Elim : forall {case_tys target_tyn ty} (e : elim case_tys (ADT target_tyn) ty),
+    hlist (expr) case_tys ->
+    expr (ADT target_tyn) ->
+    expr ty
+.
+
 End expr.
+Implicit Arguments value.
 Implicit Arguments expr.
+
+Definition body_expr G fn_sig :=
+    let '(arg_ty, free_tys, ret_ty) := fn_sig in
+    expr G (arg_ty :: free_tys) ret_ty.
+
+
+Definition value_rect_mut_comb G
+        (P : forall {ty}, value G ty -> Type)
+        (Pl : forall {tys}, hlist (value G) tys -> Type)
+    (HVConstr : forall {ty ctor arg_tys} (ct : constr_type ctor arg_tys ty) args,
+        Pl args -> P (VConstr ct args))
+    (HVClose : forall {arg_ty free_tys ret_ty} (mb : member (arg_ty, free_tys, ret_ty) G) free,
+        Pl free -> P (VClose mb free))
+    (Hhnil : Pl hnil)
+    (Hhcons : forall {ty tys} (v : value G ty) (vs : hlist (value G) tys),
+        P v -> Pl vs -> Pl (hcons v vs)) :
+    (forall {ty} (v : value G ty), P v) *
+    (forall {tys} (v : hlist (value G) tys), Pl v) :=
+    let fix go {ty} (v : value G ty) :=
+        let fix go_hlist {tys} (vs : hlist (value G) tys) :=
+            match vs as vs_ return Pl vs_ with
+            | hnil => Hhnil
+            | hcons v vs => Hhcons v vs (go v) (go_hlist vs)
+            end in
+        match v as v_ return P v_ with
+        | VConstr ct args => HVConstr ct args (go_hlist args)
+        | VClose mb free => HVClose mb free (go_hlist free)
+        end in
+    let fix go_hlist {tys} (vs : hlist (value G) tys) :=
+        match vs as vs_ return Pl vs_ with
+        | hnil => Hhnil
+        | hcons v vs => Hhcons v vs (go v) (go_hlist vs)
+        end in
+    (@go, @go_hlist).
+
+Definition value_rect_mut G P Pl HVConstr HVClose Hhnil Hhcons :=
+    fst (value_rect_mut_comb G P Pl HVConstr HVClose Hhnil Hhcons).
+
+
+Definition expr_rect_mut_comb G L
+        (P : forall {ty}, expr G L ty -> Type)
+        (Pl : forall {tys}, hlist (expr G L) tys -> Type)
+    (HValue : forall {ty} (v : value G ty), P (Value v))
+    (HVar : forall {ty} (mb : member ty L), P (Var mb))
+    (HApp : forall {ty1 ty2} (f : expr G L (Arrow ty1 ty2)) (a : expr G L ty1),
+        P f -> P a -> P (App f a))
+    (HConstr : forall {ty ctor arg_tys} (ct : constr_type ctor arg_tys ty) args,
+        Pl args -> P (Constr ct args))
+    (HClose : forall {arg_ty free_tys ret_ty} (mb : member (arg_ty, free_tys, ret_ty) G) free,
+        Pl free -> P (Close mb free))
+    (HElim : forall {case_tys target_tyn ty} (e : elim case_tys (ADT target_tyn) ty) cases target,
+        Pl cases -> P target -> P (Elim e cases target))
+    (Hhnil : Pl hnil)
+    (Hhcons : forall {ty tys} (e : expr G L ty) (es : hlist (expr G L) tys),
+        P e -> Pl es -> Pl (hcons e es)) :
+    (forall {ty} (e : expr G L ty), P e) *
+    (forall {tys} (e : hlist (expr G L) tys), Pl e) :=
+    let fix go {ty} (e : expr G L ty) :=
+        let fix go_hlist {tys} (es : hlist (expr G L) tys) :=
+            match es as es_ return Pl es_ with
+            | hnil => Hhnil
+            | hcons e es => Hhcons e es (go e) (go_hlist es)
+            end in
+        match e as e_ return P e_ with
+        | Value v => HValue v
+        | Var mb => HVar mb
+        | App f a => HApp f a (go f) (go a)
+        | Constr ct args => HConstr ct args (go_hlist args)
+        | Close mb free => HClose mb free (go_hlist free)
+        | Elim e cases target => HElim e cases target (go_hlist cases) (go target)
+        end in
+    let fix go_hlist {tys} (es : hlist (expr G L) tys) :=
+        match es as es_ return Pl es_ with
+        | hnil => Hhnil
+        | hcons e es => Hhcons e es (go e) (go_hlist es)
+        end in
+    (@go, @go_hlist).
+
+Definition expr_rect_mut G L P Pl HValue HVar HApp HConstr HClose HElim Hhnil Hhcons :=
+    fst (expr_rect_mut_comb G L P Pl HValue HVar HApp HConstr HClose HElim Hhnil Hhcons).
+
+
+
+Definition weaken_value {G} fn_sig : forall {ty}, value G ty -> value (fn_sig :: G) ty :=
+    let fix go {ty} (v : value G ty) : value (fn_sig :: G) ty :=
+        let fix go_hlist {tys} (vs : hlist (value G) tys) : hlist (value (fn_sig :: G)) tys :=
+            match vs with
+            | hnil => hnil
+            | hcons v vs => hcons (go v) (go_hlist vs)
+            end in
+        match v with
+        | VConstr ct args => VConstr ct (go_hlist args)
+        | VClose mb free => VClose (There mb) (go_hlist free)
+        end in @go.
+
+Definition weaken_value_hlist {G} fn_sig :
+        forall {tys}, hlist (value G) tys -> hlist (value (fn_sig :: G)) tys :=
+    let go := @weaken_value G fn_sig in
+    let fix go_hlist {tys} (vs : hlist (value G) tys) : hlist (value (fn_sig :: G)) tys :=
+        match vs with
+        | hnil => hnil
+        | hcons v vs => hcons (go _ v) (go_hlist vs)
+        end in @go_hlist.
+
+Definition weaken {G L} fn_sig : forall {ty}, expr G L ty -> expr (fn_sig :: G) L ty :=
+    let fix go {ty} (e : expr G L ty) : expr (fn_sig :: G) L ty :=
+        let fix go_hlist {tys} (es : hlist (expr G L) tys) : hlist (expr (fn_sig :: G) L) tys :=
+            match es with
+            | hnil => hnil
+            | hcons e es => hcons (go e) (go_hlist es)
+            end in
+        match e with
+        | Value v => Value (weaken_value fn_sig v)
+        | Var mb => Var mb
+        | App f a => App (go f) (go a)
+        | Constr ctor args => Constr ctor (go_hlist args)
+        | Close mb free => Close (There mb) (go_hlist free)
+        | Elim e cases target => Elim e (go_hlist cases) (go target)
+        end
+    in @go.
+
+Definition weaken_hlist {G L} fn_sig :
+        forall {tys}, hlist (expr G L) tys -> hlist (expr (fn_sig :: G) L) tys :=
+    let go := @weaken G L fn_sig in
+    let fix go_hlist {tys} (es : hlist (expr G L) tys) : hlist (expr (fn_sig :: G) L) tys :=
+        match es with
+        | hnil => hnil
+        | hcons e es => hcons (go _ e) (go_hlist es)
+        end in @go_hlist.
+
+Definition weaken_body {G} fn_sig :
+        forall {sig}, body_expr G sig -> body_expr (fn_sig :: G) sig :=
+    fun sig =>
+        match sig as sig_ return body_expr _ sig_ -> body_expr _ sig_ with
+        | (arg_ty, free_tys, fn_ty) => fun e => weaken fn_sig e
+        end.
+
+
+
+Inductive is_value {G L ty} : expr G L ty -> Prop :=
+| IsValue : forall v, is_value (Value v).
 
 Inductive genv : list (type * list type * type) -> Set :=
 | GenvNil : genv []
-| GenvCons : forall {arg_ty free_tys ret_ty rest},
-        expr rest (arg_ty :: free_tys) ret_ty ->
+| GenvCons : forall {fn_sig rest},
+        body_expr rest fn_sig ->
         genv rest ->
-        genv ((arg_ty, free_tys, ret_ty) :: rest).
+        genv (fn_sig :: rest).
 
 Definition mtail {A x} l : @member A x l -> list A.
 induction 1.
@@ -84,18 +239,58 @@ induction 1.
 - exact IHX.
 Defined.
 
-Definition gget {G} (g : genv G) : forall {arg_ty free_tys ret_ty},
-    forall (mb : member (arg_ty, free_tys, ret_ty) G),
-    expr (mtail G mb) (arg_ty :: free_tys) ret_ty * genv (mtail G mb).
-induction mb.
-- simpl. inversion g. split; assumption.
-- simpl. eapply IHmb. inversion g. assumption.
+Definition gget {G} (g : genv G) :
+        forall {fn_sig} (mb : member fn_sig G),
+        body_expr (mtail G mb) fn_sig * genv (mtail G mb).
+simple refine (
+    let fix go {G} (g : genv G) {fn_sig} (mb : member fn_sig G) {struct mb} :
+            body_expr (mtail G mb) fn_sig * genv (mtail G mb) :=
+        match mb as mb_ in member _ G_
+                return genv G_ -> body_expr (mtail G_  mb_) fn_sig * genv (mtail G_ mb_) with
+        | Here => fun g => _
+        | There mb' => fun g => _
+        end g in
+    @go _ g
+).
+
+- refine (
+    match g in genv (sig_ :: rest_) return (body_expr rest_ sig_ * genv rest_) with
+    | GenvNil => idProp
+    | GenvCons e g => (e, g)
+    end
+  ).
+
+- refine (
+    match g in genv (first_ :: rest_) return rest_ = l -> _ with
+    | GenvNil => idProp
+    | GenvCons e g => fun Heq => go _ _ _ mb'
+    end eq_refl
+  ).
+  rewrite <- Heq. exact g.
 Defined.
 
 
-Definition body_expr G fn_sig :=
-    let '(arg_ty, free_tys, ret_ty) := fn_sig in
-    expr G (arg_ty :: free_tys) ret_ty.
+Definition weaken_multi {G} {fn_sig} (mb : member fn_sig G)
+    (e : body_expr (mtail G mb) fn_sig) :
+    body_expr G fn_sig.
+induction mb.
+- simpl in *. eapply weaken_body. assumption.
+- simpl in *. eapply weaken_body. eapply IHmb. assumption.
+Defined.
+
+(* Any property preserved by `weaken` is also preserved by `weaken_multi`. *)
+Lemma weaken_multi_is_weaken : forall
+    (P : forall {G L ty}, expr G L ty -> Prop),
+    (forall {G L ty} fn_sig (e : expr G L ty), P e -> P (weaken fn_sig e)) ->
+    (forall {G arg_ty free_tys ret_ty} mb
+        (e : body_expr (mtail G mb) (arg_ty, free_tys, ret_ty)),
+        P e -> P (weaken_multi mb e)).
+first_induction mb; intros0 Hwkn; intros0 He.
+- simpl in *. eapply Hwkn. assumption.
+- simpl in *. eapply Hwkn. eapply IHmb; eauto.
+Qed.
+
+
 
 
 
@@ -140,65 +335,111 @@ Definition elim_denote {case_tys target_ty ty} (e : elim case_tys target_ty ty) 
                                                  (hhead (htail (htail cases))) target
   end.
 
-Definition expr_denote {G L ty}
-    (g : hlist func_type_denote G) (l : hlist type_denote L) (e : expr G L ty) :
-    type_denote ty.
+Definition value_denote
+        {G} (g : hlist func_type_denote G) :
+        forall {ty}, value G ty -> type_denote ty :=
+    let fix go {ty} (v : value G ty) : type_denote ty :=
+        let fix go_hlist {tys} (vs : hlist (value G) tys) : hlist type_denote tys :=
+            match vs with
+            | hnil => hnil
+            | hcons v vs => hcons (go v) (go_hlist vs)
+            end in
+        match v with
+        | VConstr ct args => constr_denote ct (go_hlist args)
+        | VClose mb free =>
+                let func := hget g mb in
+                let free' := go_hlist free in
+                fun x => func free' x
+        end in @go.
 
+Definition value_hlist_denote
+        {G} (g : hlist func_type_denote G) :
+        forall {tys}, hlist (value G) tys -> hlist type_denote tys :=
+    let go := @value_denote G g in
+    let fix go_hlist {tys} (vs : hlist (value G) tys) : hlist type_denote tys :=
+        match vs with
+        | hnil => hnil
+        | hcons v vs => hcons (go _ v) (go_hlist vs)
+        end in @go_hlist.
+
+Definition expr_denote {G L} (g : hlist func_type_denote G) (l : hlist type_denote L) :
+        forall {ty}, expr G L ty -> type_denote ty :=
+    let fix go {ty} (e : expr G L ty) {struct e} : type_denote ty :=
+        let fix go_hlist {tys} (es : hlist (expr G L) tys) {struct es} : hlist type_denote tys :=
+            match es with
+            | hnil => hnil
+            | hcons e es => hcons (go e) (go_hlist es)
+            end in
+        match e with
+        | Value v => value_denote g v
+        | Var mb => hget l mb
+        | App f a => (go f) (go a)
+        | Constr ct args => constr_denote ct (go_hlist args)
+        | Close mb free =>
+            let func := hget g mb in
+            let free' := go_hlist free in
+            fun x => func free' x
+        | Elim e cases target => elim_denote e (go_hlist cases) (go target)
+        end in @go.
+
+Definition expr_hlist_denote {G L} (g : hlist func_type_denote G) (l : hlist type_denote L) :
+        forall {tys}, hlist (expr G L) tys -> hlist type_denote tys :=
+    let go := @expr_denote G L g l in
+    let fix go_hlist {tys} (vs : hlist (expr G L) tys) : hlist type_denote tys :=
+        match vs with
+        | hnil => hnil
+        | hcons v vs => hcons (go _ v) (go_hlist vs)
+        end in @go_hlist.
+
+Definition body_expr_denote' {G arg_ty free_tys ret_ty}
+        (g : hlist func_type_denote G) (e : body_expr G (arg_ty, free_tys, ret_ty)) :
+        func_type_denote (arg_ty, free_tys, ret_ty) :=
+    fun l x => expr_denote g (hcons x l) e.
+
+Definition body_expr_denote
+        {G} (g : hlist func_type_denote G)
+        {fn_sig} (e : body_expr G fn_sig) :
+        func_type_denote fn_sig :=
+    match fn_sig as fn_sig_ return body_expr G fn_sig_ -> func_type_denote fn_sig_ with
+    | (arg_ty, free_tys, ret_ty) => fun e =>
+            fun l x => expr_denote g (hcons x l) e
+    end e.
+
+(*
+Definition genv_hlist {G} (g : genv G) : hlist (body_expr G) G.
 simple refine (
-    let fix go {L ty}
-            (l : hlist type_denote L) (e : expr G L ty) 
-            {struct e} :
-            type_denote ty :=
-        let fix go_hlist {L tys}
-                (l : hlist type_denote L)
-                (es : hlist (expr G L) tys)
-                {struct es} :
-                hlist type_denote tys :=
-            _ in
-        _ in go l e
-).
+    let fix go {G} (g : genv G) {struct g} : hlist (body_expr G) G :=
+        match g in genv G_ return hlist (body_expr G_) G_ with
+        | GenvNil => hnil
+        | GenvCons e g =>
+                let h := go g in
+                hcons _ _
+        end in go g
+); clearbody h; clear go.
 
-- simple refine (
-    match es in hlist _ tys_ return hlist _ tys_ with
-    | hnil => hnil
-    | hcons e es => hcons (go _ _ l e) (go_hlist _ _ l es)
-    end
-  ).
+- eapply weaken. assumption.
 
-- simple refine (
-    match e in expr _ L_ ty_ return hlist type_denote L_ -> type_denote ty_ with
-    | Var mb => fun l => hget l mb
-    | App f a => fun l => (go _ _ l f) (go _ _ l a)
-    | Constr ct args => fun l => constr_denote ct (go_hlist _ _ l args)
-    | Close mb free => _
-    | Elim e cases target => fun l => elim_denote e (go_hlist _ _ l cases) (go _ _ l target)
-    end l
-  ).
-  simple refine (
-    fun l =>
-        let func := hget g mb in
-        let free' := go_hlist _ _ l free in
-        fun x => func free' x
-  ).
+- cut (hlist (body_expr l0) l0).
+  + eapply hmap.
+    intros sig ?. destruct sig as [[arg frees] ret].
+    eapply weaken. assumption.
+  + exact h.
 Defined.
+*)
 
-Definition genv_denote {G}
-    (g : genv G) :
-    hlist func_type_denote G.
-simple refine (
-    let fix go {G} (g : genv G) {struct g} : hlist func_type_denote G :=
+Definition genv_denote {G} (g : genv G) : hlist func_type_denote G :=
+    let fix go {G} (g : genv G) : hlist func_type_denote G :=
         match g with
         | GenvNil => hnil
         | GenvCons e g' =>
                 let g'_den := go g' in
-                hcons _ g'_den
-        end in go g
-).
-simpl.
-simple refine (
-    fun l => fun x => expr_denote g'_den (hcons x l) e
-).
-Defined.
+                hcons (body_expr_denote g'_den e) g'_den
+        end in go g.
+
+(* TODO: need a lemma about genv_denote:
+    hget (genv_denote g) mb =
+    ?f (gget g mb)
+   ... where ?f is body_expr_denote applied to something-or-other *)
 
 
 
@@ -312,4 +553,251 @@ Lemma add_denoted_eq : add_denoted = add_elim.
 reflexivity.
 Qed.
 
+Definition zero : value add_G N := VConstr CTO hnil.
+Definition one : value add_G N := VConstr CTS (hcons zero hnil).
+Definition two : value add_G N := VConstr CTS (hcons one hnil).
+Definition three : value add_G N := VConstr CTS (hcons two hnil).
+Eval compute in value_denote (genv_denote add_genv) three.
+
 End add.
+
+
+
+
+Lemma weaken_value_denote : forall {G ty} fn_sig func g (v : value G ty),
+    value_denote g v = value_denote (hcons func g) (weaken_value fn_sig v).
+intros until v.
+induction v using value_rect_mut with
+    (Pl := fun tys vs =>
+        value_hlist_denote g vs =
+        value_hlist_denote _ (weaken_value_hlist fn_sig vs));
+simpl;
+fold (@value_hlist_denote _ g);
+fold (@value_hlist_denote _ (hcons func g));
+fold (@weaken_value_hlist G fn_sig).
+
+- f_equal. exact IHv.
+- rewrite <- IHv. reflexivity.
+
+- reflexivity.
+- erewrite <- IHv, <- IHv0. reflexivity.
+
+Qed.
+
+Lemma weaken_expr_denote : forall {G L ty} fn_sig func g l (e : expr G L ty),
+    expr_denote g l e = expr_denote (hcons func g) l (weaken fn_sig e).
+intros until e.
+induction e using expr_rect_mut with
+    (Pl := fun tys es =>
+        expr_hlist_denote g l es =
+        expr_hlist_denote _ _ (weaken_hlist fn_sig es));
+simpl;
+fold (@expr_hlist_denote _ _ g l);
+fold (@expr_hlist_denote _ _ (hcons func g) l);
+fold (@weaken_hlist G L fn_sig).
+
+- eapply weaken_value_denote.
+- reflexivity.
+- rewrite <- IHe1, <- IHe2. reflexivity.
+- rewrite <- IHe. reflexivity.
+- rewrite <- IHe. reflexivity.
+- rewrite <- IHe, <- IHe0. reflexivity.
+
+- reflexivity.
+- erewrite <- IHe, <- IHe0. reflexivity.
+
+Qed.
+
+(*
+Definition gget {G} (g : genv G) {fn_sig} (mb : member fn_sig G) : gg
+
+Definition gget_weaken {G} (g : genv G) {fn_sig} (mb : member fn_sig G) : body_expr G fn_sig.
+simple refine (
+    let fix go {G} (g : genv G) : member fn_sig G -> body_expr G fn_sig :=
+        match g with
+        | GenvNil => case_member_nil _
+        | GenvCons e g' => fun mb =>
+                case_member_cons _ (fun _ _ _ => _) (fun _ _ _ _ _ => _) mb e (go g')
+        end in go g mb
+).
+eapply case_member_cons.
+
+intro mb.
+eapply case_member_cons.
+
+
+
+simple refine (
+    let fix go {G} (g : genv G) (mb : member _ G) : expr G _ _ :=
+        match mb in member _ G_ return genv G_ -> expr G_ _ _ with
+        | Here => fun g => _
+                (*
+                match g in genv G_ return G_ <> [] -> expr G_ _ _ with
+                | GenvNil => fun pf => ltac:(exfalso; hide; auto)
+                | GenvCons e g => fun _ => _
+                end _
+                *)
+        | There mb => fun g => _
+        end g in
+    go g mb
+).
+- inversion g.
+
+- intro pf. exfalso. apply pf. reflexivity.
+- 
+- hide. inversion mb.
+- 
+
+
+induction mb. 
+- inversion g. eapply weaken. assumption.
+- inversion g. eapply weaken. eapply IHmb. assumption.
+Defined.
+
+Lemma genv_denote_hlist : forall {G} (g : genv G),
+    genv_denote g = hmap (fun sig e => body_expr_denote (genv_denote g) e) (genv_hlist g).
+induction g.
+- simpl. reflexivity.
+- simpl. f_equal.
+  + unfold body_expr_denote'.
+    eapply functional_extensionality. intro l.
+    eapply functional_extensionality. intro x.
+    eapply weaken_expr_denote.
+  + rewrite IHg.
+
+Lemma genv_hget_gget
+    {G} (g : genv G)
+    {arg_ty free_tys ret_ty} (mb : member (arg_ty, free_tys, ret_ty) G) :
+    hget (genv_denote g) mb =
+    (fun l x => expr_denote (genv_denote g) (hcons x l) (gget_weaken g mb)).
+make_first g. induction g; intros.
+- inversion mb.
+- dependent destruction mb.
+  + simpl.
+
+- inversion g.
+- inversion mb.
+- inversion mb.
+  + admit.
+  + 
+
+Definition genv_hlist {G} (g : genv G) : hlist (body_expr G) G.
+induction g.
+- exact hnil.
+- constructor.
+  + simpl. eapply weaken. assumption.
+  + simpl. unfold body_expr. rewrite <- weaken.
+
+Lemma genv_denote_is_hmap : forall {G} (g : genv G),
+    genv_denote g = hmap (fun sig e =>
+        fun l x => expr_denote G (hcons x l) e) 
+*)
+
+Inductive cont {G} {rty : type} : type -> Set :=
+| KAppL {L ty1 ty2}
+        (e2 : expr G L ty1)
+        (l : hlist (value G) L)
+        (k : cont ty2) :
+        cont (Arrow ty1 ty2)
+| KAppR {L ty1 ty2}
+        (e1 : expr G L (Arrow ty1 ty2))
+        (l : hlist (value G) L)
+        (k : cont ty2) :
+        cont ty1
+| KStop : cont rty
+.
+Implicit Arguments cont [].
+
+Inductive state {G rty} :=
+| Run {L ty}
+        (e : expr G L ty)
+        (l : hlist (value G) L)
+        (k : cont G rty ty)
+| Stop (v : value G rty).
+Implicit Arguments state [].
+
+Definition run_cont {G rty ty} (k : cont G rty ty) : value G ty -> state G rty :=
+    match k in cont _ _ ty_ return value G ty_ -> state G rty with
+    | KAppL e2 l k => fun v => Run (App (Value v) e2) l k
+    | KAppR e1 l k => fun v => Run (App e1 (Value v)) l k
+    | KStop => fun v => Stop v
+    end.
+
+Definition cont_denote {G rty ty} (g : hlist func_type_denote G) (k : cont G rty ty) :
+        type_denote ty -> type_denote rty :=
+    let locals_denote {tys} (l : hlist _ tys) := value_hlist_denote g l in
+    let fix go {ty} (k : cont G rty ty) :=
+        match k in cont _ _ ty_ return type_denote ty_ -> type_denote rty with
+        | KAppL e2 l k => fun x => go k (x (expr_denote g (locals_denote l) e2))
+        | KAppR e1 l k => fun x => go k ((expr_denote g (locals_denote l) e1) x)
+        | KStop => fun x => x
+        end in go k.
+
+Lemma value_hlist_denote_is_hmap : forall {G} g {tys} vs,
+    @value_hlist_denote G g tys vs = hmap (fun ty v => value_denote g v) vs.
+induction vs; simpl.
+- reflexivity.
+- rewrite IHvs. reflexivity.
+Qed.
+
+Definition state_denote {G rty} (g : hlist func_type_denote G) (s : state G rty) :
+        type_denote rty :=
+    match s with
+    | Run e l k =>
+            let e' := expr_denote g (value_hlist_denote g l) e in
+            let k' := cont_denote g k in
+            k' e'
+    | Stop v => value_denote g v
+    end.
+
+
+Definition add_state : state add_G _ :=
+    Run (App (App (Close Here hnil) (Value two)) (Value three)) hnil KStop.
+
+Eval compute in state_denote (genv_denote add_genv) add_state.
+
+
+Inductive sstep {G rty} (g : genv G) : state G rty -> state G rty -> Prop :=
+| SValue : forall {L ty} v (l : hlist (value G) L) (k : cont G rty ty),
+        sstep g (Run (Value v) l k)
+                (run_cont k v)
+| SVar : forall {L ty} mb (l : hlist (value G) L) (k : cont G rty ty),
+        sstep g (Run (Var mb) l k)
+                (Run (Value (hget l mb)) l k)
+
+| SAppL : forall {L ty1 ty2} (e1 : expr G L (Arrow ty1 ty2)) (e2 : expr G L ty1) l k,
+        ~ is_value e1 ->
+        sstep g (Run (App e1 e2) l k)
+                (Run e1 l (KAppL e2 l k))
+| SAppR : forall {L ty1 ty2} (e1 : expr G L (Arrow ty1 ty2)) (e2 : expr G L ty1) l k,
+        is_value e1 ->
+        ~ is_value e2 ->
+        sstep g (Run (App e1 e2) l k)
+                (Run e2 l (KAppR e1 l k))
+                (*
+| SMakeCall : forall {L arg_ty free_tys ret_ty}
+            (mb : member (arg_ty, free_tys, ret_ty) G) free arg
+            (l : hlist _ L) k,
+        sstep g (Run (App (Value (VClose mb free)) (Value arg)) l k)
+                (Run (gget_weaken g mb) (hcons arg free) k)
+                *)
+.
+
+Theorem sstep_denote : forall {G rty} (g : genv G) (s1 s2 : state G rty),
+    sstep g s1 s2 ->
+    state_denote (genv_denote g) s1 = state_denote (genv_denote g) s2.
+intros0 Hstep. inv Hstep.
+
+- clear Hstep. induction k; simpl; reflexivity.
+- simpl. rewrite value_hlist_denote_is_hmap. rewrite hget_hmap. reflexivity.
+
+- simpl. reflexivity.
+- simpl. reflexivity.
+
+(*
+- unfold state_denote. f_equal.
+  unfold expr_denote at 1. unfold value_denote at 1.
+  fold (@value_denote _ (genv_denote g)).
+  fold (@value_hlist_denote _ (genv_denote g)).
+*)
+Qed.
