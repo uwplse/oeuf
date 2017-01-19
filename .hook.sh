@@ -76,6 +76,9 @@ PASSED=`grep "$ALL_PASS" "$LOG" | wc -l`
 ZERO="0"
 if [[ $PASSED -gt $ZERO ]] ; then
     echo "Successful normal build"
+    curl -sf -XPOST \
+	 --data-urlencode "payload={\"channel\":\"#oeuf\",\"link_names\":1,\"text\":\"$(python -c 'import sys; print(sys.argv[1].replace("\"", "\\\""))' "Build Successful")\"}" \
+	 'https://hooks.slack.com/services/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'
 else
     echo "Problematic build"
     bash .notify.sh "$LOG"
