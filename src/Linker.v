@@ -1,10 +1,7 @@
 Require Import compcert.lib.Coqlib.
 Require Import compcert.common.AST.
 Require Import compcert.common.Globalenvs.
-
-Require Import Oeuf.
-Require Import CompilationUnit.
-
+Require Import compcert.backend.Cminor.
 
 
 Require Import StructTact.StructTactics.
@@ -326,6 +323,7 @@ Section LINKED.
 
 End LINKED.
 
+(*
 (* Use these here? *)
 Require NewCont.
 Require GenvSwap.
@@ -340,7 +338,7 @@ Require GenvSwap.
 
 Section LINK_SIM.
   
-
+  
   
 
-End LINK_SIM.
+End LINK_SIM.*)
