@@ -30,11 +30,8 @@ Require Dmajortodflatmajor.
 Require Dflatmajortocmajor.
 Require Cmajortominor.
 
-Require NewCont. (* Dummy import to force build *)
-
 
 Require Import Cmajor. (* Cminor bridge *)
-(*Require Import OeufCompcertSimulations.*)
 Require Import TraceSemantics.
 
 Require Import compcert.lib.Coqlib.
@@ -169,8 +166,6 @@ Section Simulation.
     
   Qed.
 
-
-  (* TODO: use TopLevel.v to get concrete versions of our top level theorems here *)
 
   
 End Simulation.

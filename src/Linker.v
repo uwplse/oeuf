@@ -5,6 +5,8 @@ Require Import compcert.common.Globalenvs.
 Require Import Oeuf.
 Require Import CompilationUnit.
 
+
+
 Require Import StructTact.StructTactics.
 Require Import StructTact.Util.
 Require Import EricTact.
@@ -323,3 +325,22 @@ Section LINKED.
   Qed.
 
 End LINKED.
+
+(* Use these here? *)
+Require NewCont.
+Require GenvSwap.
+
+(* There are a couple of linker things we need *)
+(* 1. we need to be able to manufacture an is_callstate fact about a call to a correct oeuf pointer *)
+(*     - this boils down to match_values between cminor level and source_lang level *)
+(*     - which we want to manufacture for compiled oeuf symbols *)
+(* 2. we need to be able to convert steps given to us from the oeuf top level theorem into steps in our program *)
+(*    - done below *)
+
+
+Section LINK_SIM.
+  
+
+  
+
+End LINK_SIM.
