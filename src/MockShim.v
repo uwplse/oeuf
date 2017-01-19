@@ -84,7 +84,7 @@ Section compilation.
 
   Definition call_id_nat : Cminor.stmt := Cminor.Scall (Some id_nat_result) sg (Cminor.Econst (Cminor.Oaddrsymbol id_nat_ident Int.zero)) nil.
     
-  
+
 
 End compilation.
 
