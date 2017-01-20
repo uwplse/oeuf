@@ -21,8 +21,8 @@ for f in test/*.v ; do
 	 PASSED=false
          diff -u "test/${TESTNAME}.expected" "test/${TESTNAME}.actual" || true
     else echo "Test $TESTNAME passed!"
-         rm "$TESTNAME.oeuf" "$TESTNAME.o"
-         rm "shim.c" "shim.o"
+         rm -f "$TESTNAME.oeuf" "$TESTNAME.o"
+         rm -f "shim.c" "shim.o"
     fi
 done
 

@@ -56,7 +56,12 @@ Fixpoint link_fundefs (l l' : list (ident * globdef Cminor.fundef unit)) : res (
         end
       | Error m => Error m
       end
-    | _ => Error ((MSG "Lookup failed") :: nil)
+    | Some (Gvar _) => Error ((MSG "Tried to link function with variable") :: nil)
+    | None =>
+      match link_fundefs r l' with
+      | OK l0 => OK ((id,Gfun fd) :: l0)
+      |	Error m => Error m
+      end
     end
   end.
     
