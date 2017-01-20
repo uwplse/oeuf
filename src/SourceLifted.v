@@ -436,10 +436,106 @@ Definition genv_denote {G} (g : genv G) : hlist func_type_denote G :=
                 hcons (body_expr_denote g'_den e) g'_den
         end in go g.
 
-(* TODO: need a lemma about genv_denote:
+Ltac match_member mb :=
+    let mb' := fresh mb "'" in
+    generalize dependent mb; intro mb';
+    pattern mb';
+    let P := match goal with [ |- ?P mb' ] => P end in
+    let P_ := fresh "P_" in  (* `fresh "P"` doesn't work - some kind of name collision? *)
+
+    simple refine (
+        (* need to bind `P` to a gallina var, because ltac:... can't see into
+         * the outer ltac scope. *)
+        let P_ := P in
+        match mb' as mb_ in member _ G
+            return
+                match G as G_ return member _ G_ -> Type with
+                | [] => ltac:(solve [exact P_ | exact (fun _ => IDProp) ])
+                | sig :: G' => ltac:(solve [exact P_ | exact (fun _ => IDProp) ])
+                end mb_ with
+        | Here => _
+        | There mb => _
+        end
+    ); clear P_; clear mb'; try solve [exact idProp].
+
+Check hlist_ind.
+Check member_ind.
+
+Lemma hlist_member_ind A (B : A -> Type) (ix : A)
+        (P : forall ixs, hlist B ixs -> member ix ixs -> Prop)
+    (HHere : forall ixs val vals,
+        P (ix :: ixs) (hcons val vals) Here)
+    (HThere : forall ix' ixs val vals mb
+        (IHmb : P ixs vals mb),
+        P (ix' :: ixs) (hcons val vals) (There mb))
+    : forall ixs vals mb, P ixs vals mb.
+induction vals; intros.
+
+- exfalso.
+  refine (
+    match mb in member _ [] with
+    | Here => idProp
+    | There mb' => idProp
+    end).
+
+- rename a into ix'. rename b into val. rename l into ixs.
+  refine (
+    match mb as mb_ in member _ (ix'_ :: ixs_)
+        return (
+            forall (val_ : B ix'_) (vals_ : hlist B ixs_)
+                (IHvals_ : forall mb, P ixs_ vals_ mb),
+            P (ix'_ :: ixs_) (hcons val_ vals_) mb_) with
+    | Here => _
+    | There mb' => _
+    end val vals IHvals); intros.
+  + eapply HHere.
+  + eapply HThere. eapply IHvals_.
+Qed.
+
+Lemma genv_member_ind ix
+        (P : forall ixs, genv ixs -> member ix ixs -> Prop)
+    (HHere : forall ixs val vals,
+        P (ix :: ixs) (GenvCons val vals) Here)
+    (HThere : forall ix' ixs val vals mb
+        (IHmb : P ixs vals mb),
+        P (ix' :: ixs) (GenvCons val vals) (There mb))
+    : forall G g mb, P G g mb.
+induction g; intros.
+
+- exfalso.
+  refine (
+    match mb in member _ [] with
+    | Here => idProp
+    | There mb' => idProp
+    end).
+
+- rename fn_sig into ix'. rename rest into ixs.
+  rename b into val. rename g into vals.
+  rename IHg into IHvals.
+
+  refine (
+    match mb as mb_ in member _ (ix'_ :: ixs_)
+        return (
+            forall (val_ : body_expr ixs_ ix'_) (vals_ : genv ixs_)
+                (IHvals_ : forall mb, P ixs_ vals_ mb),
+            P (ix'_ :: ixs_) (GenvCons val_ vals_) mb_) with
+    | Here => _
+    | There mb' => _
+    end val vals IHvals); intros.
+
+  + eapply HHere.
+  + eapply HThere. eapply IHvals_.
+Qed.
+
+Lemma genv_denote_gget : forall {G} g {fn_sig} (mb : member fn_sig G),
     hget (genv_denote g) mb =
-    ?f (gget g mb)
-   ... where ?f is body_expr_denote applied to something-or-other *)
+    (let '(e, g') := gget g mb in
+        body_expr_denote (genv_denote g') e).
+intros.
+eapply genv_member_ind with (g := g) (mb := mb); intros.
+- simpl. reflexivity.
+- simpl. exact IHmb.
+Qed.
 
 
 
