@@ -475,14 +475,13 @@ Definition run_cont {G rty ty} (k : cont G rty ty) : value G ty -> state G rty :
 (* helper function for the "eliminate" step.  Analogous to `unroll_elim` in
    later passes. *)
 Section run_elim.
+
+(* some useful notations for building the resulting terms *)
 Local Notation "f $ a" := (App f a) (at level 50, left associativity, only parsing).
 
-Local Definition h0 {A B a0 l} (h : @hlist A B (a0 :: l)) :=
-    hhead h.
-Local Definition h1 {A B a0 a1 l} (h : @hlist A B (a0 :: a1 :: l)) :=
-    hhead (htail h).
-Local Definition h2 {A B a0 a1 a2 l} (h : @hlist A B (a0 :: a1 :: a2 :: l)) :=
-    hhead (htail (htail h)).
+Local Notation "'h0' x" := (hhead x) (only parsing, at level 0).
+Local Notation "'h1' x" := (hhead (htail x)) (only parsing, at level 0).
+Local Notation "'h2' x" := (hhead (htail (htail x))) (only parsing, at level 0).
 
 Definition run_elim {G L case_tys target_tyn ret_ty}
         (e : elim case_tys (ADT target_tyn) ret_ty)
@@ -500,12 +499,13 @@ clear e0 target target_tyn0.
 
 (* note: if you add any new cases here, you must also add cases to
    run_elim_denote in SourceLiftedProofs.v *)
+pattern ret_ty.
 refine (
     match e in elim case_tys_ (ADT target_tyn_) ret_ty_
         return forall
             (cases : hlist (expr G L) case_tys_)
             (ct : constr_type ctor arg_tys target_tyn_),
-            expr G L ret_ty_ with
+            _ ret_ty_ with
     | ENat ret_ty => _
     | EBool ret_ty => _
     | EList item_ty ret_ty => _
@@ -517,25 +517,29 @@ refine (
 clear e ct target_tyn cases ret_ty0 case_tys; intros cases ct.
 
 - refine (
-    match ct in constr_type ctor_ arg_tys_ Tnat
-        return forall (args : hlist _ arg_tys_), _ with
+    match ct in constr_type ctor_ arg_tys_ (Tnat)
+        return forall
+            (args : hlist _ arg_tys_)
+            (cases : _), _ with
     | CTS => _
     | CTO => _
     | _ => idProp
-    end args);
-  clear ct args arg_tys ctor; intros args.
+    end args cases);
+  clear ct cases args arg_tys ctor; intros args cases.
   + exact (h0 cases).
   + refine (h1 cases $ Value (h0 args) $ _).
-    refine (Elim (ENat _) cases (Value (h0 args))).
+    exact (Elim (ENat _) cases (Value (h0 args))).
 
 - refine (
-    match ct in constr_type ctor_ arg_tys_ Tbool
-        return forall (args : hlist _ arg_tys_), _ with
+    match ct in constr_type ctor_ arg_tys_ (Tbool)
+        return forall
+            (args : hlist _ arg_tys_)
+            (cases : _), _ with
     | CTtrue => _
     | CTfalse => _
     | _ => idProp
-    end args);
-  clear ct args arg_tys ctor; intros args.
+    end args cases);
+  clear ct cases args arg_tys ctor; intros args cases.
   + exact (h0 cases).
   + exact (h1 cases).
 
@@ -620,7 +624,6 @@ Inductive sstep {G rty} (g : genv G) : state G rty -> state G rty -> Prop :=
 
 | SVar : forall {L ty} mb (l : hlist (value G) L) (k : cont G rty ty),
         sstep g (Run (Var mb) l k)
-        (* TODO: simplify *)
                 (Run (Value (hget l mb)) l k)
 
 | SAppL : forall {L ty1 ty2} (e1 : expr G L (Arrow ty1 ty2)) (e2 : expr G L ty1) l k,
@@ -650,6 +653,7 @@ Inductive sstep {G rty} (g : genv G) : state G rty -> state G rty -> Prop :=
         ~ is_value e ->
         sstep g (Run (Constr ct (happ vs (hcons e es))) l k)
                 (Run e l (KConstr ct vs es l k))
+
 | SConstrDone : forall {L vtys ctor ty}
             (ct : constr_type ctor vtys ty)
             (vs : hlist (value G) vtys)
@@ -668,6 +672,7 @@ Inductive sstep {G rty} (g : genv G) : state G rty -> state G rty -> Prop :=
         ~ is_value e ->
         sstep g (Run (Close mb (happ vs (hcons e es))) l k)
                 (Run e l (KClose mb vs es l k))
+
 | SCloseDone : forall {L vtys arg_ty ret_ty}
             (mb : member (arg_ty, vtys, ret_ty) G)
             (vs : hlist (value G) vtys)
