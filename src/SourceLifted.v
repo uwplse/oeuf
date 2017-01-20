@@ -561,7 +561,6 @@ Qed.
 
 
 
-
 Section add.
 
 Definition add_elim a b :=
@@ -760,17 +759,35 @@ Qed.
 
 
 
+Lemma hmap_app : forall {A B C} {l l' : list A} (f : forall a, B a -> C a)
+        (h : hlist B l) (h' : hlist B l'),
+    hmap f (happ h h') = happ (hmap f h) (hmap f h').
+induction h; intros; simpl in *.
+- reflexivity.
+- rewrite IHh. reflexivity.
+Qed.
+
+
+
+
 Inductive cont {G} {rty : type} : type -> Set :=
 | KAppL {L ty1 ty2}
         (e2 : expr G L ty1)
         (l : hlist (value G) L)
-        (k : cont ty2) :
-        cont (Arrow ty1 ty2)
+        (k : cont ty2)
+        : cont (Arrow ty1 ty2)
 | KAppR {L ty1 ty2}
         (e1 : expr G L (Arrow ty1 ty2))
         (l : hlist (value G) L)
-        (k : cont ty2) :
-        cont ty1
+        (k : cont ty2)
+        : cont ty1
+| KConstr {L vtys ety etys ctor ty}
+        (ct : constr_type ctor (vtys ++ [ety] ++ etys) ty)
+        (vs : hlist (expr G L) vtys)
+        (es : hlist (expr G L) etys)
+        (l : hlist (value G) L)
+        (k : cont (ADT ty))
+        : cont ety
 | KStop : cont rty
 .
 Implicit Arguments cont [].
@@ -787,6 +804,8 @@ Definition run_cont {G rty ty} (k : cont G rty ty) : value G ty -> state G rty :
     match k in cont _ _ ty_ return value G ty_ -> state G rty with
     | KAppL e2 l k => fun v => Run (App (Value v) e2) l k
     | KAppR e1 l k => fun v => Run (App e1 (Value v)) l k
+    | KConstr ct vs es l k =>
+            fun v => Run (Constr ct (happ vs (hcons (Value v) es))) l k
     | KStop => fun v => Stop v
     end.
 
@@ -797,6 +816,11 @@ Definition cont_denote {G rty ty} (g : hlist func_type_denote G) (k : cont G rty
         match k in cont _ _ ty_ return type_denote ty_ -> type_denote rty with
         | KAppL e2 l k => fun x => go k (x (expr_denote g (locals_denote l) e2))
         | KAppR e1 l k => fun x => go k ((expr_denote g (locals_denote l) e1) x)
+        | KConstr ct vs es l k => fun x =>
+                let l' := locals_denote l in
+                let vs' := expr_hlist_denote g l' vs in
+                let es' := expr_hlist_denote g l' es in
+                go k (constr_denote ct (happ vs' (hcons x es')))
         | KStop => fun x => x
         end in go k.
 
@@ -805,6 +829,13 @@ Lemma value_hlist_denote_is_hmap : forall {G} g {tys} vs,
 induction vs; simpl.
 - reflexivity.
 - rewrite IHvs. reflexivity.
+Qed.
+
+Lemma expr_hlist_denote_is_hmap : forall {G L} g l {tys} es,
+    @expr_hlist_denote G L g l tys es = hmap (fun ty e => expr_denote g l e) es.
+induction es; simpl.
+- reflexivity.
+- rewrite IHes. reflexivity.
 Qed.
 
 Definition state_denote {G rty} (g : hlist func_type_denote G) (s : state G rty) :
@@ -828,6 +859,7 @@ Inductive sstep {G rty} (g : genv G) : state G rty -> state G rty -> Prop :=
 | SValue : forall {L ty} v (l : hlist (value G) L) (k : cont G rty ty),
         sstep g (Run (Value v) l k)
                 (run_cont k v)
+
 | SVar : forall {L ty} mb (l : hlist (value G) L) (k : cont G rty ty),
         sstep g (Run (Var mb) l k)
                 (Run (Value (hget l mb)) l k)
@@ -847,14 +879,51 @@ Inductive sstep {G rty} (g : genv G) : state G rty -> state G rty -> Prop :=
             (l : hlist _ L) k,
         sstep g (Run (App (Value (VClose mb free)) (Value arg)) l k)
                 (Run (gget_weaken g mb) (hcons arg free) k)
+
+| SConstrStep : forall {L vtys ety etys ctor ty}
+            (ct : constr_type ctor (vtys ++ [ety] ++ etys) ty)
+            (vs : hlist (expr G L) vtys)
+            (e : expr G L ety)
+            (es : hlist (expr G L) etys)
+            (l : hlist _ L) k,
+        sstep g (Run (Constr ct (happ vs (hcons e es))) l k)
+                (Run e l (KConstr ct vs es l k))
+| SConstrDone : forall {L vtys ctor ty}
+            (ct : constr_type ctor vtys ty)
+            (vs : hlist (value G) vtys)
+            (l : hlist _ L) k,
+        let es := hmap (@Value G L) vs in
+        sstep g (Run (Constr ct es) l k)
+                (Run (Value (VConstr ct vs)) l k)
 .
+
+Ltac refold_expr_hlist_denote g l :=
+    fold (@expr_hlist_denote _ _
+        (genv_denote g)
+        (value_hlist_denote (genv_denote g) l)).
+
+Ltac refold_value_hlist_denote g :=
+    fold (@value_hlist_denote _ (genv_denote g)).
+
+Lemma expr_denote_value : forall {G L ty}
+        (g : hlist func_type_denote G)
+        (l : hlist type_denote L)
+        (v : value G ty),
+    expr_denote g l (Value v) = value_denote g v.
+intros. simpl. reflexivity.
+Qed.
 
 Theorem sstep_denote : forall {G rty} (g : genv G) (s1 s2 : state G rty),
     sstep g s1 s2 ->
     state_denote (genv_denote g) s1 = state_denote (genv_denote g) s2.
 intros0 Hstep. inv Hstep.
 
-- clear Hstep. induction k; simpl; reflexivity.
+- clear Hstep. induction k; simpl; try reflexivity.
+
+  + refold_expr_hlist_denote g l0.
+    do 3 rewrite expr_hlist_denote_is_hmap.
+    rewrite hmap_app. simpl. reflexivity.
+
 - simpl. rewrite value_hlist_denote_is_hmap. rewrite hget_hmap. reflexivity.
 
 - simpl. reflexivity.
@@ -862,4 +931,13 @@ intros0 Hstep. inv Hstep.
 
 - simpl. fold (@value_hlist_denote _ (genv_denote g)). f_equal.
   rewrite gget_gget_weaken. eapply genv_denote_gget.
+
+- simpl. refold_expr_hlist_denote g l.
+  do 3 rewrite expr_hlist_denote_is_hmap.
+  rewrite hmap_app. simpl. reflexivity.
+
+- simpl. refold_expr_hlist_denote g l. refold_value_hlist_denote g.
+  unfold es.  rewrite expr_hlist_denote_is_hmap. rewrite hmap_hmap.
+  rewrite value_hlist_denote_is_hmap with (vs0 := vs).
+  simpl. reflexivity.
 Qed.
