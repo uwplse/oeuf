@@ -20,8 +20,8 @@ Defined.
 
 
 Inductive constr_type : constr_name -> list type -> type_name -> Type :=
-| CTS            : constr_type CS         [ADT Tnat]                  Tnat
 | CTO            : constr_type CO         []                          Tnat
+| CTS            : constr_type CS         [ADT Tnat]                  Tnat
 | CTtrue         : constr_type Ctrue      []                          Tbool
 | CTfalse        : constr_type Cfalse     []                          Tbool
 | CTnil ty       : constr_type Cnil       []                          (Tlist ty)
@@ -39,8 +39,8 @@ Inductive constr_type : constr_name -> list type -> type_name -> Type :=
    eliminates a target with type given by the second index,
    and produces a result with type given by the third index *)
 Inductive elim : list type -> type -> type -> Type :=
-| EBool : forall ty, elim [ty; ty] (ADT Tbool) ty
 | ENat : forall ty, elim [ty; Arrow (ADT Tnat) (Arrow ty ty)] (ADT Tnat) ty
+| EBool : forall ty, elim [ty; ty] (ADT Tbool) ty
 | EList : forall tyA ty, elim [ty; Arrow (ADT tyA) (Arrow (ADT (Tlist tyA)) (Arrow ty ty))] (ADT (Tlist tyA)) ty
 | EUnit : forall ty, elim [ty] (ADT Tunit) ty
 | EPair : forall ty1 ty2 ty, elim [Arrow (ADT ty1) (Arrow (ADT ty2) ty)] (ADT (Tpair ty1 ty2)) ty
@@ -457,6 +457,145 @@ Definition elim_denote {case_tys target_ty ty} (e : elim case_tys target_ty ty) 
                                                  (hhead (htail (htail cases))) target
   end.
 
+
+
+Section run_elim.
+Local Notation "f $ a" := (App f a) (at level 50, left associativity, only parsing).
+
+Local Definition h0 {A B a0 l} (h : @hlist A B (a0 :: l)) :=
+    hhead h.
+Local Definition h1 {A B a0 a1 l} (h : @hlist A B (a0 :: a1 :: l)) :=
+    hhead (htail h).
+Local Definition h2 {A B a0 a1 a2 l} (h : @hlist A B (a0 :: a1 :: a2 :: l)) :=
+    hhead (htail (htail h)).
+
+Definition run_elim {G L case_tys target_tyn ret_ty}
+        (e : elim case_tys (ADT target_tyn) ret_ty)
+        (cases : hlist (expr G L) case_tys)
+        (target : value G (ADT target_tyn))
+        : expr G L ret_ty.
+refine (
+    match target in value _ (ADT target_tyn_)
+        return forall
+            (e_ : elim case_tys (ADT target_tyn_) ret_ty), _ with
+    | @VConstr _  target_tyn ctor arg_tys  ct args => fun e => _
+    | VClose _ _ => idProp
+    end e).
+clear e0 target target_tyn0.
+
+refine (
+    match e in elim case_tys_ (ADT target_tyn_) ret_ty_
+        return forall
+            (cases : hlist (expr G L) case_tys_)
+            (ct : constr_type ctor arg_tys target_tyn_),
+            expr G L ret_ty_ with
+    | ENat ret_ty => _
+    | EBool ret_ty => _
+    | EList item_ty ret_ty => _
+    | EUnit ret_ty => _
+    | EPair ty1 ty2 ret_ty => _
+    | EOption item_ty ret_ty => _
+    | EPositive ret_ty => _
+    end cases ct);
+clear e ct target_tyn cases ret_ty0 case_tys; intros cases ct.
+
+- refine (
+    match ct in constr_type ctor_ arg_tys_ Tnat
+        return forall (args : hlist _ arg_tys_), _ with
+    | CTS => _
+    | CTO => _
+    | _ => idProp
+    end args);
+  clear ct args arg_tys ctor; intros args.
+  + exact (h0 cases).
+  + refine (h1 cases $ Value (h0 args) $ _).
+    refine (Elim (ENat _) cases (Value (h0 args))).
+
+- refine (
+    match ct in constr_type ctor_ arg_tys_ Tbool
+        return forall (args : hlist _ arg_tys_), _ with
+    | CTtrue => _
+    | CTfalse => _
+    | _ => idProp
+    end args);
+  clear ct args arg_tys ctor; intros args.
+  + exact (h0 cases).
+  + exact (h1 cases).
+
+- pattern item_ty in cases.
+  refine (
+    match ct in constr_type ctor_ arg_tys_ (Tlist item_ty_)
+        return forall
+            (args : hlist _ arg_tys_)
+            (cases : _ item_ty_), _ with
+    | CTnil item_ty => _
+    | CTcons item_ty => _
+    | _ => idProp
+    end args cases);
+  clear ct cases args arg_tys ctor  item_ty0; intros args cases.
+  + exact (h0 cases).
+  + refine (h1 cases $ Value (h0 args) $ Value (h1 args) $ _).
+    exact (Elim (EList _ _) cases (Value (h1 args))).
+
+- refine (
+    match ct in constr_type ctor_ arg_tys_ (Tunit)
+        return forall
+            (args : hlist _ arg_tys_)
+            (cases : _), _ with
+    | CTtt => _
+    | _ => idProp
+    end args cases);
+  clear ct cases args arg_tys ctor; intros args cases.
+  + exact (h0 cases).
+
+- pattern ty1, ty2 in cases.
+  refine (
+    match ct in constr_type ctor_ arg_tys_ (Tpair ty1_ ty2_)
+        return forall
+            (args : hlist _ arg_tys_)
+            (cases : _ ty1_ ty2_), _ with
+    | CTpair ty1 ty2 => _
+    | _ => idProp
+    end args cases);
+  clear ct cases args arg_tys ctor  ty0 ty3; intros args cases.
+  + exact (h0 cases $ Value (h0 args) $ Value (h1 args)).
+
+- pattern item_ty in cases.
+  refine (
+    match ct in constr_type ctor_ arg_tys_ (Toption item_ty_)
+        return forall
+            (args : hlist _ arg_tys_)
+            (cases : _ item_ty_), _ with
+    | CTsome item_ty => _
+    | CTnone item_ty => _
+    | _ => idProp
+    end args cases);
+  clear ct cases args arg_tys ctor  item_ty0; intros args cases.
+  + exact (h0 cases $ Value (h0 args)).
+  + exact (h1 cases).
+
+- refine (
+    match ct in constr_type ctor_ arg_tys_ (Tpositive)
+        return forall
+            (args : hlist _ arg_tys_)
+            (cases : _), _ with
+    | CTxI => _
+    | CTxO => _
+    | CTxH => _
+    | _ => idProp
+    end args cases);
+  clear ct cases args arg_tys ctor; intros args cases.
+  + refine (h0 cases $ Value (h0 args) $ _).
+    exact (Elim (EPositive _) cases (Value (h0 args))).
+  + refine (h1 cases $ Value (h0 args) $ _).
+    exact (Elim (EPositive _) cases (Value (h0 args))).
+  + exact (h2 cases).
+
+Defined.
+
+End run_elim.
+
+
 Definition value_denote
         {G} (g : hlist func_type_denote G) :
         forall {ty}, value G ty -> type_denote ty :=
@@ -788,6 +927,19 @@ Inductive cont {G} {rty : type} : type -> Set :=
         (l : hlist (value G) L)
         (k : cont (ADT ty))
         : cont ety
+| KClose {L vtys ety etys arg_ty ret_ty}
+        (mb : member (arg_ty, vtys ++ [ety] ++ etys, ret_ty) G)
+        (vs : hlist (expr G L) vtys)
+        (es : hlist (expr G L) etys)
+        (l : hlist (value G) L)
+        (k : cont (Arrow arg_ty ret_ty))
+        : cont ety
+| KElim {L case_tys target_tyn ty}
+        (e : elim case_tys (ADT target_tyn) ty)
+        (cases : hlist (expr G L) case_tys)
+        (l : hlist (value G) L)
+        (k : cont ty)
+        : cont (ADT target_tyn)
 | KStop : cont rty
 .
 Implicit Arguments cont [].
@@ -806,6 +958,10 @@ Definition run_cont {G rty ty} (k : cont G rty ty) : value G ty -> state G rty :
     | KAppR e1 l k => fun v => Run (App e1 (Value v)) l k
     | KConstr ct vs es l k =>
             fun v => Run (Constr ct (happ vs (hcons (Value v) es))) l k
+    | KClose mb vs es l k =>
+            fun v => Run (Close mb (happ vs (hcons (Value v) es))) l k
+    | KElim e cases l k =>
+            fun v => Run (Elim e cases (Value v)) l k
     | KStop => fun v => Stop v
     end.
 
@@ -821,6 +977,16 @@ Definition cont_denote {G rty ty} (g : hlist func_type_denote G) (k : cont G rty
                 let vs' := expr_hlist_denote g l' vs in
                 let es' := expr_hlist_denote g l' es in
                 go k (constr_denote ct (happ vs' (hcons x es')))
+        | KClose mb vs es l k => fun x =>
+                let l' := locals_denote l in
+                let vs' := expr_hlist_denote g l' vs in
+                let es' := expr_hlist_denote g l' es in
+                let func := hget g mb in
+                go k (fun arg => func (happ vs' (hcons x es')) arg)
+        | KElim e cases l k => fun x =>
+                let l' := locals_denote l in
+                let cases' := expr_hlist_denote g l' cases in
+                go k (elim_denote e cases' x)
         | KStop => fun x => x
         end in go k.
 
@@ -886,6 +1052,8 @@ Inductive sstep {G rty} (g : genv G) : state G rty -> state G rty -> Prop :=
             (e : expr G L ety)
             (es : hlist (expr G L) etys)
             (l : hlist _ L) k,
+        HForall (@is_value G L) vs ->
+        ~ is_value e ->
         sstep g (Run (Constr ct (happ vs (hcons e es))) l k)
                 (Run e l (KConstr ct vs es l k))
 | SConstrDone : forall {L vtys ctor ty}
@@ -895,6 +1063,41 @@ Inductive sstep {G rty} (g : genv G) : state G rty -> state G rty -> Prop :=
         let es := hmap (@Value G L) vs in
         sstep g (Run (Constr ct es) l k)
                 (Run (Value (VConstr ct vs)) l k)
+
+| SCloseStep : forall {L vtys ety etys arg_ty ret_ty}
+            (mb : member (arg_ty, vtys ++ [ety] ++ etys, ret_ty) G)
+            (vs : hlist (expr G L) vtys)
+            (e : expr G L ety)
+            (es : hlist (expr G L) etys)
+            (l : hlist _ L) k,
+        HForall (@is_value G L) vs ->
+        ~ is_value e ->
+        sstep g (Run (Close mb (happ vs (hcons e es))) l k)
+                (Run e l (KClose mb vs es l k))
+| SCloseDone : forall {L vtys arg_ty ret_ty}
+            (mb : member (arg_ty, vtys, ret_ty) G)
+            (vs : hlist (value G) vtys)
+            (l : hlist _ L) k,
+        let es := hmap (@Value G L) vs in
+        sstep g (Run (Close mb es) l k)
+                (Run (Value (VClose mb vs)) l k)
+
+| SElimTarget : forall {L case_tys target_tyn ty}
+            (e : elim case_tys (ADT target_tyn) ty)
+            (cases : hlist (expr G L) case_tys)
+            (target : expr G L (ADT target_tyn))
+            (l : hlist _ L) k,
+        ~ is_value target ->
+        sstep g (Run (Elim e cases target) l k)
+                (Run target l (KElim e cases l k))
+
+| SEliminate : forall {L case_tys target_tyn ty}
+            (e : elim case_tys (ADT target_tyn) ty)
+            (cases : hlist (expr G L) case_tys)
+            (target : value G (ADT target_tyn))
+            (l : hlist _ L) k,
+        sstep g (Run (Elim e cases (Value target)) l k)
+                (Run (run_elim e cases target) l k)
 .
 
 Ltac refold_expr_hlist_denote g l :=
@@ -913,12 +1116,227 @@ Lemma expr_denote_value : forall {G L ty}
 intros. simpl. reflexivity.
 Qed.
 
+Lemma value_denote_htail : forall {G ty tys}
+    (g : hlist func_type_denote G)
+    (vs : hlist (value G) (ty :: tys)),
+    htail (value_hlist_denote g vs) = value_hlist_denote g (htail vs).
+intros.
+pattern vs.
+refine (
+    match vs as vs_ in hlist _ (ty_ :: tys_) return _ vs_ with
+    | hnil => idProp
+    | hcons v vs => _
+    end).
+simpl. reflexivity.
+Qed.
+
+Lemma value_denote_hhead : forall {G ty tys}
+    (g : hlist func_type_denote G)
+    (vs : hlist (value G) (ty :: tys)),
+    hhead (value_hlist_denote g vs) = value_denote g (hhead vs).
+intros.
+pattern vs.
+refine (
+    match vs as vs_ in hlist _ (ty_ :: tys_) return _ vs_ with
+    | hnil => idProp
+    | hcons v vs => _
+    end).
+simpl. reflexivity.
+Qed.
+
+Lemma expr_denote_htail : forall {G L ty tys}
+    (g : hlist func_type_denote G)
+    (l : hlist type_denote L)
+    (es : hlist (expr G L) (ty :: tys)),
+    htail (expr_hlist_denote g l es) = expr_hlist_denote g l (htail es).
+intros.
+pattern es.
+refine (
+    match es as es_ in hlist _ (ty_ :: tys_) return _ es_ with
+    | hnil => idProp
+    | hcons e es => _
+    end).
+simpl. reflexivity.
+Qed.
+
+Lemma expr_denote_hhead : forall {G L ty tys}
+    (g : hlist func_type_denote G)
+    (l : hlist type_denote L)
+    (es : hlist (expr G L) (ty :: tys)),
+    hhead (expr_hlist_denote g l es) = expr_denote g l (hhead es).
+intros.
+pattern es.
+refine (
+    match es as es_ in hlist _ (ty_ :: tys_) return _ es_ with
+    | hnil => idProp
+    | hcons e es => _
+    end).
+simpl. reflexivity.
+Qed.
+
+Hint Rewrite -> @value_denote_htail : hlist_denote_normalize.
+Hint Rewrite -> @value_denote_hhead : hlist_denote_normalize.
+Hint Rewrite -> @expr_denote_htail : hlist_denote_normalize.
+Hint Rewrite -> @expr_denote_hhead : hlist_denote_normalize.
+
+Local Ltac run_elim_refold g l :=
+    fold (@value_hlist_denote _ g);
+    fold (@expr_hlist_denote _ _ g l).
+
+Local Ltac run_elim_solver g l :=
+    simpl; run_elim_refold g l;
+    autorewrite with hlist_denote_normalize; try reflexivity.
+
+Lemma run_elim_denote : forall {G L case_tys target_tyn ret_ty}
+        (g : hlist func_type_denote G)
+        (l : hlist type_denote L)
+        (e : elim case_tys (ADT target_tyn) ret_ty)
+        (cases : hlist (expr G L) case_tys)
+        (target : value G (ADT target_tyn)),
+    elim_denote e (expr_hlist_denote g l cases) (value_denote g target) =
+    expr_denote g l (run_elim e cases target).
+intros.
+
+pattern e.
+refine (
+    match target in value _ (ADT target_tyn_)
+        return forall
+            (e_ : elim case_tys (ADT target_tyn_) ret_ty), _ e_ with
+    | @VConstr _  target_tyn ctor arg_tys  ct args => fun e => _
+    | VClose _ _ => idProp
+    end e).
+clear e0 target target_tyn0.
+
+
+pattern e, cases, ct.
+refine (
+    match e as e_ in elim case_tys_ (ADT target_tyn_) ret_ty_
+        return forall
+            (cases_ : hlist (expr G L) case_tys_)
+            (ct_ : constr_type ctor arg_tys target_tyn_),
+            _ e_ cases_ ct_ with
+    | ENat ret_ty => _
+    | EBool ret_ty => _
+    | EList item_ty ret_ty => _
+    | EUnit ret_ty => _
+    | EPair ty1 ty2 ret_ty => _
+    | EOption item_ty ret_ty => _
+    | EPositive ret_ty => _
+    end cases ct);
+clear e ct target_tyn cases ret_ty0 case_tys; intros cases ct.
+
+- pattern ct, args, cases.
+  refine (
+    match ct as ct_ in constr_type ctor_ arg_tys_ Tnat
+        return forall
+            (args_ : hlist _ arg_tys_)
+            (cases_ : _),
+            _ ct_ args_ cases_ with
+    | CTS => _
+    | CTO => _
+    | _ => idProp
+    end args cases);
+  clear ct cases args arg_tys ctor; intros args cases.
+  all: run_elim_solver g l.
+
+- pattern ct, args, cases.
+  refine (
+    match ct as ct_ in constr_type ctor_ arg_tys_ Tbool
+        return forall
+            (args_ : hlist _ arg_tys_)
+            (cases_ : _),
+            _ ct_ args_ cases_ with
+    | CTtrue => _
+    | CTfalse => _
+    | _ => idProp
+    end args cases);
+  clear ct cases args arg_tys ctor; intros args cases.
+  all: run_elim_solver g l.
+
+- pattern item_ty in cases.
+  pattern item_ty, ct, args, cases.
+  refine (
+    match ct as ct_ in constr_type ctor_ arg_tys_ (Tlist item_ty_)
+        return forall
+            (args_ : hlist _ arg_tys_)
+            (cases_ : _ item_ty_),
+            _ item_ty_ ct_ args_ cases_ with
+    | CTnil item_ty => _
+    | CTcons item_ty => _
+    | _ => idProp
+    end args cases);
+  clear ct cases args arg_tys ctor  item_ty0; intros args cases.
+  all: run_elim_solver g l.
+
+- pattern ct, args, cases.
+  refine (
+    match ct as ct_ in constr_type ctor_ arg_tys_ (Tunit)
+        return forall
+            (args_ : hlist _ arg_tys_)
+            (cases_ : _),
+            _ ct_ args_ cases_ with
+    | CTtt => _
+    | _ => idProp
+    end args cases);
+  clear ct cases args arg_tys ctor; intros args cases.
+  all: run_elim_solver g l.
+
+- pattern ty1, ty2 in cases.
+  pattern ty1, ty2, ct, args, cases.
+  refine (
+    match ct as ct_ in constr_type ctor_ arg_tys_ (Tpair ty1_ ty2_)
+        return forall
+            (args_ : hlist _ arg_tys_)
+            (cases_ : _ ty1_ ty2_),
+            _ ty1_ ty2_ ct_ args_ cases_ with
+    | CTpair ty1 ty2 => _
+    | _ => idProp
+    end args cases);
+  clear ct cases args arg_tys ctor  ty0 ty3; intros args cases.
+  all: run_elim_solver g l.
+
+- pattern item_ty in cases.
+  pattern item_ty, ct, args, cases.
+  refine (
+    match ct as ct_ in constr_type ctor_ arg_tys_ (Toption item_ty_)
+        return forall
+            (args_ : hlist _ arg_tys_)
+            (cases_ : _ item_ty_),
+            _ item_ty_ ct_ args_ cases_ with
+    | CTsome item_ty => _
+    | CTnone item_ty => _
+    | _ => idProp
+    end args cases);
+  clear ct cases args arg_tys ctor  item_ty0; intros args cases.
+  all: run_elim_solver g l.
+
+- pattern ct, args, cases.
+  refine (
+    match ct as ct_ in constr_type ctor_ arg_tys_ (Tpositive)
+        return forall
+            (args_ : hlist _ arg_tys_)
+            (cases_ : _),
+            _ ct_ args_ cases_ with
+    | CTxI => _
+    | CTxO => _
+    | CTxH => _
+    | _ => idProp
+    end args cases);
+  clear ct cases args arg_tys ctor; intros args cases.
+  all: run_elim_solver g l.
+
+Qed.
+
 Theorem sstep_denote : forall {G rty} (g : genv G) (s1 s2 : state G rty),
     sstep g s1 s2 ->
     state_denote (genv_denote g) s1 = state_denote (genv_denote g) s2.
 intros0 Hstep. inv Hstep.
 
 - clear Hstep. induction k; simpl; try reflexivity.
+
+  + refold_expr_hlist_denote g l0.
+    do 3 rewrite expr_hlist_denote_is_hmap.
+    rewrite hmap_app. simpl. reflexivity.
 
   + refold_expr_hlist_denote g l0.
     do 3 rewrite expr_hlist_denote_is_hmap.
@@ -940,4 +1358,18 @@ intros0 Hstep. inv Hstep.
   unfold es.  rewrite expr_hlist_denote_is_hmap. rewrite hmap_hmap.
   rewrite value_hlist_denote_is_hmap with (vs0 := vs).
   simpl. reflexivity.
+
+- simpl. refold_expr_hlist_denote g l.
+  do 3 rewrite expr_hlist_denote_is_hmap.
+  rewrite hmap_app. simpl. reflexivity.
+
+- simpl. refold_expr_hlist_denote g l. refold_value_hlist_denote g.
+  unfold es.  rewrite expr_hlist_denote_is_hmap. rewrite hmap_hmap.
+  rewrite value_hlist_denote_is_hmap with (vs0 := vs).
+  simpl. reflexivity.
+
+- simpl. refold_expr_hlist_denote g l. reflexivity.
+
+- simpl. refold_expr_hlist_denote g l. f_equal.
+  apply run_elim_denote.
 Qed.
