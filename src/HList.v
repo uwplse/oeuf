@@ -561,3 +561,11 @@ Proof.
   - destruct m using case_member_nil.
   - destruct a0, l, m using case_member_cons; simpl; auto.
 Qed.
+
+Lemma hmap_app : forall {A B C} {l l' : list A} (f : forall a, B a -> C a)
+        (h : hlist B l) (h' : hlist B l'),
+    hmap f (happ h h') = happ (hmap f h) (hmap f h').
+induction h; intros; simpl in *.
+- reflexivity.
+- rewrite IHh. reflexivity.
+Qed.
