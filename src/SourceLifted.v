@@ -276,36 +276,6 @@ Lemma hlist_member_ind A (B : A -> Type) (ix : A)
 apply hlist_member_rect; assumption.
 Qed.
 
-(*
-Fixpoint genv_rect'
-        (P : forall ixs, genv ixs -> Type)
-    (HNil : P [] GenvNil)
-    (HCons : forall ix ixs val vals,
-        P ixs vals ->
-        P (ix :: ixs) (GenvCons val vals))
-    ixs g {struct g} : P ixs g.
-refine (
-    match g as g_ in genv ixs_ return P ixs_ g_ with
-    | GenvNil => HNil
-    | GenvCons val vals => HCons _ _ val vals _
-    end
-).
-- eapply (genv_rect' P HNil HCons).
-Defined.
-*)
-
-(*
-refine (
-    let fix go ixs g {struct g} :=
-        match g as g_ in genv ixs_ return P ixs_ g_ with
-        | GenvNil => _
-        | GenvCons val vals => _
-        end in
-    go).
-- exact HNil.
-- eapply HCons. eapply go.
-*)
-
 Lemma genv_member_rect ix
         (P : forall ixs, genv ixs -> member ix ixs -> Type)
     (HHere : forall ixs val vals,
@@ -402,23 +372,6 @@ refine (
 - simpl. exact (val, vals).
 - simpl. eapply gget.
 Defined.
-(*
-refine (
-    let fix go {ixs} vals {ix} mb {struct vals} :=
-        match vals as vals_ in genv ixs_
-                return forall {ix_} (mb : member ix_ ixs_), _ with
-        | GenvNil => fun ix mb =>
-        | @GenvCons ix' ixs val vals => fun ix mb => _
-        end ix mb
-    in @go G g).
-
-intros.
-eapply genv_member_rect with (mb := mb); intros; simpl in *.
-- exact (val, vals).
-- exact IHmb.
-- exact g.
-Defined.
-*)
 
 Fixpoint gget_weaken {G} (g : genv G) {fn_sig} (mb : member fn_sig G) {struct g} :
         body_expr G fn_sig.
@@ -806,93 +759,6 @@ Qed.
 
 
 
-
-
-
-(*
-Definition gget {G} (g : genv G) {fn_sig} (mb : member fn_sig G) : gg
-
-Definition gget_weaken {G} (g : genv G) {fn_sig} (mb : member fn_sig G) : body_expr G fn_sig.
-simple refine (
-    let fix go {G} (g : genv G) : member fn_sig G -> body_expr G fn_sig :=
-        match g with
-        | GenvNil => case_member_nil _
-        | GenvCons e g' => fun mb =>
-                case_member_cons _ (fun _ _ _ => _) (fun _ _ _ _ _ => _) mb e (go g')
-        end in go g mb
-).
-eapply case_member_cons.
-
-intro mb.
-eapply case_member_cons.
-
-
-
-simple refine (
-    let fix go {G} (g : genv G) (mb : member _ G) : expr G _ _ :=
-        match mb in member _ G_ return genv G_ -> expr G_ _ _ with
-        | Here => fun g => _
-                (*
-                match g in genv G_ return G_ <> [] -> expr G_ _ _ with
-                | GenvNil => fun pf => ltac:(exfalso; hide; auto)
-                | GenvCons e g => fun _ => _
-                end _
-                *)
-        | There mb => fun g => _
-        end g in
-    go g mb
-).
-- inversion g.
-
-- intro pf. exfalso. apply pf. reflexivity.
-- 
-- hide. inversion mb.
-- 
-
-
-induction mb. 
-- inversion g. eapply weaken. assumption.
-- inversion g. eapply weaken. eapply IHmb. assumption.
-Defined.
-
-Lemma genv_denote_hlist : forall {G} (g : genv G),
-    genv_denote g = hmap (fun sig e => body_expr_denote (genv_denote g) e) (genv_hlist g).
-induction g.
-- simpl. reflexivity.
-- simpl. f_equal.
-  + unfold body_expr_denote'.
-    eapply functional_extensionality. intro l.
-    eapply functional_extensionality. intro x.
-    eapply weaken_expr_denote.
-  + rewrite IHg.
-
-Lemma genv_hget_gget
-    {G} (g : genv G)
-    {arg_ty free_tys ret_ty} (mb : member (arg_ty, free_tys, ret_ty) G) :
-    hget (genv_denote g) mb =
-    (fun l x => expr_denote (genv_denote g) (hcons x l) (gget_weaken g mb)).
-make_first g. induction g; intros.
-- inversion mb.
-- dependent destruction mb.
-  + simpl.
-
-- inversion g.
-- inversion mb.
-- inversion mb.
-  + admit.
-  + 
-
-Definition genv_hlist {G} (g : genv G) : hlist (body_expr G) G.
-induction g.
-- exact hnil.
-- constructor.
-  + simpl. eapply weaken. assumption.
-  + simpl. unfold body_expr. rewrite <- weaken.
-
-Lemma genv_denote_is_hmap : forall {G} (g : genv G),
-    genv_denote g = hmap (fun sig e =>
-        fun l x => expr_denote G (hcons x l) e) 
-*)
 
 Inductive cont {G} {rty : type} : type -> Set :=
 | KAppL {L ty1 ty2}
