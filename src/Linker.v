@@ -79,7 +79,7 @@ Definition shim_link (oeuf_code : Cminor.program) (shim_code : Cminor.program) :
     else Error ((MSG "Shim list_norepet check failed"):: nil)
   else Error ((MSG "Oeuf list_norepet check failed"):: nil).
 
-(*
+
 Lemma remove_id_preserve_not_in :
   forall {A} (l : list (ident * A)) i,
     ~ In i (map fst l) ->
@@ -99,7 +99,7 @@ Qed.
 
 Lemma link_fundefs_not_in :
   forall a b l,
-    link_fundefs a b = Some l ->
+    link_fundefs a b = OK l ->
     forall i,
       ~ In i (map fst a) ->
       ~ In i (map fst b) ->
@@ -115,6 +115,11 @@ Proof.
   intro. break_or; try congruence.
   eapply IHa; eauto.
   eapply remove_id_preserve_not_in; eauto.
+
+  eapply Decidable.not_or in H0.
+  invc H. simpl in *. break_and.
+  intro. break_or; try congruence.
+  eapply IHa; eauto.
 Qed.
 
 Lemma remove_id_not_in :
@@ -147,11 +152,23 @@ Proof.
   eapply remove_id_preserve_not_in; eauto.
 Qed.
 
+Lemma lookup_not_in :
+  forall {A} (l : list (ident * A)) i,
+    lookup i l = None ->
+    ~ In i (map fst l).
+Proof.
+  induction l; intros; simpl in *; try congruence.
+  break_let. subst. simpl.
+  break_match_hyp; try congruence.
+  intro. break_or; try congruence.
+  eapply IHl in H; eauto.
+Qed.
+
 Lemma link_fundefs_norepet :
   forall a b c,
     list_norepet (map fst a) ->
     list_norepet (map fst b) ->
-    link_fundefs a b = Some c ->
+    link_fundefs a b = OK c ->
     list_norepet (map fst c).
 Proof.
   induction a; intros.
@@ -164,22 +181,29 @@ Proof.
   eapply IHa. eauto.
   Focus 2. eassumption.
   eapply list_norepet_remove_id; eauto.
+
+  simpl in *. repeat (break_match_hyp; try congruence).
+  subst. inv H1. simpl in *.
+  inv H. econstructor; eauto.
+  eapply link_fundefs_not_in; eauto.
+  eapply lookup_not_in; eauto.
+  
 Qed.
 
 Lemma list_norepet_link :
   forall a b c,
-    shim_link a b = Some c ->
+    shim_link a b = OK c ->
     list_norepet (prog_defs_names c).
 Proof.
   intros. unfold shim_link in *.
   repeat break_match_hyp; try congruence.
   inv H. unfold prog_defs_names.
-  eapply link_fundefs_norepet in Heqo; eauto.
+  eapply link_fundefs_norepet in Heqr; eauto.
 Qed.
 
 Lemma link_fundef_left :
   forall a b c,
-    link_fundef a b = Some c ->
+    link_fundef a b = OK c ->
     a = c.
 Proof.
   intros.
@@ -189,7 +213,7 @@ Qed.
 
 Lemma prog_def_link_fundefs_l :
   forall a b c,
-    link_fundefs a b = Some c ->
+    link_fundefs a b = OK c ->
     forall id fd,
       In (id,Gfun fd) a ->
       In (id,Gfun fd) c.
@@ -202,6 +226,12 @@ Proof.
   simpl. left.
   app link_fundef_left link_fundef. subst.
   reflexivity.
+  simpl. right.
+  eapply IHa; eauto.
+
+  invc H.
+  break_or. invc H.
+  simpl. left. reflexivity.
   simpl. right.
   eapply IHa; eauto.
 Qed.
@@ -246,7 +276,7 @@ Qed.
 Lemma prog_def_link_fundefs_r :
   forall a b c,
     list_norepet (map fst b) ->
-    link_fundefs a b = Some c ->
+    link_fundefs a b = OK c ->
     forall id fd,
       In (id,Gfun (Internal fd)) b ->
       In (id,Gfun (Internal fd)) c.
@@ -254,19 +284,27 @@ Proof.
   induction a; intros; simpl in *.
   inv H0. solve [eauto].
   repeat (break_match_hyp; try congruence). subst.
+  copy Heqr.
+  eapply link_fundef_left in Heqr; eauto. subst.
+  invc H0.
   destruct (peq id i). subst.
   erewrite lookup_norepet in Heqo; eauto.
-  inv Heqo. unfold link_fundef in Heqo0.
+  inv Heqo.
+  unfold link_fundef in H2.
   break_match_hyp; try congruence.
-  invc H0. simpl. right.
-  eapply IHa in Heqo1; eauto.
-  eapply list_norepet_remove_id; eauto.
+  simpl. right. eapply IHa in Heqr0; eauto.
+  eapply list_norepet_remove_id; eauto.  
   eapply remove_id_preserve_in; eauto.
+
+  invc H0.
+  simpl. right.
+  eapply IHa in Heqr; eauto.
+  
 Qed.
 
 Lemma prog_def_transf_l :
   forall a b c,
-    shim_link a b = Some c ->
+    shim_link a b = OK c ->
     forall id fd,
       In (id,Gfun fd) (prog_defs a) ->
       In (id,Gfun fd) (prog_defs c).
@@ -280,7 +318,7 @@ Qed.
 
 Lemma prog_def_transf_r :
   forall a b c,
-    shim_link a b = Some c ->
+    shim_link a b = OK c ->
     forall id fd,
       In (id,Gfun (Internal fd)) (prog_defs b) ->
       In (id,Gfun (Internal fd)) (prog_defs c).
@@ -295,7 +333,7 @@ Qed.
 Section LINKED.
 
   Variable oeuf_code shim_code link_code : Cminor.program.
-  Hypothesis TRANSF : shim_link oeuf_code shim_code = Some link_code.
+  Hypothesis TRANSF : shim_link oeuf_code shim_code = OK link_code.
 
   Definition oeuf_ge := Genv.globalenv oeuf_code.
   Definition shim_ge := Genv.globalenv shim_code.
@@ -328,7 +366,7 @@ Section LINKED.
   Qed.
 
 End LINKED.
-*)
+
 
 (*
 (* Use these here? *)
