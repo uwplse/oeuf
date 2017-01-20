@@ -233,62 +233,231 @@ Inductive genv : list (type * list type * type) -> Set :=
         genv rest ->
         genv (fn_sig :: rest).
 
+
+Lemma hlist_member_rect A (B : A -> Type) (ix : A)
+        (P : forall ixs, hlist B ixs -> member ix ixs -> Type)
+    (HHere : forall ixs val vals,
+        P (ix :: ixs) (hcons val vals) Here)
+    (HThere : forall ix' ixs val vals mb
+        (IHmb : P ixs vals mb),
+        P (ix' :: ixs) (hcons val vals) (There mb))
+    : forall ixs vals mb, P ixs vals mb.
+induction vals; intros.
+
+- exfalso.
+  refine (
+    match mb in member _ [] with
+    | Here => idProp
+    | There mb' => idProp
+    end).
+
+- rename a into ix'. rename b into val. rename l into ixs.
+  refine (
+    match mb as mb_ in member _ (ix'_ :: ixs_)
+        return (
+            forall (val_ : B ix'_) (vals_ : hlist B ixs_)
+                (IHvals_ : forall mb, P ixs_ vals_ mb),
+            P (ix'_ :: ixs_) (hcons val_ vals_) mb_) with
+    | Here => _
+    | There mb' => _
+    end val vals IHvals); intros.
+  + eapply HHere.
+  + eapply HThere. eapply IHvals_.
+Defined.
+
+Lemma hlist_member_ind A (B : A -> Type) (ix : A)
+        (P : forall ixs, hlist B ixs -> member ix ixs -> Prop)
+    (HHere : forall ixs val vals,
+        P (ix :: ixs) (hcons val vals) Here)
+    (HThere : forall ix' ixs val vals mb
+        (IHmb : P ixs vals mb),
+        P (ix' :: ixs) (hcons val vals) (There mb))
+    : forall ixs vals mb, P ixs vals mb.
+apply hlist_member_rect; assumption.
+Qed.
+
+(*
+Fixpoint genv_rect'
+        (P : forall ixs, genv ixs -> Type)
+    (HNil : P [] GenvNil)
+    (HCons : forall ix ixs val vals,
+        P ixs vals ->
+        P (ix :: ixs) (GenvCons val vals))
+    ixs g {struct g} : P ixs g.
+refine (
+    match g as g_ in genv ixs_ return P ixs_ g_ with
+    | GenvNil => HNil
+    | GenvCons val vals => HCons _ _ val vals _
+    end
+).
+- eapply (genv_rect' P HNil HCons).
+Defined.
+*)
+
+(*
+refine (
+    let fix go ixs g {struct g} :=
+        match g as g_ in genv ixs_ return P ixs_ g_ with
+        | GenvNil => _
+        | GenvCons val vals => _
+        end in
+    go).
+- exact HNil.
+- eapply HCons. eapply go.
+*)
+
+Lemma genv_member_rect ix
+        (P : forall ixs, genv ixs -> member ix ixs -> Type)
+    (HHere : forall ixs val vals,
+        P (ix :: ixs) (GenvCons val vals) Here)
+    (HThere : forall ix' ixs val vals mb
+        (IHmb : P ixs vals mb),
+        P (ix' :: ixs) (GenvCons val vals) (There mb))
+    : forall G g mb, P G g mb.
+induction g using genv_rect; intros.
+
+- exfalso.
+  refine (
+    match mb in member _ [] with
+    | Here => idProp
+    | There mb' => idProp
+    end).
+
+- rename fn_sig into ix'. rename rest into ixs.
+  rename b into val. rename g into vals.
+  rename IHg into IHvals.
+
+  refine (
+    match mb as mb_ in member _ (ix'_ :: ixs_)
+        return (
+            forall (val_ : body_expr ixs_ ix'_) (vals_ : genv ixs_)
+                (IHvals_ : forall mb, P ixs_ vals_ mb),
+            P (ix'_ :: ixs_) (GenvCons val_ vals_) mb_) with
+    | Here => _
+    | There mb' => _
+    end val vals IHvals); intros.
+
+  + eapply HHere.
+  + eapply HThere. eapply IHvals_.
+Defined.
+
+Print genv_member_rect.
+
+Lemma genv_member_ind ix
+        (P : forall ixs, genv ixs -> member ix ixs -> Prop)
+    (HHere : forall ixs val vals,
+        P (ix :: ixs) (GenvCons val vals) Here)
+    (HThere : forall ix' ixs val vals mb
+        (IHmb : P ixs vals mb),
+        P (ix' :: ixs) (GenvCons val vals) (There mb))
+    : forall G g mb, P G g mb.
+apply genv_member_rect; assumption.
+Qed.
+
+
+
+
+
 Definition mtail {A x} l : @member A x l -> list A.
 induction 1.
 - exact l.
 - exact IHX.
 Defined.
 
-Definition gget {G} (g : genv G) :
-        forall {fn_sig} (mb : member fn_sig G),
+Fixpoint gget {G} (g : genv G) {fn_sig} (mb : member fn_sig G) {struct g} :
         body_expr (mtail G mb) fn_sig * genv (mtail G mb).
-simple refine (
-    let fix go {G} (g : genv G) {fn_sig} (mb : member fn_sig G) {struct mb} :
-            body_expr (mtail G mb) fn_sig * genv (mtail G mb) :=
-        match mb as mb_ in member _ G_
-                return genv G_ -> body_expr (mtail G_  mb_) fn_sig * genv (mtail G_ mb_) with
-        | Here => fun g => _
-        | There mb' => fun g => _
-        end g in
-    @go _ g
+rename G into ixs. rename g into vals.
+rename fn_sig into ix.
+
+pattern ixs, vals, mb.
+refine (
+    match vals as vals_ in genv ixs_
+        return
+            forall (mb_ : member ix ixs_), _ ixs_ vals_ mb_ with
+    | GenvNil => fun mb => _
+    | @GenvCons ix' ixs val vals => fun mb => _
+    end mb
 ).
 
-- refine (
-    match g in genv (sig_ :: rest_) return (body_expr rest_ sig_ * genv rest_) with
-    | GenvNil => idProp
-    | GenvCons e g => (e, g)
-    end
-  ).
+  { exfalso.
+    refine (
+        match mb in member _ [] with
+        | Here => idProp
+        | There _ => idProp
+        end). }
 
-- refine (
-    match g in genv (first_ :: rest_) return rest_ = l -> _ with
-    | GenvNil => idProp
-    | GenvCons e g => fun Heq => go _ _ _ mb'
-    end eq_refl
-  ).
-  rewrite <- Heq. exact g.
+specialize (gget ixs vals).
+pattern ix', ixs, mb.
+pattern ix', ixs, mb in gget.
+refine (
+    match mb as mb_ in member _ (ix'_ :: ixs_)
+        return
+            forall (val_ : body_expr ixs_ ix'_) (vals_ : genv ixs_)
+                (gget_ : _ ix'_ ixs_ mb_),
+            _ ix'_ ixs_ mb_ with
+    | @Here _ _ ixs => fun val vals gget => _
+    | @There _ _ ix ixs mb' => fun val vals gget => _
+    end val vals gget).
+
+- simpl. exact (val, vals).
+- simpl. eapply gget.
 Defined.
+(*
+refine (
+    let fix go {ixs} vals {ix} mb {struct vals} :=
+        match vals as vals_ in genv ixs_
+                return forall {ix_} (mb : member ix_ ixs_), _ with
+        | GenvNil => fun ix mb =>
+        | @GenvCons ix' ixs val vals => fun ix mb => _
+        end ix mb
+    in @go G g).
 
-
-Definition weaken_multi {G} {fn_sig} (mb : member fn_sig G)
-    (e : body_expr (mtail G mb) fn_sig) :
-    body_expr G fn_sig.
-induction mb.
-- simpl in *. eapply weaken_body. assumption.
-- simpl in *. eapply weaken_body. eapply IHmb. assumption.
+intros.
+eapply genv_member_rect with (mb := mb); intros; simpl in *.
+- exact (val, vals).
+- exact IHmb.
+- exact g.
 Defined.
+*)
 
-(* Any property preserved by `weaken` is also preserved by `weaken_multi`. *)
-Lemma weaken_multi_is_weaken : forall
-    (P : forall {G L ty}, expr G L ty -> Prop),
-    (forall {G L ty} fn_sig (e : expr G L ty), P e -> P (weaken fn_sig e)) ->
-    (forall {G arg_ty free_tys ret_ty} mb
-        (e : body_expr (mtail G mb) (arg_ty, free_tys, ret_ty)),
-        P e -> P (weaken_multi mb e)).
-first_induction mb; intros0 Hwkn; intros0 He.
-- simpl in *. eapply Hwkn. assumption.
-- simpl in *. eapply Hwkn. eapply IHmb; eauto.
-Qed.
+Fixpoint gget_weaken {G} (g : genv G) {fn_sig} (mb : member fn_sig G) {struct g} :
+        body_expr G fn_sig.
+rename G into ixs. rename g into vals.
+rename fn_sig into ix.
+
+pattern ixs, vals, mb.
+refine (
+    match vals as vals_ in genv ixs_
+        return
+            forall (mb_ : member ix ixs_), _ ixs_ vals_ mb_ with
+    | GenvNil => fun mb => _
+    | @GenvCons ix' ixs val vals => fun mb => _
+    end mb
+).
+
+  { exfalso.
+    refine (
+        match mb in member _ [] with
+        | Here => idProp
+        | There _ => idProp
+        end). }
+
+specialize (gget_weaken ixs vals).
+pattern ix', ixs, mb.
+pattern ix', ixs, mb in gget_weaken.
+refine (
+    match mb as mb_ in member _ (ix'_ :: ixs_)
+        return
+            forall (val_ : body_expr ixs_ ix'_) (vals_ : genv ixs_)
+                (gget_ : _ ix'_ ixs_ mb_),
+            _ ix'_ ixs_ mb_ with
+    | @Here _ _ ixs => fun val vals gget_weaken => _
+    | @There _ _ ix ixs mb' => fun val vals gget_weaken => _
+    end val vals gget_weaken).
+
+- simpl. exact (weaken_body _ val).
+- simpl. exact (weaken_body _ (gget_weaken _ mb')).
+Defined.
 
 
 
@@ -405,28 +574,6 @@ Definition body_expr_denote
             fun l x => expr_denote g (hcons x l) e
     end e.
 
-(*
-Definition genv_hlist {G} (g : genv G) : hlist (body_expr G) G.
-simple refine (
-    let fix go {G} (g : genv G) {struct g} : hlist (body_expr G) G :=
-        match g in genv G_ return hlist (body_expr G_) G_ with
-        | GenvNil => hnil
-        | GenvCons e g =>
-                let h := go g in
-                hcons _ _
-        end in go g
-); clearbody h; clear go.
-
-- eapply weaken. assumption.
-
-- cut (hlist (body_expr l0) l0).
-  + eapply hmap.
-    intros sig ?. destruct sig as [[arg frees] ret].
-    eapply weaken. assumption.
-  + exact h.
-Defined.
-*)
-
 Definition genv_denote {G} (g : genv G) : hlist func_type_denote G :=
     let fix go {G} (g : genv G) : hlist func_type_denote G :=
         match g with
@@ -436,98 +583,7 @@ Definition genv_denote {G} (g : genv G) : hlist func_type_denote G :=
                 hcons (body_expr_denote g'_den e) g'_den
         end in go g.
 
-Ltac match_member mb :=
-    let mb' := fresh mb "'" in
-    generalize dependent mb; intro mb';
-    pattern mb';
-    let P := match goal with [ |- ?P mb' ] => P end in
-    let P_ := fresh "P_" in  (* `fresh "P"` doesn't work - some kind of name collision? *)
-
-    simple refine (
-        (* need to bind `P` to a gallina var, because ltac:... can't see into
-         * the outer ltac scope. *)
-        let P_ := P in
-        match mb' as mb_ in member _ G
-            return
-                match G as G_ return member _ G_ -> Type with
-                | [] => ltac:(solve [exact P_ | exact (fun _ => IDProp) ])
-                | sig :: G' => ltac:(solve [exact P_ | exact (fun _ => IDProp) ])
-                end mb_ with
-        | Here => _
-        | There mb => _
-        end
-    ); clear P_; clear mb'; try solve [exact idProp].
-
-Check hlist_ind.
-Check member_ind.
-
-Lemma hlist_member_ind A (B : A -> Type) (ix : A)
-        (P : forall ixs, hlist B ixs -> member ix ixs -> Prop)
-    (HHere : forall ixs val vals,
-        P (ix :: ixs) (hcons val vals) Here)
-    (HThere : forall ix' ixs val vals mb
-        (IHmb : P ixs vals mb),
-        P (ix' :: ixs) (hcons val vals) (There mb))
-    : forall ixs vals mb, P ixs vals mb.
-induction vals; intros.
-
-- exfalso.
-  refine (
-    match mb in member _ [] with
-    | Here => idProp
-    | There mb' => idProp
-    end).
-
-- rename a into ix'. rename b into val. rename l into ixs.
-  refine (
-    match mb as mb_ in member _ (ix'_ :: ixs_)
-        return (
-            forall (val_ : B ix'_) (vals_ : hlist B ixs_)
-                (IHvals_ : forall mb, P ixs_ vals_ mb),
-            P (ix'_ :: ixs_) (hcons val_ vals_) mb_) with
-    | Here => _
-    | There mb' => _
-    end val vals IHvals); intros.
-  + eapply HHere.
-  + eapply HThere. eapply IHvals_.
-Qed.
-
-Lemma genv_member_ind ix
-        (P : forall ixs, genv ixs -> member ix ixs -> Prop)
-    (HHere : forall ixs val vals,
-        P (ix :: ixs) (GenvCons val vals) Here)
-    (HThere : forall ix' ixs val vals mb
-        (IHmb : P ixs vals mb),
-        P (ix' :: ixs) (GenvCons val vals) (There mb))
-    : forall G g mb, P G g mb.
-induction g; intros.
-
-- exfalso.
-  refine (
-    match mb in member _ [] with
-    | Here => idProp
-    | There mb' => idProp
-    end).
-
-- rename fn_sig into ix'. rename rest into ixs.
-  rename b into val. rename g into vals.
-  rename IHg into IHvals.
-
-  refine (
-    match mb as mb_ in member _ (ix'_ :: ixs_)
-        return (
-            forall (val_ : body_expr ixs_ ix'_) (vals_ : genv ixs_)
-                (IHvals_ : forall mb, P ixs_ vals_ mb),
-            P (ix'_ :: ixs_) (GenvCons val_ vals_) mb_) with
-    | Here => _
-    | There mb' => _
-    end val vals IHvals); intros.
-
-  + eapply HHere.
-  + eapply HThere. eapply IHvals_.
-Qed.
-
-Lemma genv_denote_gget : forall {G} g {fn_sig} (mb : member fn_sig G),
+Lemma genv_denote_gget' : forall {G} g {fn_sig} (mb : member fn_sig G),
     hget (genv_denote g) mb =
     (let '(e, g') := gget g mb in
         body_expr_denote (genv_denote g') e).
@@ -535,6 +591,19 @@ intros.
 eapply genv_member_ind with (g := g) (mb := mb); intros.
 - simpl. reflexivity.
 - simpl. exact IHmb.
+Qed.
+
+Lemma genv_denote_gget : forall
+        {G} (g : genv G)
+        {arg_ty free_tys ret_ty} (mb : member (arg_ty, free_tys, ret_ty) G)
+        l x,
+    hget (genv_denote g) mb l x =
+    (let '(e, g') := gget g mb in
+        expr_denote (genv_denote g') (hcons x l) e).
+intros.
+eapply genv_member_ind with (g := g) (mb := mb); intros; simpl.
+- reflexivity.
+- exact IHmb.
 Qed.
 
 
@@ -704,6 +773,42 @@ fold (@weaken_hlist G L fn_sig).
 
 Qed.
 
+Lemma weaken_body_denote : forall {G sig} fn_sig func g (e : body_expr G sig),
+    body_expr_denote g e = body_expr_denote (hcons func g) (weaken_body fn_sig e).
+intros.
+destruct sig as [[? ?] ?]. simpl in *.
+do 2 (eapply functional_extensionality; intro).
+eapply weaken_expr_denote.
+Qed.
+
+Lemma gget_gget_weaken' : forall {G} g {fn_sig} (mb : member fn_sig G),
+    body_expr_denote (genv_denote g) (gget_weaken g mb) =
+    let '(e, g') := gget g mb in
+        body_expr_denote (genv_denote g') e.
+intros.
+eapply genv_member_ind with (g := g) (mb := mb); intros; simpl.
+- rewrite <- weaken_body_denote. reflexivity.
+- rewrite <- weaken_body_denote. exact IHmb.
+Qed.
+
+Lemma gget_gget_weaken : forall
+        {G} (g : genv G)
+        {arg_ty free_tys ret_ty} (mb : member (arg_ty, free_tys, ret_ty) G)
+        l,
+    expr_denote (genv_denote g) l (gget_weaken g mb) =
+    let '(e, g') := gget g mb in
+        expr_denote (genv_denote g') l e.
+intros.
+eapply genv_member_ind with (g := g) (mb := mb); intros; simpl.
+- rewrite <- weaken_expr_denote. reflexivity.
+- rewrite <- weaken_expr_denote. exact IHmb.
+Qed.
+
+
+
+
+
+
 (*
 Definition gget {G} (g : genv G) {fn_sig} (mb : member fn_sig G) : gg
 
@@ -870,13 +975,12 @@ Inductive sstep {G rty} (g : genv G) : state G rty -> state G rty -> Prop :=
         ~ is_value e2 ->
         sstep g (Run (App e1 e2) l k)
                 (Run e2 l (KAppR e1 l k))
-                (*
+
 | SMakeCall : forall {L arg_ty free_tys ret_ty}
             (mb : member (arg_ty, free_tys, ret_ty) G) free arg
             (l : hlist _ L) k,
         sstep g (Run (App (Value (VClose mb free)) (Value arg)) l k)
                 (Run (gget_weaken g mb) (hcons arg free) k)
-                *)
 .
 
 Theorem sstep_denote : forall {G rty} (g : genv G) (s1 s2 : state G rty),
@@ -890,10 +994,6 @@ intros0 Hstep. inv Hstep.
 - simpl. reflexivity.
 - simpl. reflexivity.
 
-(*
-- unfold state_denote. f_equal.
-  unfold expr_denote at 1. unfold value_denote at 1.
-  fold (@value_denote _ (genv_denote g)).
-  fold (@value_hlist_denote _ (genv_denote g)).
-*)
+- simpl. fold (@value_hlist_denote _ (genv_denote g)). f_equal.
+  rewrite gget_gget_weaken. eapply genv_denote_gget.
 Qed.
