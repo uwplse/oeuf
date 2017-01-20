@@ -20,6 +20,8 @@ open Oeuf
 open SourceLang
 open Utopia
 
+let c_source_file = ref ""
+
 (* Location of the compatibility library *)
 
 let stdlib_path = ref Configuration.stdlib_path
@@ -98,6 +100,7 @@ let output_filename_default default_file =
   match !option_o with
   | Some file -> file
   | None -> default_file
+
 
 (* From C to preprocessed C *)
 
@@ -279,6 +282,8 @@ let linker exe_name files =
     exit 2
   end
 
+
+
 (* Processing of a .c file *)
 
 let process_c_file sourcename =
@@ -313,83 +318,10 @@ let process_c_file sourcename =
     end
   end
 
-(* Processing of a .i / .p file (preprocessed C) *)
-
-let process_i_file sourcename =
-  if !option_interp then begin
-    let csyntax,_ = parse_c_file sourcename sourcename in
-    Interp.execute csyntax;
-    ""
-  end else if !option_S then begin
-    compile_c_file sourcename sourcename
-                   (output_filename ~final:true sourcename ".c" ".s");
-    ""
-  end else begin
-    let asmname =
-      if !option_dasm
-      then output_filename sourcename ".c" ".s"
-      else Filename.temp_file "compcert" ".s" in
-    compile_c_file sourcename sourcename asmname;
-    let objname = output_filename ~final: !option_c sourcename ".c" ".o" in
-    assemble asmname objname;
-    if not !option_dasm then safe_remove asmname;
-    objname
-  end
-
-(* Processing of a .cm file *)
-
-let process_cminor_file sourcename =
-  if !option_S then begin
-    compile_cminor_file sourcename
-                        (output_filename ~final:true sourcename ".cm" ".s");
-    ""
-  end else begin
-    let asmname =
-      if !option_dasm
-      then output_filename sourcename ".cm" ".s"
-      else Filename.temp_file "compcert" ".s" in
-    compile_cminor_file sourcename asmname;
-    let objname = output_filename ~final: !option_c sourcename ".cm" ".o" in
-    assemble asmname objname;
-    if not !option_dasm then safe_remove asmname;
-    objname
-  end
-
-(* Processing of .S and .s files *)
-
-let process_s_file sourcename =
-  let objname = output_filename ~final: !option_c sourcename ".s" ".o" in
-  assemble sourcename objname;
-  objname
-
-let process_S_file sourcename =
-  if !option_E then begin
-    preprocess sourcename (output_filename_default "-");
-    ""
-  end else begin
-    let preproname = Filename.temp_file "compcert" ".s" in
-    preprocess sourcename preproname;
-    let objname = output_filename ~final: !option_c sourcename ".S" ".o" in
-    assemble preproname objname;
-    safe_remove preproname;
-    objname
-  end
-
-(* Processing of .h files *)
-
-let process_h_file sourcename =
-  if !option_E then begin
-    preprocess sourcename (output_filename_default "-");
-    ""
-  end else begin
-    eprintf "Error: input file %s ignored (not in -E mode)\n" sourcename;
-    exit 2
-  end
-
 
 (* Processing of .oeuf "files" *)
 
-let compile_oeuf cu sourcename asmname =
+let compile_oeuf cu shim_ast sourcename asmname =
   (* Prepare to dump Clight, RTL, etc, if requested *)
   let set_dest dst opt ext =
     dst := if !opt then Some (output_filename sourcename ".oeuf" ext)
@@ -403,16 +335,20 @@ let compile_oeuf cu sourcename asmname =
 
   (* Convert to Asm *)
   let asm =
-    match Compiler.apply_partial
-               (Oeuf.transf_to_asm cu)
-               Asmexpand.expand_program with
-    | Errors.OK asm ->
-        asm
+  match Oeuf.transf_whole_program cu shim_ast with
+    | Errors.OK (cm,asm) -> (* TODO: grab cminor here and do something *)
+      (match Asmexpand.expand_program asm with
+      | Errors.OK asm' -> asm'
+      | Errors.Error msg ->
+        eprintf "it's busted\n";
+        eprintf "%s: %a" sourcename print_error msg;
+        exit 2)
     | Errors.Error msg ->
         eprintf "it's busted\n";
         eprintf "%s: %a" sourcename print_error msg;
-        exit 2 in
-
+        exit 2
+   in
+      
   (* Dump Asm in binary and JSON format *)
   if !option_sdump then
       dump_jasm asm sourcename (output_filename sourcename ".oeuf" !sdump_suffix);
@@ -422,6 +358,7 @@ let compile_oeuf cu sourcename asmname =
   PrintAsm.print_program oc asm (*debug=*)None;
   close_out oc
 
+
 let parse_oeuf sourcename =
   let text = Parse.read_file sourcename in
   match Pretty.Coq_compilation_unit.parse (Camlcoq.coqstring_of_camlstring text) with
@@ -430,13 +367,16 @@ let parse_oeuf sourcename =
 
 
 let process_oeuf sourcename =
+  let shimname = !c_source_file in
   let cu = parse_oeuf sourcename in
   Hashtbl.clear Camlcoq.atom_of_string;
   Hashtbl.clear Camlcoq.string_of_atom;
   PrintCminor.destination := Some (output_filename sourcename ".oeuf" ".minor.c");
-
+  let preproname = Filename.temp_file "compcert" ".i" in
+  preprocess shimname preproname;
+  let shim_ast,_ = parse_c_file shimname preproname in
   let s = if !option_S then begin
-              compile_oeuf cu sourcename
+              compile_oeuf cu shim_ast sourcename 
                            (output_filename ~final:true sourcename ".oeuf" ".s");
               ""
             end else begin
@@ -444,17 +384,18 @@ let process_oeuf sourcename =
                 if !option_dasm
                 then output_filename sourcename ".oeuf" ".s"
                 else Filename.temp_file "compcert" ".s" in
-              compile_oeuf cu sourcename asmname;
+              compile_oeuf cu shim_ast sourcename asmname;
               let objname = output_filename ~final: !option_c sourcename ".oeuf" ".o" in
               assemble asmname objname;
               if not !option_dasm then safe_remove asmname;
               objname
             end
-  in
+in
+
+
   Hashtbl.clear Camlcoq.atom_of_string;
   Hashtbl.clear Camlcoq.string_of_atom;
   s
-
 
 
 (* Record actions to be performed after parsing the command line *)
@@ -486,6 +427,7 @@ let version_string =
   else
     "The CompCert C verified compiler, version "^ Version.version ^ "\n"
 
+(* TODO: this is quite a deprecated usage string *)
 let usage_string =
   version_string ^
   "Usage: ccomp [options] <source files>
@@ -723,25 +665,7 @@ let cmdline_actions =
       eprintf "Unknown option `%s'\n" s; exit 2);
 (* File arguments *)
   Suffix ".c", Self (fun s ->
-      push_action process_c_file s; incr num_source_files; incr num_input_files);
-  Suffix ".i", Self (fun s ->
-      push_action process_i_file s; incr num_source_files; incr num_input_files);
-  Suffix ".p", Self (fun s ->
-      push_action process_i_file s; incr num_source_files; incr num_input_files);
-  Suffix ".cm", Self (fun s ->
-      push_action process_cminor_file s; incr num_source_files; incr num_input_files);
-  Suffix ".s", Self (fun s ->
-      push_action process_s_file s; incr num_source_files; incr num_input_files);
-  Suffix ".S", Self (fun s ->
-      push_action process_S_file s; incr num_source_files; incr num_input_files);
-  Suffix ".o", Self (fun s -> push_linker_arg s; incr num_input_files);
-  Suffix ".a", Self (fun s -> push_linker_arg s; incr num_input_files);
-  (* GCC compatibility: .o.ext files and .so files are also object files *)
-  _Regexp ".*\\.o\\.", Self (fun s -> push_linker_arg s; incr num_input_files);
-  Suffix ".so", Self (fun s -> push_linker_arg s; incr num_input_files);
-  (* GCC compatibility: .h files can be preprocessed with -E *)
-  Suffix ".h", Self (fun s ->
-      push_action process_h_file s; incr num_source_files; incr num_input_files);
+      c_source_file := s);
   Suffix ".oeuf", Self (fun s ->
       push_action process_oeuf s; incr num_source_files; incr num_input_files);
   ]
