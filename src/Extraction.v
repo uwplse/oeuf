@@ -180,9 +180,7 @@ Separate Extraction
    Globalenvs.Senv.invert_symbol
    AST.transform_partial_ident_program
    Parser.translation_unit_file
-   Oeuf.transf_to_cminor
-   Oeuf.transf_to_asm
-   (* HERE *)
+   Oeuf.transf_whole_program
    Pretty.compilation_unit.parse
 .
 
