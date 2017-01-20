@@ -2,7 +2,7 @@ Require Import compcert.lib.Coqlib.
 Require Import compcert.common.AST.
 Require Import compcert.common.Globalenvs.
 Require Import compcert.backend.Cminor.
-
+Require Import compcert.common.Errors.
 
 Require Import StructTact.StructTactics.
 Require Import StructTact.Util.
@@ -15,16 +15,16 @@ Require Import EricTact.
 
 (* Only allow calls from shim into Oeuf, not other way around *)
 (* thus internal always on left *)
-Definition link_fundef (a b : Cminor.fundef) : option Cminor.fundef :=
+Definition link_fundef (a b : Cminor.fundef) : res Cminor.fundef :=
   match a, b with
   | Internal _, External ef => (* Oeuf defined function linked against shim *)
     match ef with
-    | EF_external id sg => Some a
-    | _ => None
+    | EF_external id sg => OK a
+    | _ => Error ((MSG "call to oeuf via not EF_external"):: nil)
     end
   | External ef, External ef' => (* common external function, e.g. malloc *)
-    if external_function_eq ef ef' then Some (External ef) else None
-  | _ , _ => None
+    if external_function_eq ef ef' then (OK (External ef)) else (Error ((MSG "non-matching external functions") :: nil))
+  | _ , _ => Error ((MSG "Other fundef linking error"):: nil)
   end.
 
 Fixpoint lookup {A} (id : ident) (l : list (ident * A)) : option A :=
@@ -41,39 +41,40 @@ Fixpoint remove_id {A} (id : ident) (l : list (ident * A)) : list (ident * A) :=
     if peq id id' then remove_id id r else (id',x) :: remove_id id r
   end.
 
-Fixpoint link_fundefs (l l' : list (ident * globdef Cminor.fundef unit)) : option (list (ident * globdef Cminor.fundef unit)) :=
+Fixpoint link_fundefs (l l' : list (ident * globdef Cminor.fundef unit)) : res (list (ident * globdef Cminor.fundef unit)) :=
   match l with
-  | nil => Some l'
-  | (id,Gvar _) :: _ => None
+  | nil => OK l'
+  | (id,Gvar _) :: _ => Error ((MSG "Oeuf had a global variable") :: nil)
   | (id,Gfun fd) :: r =>
     match lookup id l' with
     | Some (Gfun fd') =>
       match link_fundef fd fd' with
-      | Some fd0 =>
+      | OK fd0 =>
         match link_fundefs r (remove_id id l') with
-        | Some l0 => Some ((id,(Gfun fd0)) :: l0)
-        | None => None
+        | OK l0 => OK ((id,(Gfun fd0)) :: l0)
+        | Error m => Error m
         end
-      | None => None
+      | Error m => Error m
       end
-    | _ => None
+    | _ => Error ((MSG "Lookup failed") :: nil)
     end
   end.
     
            
 (* We need a way to construct a shim, given Oeuf code *)
-Definition shim_link (oeuf_code : Cminor.program) (shim_code : Cminor.program) : option Cminor.program :=
+Definition shim_link (oeuf_code : Cminor.program) (shim_code : Cminor.program) : res Cminor.program :=
   if (list_norepet_dec peq (prog_defs_names oeuf_code)) then
     if (list_norepet_dec peq (prog_defs_names shim_code)) then
   match (link_fundefs (prog_defs oeuf_code) (prog_defs shim_code)) with
-  | Some fds => Some (AST.mkprogram fds
+  | OK fds => OK (AST.mkprogram fds
                                     (prog_public shim_code)
                                     (prog_main shim_code))
-  | None => None
+  | Error m => Error m
   end
-    else None
-  else None.
+    else Error ((MSG "Shim list_norepet check failed"):: nil)
+  else Error ((MSG "Oeuf list_norepet check failed"):: nil).
 
+(*
 Lemma remove_id_preserve_not_in :
   forall {A} (l : list (ident * A)) i,
     ~ In i (map fst l) ->
@@ -322,6 +323,7 @@ Section LINKED.
   Qed.
 
 End LINKED.
+*)
 
 (*
 (* Use these here? *)

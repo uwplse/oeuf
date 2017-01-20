@@ -56,13 +56,13 @@ Definition transf_whole_program (oeuf_code : CompilationUnit.compilation_unit) (
     match transf_c_to_cminor shim_code with
     | OK shim_cm =>
       match shim_link oeuf_cm shim_cm with
-      | Some all_cm =>
+      | OK all_cm =>
         match transf_cminor_program all_cm with
         | OK all_asm =>
           OK (all_cm, all_asm)
         | Error m => Error m
         end
-      | None => Error ((MSG "Linking failed") :: nil)
+      | Error m => Error m
       end
     | Error m => Error m
     end
