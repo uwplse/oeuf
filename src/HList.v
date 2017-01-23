@@ -569,3 +569,49 @@ induction h; intros; simpl in *.
 - reflexivity.
 - rewrite IHh. reflexivity.
 Qed.
+
+(* induction schemes for hlist * member *)
+
+Lemma hlist_member_rect A (B : A -> Type) (ix : A)
+        (P : forall ixs, hlist B ixs -> member ix ixs -> Type)
+    (HHere : forall ixs val vals,
+        P (ix :: ixs) (hcons val vals) Here)
+    (HThere : forall ix' ixs val vals mb
+        (IHmb : P ixs vals mb),
+        P (ix' :: ixs) (hcons val vals) (There mb))
+    : forall ixs vals mb, P ixs vals mb.
+induction vals; intros.
+
+- exfalso.
+  refine (
+    match mb in member _ [] with
+    | Here => idProp
+    | There mb' => idProp
+    end).
+
+- rename a into ix'. rename b into val. rename l into ixs.
+  refine (
+    match mb as mb_ in member _ (ix'_ :: ixs_)
+        return (
+            forall (val_ : B ix'_) (vals_ : hlist B ixs_)
+                (IHvals_ : forall mb, P ixs_ vals_ mb),
+            P (ix'_ :: ixs_) (hcons val_ vals_) mb_) with
+    | Here => _
+    | There mb' => _
+    end val vals IHvals); intros.
+  + eapply HHere.
+  + eapply HThere. eapply IHvals_.
+Defined.
+
+Lemma hlist_member_ind A (B : A -> Type) (ix : A)
+        (P : forall ixs, hlist B ixs -> member ix ixs -> Prop)
+    (HHere : forall ixs val vals,
+        P (ix :: ixs) (hcons val vals) Here)
+    (HThere : forall ix' ixs val vals mb
+        (IHmb : P ixs vals mb),
+        P (ix' :: ixs) (hcons val vals) (There mb))
+    : forall ixs vals mb, P ixs vals mb.
+apply hlist_member_rect; assumption.
+Qed.
+
+

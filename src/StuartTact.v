@@ -669,3 +669,43 @@ Tactic Notation "finish_mut_induction" ident(prefix) "using" ident_list(suffixes
                 ));
             eapply g; eauto
     end.
+
+
+
+(* Lemma and tactic for working with existT *)
+
+Require Import Eqdep_dec.
+Require Import EqdepFacts.
+
+Lemma existT_eq : forall {A} (eq_dec : forall (x y : A), { x = y } + { x <> y })
+    (P : A -> Type) x y1 y2,
+    existT P x y1 = existT P x y2 ->
+    y1 = y2.
+intros0 eq_dec. intros0 Heq.
+eapply eq_dep_eq_dec; eauto.
+eapply eq_sigT_eq_dep. assumption.
+Qed.
+
+Ltac fix_existT :=
+    let rec go :=
+        match goal with
+        | [ H : existT ?P ?x _ = existT ?P ?x _ |- _ ] =>
+                eapply existT_eq in H;
+                [ try go | eauto with eq_dec.. ]
+        end in go.
+
+Ltac fix_eq_rect :=
+    let rec go :=
+        match goal with
+        | [ H : context [ eq_rect _ _ _ _ _ ] |- _ ] =>
+                rewrite <- eq_rect_eq_dec in H;
+                [ try go | eauto with eq_dec.. ]
+        | [ |- context [ eq_rect _ _ _ _ _ ] ] =>
+                rewrite <- eq_rect_eq_dec;
+                [ try go | eauto with eq_dec.. ]
+        end in go.
+
+Hint Resolve eq_nat_dec : eq_dec.
+Hint Resolve Bool.bool_dec : eq_dec.
+Hint Resolve list_eq_dec : eq_dec.
+
