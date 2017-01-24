@@ -263,6 +263,198 @@ induction vs; intros; simpl.
 Qed.
 
 
+Lemma nil_hnil : forall A (B : A -> Type) (vals : hlist B []),
+    vals = hnil.
+intros.
+refine (
+    match vals as vals_ in hlist _ []
+        return vals_ = hnil with
+    | hnil => _
+    | hcons hd tl => idProp
+    end).
+reflexivity.
+Qed.
+
+Lemma hcons_hhead_htail : forall A (B : A -> Type) ix ixs (vals : hlist B (ix :: ixs)),
+    vals = hcons (hhead vals) (htail vals).
+intros.
+refine (
+    match vals as vals_ in hlist _ (_ :: _)
+        return vals_ = hcons (hhead vals_) (htail vals_) with
+    | hnil => idProp
+    | hcons hd tl => _
+    end).
+simpl. reflexivity.
+Qed.
+
+Ltac unpack_hlist xs x0 :=
+    let rec go :=
+        lazymatch type of xs with
+        | @hlist ?A ?B [] =>
+                replace xs with (@hnil A B) in *
+                    by (symmetry; eapply nil_hnil);
+                clear xs
+        | hlist _ (?ix :: ?ixs) =>
+                let x0_ := fresh x0 in
+                let xs' := fresh xs "'" in
+                set (x0_ := hhead xs);
+                set (xs' := htail xs);
+                replace xs with (hcons x0_ xs') in *
+                    by (unfold x0_, xs'; symmetry; eapply hcons_hhead_htail);
+                clearbody x0_ xs';
+                clear xs;
+                rename xs' into xs;
+                go
+        end in go.
+
+Lemma compile_run_elim : forall G L case_tys target_tyn ret_ty
+        (e : A.elim case_tys (A.ADT target_tyn) ret_ty)
+        (cases : hlist (A.expr G L) case_tys)
+        (target : A.value G (A.ADT target_tyn)),
+    B.run_elim target_tyn (compile_expr_list cases) (compile_value target) =
+        Some (compile_expr (A.run_elim e cases target)).
+intros.
+
+pattern target_tyn, target, e.
+refine (
+    match target as target_ in A.value _ (A.ADT target_tyn_)
+        return forall
+            (e_ : A.elim case_tys (A.ADT target_tyn_) ret_ty),
+            _ target_tyn_ target_ e_ with
+    | @A.VConstr _  target_tyn ctor arg_tys  ct args => fun e => _
+    | A.VClose _ _ => idProp
+    end e).
+clear e0 target target_tyn0.
+
+pattern target_tyn, e, cases, ct.
+refine (
+    match e as e_ in A.elim case_tys_ (A.ADT target_tyn_) ret_ty_
+        return forall
+            (cases_ : hlist (A.expr G L) case_tys_)
+            (ct_ : A.constr_type ctor arg_tys target_tyn_),
+            _ target_tyn_ e_ cases_ ct_ with
+    | A.ENat ret_ty => _
+    | A.EBool ret_ty => _
+    | A.EList item_ty ret_ty => _
+    | A.EUnit ret_ty => _
+    | A.EPair ty1 ty2 ret_ty => _
+    | A.EOption item_ty ret_ty => _
+    | A.EPositive ret_ty => _
+    end cases ct);
+clear e ct target_tyn cases ret_ty0 case_tys; intros cases ct.
+
+- pattern ct, args, cases.
+  refine (
+    match ct as ct_ in A.constr_type ctor_ arg_tys_ Tnat
+        return forall
+            (args_ : hlist _ arg_tys_)
+            (cases_ : _),
+            _ ct_ args_ cases_ with
+    | A.CTS => _
+    | A.CTO => _
+    | _ => idProp
+    end args cases);
+  clear ct cases args arg_tys ctor; intros args cases.
+  all: unpack_hlist cases case0; unpack_hlist args arg0.
+  all: reflexivity.
+
+- pattern ct, args, cases.
+  refine (
+    match ct as ct_ in A.constr_type ctor_ arg_tys_ Tbool
+        return forall
+            (args_ : hlist _ arg_tys_)
+            (cases_ : _),
+            _ ct_ args_ cases_ with
+    | A.CTtrue => _
+    | A.CTfalse => _
+    | _ => idProp
+    end args cases);
+  clear ct cases args arg_tys ctor; intros args cases.
+  all: unpack_hlist cases case0; unpack_hlist args arg0.
+  all: reflexivity.
+
+- pattern item_ty in cases.
+  pattern item_ty, ct, args, cases.
+  refine (
+    match ct as ct_ in A.constr_type ctor_ arg_tys_ (Tlist item_ty_)
+        return forall
+            (args_ : hlist _ arg_tys_)
+            (cases_ : _ item_ty_),
+            _ item_ty_ ct_ args_ cases_ with
+    | A.CTnil item_ty => _
+    | A.CTcons item_ty => _
+    | _ => idProp
+    end args cases);
+  clear ct cases args arg_tys ctor  item_ty0; intros args cases.
+  all: unpack_hlist cases case0; unpack_hlist args arg0.
+  all: reflexivity.
+
+- pattern ct, args, cases.
+  refine (
+    match ct as ct_ in A.constr_type ctor_ arg_tys_ (Tunit)
+        return forall
+            (args_ : hlist _ arg_tys_)
+            (cases_ : _),
+            _ ct_ args_ cases_ with
+    | A.CTtt => _
+    | _ => idProp
+    end args cases);
+  clear ct cases args arg_tys ctor; intros args cases.
+  all: unpack_hlist cases case0; unpack_hlist args arg0.
+  all: reflexivity.
+
+- pattern ty1, ty2 in cases.
+  pattern ty1, ty2, ct, args, cases.
+  refine (
+    match ct as ct_ in A.constr_type ctor_ arg_tys_ (Tpair ty1_ ty2_)
+        return forall
+            (args_ : hlist _ arg_tys_)
+            (cases_ : _ ty1_ ty2_),
+            _ ty1_ ty2_ ct_ args_ cases_ with
+    | A.CTpair ty1 ty2 => _
+    | _ => idProp
+    end args cases);
+  clear ct cases args arg_tys ctor  ty0 ty3; intros args cases.
+  all: unpack_hlist cases case0; unpack_hlist args arg0.
+  all: reflexivity.
+
+- pattern item_ty in cases.
+  pattern item_ty, ct, args, cases.
+  refine (
+    match ct as ct_ in A.constr_type ctor_ arg_tys_ (Toption item_ty_)
+        return forall
+            (args_ : hlist _ arg_tys_)
+            (cases_ : _ item_ty_),
+            _ item_ty_ ct_ args_ cases_ with
+    | A.CTsome item_ty => _
+    | A.CTnone item_ty => _
+    | _ => idProp
+    end args cases);
+  clear ct cases args arg_tys ctor  item_ty0; intros args cases.
+  all: unpack_hlist cases case0; unpack_hlist args arg0.
+  all: reflexivity.
+
+- pattern ct, args, cases.
+  refine (
+    match ct as ct_ in A.constr_type ctor_ arg_tys_ (Tpositive)
+        return forall
+            (args_ : hlist _ arg_tys_)
+            (cases_ : _),
+            _ ct_ args_ cases_ with
+    | A.CTxI => _
+    | A.CTxO => _
+    | A.CTxH => _
+    | _ => idProp
+    end args cases);
+  clear ct cases args arg_tys ctor; intros args cases.
+  all: unpack_hlist cases case0; unpack_hlist args arg0.
+  all: reflexivity.
+
+Qed.
+
+
+
+
 
 Ltac i_ctor := intros; constructor; eauto.
 Ltac i_lem H := intros; eapply H; eauto.
@@ -332,7 +524,7 @@ all: fix_existT; subst.
 
 - eexists. split.
   simpl. fold (@compile_expr_list G L case_tys). i_lem B.SEliminate.
-  + admit. (* run_elim *)
+  + eapply compile_run_elim.
   + simpl. reflexivity.
 
-Admitted.
+Qed.
