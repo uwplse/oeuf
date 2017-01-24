@@ -1,11 +1,9 @@
 Require Import Common.
-
 Require Import Utopia.
 
-
 Require Import Metadata.
-
 Require Import Semantics.
+Require Import HighestValues.
 
 Require Export Untyped1.
 
@@ -35,7 +33,7 @@ Inductive sstep (g : list expr) : state -> state -> Prop :=
 
 | SMakeCall : forall fname free arg l k body,
         nth_error g fname = Some body ->
-        sstep g (Run (App (Value (VClose fname free)) (Value arg)) l k)
+        sstep g (Run (App (Value (Close fname free)) (Value arg)) l k)
                 (Run body (arg :: free) k)
 
 | SConstrStep : forall
@@ -46,7 +44,7 @@ Inductive sstep (g : list expr) : state -> state -> Prop :=
             l k,
         Forall is_value vs ->
         ~ is_value e ->
-        sstep g (Run (Constr ctor (vs ++ e :: es)) l k)
+        sstep g (Run (MkConstr ctor (vs ++ e :: es)) l k)
                 (Run e l (KConstr ctor vs es l k))
 
 | SConstrDone : forall
@@ -54,8 +52,8 @@ Inductive sstep (g : list expr) : state -> state -> Prop :=
             (vs : list value)
             l k,
         let es := map Value vs in
-        sstep g (Run (Constr ctor es) l k)
-                (Run (Value (VConstr ctor vs)) l k)
+        sstep g (Run (MkConstr ctor es) l k)
+                (Run (Value (Constr ctor vs)) l k)
 
 | SCloseStep : forall
             (fname : nat)
@@ -65,7 +63,7 @@ Inductive sstep (g : list expr) : state -> state -> Prop :=
             l k,
         Forall is_value vs ->
         ~ is_value e ->
-        sstep g (Run (Close fname (vs ++ e :: es)) l k)
+        sstep g (Run (MkClose fname (vs ++ e :: es)) l k)
                 (Run e l (KClose fname vs es l k))
 
 | SCloseDone : forall
@@ -73,8 +71,8 @@ Inductive sstep (g : list expr) : state -> state -> Prop :=
             (vs : list value)
             l k,
         let es := map Value vs in
-        sstep g (Run (Close fname es) l k)
-                (Run (Value (VClose fname vs)) l k)
+        sstep g (Run (MkClose fname es) l k)
+                (Run (Value (Close fname vs)) l k)
 
 | SElimTarget : forall
             (ty : type_name)
@@ -94,7 +92,7 @@ Inductive sstep (g : list expr) : state -> state -> Prop :=
             l k,
         is_ctor_for_type ty ctor ->
         constructor_arg_n ctor = length args ->
-        run_elim ty cases (VConstr ctor args) = Some result ->
-        sstep g (Run (Elim ty cases (Value (VConstr ctor args))) l k)
+        run_elim ty cases (Constr ctor args) = Some result ->
+        sstep g (Run (Elim ty cases (Value (Constr ctor args))) l k)
                 (Run result l k)
 .

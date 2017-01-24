@@ -7,6 +7,7 @@ Require Import Program.
 Require Import HList.
 Require Import CompilationUnit.
 Require Import Semantics.
+Require Import HighestValues.
 
 Require Untyped1.
 Require Untyped2.
