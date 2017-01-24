@@ -461,8 +461,6 @@ clear e ct target_tyn cases ret_ty0 case_tys; intros cases ct.
 Qed.
 
 
-Set Default Timeout 5.
-
 Lemma ct_is_constr_for_type : forall ctor arg_tys ty,
     A.constr_type ctor arg_tys ty ->
     is_ctor_for_type ty ctor.
