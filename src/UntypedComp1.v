@@ -262,6 +262,13 @@ induction vs; intros; simpl.
 - rewrite IHvs. reflexivity.
 Qed.
 
+Lemma compile_value_length : forall G tys (vs : hlist (A.value G) tys),
+    length (compile_value_list vs) = length tys.
+induction vs; simpl.
+- reflexivity.
+- rewrite IHvs. reflexivity.
+Qed.
+
 
 Lemma nil_hnil : forall A (B : A -> Type) (vals : hlist B []),
     vals = hnil.
@@ -453,6 +460,28 @@ clear e ct target_tyn cases ret_ty0 case_tys; intros cases ct.
 Qed.
 
 
+Set Default Timeout 5.
+
+Lemma ct_is_constr_for_type : forall ctor arg_tys ty,
+    A.constr_type ctor arg_tys ty ->
+    is_ctor_for_type ty ctor.
+intros0 ct.
+destruct ct.
+
+all: let use n := exists n; reflexivity in
+        use 0 || use 1 || use 2.
+Qed.
+
+Lemma ct_constructor_arg_n : forall ctor arg_tys ty,
+    A.constr_type ctor arg_tys ty ->
+    constructor_arg_n ctor = length arg_tys.
+intros0 ct.
+destruct ct.
+
+all: simpl; reflexivity.
+Qed.
+
+
 
 
 
@@ -522,9 +551,23 @@ all: fix_existT; subst.
   + i_lem compile_isnt_value.
   + simpl. reflexivity.
 
-- eexists. split.
-  simpl. fold (@compile_expr_list G L case_tys). i_lem B.SEliminate.
-  + eapply compile_run_elim.
+- revert e0 Astep. pattern target_tyn, target.
+  refine (
+    match target as target_ in A.value _ (A.ADT target_tyn_)
+        return _ target_tyn_ target_ with
+    | @A.VConstr _ target_tyn ctor arg_tys ct args => _
+    | A.VClose _ _ => idProp
+    end).
+  intros e0 Astep.
+
+  eexists. split.
+  simpl. fold (@compile_expr_list G L case_tys).
+  fold (@compile_value_list G arg_tys). i_lem B.SEliminate.
+  + i_lem ct_is_constr_for_type.
+  + rewrite compile_value_length. i_lem ct_constructor_arg_n.
+  + change (B.VConstr _ (_ args))
+      with (compile_value (A.VConstr ct args)).
+    eapply compile_run_elim.
   + simpl. reflexivity.
 
 Qed.
