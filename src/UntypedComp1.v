@@ -7,6 +7,7 @@ Require Import Program.
 Require Import HList.
 Require Import CompilationUnit.
 Require Import Semantics.
+Require Import HighestValues.
 
 Require SourceLifted.
 Require Untyped1.
@@ -30,8 +31,8 @@ Definition compile_value {G ty} :=
             | hcons v vs => go v :: go_list vs
             end in
         match v with
-        | @A.VConstr _ _ ctor _ _ args => B.VConstr ctor (go_list args)
-        | @A.VClose _ _ _ _ mb free => B.VClose (compile_member mb) (go_list free)
+        | @A.VConstr _ _ ctor _ _ args => Constr ctor (go_list args)
+        | @A.VClose _ _ _ _ mb free => Close (compile_member mb) (go_list free)
         end in @go ty.
 
 Definition compile_value_list {G tys} :=
@@ -53,8 +54,8 @@ Definition compile_expr {G L ty} :=
         | @A.Value _ _ _ v => B.Value (compile_value v)
         | @A.Var _ _ _ mb => B.Var (compile_member mb)
         | @A.App _ _ _ _ f a => B.App (go f) (go a)
-        | @A.Constr _ _ _ ctor _ _ args => B.Constr ctor (go_list args)
-        | @A.Close _ _ _ _ _ mb free => B.Close (compile_member mb) (go_list free)
+        | @A.Constr _ _ _ ctor _ _ args => B.MkConstr ctor (go_list args)
+        | @A.Close _ _ _ _ _ mb free => B.MkClose (compile_member mb) (go_list free)
         | @A.Elim _ _ _ ty _ _ cases target =>
                 B.Elim ty (go_list cases) (go target)
         end in @go ty.
@@ -565,7 +566,7 @@ all: fix_existT; subst.
   fold (@compile_value_list G arg_tys). i_lem B.SEliminate.
   + i_lem ct_is_constr_for_type.
   + rewrite compile_value_length. i_lem ct_constructor_arg_n.
-  + change (B.VConstr _ (_ args))
+  + change (Constr _ (_ args))
       with (compile_value (A.VConstr ct args)).
     eapply compile_run_elim.
   + simpl. reflexivity.
