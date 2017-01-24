@@ -7,6 +7,13 @@ Require Import Metadata.
 
 Require Import Semantics.
 
+(* TODO:
+ - split Var into Arg + UpVar
+ - tweak SEliminate structure
+ - directly run_cont from SConstrDone/SCloseDone
+ - unflag values
+ *)
+
 
 
 Inductive value :=
@@ -42,8 +49,6 @@ Inductive state :=
 | Run (e : expr) (l : list value) (k : cont)
 | Stop (v : value)
 .
-
-Print nth_error.
 
 
 Definition weaken_value :=
@@ -229,10 +234,13 @@ Inductive sstep (g : list expr) : state -> state -> Prop :=
 | SEliminate : forall
             (ty : type_name)
             (cases : list expr)
-            (target : value)
+            (ctor : constr_name)
+            (args : list value)
             (result : expr)
             l k,
-        run_elim ty cases target = Some result ->
-        sstep g (Run (Elim ty cases (Value target)) l k)
+        is_ctor_for_type ty ctor ->
+        constructor_arg_n ctor = length args ->
+        run_elim ty cases (VConstr ctor args) = Some result ->
+        sstep g (Run (Elim ty cases (Value (VConstr ctor args))) l k)
                 (Run result l k)
 .
