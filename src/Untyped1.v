@@ -6,7 +6,6 @@ Require Import Semantics.
 Require Import HighestValues.
 
 (* TODO:
- - directly run_cont from SConstrDone/SCloseDone
  - unflag values
  - convert to functional continuations
  *)
