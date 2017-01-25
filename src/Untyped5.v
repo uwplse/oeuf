@@ -11,10 +11,6 @@ Require Export Untyped4.
 
 (* the actual step relation *)
 Inductive sstep (g : list expr) : state -> state -> Prop :=
-| SValue : forall v (l : list value) (k : cont),
-        sstep g (Run (Value v) l k)
-                (run_cont k v)
-
 | SArg : forall (l : list value) (k : cont) v,
         nth_error l 0 = Some v ->
         sstep g (Run (Arg) l k)

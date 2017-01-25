@@ -424,7 +424,56 @@ Qed.
 
 
 
-Definition metric (s : S.state) := 0.
+Definition expr_metric :=
+    let fix go e := 
+        let fix go_list es :=
+            match es with
+            | [] => 0
+            | e :: es => go e + go_list es
+            end in
+        match e with
+        | S.Value _ => 0
+        | S.Arg => 0
+        | S.UpVar _ => 0
+        | S.App f a => 2 + go f + go a
+        | S.MkConstr _ args => 2 + go_list args
+        | S.MkClose _ free => 2 + go_list free
+        | S.Elim _ _ target => 2 + go target
+        end in go.
+
+Definition expr_metric_list :=
+    let go := expr_metric in
+    let fix go_list es :=
+        match es with
+        | [] => 0
+        | e :: es => go e + go_list es
+        end in go_list.
+
+Definition cont_metric :=
+    let go_expr := expr_metric in
+    let go_expr_list := expr_metric_list in
+    let fix go k :=
+        match k with
+        | S.KAppL e2 _ k => 1 + go_expr e2 + go k
+        | S.KAppR e1 _ k => 1 + go_expr e1 + go k
+        | S.KConstr _ vs es _ k => 1 + go_expr_list vs + go_expr_list es + go k
+        | S.KClose _ vs es _ k => 1 + go_expr_list vs + go_expr_list es + go k
+        | S.KElim _ _ _ k => 1 + go k
+        | S.KStop => 0
+        end in go.
+
+Lemma expr_metric_list_app : forall es es',
+    expr_metric_list (es ++ es') = expr_metric_list es + expr_metric_list es'.
+induction es; simpl; intros; eauto.
+- rewrite IHes. omega.
+Qed.
+
+
+Definition metric (s : S.state) :=
+    match s with
+    | S.Run e _ k => expr_metric e + cont_metric k
+    | S.Stop _ => 0
+    end.
 
 Theorem I_sim : forall AE BE a a' b,
     Forall2 I_expr AE BE ->
@@ -446,39 +495,6 @@ all: try solve [
     inversion 1
     ].
 
-(* SValue *)
-- on >B.expr_value, invc.
-  + eexists. split. left. i_lem B.SValue.
-    i_lem I_run_cont.
-  + eexists. split. left. i_lem B.SConstrDone.
-    i_ctor. i_lem I_run_cont.
-  + eexists. split. left. i_lem B.SCloseDone.
-    i_ctor. i_lem I_run_cont.
-
-(* SValue - IInValue *)
-- destruct depth as [ | depth' ].
-
-  + (* Depth is zero.  Left pops a continuation, returning to correspondence
-       with the right. *)
-    simpl in *.
-    inject_some.
-    on (B.expr_value (S.Value _) _), invc.
-    on (S.run_cont _ _ = _), fun H => (rewrite H; clear H).
-
-    eexists. split. right. split. reflexivity.
-    * admit. (* metric *)
-    * i_ctor. on _, eapply_. i_ctor.
-
-  + (* Depth is nonzero.  Left pops a continuation and remains in IInValue. *)
-    destruct ak; try discriminate; simpl in *.
-
-    * eexists. split. right. split. reflexivity.
-      -- admit. (* metric *)
-      -- break_and. subst l0. i_lem IInValue.
-    * eexists. split. right. split. reflexivity.
-      -- admit. (* metric *)
-      -- break_and. subst l0. i_lem IInValue.
-
 
 (* SArg *)
 - eexists. split. left. i_lem B.SArg.
@@ -494,7 +510,7 @@ all: try solve [
 
   + (* Right is already a value, but left needs to do work.  Step to IInValue. *)
     eexists. split. right. split. reflexivity.
-    * admit. (* metric *)
+    * simpl. omega.
     * eapply IInValue with (depth := 0)
         (apat := fun f => S.App f _) (bpat := fun f => S.App f _);
         simpl; eauto using I_expr_expr_value.
@@ -510,7 +526,7 @@ all: try solve [
 
   + (* Right is already a value, but left needs to do work.  Step to IInValue. *)
     eexists. split. right. split. reflexivity.
-    * admit. (* metric *)
+    * simpl. omega.
     * eapply IInValue with (depth := 0)
         (apat := fun a => S.App _ a) (bpat := fun a => S.App _ a);
         simpl; eauto using I_expr_expr_value.
@@ -535,7 +551,7 @@ all: try solve [
   destruct (B.value_dec be) as [[be_v ?] | ?].
 
   + eexists. split. right. split. reflexivity.
-    * admit. (* metric *)
+    * simpl. fold expr_metric_list. rewrite expr_metric_list_app. simpl. omega.
     * eapply IInValue with (depth := 0)
         (apat := fun v => S.MkConstr _ (_ ++ v :: _))
         (bpat := fun v => S.MkConstr _ (_ ++ v :: _));
@@ -549,7 +565,7 @@ all: try solve [
 
 (* SConstrStep - IInValue *)
 - eexists. split. right. split. reflexivity.
-  + admit. (* metric *)
+  + simpl. fold expr_metric_list. rewrite expr_metric_list_app. simpl. omega.
   + eapply IInValue with (depth := S depth); simpl; eauto.
 
 (* SConstrDone *)
@@ -569,7 +585,7 @@ all: try solve [
     on (S.run_cont _ _ = _), fun H => (rewrite H; clear H).
 
     eexists. split. right. split. reflexivity.
-    * admit. (* metric *)
+    * admit. (* metric - pat case *)
     * i_ctor. on _, eapply_. i_ctor.
 
   + (* Depth is nonzero.  Left pops a continuation and remains in IInValue. *)
@@ -578,13 +594,13 @@ all: try solve [
     all: break_and; subst l0.
 
     * eexists. split. right. split. reflexivity.
-      -- admit. (* metric *)
+      -- simpl. fold expr_metric_list. rewrite expr_metric_list_app. simpl. omega.
       -- i_lem IInValue.
          eapply unroll_cont_expr_value with (result := ae_last); eauto.
          eapply MkConstr_expr_value, MkConstr_expr_value_2.
 
     * eexists. split. right. split. reflexivity.
-      -- admit. (* metric *)
+      -- simpl. fold expr_metric_list. rewrite expr_metric_list_app. simpl. omega.
       -- i_lem IInValue.
          eapply unroll_cont_expr_value with (result := ae_last); eauto.
          eapply MkClose_expr_value, MkConstr_expr_value_2.
@@ -596,7 +612,7 @@ all: try solve [
   destruct (B.value_dec be) as [[be_v ?] | ?].
 
   + eexists. split. right. split. reflexivity.
-    * admit. (* metric *)
+    * simpl. fold expr_metric_list. rewrite expr_metric_list_app. simpl. omega.
     * eapply IInValue with (depth := 0)
         (apat := fun v => S.MkClose _ (_ ++ v :: _))
         (bpat := fun v => S.MkClose _ (_ ++ v :: _));
@@ -610,7 +626,7 @@ all: try solve [
 
 (* SCloseStep - IInValue *)
 - eexists. split. right. split. reflexivity.
-  + admit. (* metric *)
+  + simpl. fold expr_metric_list. rewrite expr_metric_list_app. simpl. omega.
   + eapply IInValue with (depth := S depth); simpl; eauto.
 
 (* SCloseDone *)
@@ -630,7 +646,7 @@ all: try solve [
     on (S.run_cont _ _ = _), fun H => (rewrite H; clear H).
 
     eexists. split. right. split. reflexivity.
-    * admit. (* metric *)
+    * admit. (* metric - pat case *)
     * i_ctor. on _, eapply_. i_ctor.
 
   + (* Depth is nonzero.  Left pops a continuation and remains in IInValue. *)
@@ -639,13 +655,13 @@ all: try solve [
     all: break_and; subst l0.
 
     * eexists. split. right. split. reflexivity.
-      -- admit. (* metric *)
+      -- simpl. fold expr_metric_list. rewrite expr_metric_list_app. simpl. omega.
       -- i_lem IInValue.
          eapply unroll_cont_expr_value with (result := ae_last); eauto.
          eapply MkConstr_expr_value, MkClose_expr_value_2.
 
     * eexists. split. right. split. reflexivity.
-      -- admit. (* metric *)
+      -- simpl. fold expr_metric_list. rewrite expr_metric_list_app. simpl. omega.
       -- i_lem IInValue.
          eapply unroll_cont_expr_value with (result := ae_last); eauto.
          eapply MkClose_expr_value, MkClose_expr_value_2.
@@ -655,7 +671,7 @@ all: try solve [
 - destruct (B.value_dec btarget) as [[btarget_v ?] | ?].
 
   + eexists. split. right. split. reflexivity.
-    * admit. (* metric *)
+    * simpl. omega.
     * eapply IInValue with (depth := 0)
         (apat := fun v => S.Elim _ _ v)
         (bpat := fun v => S.Elim _ _ v);
