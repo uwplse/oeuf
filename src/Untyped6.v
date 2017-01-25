@@ -5,71 +5,21 @@ Require Import Metadata.
 Require Import Semantics.
 Require Import HighestValues.
 
+Require Export Untyped4.
 
 
-Inductive expr :=
-| Value (v : value)
-| Arg
-| UpVar (idx : nat)
-| App (f : expr) (a : expr)
-| MkConstr (ctor : constr_name) (args : list expr)
-| MkClose (fname : nat) (free : list expr)
-| Elim (ty : type_name) (cases : list expr) (target : expr)
+
+Inductive expr_value : expr -> value -> Prop :=
+| IsValue : forall v, expr_value (Value v) v
+| IsVConstr : forall ctor args_e args_v,
+        Forall2 expr_value args_e args_v ->
+        expr_value (MkConstr ctor args_e) (Constr ctor args_v)
+| IsVClose : forall fname free_e free_v,
+        Forall2 expr_value free_e free_v ->
+        expr_value (MkClose fname free_e) (Close fname free_v)
 .
 
-Inductive is_value : expr -> Prop :=
-| IsValue : forall v, is_value (Value v).
-
-
-Inductive cont :=
-| KAppL (e2 : expr) (l : list value) (k : cont)
-| KAppR (e1 : expr) (l : list value) (k : cont)
-| KConstr (ctor : constr_name) (vs : list expr) (es : list expr)
-        (l : list value) (k : cont)
-| KClose (fname : nat) (vs : list expr) (es : list expr)
-        (l : list value) (k : cont)
-| KElim (ty : type_name) (cases : list expr) (l : list value) (k : cont)
-| KStop
-.
-
-Inductive state :=
-| Run (e : expr) (l : list value) (k : cont)
-| Stop (v : value)
-.
-
-
-(* helper function for proceeding into a continuation *)
-Definition run_cont (k : cont) : value -> state :=
-    match k with
-    | KAppL e2 l k => fun v => Run (App (Value v) e2) l k
-    | KAppR e1 l k => fun v => Run (App e1 (Value v)) l k
-    | KConstr ct vs es l k =>
-            fun v => Run (MkConstr ct (vs ++ Value v :: es)) l k
-    | KClose mb vs es l k =>
-            fun v => Run (MkClose mb (vs ++ Value v :: es)) l k
-    | KElim e cases l k =>
-            fun v => Run (Elim e cases (Value v)) l k
-    | KStop => fun v => Stop v
-    end.
-
-
-(* helper function for proceeding into an elim *)
-Fixpoint unroll_elim' (case : expr)
-                      (ctor : constr_name)
-                      (args : list value)
-                      (mk_rec : expr -> expr)
-                      (idx : nat) : expr :=
-    match args with
-    | [] => case
-    | arg :: args =>
-            let case := App case (Value arg) in
-            let case := if ctor_arg_is_recursive ctor idx
-                then App case (mk_rec (Value arg)) else case in
-            unroll_elim' case ctor args mk_rec (S idx)
-    end.
-
-Definition unroll_elim case ctor args mk_rec :=
-    unroll_elim' case ctor args mk_rec 0.
+Definition is_value e := exists v, expr_value e v.
 
 (* the actual step relation *)
 Inductive sstep (g : list expr) : state -> state -> Prop :=
@@ -80,12 +30,12 @@ Inductive sstep (g : list expr) : state -> state -> Prop :=
 | SArg : forall (l : list value) (k : cont) v,
         nth_error l 0 = Some v ->
         sstep g (Run (Arg) l k)
-                (Run (Value v) l k)
+                (run_cont k v)
 
 | SUpVar : forall idx (l : list value) (k : cont) v,
         nth_error l (S idx) = Some v ->
         sstep g (Run (UpVar idx) l k)
-                (Run (Value v) l k)
+                (run_cont k v)
 
 | SAppL : forall (e1 : expr) (e2 : expr) l k,
         ~ is_value e1 ->
@@ -98,9 +48,11 @@ Inductive sstep (g : list expr) : state -> state -> Prop :=
         sstep g (Run (App e1 e2) l k)
                 (Run e2 l (KAppR e1 l k))
 
-| SMakeCall : forall fname free arg l k body,
+| SMakeCall : forall fname free func_e arg arg_e l k body,
+        expr_value func_e (Close fname free) ->
+        expr_value arg_e arg ->
         nth_error g fname = Some body ->
-        sstep g (Run (App (Value (Close fname free)) (Value arg)) l k)
+        sstep g (Run (App func_e arg_e) l k)
                 (Run body (arg :: free) k)
 
 | SConstrStep : forall
@@ -117,10 +69,11 @@ Inductive sstep (g : list expr) : state -> state -> Prop :=
 | SConstrDone : forall
             (ctor : constr_name)
             (vs : list value)
+            (e : expr)
             l k,
-        let es := map Value vs in
-        sstep g (Run (MkConstr ctor es) l k)
-                (Run (Value (Constr ctor vs)) l k)
+        expr_value e (Constr ctor vs) ->
+        sstep g (Run e l k)
+                (run_cont k (Constr ctor vs))
 
 | SCloseStep : forall
             (fname : nat)
@@ -136,10 +89,11 @@ Inductive sstep (g : list expr) : state -> state -> Prop :=
 | SCloseDone : forall
             (fname : nat)
             (vs : list value)
+            (e : expr)
             l k,
-        let es := map Value vs in
-        sstep g (Run (MkClose fname es) l k)
-                (Run (Value (Close fname vs)) l k)
+        expr_value e (Close fname vs) ->
+        sstep g (Run e l k)
+                (run_cont k (Close fname vs))
 
 | SElimTarget : forall
             (ty : type_name)
@@ -156,25 +110,31 @@ Inductive sstep (g : list expr) : state -> state -> Prop :=
             (ctor : constr_name)
             (args : list value)
             (case : expr)
+            (target : expr)
             (result : expr)
             l k,
         is_ctor_for_type ty ctor ->
         constructor_arg_n ctor = length args ->
         nth_error cases (constructor_index ctor) = Some case ->
         unroll_elim case ctor args (Elim ty cases) = result ->
-        sstep g (Run (Elim ty cases (Value (Constr ctor args))) l k)
+        expr_value target (Constr ctor args) ->
+        sstep g (Run (Elim ty cases target) l k)
                 (Run result l k)
 .
 
 
 
+(*
+ * Mutual induction schemes
+ *)
+
 Definition expr_rect_mut (P : expr -> Type) (Pl : list expr -> Type)
     (HValue :   forall v, P (Value v))
     (HArg :     P Arg)
-    (HUpVar :   forall idx, P (UpVar idx))
+    (HUpVar :   forall n, P (UpVar n))
     (HApp :     forall f a, P f -> P a -> P (App f a))
-    (HMkConstr : forall c args, Pl args -> P (MkConstr c args))
-    (HMkClose : forall f free, Pl free -> P (MkClose f free))
+    (HMkConstr : forall ctor args, Pl args -> P (MkConstr ctor args))
+    (HMkClose : forall fname free, Pl free -> P (MkClose fname free))
     (HElim :    forall ty cases target, Pl cases -> P target -> P (Elim ty cases target))
     (Hnil :     Pl [])
     (Hcons :    forall e es, P e -> Pl es -> Pl (e :: es))
@@ -188,22 +148,65 @@ Definition expr_rect_mut (P : expr -> Type) (Pl : list expr -> Type)
         match e as e_ return P e_ with
         | Value v => HValue v
         | Arg => HArg
-        | UpVar idx => HUpVar idx
+        | UpVar n => HUpVar n
         | App f a => HApp f a (go f) (go a)
-        | MkConstr c args => HMkConstr c args (go_list args)
-        | MkClose f free => HMkClose f free (go_list free)
+        | MkConstr ctor args => HMkConstr ctor args (go_list args)
+        | MkClose fname free => HMkClose fname free (go_list free)
         | Elim ty cases target => HElim ty cases target (go_list cases) (go target)
         end in go e.
 
 Definition expr_rect_mut' (P : expr -> Type) (Pl : list expr -> Type)
     HValue HArg HUpVar HApp HMkConstr HMkClose HElim Hnil Hcons
     : (forall e, P e) * (forall es, Pl es) :=
-    let go := expr_rect_mut P Pl
+    let go := expr_rect_mut P Pl 
         HValue HArg HUpVar HApp HMkConstr HMkClose HElim Hnil Hcons
-    in
+        in
     let fix go_list es :=
         match es as es_ return Pl es_ with
         | [] => Hnil
         | e :: es => Hcons e es (go e) (go_list es)
-        end in
-    (go, go_list).
+        end in (go, go_list).
+
+
+Lemma expr_value_is_value : forall e v,
+    expr_value e v ->
+    is_value e.
+intros. eexists. eauto.
+Qed.
+
+Lemma expr_value_is_value_list : forall es vs,
+    Forall2 expr_value es vs ->
+    Forall is_value es.
+induction es; destruct vs; intros0 Hev; invc Hev.
+- constructor.
+- constructor; eauto. eexists. eauto.
+Qed.
+
+Definition value_dec (e : expr) : { v | expr_value e v } + { ~ is_value e }.
+mut_induction e using expr_rect_mut' with
+    (Pl := fun es =>
+        { vs | Forall2 expr_value es vs } + { ~ Forall is_value es }).
+all: try solve [right; inversion 1; on >expr_value, invc].
+
+- left. eexists. constructor.
+
+- destruct IHe as [(v & ?) | Hnv].
+  + left. eexists. constructor. eauto.
+  + right. inversion 1. on >expr_value, invc.
+    on _, eapply_lem expr_value_is_value_list.  eauto.
+
+- destruct IHe as [(v & ?) | Hnv].
+  + left. eexists. constructor. eauto.
+  + right. inversion 1. on >expr_value, invc.
+    on _, eapply_lem expr_value_is_value_list.  eauto.
+
+- left. exists []. constructor.
+
+- destruct IHe as [[? ?] | ?], IHe0 as [[? ?] | ?].
+  + left. eexists. constructor; eauto.
+  + right. inversion 1. eauto.
+  + right. inversion 1. eauto.
+  + right. inversion 1. eauto.
+
+- finish_mut_induction value_dec using list.
+Qed.
