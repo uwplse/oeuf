@@ -107,4 +107,7 @@ all: try solve [eexists; split; repeat i_ctor].
   + simpl. eapply run_cont_metric.
   + i_lem I_run_cont.
 
+- eexists. split. left. i_lem B.SEliminate.
+  i_ctor.
+
 Qed.
