@@ -45,6 +45,7 @@ Definition uncompile_value_list :=
 
 Inductive I : S.state -> S.state -> Prop :=
 | IRun : forall l e k,
+        ~ S.is_value e ->
         I (S.Run e l k) (S.Run e l k)
 | IRunValue : forall v l k,
         I (S.Run (S.Value v) l k) (S.run_cont k v)
@@ -60,7 +61,7 @@ Ltac i_lem H := intros; eapply H; eauto.
 
 Lemma I_run_cont : forall k v,
     I (S.run_cont k v) (S.run_cont k v).
-induction k; simpl; i_ctor.
+induction k; simpl; i_ctor; inversion 1.
 Qed.
 
 
@@ -87,8 +88,27 @@ Lemma run_cont_metric : forall k v,
 induction k; intros; simpl; omega.
 Qed.
 
+Lemma unroll_elim'_not_value : forall case ctor args mk_rec idx,
+    ~ S.is_value case ->
+    (forall e, ~ S.is_value e -> ~ S.is_value (mk_rec e)) ->
+    ~ S.is_value (S.unroll_elim' case ctor args mk_rec idx).
+first_induction args; intros0 Hcase Hmk_rec; simpl in *.
+- auto.
+- break_if.
+  + eapply IHargs; eauto. inversion 1.
+  + eapply IHargs; eauto. inversion 1.
+Qed.
+
+Lemma unroll_elim_not_value : forall case ctor args mk_rec,
+    ~ S.is_value case ->
+    (forall e, ~ S.is_value e -> ~ S.is_value (mk_rec e)) ->
+    ~ S.is_value (S.unroll_elim case ctor args mk_rec).
+intros. eapply unroll_elim'_not_value; eauto.
+Qed.
+
 
 Theorem I_sim : forall E a a' b,
+    Forall (fun e => ~ S.is_value e) E ->
     I a b ->
     A.sstep E a a' ->
     exists b',
@@ -96,18 +116,23 @@ Theorem I_sim : forall E a a' b,
         I a' b'.
 
 destruct a as [ae l ak | v];
-intros0 II Astep; inv Astep.
+intros0 Henv II Astep; inv Astep.
 all: inv II.
 
 all: try solve [eexists; split; repeat i_ctor].
 
-- eexists. split. left. i_ctor. i_lem I_run_cont.
+- on (~ S.is_value _), contradict. i_ctor.
 
 - eexists. split. right. split. reflexivity.
   + simpl. eapply run_cont_metric.
   + i_lem I_run_cont.
 
-- eexists. split. left. i_lem B.SEliminate.
-  i_ctor.
+- eexists. split. left. i_lem B.SMakeCall.
+  i_ctor. eapply Forall_nth_error with (1 := Henv). eauto.
 
-Qed.
+- eexists. split. left. i_lem B.SEliminate.
+  i_ctor. eapply unroll_elim_not_value.
+  + admit. (* need cases_arent_values *)
+  + intros. inversion 1.
+
+Admitted.
