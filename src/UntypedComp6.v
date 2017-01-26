@@ -468,12 +468,18 @@ induction es; simpl; intros; eauto.
 - rewrite IHes. omega.
 Qed.
 
-
 Definition metric (s : S.state) :=
     match s with
     | S.Run e _ k => expr_metric e + cont_metric k
-    | S.Stop _ => 0
+    | S.Stop _ => 1 (* to make run_cont_metric nicer *)
     end.
+
+Lemma run_cont_metric : forall k v,
+    metric (S.run_cont k v) = S (cont_metric k).
+induction k; intros; simpl; fold expr_metric_list.
+all: repeat rewrite expr_metric_list_app; simpl.
+all: reflexivity || omega.
+Qed.
 
 Theorem I_sim : forall AE BE a a' b,
     Forall2 I_expr AE BE ->
@@ -582,10 +588,10 @@ all: try solve [
     inject_some.
     on (B.expr_value (S.MkConstr _ _) _), invc.
     fwd eapply expr_value_eq_list; eauto. subst.
-    on (S.run_cont _ _ = _), fun H => (rewrite H; clear H).
+    on (S.run_cont _ _ = _), fun H => (rename H into Hcont; rewrite Hcont).
 
     eexists. split. right. split. reflexivity.
-    * admit. (* metric - pat case *)
+    * rewrite <- Hcont. fold expr_metric_list. rewrite run_cont_metric. omega.
     * i_ctor. on _, eapply_. i_ctor.
 
   + (* Depth is nonzero.  Left pops a continuation and remains in IInValue. *)
@@ -643,10 +649,10 @@ all: try solve [
     inject_some.
     on (B.expr_value (S.MkClose _ _) _), invc.
     fwd eapply expr_value_eq_list; eauto. subst.
-    on (S.run_cont _ _ = _), fun H => (rewrite H; clear H).
+    on (S.run_cont _ _ = _), fun H => (rename H into Hcont; rewrite Hcont).
 
     eexists. split. right. split. reflexivity.
-    * admit. (* metric - pat case *)
+    * rewrite <- Hcont. fold expr_metric_list. rewrite run_cont_metric. omega.
     * i_ctor. on _, eapply_. i_ctor.
 
   + (* Depth is nonzero.  Left pops a continuation and remains in IInValue. *)
@@ -690,4 +696,4 @@ all: try solve [
   eexists. split. left. i_lem B.SEliminate.
   i_ctor. i_lem I_unroll_elim. i_ctor.
 
-Admitted.
+Qed.
