@@ -20,6 +20,8 @@ open Oeuf
 open SourceLang
 open Utopia
 
+open ExportCminor
+
 let c_source_file = ref ""
 
 (* Location of the compatibility library *)
@@ -336,7 +338,7 @@ let compile_oeuf cu shim_ast sourcename asmname cmname =
   (* Convert to Asm *)
   let cm,asm =
   match Oeuf.transf_whole_program cu shim_ast with
-    | Errors.OK (cm,asm) -> (* TODO: grab cminor here and do something *)
+    | Errors.OK (cm,asm) -> 
       (match Asmexpand.expand_program asm with
       | Errors.OK asm' -> cm,asm'
       | Errors.Error msg ->
@@ -357,10 +359,9 @@ let compile_oeuf cu shim_ast sourcename asmname cmname =
   let oc = open_out asmname in
   PrintAsm.print_program oc asm (*debug=*)None;
   close_out oc;
-  (* Print cminor in text form *)
+  (* Print cminor in coq defn form *)
   let ocm = open_out cmname in
-  (*PrintCminor.print_program ocm cm;*)
-  (* TODO: print out cminor here *)
+  ExportCminor.print_program ocm cm;
   close_out ocm
 
 
@@ -379,7 +380,7 @@ let process_oeuf sourcename =
   let preproname = Filename.temp_file "compcert" ".i" in
   preprocess shimname preproname;
   let shim_ast,_ = parse_c_file shimname preproname in
-  let cmname = (output_filename ~final:true sourcename ".oeuf" ".cm") in
+  let cmname = (output_filename ~final:true sourcename ".oeuf" "_cm.v") in
   let s = if !option_S then begin
               compile_oeuf cu shim_ast sourcename 
                            (output_filename ~final:true sourcename ".oeuf" ".s") cmname;
