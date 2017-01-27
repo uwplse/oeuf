@@ -578,13 +578,13 @@ Qed.
 
 
 
+(*
 Lemma compile_cu_compile_genv : forall G (A : A.genv G) Ameta B Bmeta,
     compile_cu (A, Ameta) = (B, Bmeta) ->
     compile_genv A = B.
 simpl. inversion 1. auto.
 Qed.
 
-(*
 Section Preservation.
 
     Variable aprog : A.prog_type.
@@ -612,4 +612,3 @@ Section Preservation.
 
 End Preservation.
 *)
-

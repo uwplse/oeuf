@@ -403,6 +403,30 @@ Lemma compile_cu_I_expr : forall A Ameta B Bmeta,
 simpl. inversion 1. break_bind_option. inject_some. i_lem compile_genv_I_expr.
 Qed.
 
+Lemma A_expr_value_ex : forall v b,
+    B.expr_value b v ->
+    exists a, A.expr_value a v /\ I_expr a b.
+mut_induction v using value_rect_mut' with
+    (Pl := fun v => forall b,
+        Forall2 B.expr_value b v ->
+        exists a, Forall2 A.expr_value a v /\ Forall2 I_expr a b);
+[ intros0 Bev; invc Bev.. | ].
+
+- destruct (IHv ?? **) as (? & ? & ?).
+  eexists; split; i_ctor. i_ctor.
+
+- destruct (IHv ?? **) as (? & ? & ?).
+  eexists; split; i_ctor. i_ctor.
+
+- eexists; split; i_ctor.
+
+- destruct (IHv ?? **) as (? & ? & ?).
+  destruct (IHv0 ?? **) as (? & ? & ?).
+  eexists; split; i_ctor.
+
+- finish_mut_induction A_expr_value_ex using list.
+Qed exporting.
+
 Section Preservation.
 
     Variable aprog : A.prog_type.
@@ -418,7 +442,12 @@ Section Preservation.
         (match_states := I)
         (match_values := @eq value).
 
-    - simpl. admit. (* callstate matching *)
+    - simpl. intros0 Bcall Hf Ha. invc Bcall.
+      fwd eapply Forall2_nth_error_ex' with (ys := B) as HH; eauto.
+        destruct HH as (abody & ? & ?).
+      fwd eapply A_expr_value_ex as HH; eauto. destruct HH as (? & ? & ?).
+      fwd eapply A_expr_value_ex_list as HH; eauto. destruct HH as (? & ? & ?).
+      eexists. split; repeat i_ctor.
 
     - simpl. intros0 II Afinal. invc Afinal. invc II.
       eexists. split. i_ctor. i_ctor.
@@ -426,7 +455,7 @@ Section Preservation.
     - intros0 Astep. intros0 II.
       i_lem I_sim.
 
-    Admitted.
+    Qed.
 
 End Preservation.
 
