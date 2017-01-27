@@ -23,6 +23,7 @@ for f in test/*.v ; do
     else echo "Test $TESTNAME passed!"
          rm -f "$TESTNAME.oeuf" "$TESTNAME.o"
          rm -f "shim.c" "shim.o"
+	 rm -f "$TESTNAME"
     fi
 done
 
