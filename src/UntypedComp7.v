@@ -50,6 +50,12 @@ Definition compile_expr_list :=
 
 Definition compile_genv := compile_expr_list.
 
+Definition compile_cu (cu : list AS.expr * list metadata) :
+        option (list B.expr * list metadata) :=
+    let '(exprs, metas) := cu in
+    compile_genv exprs >>= fun exprs' =>
+    Some (exprs', metas).
+
 End compile.
 
 

@@ -25,6 +25,11 @@ Definition compile_genv :=
                 map S.weaken_expr (e :: go g')
         end in go.
 
+Definition compile_cu (cu : list S.expr * list metadata) :
+        list S.expr * list metadata :=
+    let '(exprs, metas) := cu in
+    (compile_genv exprs, metas).
+
 
 Lemma compile_get_weaken : forall AE fname,
     A.get_weaken AE fname = nth_error (compile_genv AE) fname.
