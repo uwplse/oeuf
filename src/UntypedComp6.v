@@ -70,6 +70,7 @@ Inductive I_cont : S.cont -> S.cont -> Prop :=
         I_cont ak bk ->
         I_cont (S.KElim ty acases l ak)
                (S.KElim ty bcases l bk)
+| IKStop : I_cont S.KStop S.KStop
 .
 
 Fixpoint unroll_cont e depth k :=
