@@ -93,6 +93,7 @@ Inductive I_cont : AS.cont -> B.cont -> Prop :=
         I_cont ak bk ->
         I_cont (AS.KElim ty acases l ak)
                (B.KElim ty bcases l bk)
+| IKStop : I_cont AS.KStop B.KStop
 .
 
 Inductive I : AS.state -> B.state -> Prop :=
