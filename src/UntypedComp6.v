@@ -22,6 +22,9 @@ Module B := Untyped6.
 
 Definition compile_genv := @id (list S.expr).
 
+Definition compile_cu := @id (list S.expr * list metadata)%type.
+
+
 Inductive I_expr : S.expr -> S.expr -> Prop :=
 | IValue : forall av bv,
         B.expr_value bv av ->

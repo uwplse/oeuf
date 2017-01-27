@@ -20,6 +20,8 @@ Module S := Untyped1.
 
 Definition compile_genv := @id (list S.expr).
 
+Definition compile_cu := @id (list S.expr * list metadata)%type.
+
 
 Ltac i_ctor := intros; constructor; eauto.
 Ltac i_lem H := intros; eapply H; eauto.

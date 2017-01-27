@@ -46,6 +46,11 @@ Definition compile_expr_list :=
 
 Definition compile_genv := compile_expr_list.
 
+Definition compile_cu (cu : list AS.expr * list metadata) :
+        list B.expr * list metadata :=
+    let '(exprs, metas) := cu in
+    (compile_genv exprs, metas).
+
 
 Inductive I_expr : AS.expr -> B.expr -> Prop :=
 | IValue : forall v, I_expr (AS.Value v) (B.Value v)

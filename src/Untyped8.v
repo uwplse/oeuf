@@ -15,6 +15,8 @@ Inductive expr :=
 | Elim (ty : type_name) (cases : list expr) (target : expr)
 .
 
+Definition env := list expr.
+
 Inductive is_value : expr -> Prop :=
 | IsVConstr : forall ctor args,
         Forall is_value args ->

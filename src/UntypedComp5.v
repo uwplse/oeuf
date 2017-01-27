@@ -20,6 +20,8 @@ Module S := Untyped4.
 
 Definition compile_genv := @id (list S.expr).
 
+Definition compile_cu := @id (list S.expr * list metadata)%type.
+
 
 
 Definition uncompile_value :=

@@ -109,6 +109,11 @@ Definition compile_state {G rty} (s : A.state G rty) :=
     | A.Stop v => B.Stop (go_value v)
     end.
 
+Definition compile_cu {G} (cu : A.genv G * list metadata) :
+        list B.expr * list metadata :=
+    let '(exprs, metas) := cu in
+    (compile_genv exprs, metas).
+
 
 
 Lemma compile_hget_value : forall G ty tys
