@@ -9,6 +9,7 @@ Require Import HList.
 Require Import CompilationUnit.
 Require Import Semantics.
 Require Import HighestValues.
+Require Import StepLib.
 
 Require Untyped4.
 Require Untyped5.
@@ -114,7 +115,7 @@ Theorem I_sim : forall E a a' b,
     I a b ->
     A.sstep E a a' ->
     exists b',
-        (B.sstep E b b' \/ (b = b' /\ metric a' < metric a)) /\
+        (B.sstep E b b' \/ (b' = b /\ metric a' < metric a)) /\
         I a' b'.
 
 destruct a as [ae l ak | v];
@@ -138,3 +139,41 @@ all: try solve [eexists; split; repeat i_ctor].
   + intros. inversion 1.
 
 Admitted.
+
+
+
+Lemma compile_cu_eq : forall A Ameta B Bmeta,
+    compile_cu (A, Ameta) = (B, Bmeta) ->
+    A = B.
+simpl. inversion 1. auto.
+Qed.
+
+Section Preservation.
+
+    Variable aprog : A.prog_type.
+    Variable bprog : B.prog_type.
+
+    Hypothesis Hcomp : compile_cu aprog = bprog.
+
+    Theorem fsim : Semantics.forward_simulation (A.semantics aprog) (B.semantics bprog).
+    destruct aprog as [A Ameta], bprog as [B Bmeta].
+    fwd eapply compile_cu_eq; eauto.
+
+    eapply Semantics.forward_simulation_star with
+        (match_states := I)
+        (match_values := @eq value).
+
+    - simpl. admit. (* callstate matching *)
+
+    - simpl. intros0 II Afinal. invc Afinal. invc II.
+      eexists. split. i_ctor. i_ctor.
+
+    - intros0 Astep. intros0 II.
+      simpl in *. subst B.
+      eapply sstar_01_semantics_sim, I_sim; eauto.
+      + admit. (* global env contains no values *)
+
+    Admitted.
+
+End Preservation.
+

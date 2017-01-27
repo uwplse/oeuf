@@ -39,3 +39,39 @@ all: try solve [i_ctor].
   i_lem B.SEliminate.
 Qed.
 
+
+
+Lemma compile_cu_eq : forall A Ameta B Bmeta,
+    compile_cu (A, Ameta) = (B, Bmeta) ->
+    A = B.
+simpl. inversion 1. auto.
+Qed.
+
+Section Preservation.
+
+    Variable aprog : A.prog_type.
+    Variable bprog : B.prog_type.
+
+    Hypothesis Hcomp : compile_cu aprog = bprog.
+
+    Theorem fsim : Semantics.forward_simulation (A.semantics aprog) (B.semantics bprog).
+    destruct aprog as [A Ameta], bprog as [B Bmeta].
+    fwd eapply compile_cu_eq; eauto.
+
+    eapply Semantics.forward_simulation_step with
+        (match_states := @eq S.state)
+        (match_values := @eq value).
+
+    - simpl. admit. (* callstate matching *)
+
+    - simpl. intros0 II Afinal. invc Afinal.
+      eexists. split. i_ctor. i_ctor.
+
+    - intros0 Astep. intros0 II.
+      fwd eapply I_sim; eauto.
+      subst s1. eexists. eauto.
+
+    Admitted.
+
+End Preservation.
+
