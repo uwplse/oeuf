@@ -109,8 +109,12 @@ Definition valtype := value.
 
 Definition initial_env (prog : prog_type) : env := fst prog.
 
-Inductive is_callstate (prog : prog_type) : valtype -> valtype -> state -> Prop := .
-(* TODO: stub *)
+Inductive is_callstate (prog : prog_type) : valtype -> valtype -> state -> Prop :=
+| IsCallstate : forall fname free av body,
+        nth_error (fst prog) fname = Some body ->
+        let fv := Close fname free in
+        is_callstate prog fv av
+            (Run body (av :: free) KStop).
 
 Inductive final_state (prog : prog_type) : state -> valtype -> Prop :=
 | FinalState : forall v, final_state prog (Stop v) v.

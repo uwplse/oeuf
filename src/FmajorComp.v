@@ -630,18 +630,6 @@ rewrite count_up_nth_error in * by auto.
 congruence.
 Qed.
 
-Lemma map_nth_error' : forall A B (f : A -> B) xs n x,
-    nth_error (map f xs) n = Some x ->
-    exists y,
-        nth_error xs n = Some y /\
-        x = f y.
-induction xs; intros0 Hnth; simpl in *.
-- destruct n; discriminate Hnth.
-- destruct n; simpl in *.
-  + inject_some. eauto.
-  + eapply IHxs; eauto.
-Qed.
-
 Lemma list_disjoint_append_r : forall A (xs ys1 ys2 : list A),
     list_disjoint xs ys1 ->
     list_disjoint xs ys2 ->

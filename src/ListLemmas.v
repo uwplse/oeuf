@@ -571,6 +571,18 @@ induction xs; destruct ys; intros0 Hfa; invc Hfa.
   + eauto.
 Qed.
 
+Lemma map_nth_error' : forall A B (f : A -> B) xs n x,
+    nth_error (map f xs) n = Some x ->
+    exists y,
+        nth_error xs n = Some y /\
+        x = f y.
+induction xs; intros0 Hnth; simpl in *.
+- destruct n; discriminate Hnth.
+- destruct n; simpl in *.
+  + inject_some. eauto.
+  + eapply IHxs; eauto.
+Qed.
+
 
 
 

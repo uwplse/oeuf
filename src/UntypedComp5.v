@@ -163,7 +163,10 @@ Section Preservation.
         (match_states := I)
         (match_values := @eq value).
 
-    - simpl. admit. (* callstate matching *)
+    - simpl. intros0 Bcall Hf Ha. invc Bcall.
+      simpl in *.
+      eexists. split; repeat i_ctor.
+      + admit. (* global env contains no values *)
 
     - simpl. intros0 II Afinal. invc Afinal. invc II.
       eexists. split. i_ctor. i_ctor.

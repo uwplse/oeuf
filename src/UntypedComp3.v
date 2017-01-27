@@ -62,7 +62,9 @@ Section Preservation.
         (match_states := @eq S.state)
         (match_values := @eq value).
 
-    - simpl. admit. (* callstate matching *)
+    - simpl. intros0 Bcall Hf Ha. invc Bcall.
+      simpl in *.
+      eexists. split; repeat i_ctor.
 
     - simpl. intros0 II Afinal. invc Afinal.
       eexists. split. i_ctor. i_ctor.
@@ -71,7 +73,7 @@ Section Preservation.
       fwd eapply I_sim; eauto.
       subst s1. eexists. eauto.
 
-    Admitted.
+    Qed.
 
 End Preservation.
 

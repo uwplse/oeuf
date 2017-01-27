@@ -4,6 +4,7 @@ Require Import Utopia.
 Require Import Metadata.
 Require Import Program.
 
+Require Import ListLemmas.
 Require Import HList.
 Require Import CompilationUnit.
 Require Import Semantics.
@@ -67,6 +68,31 @@ Lemma compile_cu_compile_genv : forall A Ameta B Bmeta,
 simpl. inversion 1. auto.
 Qed.
 
+Lemma compile_genv_length : forall a,
+    length a = length (compile_genv a).
+induction a; simpl in *.
+- reflexivity.
+- rewrite map_length. f_equal. auto.
+Qed.
+
+Lemma compile_genv_weaken_expr : forall A,
+    map S.weaken_expr (compile_genv A) =
+    compile_genv (map S.weaken_expr A).
+induction A; simpl.
+- reflexivity.
+- rewrite IHA. reflexivity.
+Qed.
+
+Lemma compile_genv_get_nth : forall A fname body,
+    nth_error (compile_genv A) fname = Some body ->
+    A.get_weaken A fname = Some body.
+induction A; intros0 Hnth; destruct fname; try discriminate; simpl in *.
+- auto.
+- eapply map_nth_error' in Hnth.  destruct Hnth as (? & ? & ?).
+  erewrite IHA; eauto.
+  f_equal. eauto.
+Qed.
+
 Section Preservation.
 
     Variable aprog : A.prog_type.
@@ -82,7 +108,9 @@ Section Preservation.
         (match_states := @eq S.state)
         (match_values := @eq value).
 
-    - simpl. admit. (* callstate matching *)
+    - simpl. intros0 Bcall Hf Ha. invc Bcall.
+      fwd eapply compile_genv_get_nth as HH; eauto.
+      eexists. split; i_ctor.
 
     - simpl. intros0 II Afinal. invc Afinal.
       eexists. split. i_ctor. i_ctor.
@@ -91,7 +119,7 @@ Section Preservation.
       fwd eapply I_sim; eauto.
       subst s1. eexists. eauto.
 
-    Admitted.
+    Qed.
 
 End Preservation.
 

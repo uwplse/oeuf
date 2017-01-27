@@ -734,7 +734,10 @@ Section Preservation.
         (match_states := I)
         (match_values := @eq value).
 
-    - simpl. admit. (* callstate matching *)
+    - simpl. intros0 Bcall Hf Ha. invc Bcall.
+      fwd eapply Forall2_nth_error_ex' with (ys := B) as HH; eauto.
+        destruct HH as (abody & ? & ?).
+      eexists. split; repeat i_ctor.
 
     - simpl. intros0 II Afinal. invc Afinal. invc II.
       eexists. split. i_ctor. i_ctor.
@@ -742,7 +745,7 @@ Section Preservation.
     - intros0 Astep. intros0 II.  simpl in *.
       eapply sstar_01_semantics_sim, I_sim; eauto.
 
-    Admitted.
+    Qed.
 
 End Preservation.
 
