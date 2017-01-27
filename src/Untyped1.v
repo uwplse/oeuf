@@ -235,3 +235,66 @@ Inductive sstep (g : list expr) : state -> state -> Prop :=
         sstep g (Run (Elim ty cases (Value (Constr ctor args))) l k)
                 (Run result l k)
 .
+
+
+
+Definition expr_rect_mut (P : expr -> Type) (Pl : list expr -> Type)
+    (HValue :   forall v, P (Value v))
+    (HVar :     forall idx, P (Var idx))
+    (HApp :     forall f a, P f -> P a -> P (App f a))
+    (HMkConstr : forall c args, Pl args -> P (MkConstr c args))
+    (HMkClose : forall f free, Pl free -> P (MkClose f free))
+    (HElim :    forall ty cases target, Pl cases -> P target -> P (Elim ty cases target))
+    (Hnil :     Pl [])
+    (Hcons :    forall e es, P e -> Pl es -> Pl (e :: es))
+    (e : expr) : P e :=
+    let fix go e :=
+        let fix go_list es :=
+            match es as es_ return Pl es_ with
+            | [] => Hnil
+            | e :: es => Hcons e es (go e) (go_list es)
+            end in
+        match e as e_ return P e_ with
+        | Value v => HValue v
+        | Var idx => HVar idx
+        | App f a => HApp f a (go f) (go a)
+        | MkConstr c args => HMkConstr c args (go_list args)
+        | MkClose f free => HMkClose f free (go_list free)
+        | Elim ty cases target => HElim ty cases target (go_list cases) (go target)
+        end in go e.
+
+Definition expr_rect_mut' (P : expr -> Type) (Pl : list expr -> Type)
+    HValue HVar HApp HMkConstr HMkClose HElim Hnil Hcons
+    : (forall e, P e) * (forall es, Pl es) :=
+    let go := expr_rect_mut P Pl
+        HValue HVar HApp HMkConstr HMkClose HElim Hnil Hcons
+    in
+    let fix go_list es :=
+        match es as es_ return Pl es_ with
+        | [] => Hnil
+        | e :: es => Hcons e es (go e) (go_list es)
+        end in
+    (go, go_list).
+
+
+
+(* semantics *)
+
+Definition env := list expr.
+Definition prog_type : Type := list expr * list metadata.
+Definition valtype := value.
+
+Definition initial_env (prog : prog_type) : env := fst prog.
+
+Inductive is_callstate (prog : prog_type) : valtype -> valtype -> state -> Prop := .
+(* TODO: stub *)
+
+Inductive final_state (prog : prog_type) : state -> valtype -> Prop :=
+| FinalState : forall v, final_state prog (Stop v) v.
+
+Definition semantics (prog : prog_type) : Semantics.semantics :=
+  @Semantics_gen state env valtype
+                 (is_callstate prog)
+                 (sstep)
+                 (final_state prog)
+                 (initial_env prog).

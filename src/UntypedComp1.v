@@ -575,3 +575,41 @@ all: fix_existT; subst.
   + simpl. reflexivity.
 
 Qed.
+
+
+
+Lemma compile_cu_compile_genv : forall G (A : A.genv G) Ameta B Bmeta,
+    compile_cu (A, Ameta) = (B, Bmeta) ->
+    compile_genv A = B.
+simpl. inversion 1. auto.
+Qed.
+
+(*
+Section Preservation.
+
+    Variable aprog : A.prog_type.
+    Variable bprog : B.prog_type.
+
+    Hypothesis Hcomp : compile_cu aprog = bprog.
+
+    Theorem fsim : Semantics.forward_simulation (A.semantics aprog) (B.semantics bprog).
+    destruct aprog as [A Ameta], bprog as [B Bmeta].
+    fwd eapply compile_cu_I_expr; eauto.
+
+    eapply Semantics.forward_simulation_step with
+        (match_states := I)
+        (match_values := @eq value).
+
+    - simpl. admit. (* callstate matching *)
+
+    - simpl. intros0 II Afinal. invc Afinal. invc II.
+      eexists. split. i_ctor. i_ctor.
+
+    - intros0 Astep. intros0 II.
+      i_lem I_sim.
+
+    Admitted.
+
+End Preservation.
+*)
+

@@ -951,3 +951,24 @@ Qed.
 
 
 
+(* semantics *)
+
+(*
+Definition prog_type G : Type := genv G * list metadata.
+Definition valtype := value.
+
+Definition initial_env (prog : prog_type) : env := fst prog.
+
+Inductive is_callstate (prog : prog_type) : valtype -> valtype -> state -> Prop := .
+(* TODO: stub *)
+
+Inductive final_state (prog : prog_type) : state -> valtype -> Prop :=
+| FinalState : forall v, final_state prog (Stop v) v.
+
+Definition semantics (prog : prog_type) : Semantics.semantics :=
+  @Semantics_gen state env valtype
+                 (is_callstate prog)
+                 (sstep)
+                 (final_state prog)
+                 (initial_env prog).
+*)

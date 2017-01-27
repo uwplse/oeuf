@@ -374,3 +374,59 @@ all: invc II.
   + i_ctor. i_lem I_unroll_elim. i_ctor.
 
 Qed.
+
+
+
+Lemma compile_I_expr : forall a b,
+    compile_expr a = Some b ->
+    I_expr a b.
+mut_induction a using AS.expr_rect_mut' with
+    (Pl := fun a => forall b,
+        compile_expr_list a = Some b ->
+        Forall2 I_expr a b);
+[ intros0 Hcomp; simpl in Hcomp; break_bind_option; inject_some; try i_ctor.. | ].
+
+- discriminate.
+
+- finish_mut_induction compile_I_expr using list.
+Qed exporting.
+
+Lemma compile_genv_I_expr : forall A B,
+    compile_genv A = Some B ->
+    Forall2 I_expr A B.
+intros. i_lem compile_I_expr_list.
+Qed.
+
+Lemma compile_cu_I_expr : forall A Ameta B Bmeta,
+    compile_cu (A, Ameta) = Some (B, Bmeta) ->
+    Forall2 I_expr A B.
+simpl. inversion 1. break_bind_option. inject_some. i_lem compile_genv_I_expr.
+Qed.
+
+Section Preservation.
+
+    Variable aprog : A.prog_type.
+    Variable bprog : B.prog_type.
+
+    Hypothesis Hcomp : compile_cu aprog = Some bprog.
+
+    Theorem fsim : Semantics.forward_simulation (A.semantics aprog) (B.semantics bprog).
+    destruct aprog as [A Ameta], bprog as [B Bmeta].
+    fwd eapply compile_cu_I_expr; eauto.
+
+    eapply Semantics.forward_simulation_step with
+        (match_states := I)
+        (match_values := @eq value).
+
+    - simpl. admit. (* callstate matching *)
+
+    - simpl. intros0 II Afinal. invc Afinal. invc II.
+      eexists. split. i_ctor. i_ctor.
+
+    - intros0 Astep. intros0 II.
+      i_lem I_sim.
+
+    Admitted.
+
+End Preservation.
+

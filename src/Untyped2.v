@@ -96,3 +96,26 @@ Inductive sstep (g : list expr) : state -> state -> Prop :=
         sstep g (Run (Elim ty cases (Value (Constr ctor args))) l k)
                 (Run result l k)
 .
+
+
+
+(* semantics *)
+
+Definition env := list expr.
+Definition prog_type : Type := list expr * list metadata.
+Definition valtype := value.
+
+Definition initial_env (prog : prog_type) : env := fst prog.
+
+Inductive is_callstate (prog : prog_type) : valtype -> valtype -> state -> Prop := .
+(* TODO: stub *)
+
+Inductive final_state (prog : prog_type) : state -> valtype -> Prop :=
+| FinalState : forall v, final_state prog (Stop v) v.
+
+Definition semantics (prog : prog_type) : Semantics.semantics :=
+  @Semantics_gen state env valtype
+                 (is_callstate prog)
+                 (sstep)
+                 (final_state prog)
+                 (initial_env prog).

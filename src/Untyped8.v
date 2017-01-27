@@ -15,8 +15,6 @@ Inductive expr :=
 | Elim (ty : type_name) (cases : list expr) (target : expr)
 .
 
-Definition env := list expr.
-
 Inductive is_value : expr -> Prop :=
 | IsVConstr : forall ctor args,
         Forall is_value args ->
@@ -230,3 +228,27 @@ mut_induction e using expr_rect_mut' with
 - finish_mut_induction is_value_expr_value using list.
 Qed exporting.
 
+
+
+(* semantics *)
+
+Definition env := list expr.
+Definition prog_type : Type := list expr * list metadata.
+Definition valtype := value.
+
+Definition initial_env (prog : prog_type) : env := fst prog.
+
+Inductive is_callstate (prog : prog_type) : valtype -> valtype -> state -> Prop := .
+(* TODO: stub *)
+
+Inductive final_state (prog : prog_type) : state -> valtype -> Prop :=
+| FinalState : forall e v,
+        expr_value e v ->
+        final_state prog (Stop e) v.
+
+Definition semantics (prog : prog_type) : Semantics.semantics :=
+  @Semantics_gen state env valtype
+                 (is_callstate prog)
+                 (sstep)
+                 (final_state prog)
+                 (initial_env prog).

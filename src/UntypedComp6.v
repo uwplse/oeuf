@@ -10,6 +10,7 @@ Require Import HList.
 Require Import CompilationUnit.
 Require Import Semantics.
 Require Import HighestValues.
+Require Import StepLib.
 
 Require Untyped4.
 Require Untyped5.
@@ -701,3 +702,47 @@ all: try solve [
   i_ctor. i_lem I_unroll_elim. i_ctor.
 
 Qed.
+
+
+
+Lemma compile_genv_I_expr : forall A B,
+    compile_genv A = B ->
+    Forall2 I_expr A B.
+induction A; intros; subst B; simpl.
+- i_ctor.
+- i_ctor.
+Qed.
+
+Lemma compile_cu_I_expr : forall A Ameta B Bmeta,
+    compile_cu (A, Ameta) = (B, Bmeta) ->
+    Forall2 I_expr A B.
+simpl. inversion 1. i_lem compile_genv_I_expr.
+Qed.
+
+Section Preservation.
+
+    Variable aprog : A.prog_type.
+    Variable bprog : B.prog_type.
+
+    Hypothesis Hcomp : compile_cu aprog = bprog.
+
+    Theorem fsim : Semantics.forward_simulation (A.semantics aprog) (B.semantics bprog).
+    destruct aprog as [A Ameta], bprog as [B Bmeta].
+    fwd eapply compile_cu_I_expr; eauto.
+
+    eapply Semantics.forward_simulation_star with
+        (match_states := I)
+        (match_values := @eq value).
+
+    - simpl. admit. (* callstate matching *)
+
+    - simpl. intros0 II Afinal. invc Afinal. invc II.
+      eexists. split. i_ctor. i_ctor.
+
+    - intros0 Astep. intros0 II.  simpl in *.
+      eapply sstar_01_semantics_sim, I_sim; eauto.
+
+    Admitted.
+
+End Preservation.
+
