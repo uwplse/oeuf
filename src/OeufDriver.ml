@@ -354,15 +354,15 @@ let compile_oeuf cu shim_ast sourcename asmname cmname =
   (* Dump Asm in binary and JSON format *)
   if !option_sdump then
       dump_jasm asm sourcename (output_filename sourcename ".oeuf" !sdump_suffix);
+  (* Print cminor in coq defn form *)
+  let ocm = open_out cmname in
+  ExportCminor.print_program ocm cm;
+  close_out ocm;
 
   (* Print Asm in text form *)
   let oc = open_out asmname in
   PrintAsm.print_program oc asm (*debug=*)None;
-  close_out oc;
-  (* Print cminor in coq defn form *)
-  let ocm = open_out cmname in
-  ExportCminor.print_program ocm cm;
-  close_out ocm
+  close_out oc
 
 
 let parse_oeuf sourcename =

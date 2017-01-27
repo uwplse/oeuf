@@ -123,6 +123,9 @@ let coqsingle p n =
 let coqN p n =
   fprintf p "%ld%%N" (N.to_int32 n)
 
+let coqZ p z =
+  fprintf p "%ld%%Z" (Z.to_int32 z)
+	  
 let rec nat p  = function
   | S(n) -> fprintf p "(S %a)" nat n
   | O -> fprintf p "O"
@@ -367,15 +370,15 @@ let rec expr p = function
   | Evar(id) ->
       fprintf p "(Evar %a)" ident id
   | Eunop(op, a1) ->
-      fprintf p "@[<hov 2>(Eunop %s %a@)@]"
+      fprintf p "@[<hov 2>(Eunop %s %a)@]"
          (name_unop op) expr a1
   | Econst(c) ->
-     fprintf p "@[<hov 2>(Econst %a@)@]" constant c
+     fprintf p "@[<hov 2>(Econst %a)@]" constant c
   | Ebinop(op, a1, a2) ->
-      fprintf p "@[<hov 2>(Ebinop %s@ %a@ %a@)@]"
+      fprintf p "@[<hov 2>(Ebinop %s@ %a@ %a)@]"
          (name_binop op) expr a1 expr a2
   | Eload(chnk, a1) ->
-      fprintf p "@[<hov 2>(Eload %s@ %a@)@]"
+      fprintf p "@[<hov 2>(Eload %s@ %a)@]"
          (name_of_chunk chnk) expr a1
 
 
@@ -416,7 +419,7 @@ let rec stmt p = function
   | Sexit(n) ->
      fprintf p "@[<hv 2>(Sexit@ %a)@]" nat n
   | Sswitch(b,e,numlist,n) ->
-     fprintf p "@[<hv 2>(Sswitch %B %a@ %a@ %a)@]" b expr e (print_list (print_pair coqint nat)) numlist nat n                                                                         
+     fprintf p "@[<hv 2>(Sswitch %B %a@ %a@ %a)@]" b expr e (print_list (print_pair coqZ nat)) numlist nat n 
   | Sreturn e ->
       fprintf p "@[<hv 2>(Sreturn %a)@]" (print_option expr) e
   | Slabel(lbl, s1) ->
@@ -465,7 +468,7 @@ let print_ident_globdef p = function
   | (id, Gfun(Internal f)) ->
       fprintf p "(%a, Gfun(Internal f_%s))" ident id (extern_atom id)
   | (id, Gfun(External ef)) ->
-      fprintf p "@[<hov 2>(%a,@ @[<hov 2>Gfun(External %a@))@]@]"
+      fprintf p "@[<hov 2>(%a,@ @[<hov 2>Gfun(External %a))@]@]"
         ident id external_function ef 
   | (id, Gvar v) ->
       fprintf p "(%a, Gvar v_%s)" ident id (extern_atom id)
@@ -532,6 +535,11 @@ let print_assertions p =
 
 let prologue = "\
 Require Import compcert.backend.Cminor.
+Require Import compcert.common.AST.
+Require Import BinNums.
+Require Import compcert.lib.Integers.
+Require Import List.
+Import ListNotations.
 
 Local Open Scope Z_scope.
 
