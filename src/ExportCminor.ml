@@ -357,12 +357,12 @@ let name_binop = function
   | Oshll -> "Oshll"
   | Oshrl -> "Oshrl"
   | Oshrlu -> "Oshrlu"
-  | Ocmp(c) -> "Ocmp" ^ cmp c
-  | Ocmpu(c) -> "Ocmpu" ^ cmp c
-  | Ocmpf(c) -> "Ocmpf" ^ cmp c
-  | Ocmpfs(c) -> "Ocmpfs" ^ cmp c
-  | Ocmpl(c) -> "Ocmpl" ^ cmp c
-  | Ocmplu(c) -> "Ocmplu" ^ cmp c
+  | Ocmp(c) -> "(Ocmp " ^ cmp c ^ ")"
+  | Ocmpu(c) -> "(Ocmpu " ^ cmp c ^ ")"
+  | Ocmpf(c) -> "(Ocmpf " ^ cmp c ^ ")"
+  | Ocmpfs(c) -> "(Ocmpfs " ^ cmp c ^ ")"
+  | Ocmpl(c) -> "(Ocmpl " ^ cmp c ^ ")"
+  | Ocmplu(c) -> "(Ocmplu " ^ cmp c ^ ")"
 
 
 
