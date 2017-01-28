@@ -380,7 +380,7 @@ let process_oeuf sourcename =
   let preproname = Filename.temp_file "compcert" ".i" in
   preprocess shimname preproname;
   let shim_ast,_ = parse_c_file shimname preproname in
-  let cmname = (output_filename ~final:true sourcename ".oeuf" "_cm.v") in
+  let cmname = (output_filename sourcename ".oeuf" "_cm.v") in
   let s = if !option_S then begin
               compile_oeuf cu shim_ast sourcename 
                            (output_filename ~final:true sourcename ".oeuf" ".s") cmname;
