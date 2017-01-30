@@ -1,10 +1,11 @@
 Require Import OeufCompcertCompiler compcert.common.Errors.
 Require Import Common Monads.
-Require UntypedComp TaggedComp LiftedComp SwitchedComp FmajorComp.
+Require Untyped1.
+Require UntypedComp1 TaggedComp SwitchedComp FmajorComp.
 Require Fmajortofflatmajor Fflatmajortoemajor Emajortodmajor Dmajortodflatmajor Dflatmajortocmajor Cmajortominor.
 Require TaggedNumberedComp ElimFuncComp ElimFuncComp2 ElimFuncComp3.
 Require SelfCloseComp ValueFlagComp.
-Require StackCompCombined LocalsCompCombined FlatCompCombined.
+Require UntypedCompCombined StackCompCombined LocalsCompCombined FlatCompCombined.
 Require CompilationUnit Metadata.
 Require Import CompilerUtil.
 
@@ -13,9 +14,9 @@ Require compcert.backend.SelectLong.
 Require Import Linker.
 
 
-Definition transf_untyped_to_cminor (l : list UntypedComp.U.expr * list Metadata.metadata) : res Cminor.program :=
+Definition transf_untyped_to_cminor (l : list Untyped1.expr * list Metadata.metadata) : res Cminor.program :=
   OK l
-  @@ LiftedComp.compile_cu
+ @@@ UntypedCompCombined.compile_cu
  @@@ TaggedComp.compile_cu ~~ "TaggedComp"
   @@ TaggedNumberedComp.compile_cu
   @@ ElimFuncComp.compile_cu
@@ -39,7 +40,7 @@ Definition transf_untyped_to_cminor (l : list UntypedComp.U.expr * list Metadata
 
 Definition transf_oeuf_to_cminor (j : CompilationUnit.compilation_unit) : res Cminor.program :=
   OK (Metadata.init_metadata j)
-  @@ UntypedComp.compile_cu
+  @@ UntypedComp1.compile_cu
  @@@ Metadata.check_length
  @@@ transf_untyped_to_cminor.
 
@@ -72,7 +73,7 @@ Definition transf_whole_program (oeuf_code : CompilationUnit.compilation_unit) (
 (* LEGACY BELOW *)  
 Definition transf_to_cminor (j : CompilationUnit.compilation_unit) : res Cminor.program :=
   OK (Metadata.init_metadata j)
-  @@ UntypedComp.compile_cu
+  @@ UntypedComp1.compile_cu
  @@@ Metadata.check_length
  @@@ transf_untyped_to_cminor.
 

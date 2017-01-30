@@ -7,11 +7,13 @@ Require Import ListLemmas.
 Require Import Metadata.
 Require Import StepLib.
 Require Utopia String.
+Require HigherValue.
+Require HighestValues.
 
-Require Lifted.
+Require Untyped8.
 Require Tagged.
 
-Module A := Lifted.
+Module A := Untyped8.
 Module B := Tagged.
 
 
@@ -49,7 +51,7 @@ Definition compile (e : A.expr) : option B.expr :=
         match e with
         | A.Arg => Some (B.Arg)
         | A.UpVar n => Some (B.UpVar n)
-        | A.Call f a => B.Call <$> go f <*> go a
+        | A.App f a => B.Call <$> go f <*> go a
         | A.Constr c args => B.Constr (Utopia.constructor_index c) <$> go_list args
         | A.Elim ty cases target =>
                 go_list cases >>= fun cases =>
@@ -153,6 +155,18 @@ Qed.
 
 
 
+Inductive I_value : HighestValues.value -> HigherValue.value -> Prop :=
+| IvConstr : forall ctor aargs tag bargs,
+        Utopia.constructor_index ctor = tag ->
+        Forall2 I_value aargs bargs ->
+        I_value (HighestValues.Constr ctor aargs)
+                (HigherValue.Constr tag bargs)
+| IvClose : forall fname aargs bargs,
+        Forall2 I_value aargs bargs ->
+        I_value (HighestValues.Close fname aargs)
+                (HigherValue.Close fname bargs)
+.
+
 Inductive I_expr : A.expr -> B.expr -> Prop :=
 | IArg : I_expr A.Arg B.Arg
 | IUpVar : forall n,
@@ -160,7 +174,7 @@ Inductive I_expr : A.expr -> B.expr -> Prop :=
 | ICall : forall af aa bf ba,
         I_expr af bf ->
         I_expr aa ba ->
-        I_expr (A.Call af aa) (B.Call bf ba)
+        I_expr (A.App af aa) (B.Call bf ba)
 | IConstr : forall ctor aargs tag bargs,
         Utopia.constructor_index ctor = tag ->
         Forall2 I_expr aargs bargs ->
@@ -184,11 +198,11 @@ Inductive I_expr : A.expr -> B.expr -> Prop :=
 Inductive I : A.state -> B.state -> Prop :=
 | IRun : forall ae al ak be bl bk,
         I_expr ae be ->
-        Forall A.value al ->
+        Forall A.is_value al ->
         Forall B.value bl ->
         Forall2 I_expr al bl ->
         (forall av bv,
-            A.value av ->
+            A.is_value av ->
             B.value bv ->
             I_expr av bv ->
             I (ak av) (bk bv)) ->
@@ -202,18 +216,21 @@ Inductive I : A.state -> B.state -> Prop :=
 
 Lemma I_expr_value : forall a b,
     I_expr a b ->
-    A.value a ->
+    A.is_value a ->
     B.value b.
-induction a using A.expr_ind'; intros0 II Aval; invc Aval; invc II.
-- constructor. list_magic_on (args, (bargs, tt)).
-- constructor. list_magic_on (free, (bfree, tt)).
+induction a using A.expr_rect_mut with
+    (Pl := fun a => forall b,
+        Forall2 I_expr a b ->
+        Forall A.is_value a ->
+        Forall B.value b); intros0 II Aval; invc Aval; invc II;
+constructor; eauto.
 Qed.
 Hint Resolve I_expr_value.
 
 Lemma I_expr_value' : forall b a,
     I_expr a b ->
     B.value b ->
-    A.value a.
+    A.is_value a.
 induction b using B.expr_ind''; intros0 II Bval; invc Bval; invc II.
 - constructor. list_magic_on (args, (aargs, tt)).
 - constructor. list_magic_on (free, (afree, tt)).
@@ -221,7 +238,7 @@ Qed.
 
 Lemma I_expr_not_value : forall a b,
     I_expr a b ->
-    ~A.value a ->
+    ~A.is_value a ->
     ~B.value b.
 intros. intro. fwd eapply I_expr_value'; eauto.
 Qed.
@@ -230,13 +247,13 @@ Hint Resolve I_expr_not_value.
 Lemma I_expr_not_value' : forall a b,
     I_expr a b ->
     ~B.value b ->
-    ~A.value a.
+    ~A.is_value a.
 intros. intro. fwd eapply I_expr_value; eauto.
 Qed.
 
 Lemma Forall_I_expr_value : forall aes bes,
     Forall2 I_expr aes bes ->
-    Forall A.value aes ->
+    Forall A.is_value aes ->
     Forall B.value bes.
 intros. list_magic_on (aes, (bes, tt)).
 Qed.
@@ -375,35 +392,17 @@ inv Astep; invc II; try on (I_expr _ _), invc.
 
 - fwd eapply Forall2_nth_error_ex with (xs := al) (ys := bl); eauto.
     break_exists. break_and.
-  assert (A.value v).  { eapply Forall_nth_error; eauto. }
+  assert (A.is_value v).  { eapply Forall_nth_error; eauto. }
 
   eexists. split. eapply B.SArg; eauto.
   on _, eapply_; eauto.
 
 - fwd eapply Forall2_nth_error_ex with (xs := al) (ys := bl); eauto.
     break_exists. break_and.
-  assert (A.value v).  { eapply Forall_nth_error; eauto. }
+  assert (A.is_value v).  { eapply Forall_nth_error; eauto. }
 
   eexists. split. eapply B.SUpVar; eauto.
   on _, eapply_; eauto.
-
-- on _, invc_using Forall2_3part_inv.
-
-  eexists. split. eapply B.SCloseStep; eauto.
-  i_ctor. i_ctor. i_ctor. eauto using Forall2_app.
-
-- eexists. split. eapply B.SCloseDone; eauto.
-  on _, eapply_; eauto.
-  all: constructor; eauto.
-
-- on _, invc_using Forall2_3part_inv.
-
-  eexists. split. eapply B.SConstrStep; eauto.
-  i_ctor. i_ctor. i_ctor. eauto using Forall2_app.
-
-- eexists. split. eapply B.SConstrDone; eauto.
-  on _, eapply_; eauto.
-  all: constructor; eauto.
 
 - eexists. split. eapply B.SCallL; eauto.
   i_ctor. i_ctor. i_ctor.
@@ -418,6 +417,24 @@ inv Astep; invc II; try on (I_expr _ _), invc.
   eexists. split. eapply B.SMakeCall; eauto.
   i_ctor.
 
+- on _, invc_using Forall2_3part_inv.
+
+  eexists. split. eapply B.SConstrStep; eauto.
+  i_ctor. i_ctor. i_ctor. i_lem Forall2_app. i_ctor.
+
+- eexists. split. eapply B.SConstrDone; eauto.
+  on _, eapply_; eauto.
+  all: constructor; eauto.
+
+- on _, invc_using Forall2_3part_inv.
+
+  eexists. split. eapply B.SCloseStep; eauto.
+  i_ctor. i_ctor. i_ctor. i_lem Forall2_app. i_ctor.
+
+- eexists. split. eapply B.SCloseDone; eauto.
+  on _, eapply_; eauto.
+  all: constructor; eauto.
+
 - eexists. split. eapply B.SElimStep; eauto.
   i_ctor. i_ctor. i_ctor.
 
@@ -427,7 +444,8 @@ inv Astep; invc II; try on (I_expr _ _), invc.
   remember (A.unroll_elim _ _ _ _) as e'. symmetry in Heqe'.
 
   pose proof H13 as Hnth.
-  specialize (Hnth ?? ?? ?? ?? c ** ** ltac:(eauto using Utopia.ctor_for_type_constr_index)).
+  specialize (Hnth ?? ?? ?? ?? ctor ** **
+    ltac:(eauto using Utopia.ctor_for_type_constr_index)).
   break_and.
   subst brec.
 
@@ -439,48 +457,6 @@ inv Astep; invc II; try on (I_expr _ _), invc.
 Qed.
 
 
-
-(* spec *)
-
-Inductive R (AE : A.env) (BE : B.env) : A.expr -> B.expr -> Prop :=
-| RConstr : forall c aargs bargs,
-        Forall2 (R AE BE) aargs bargs ->
-        R AE BE
-            (A.Constr c aargs)
-            (B.Constr (Utopia.constructor_index c) bargs)
-| RClose : forall fn af bf afree bfree,
-        nth_error AE fn = Some af ->
-        nth_error BE fn = Some bf ->
-        compile af = Some bf ->
-        Forall2 (R AE BE) afree bfree ->
-        R AE BE
-            (A.Close fn afree)
-            (B.Close fn bfree)
-.
-
-Lemma I_expr_R : forall AE BE ae be,
-    compile_list AE = Some BE ->
-    A.value_ok AE ae ->
-    I_expr ae be ->
-    R AE BE ae be.
-induction ae using A.expr_ind'; intros0 Henv Avok II; invc Avok.
-- on (I_expr _ _), invc.
-  constructor; eauto. list_magic_on (args, (bargs, tt)).
-- on (I_expr _ _), invc.
-  pose proof Henv as Henv'. eapply compile_list_Forall in Henv'.
-  fwd eapply Forall2_nth_error_ex with (xs := AE) as HH; eauto.
-    destruct HH as (bbody & ? & ?).
-  econstructor; eauto. list_magic_on (free, (bfree, tt)).
-Qed.
-
-Lemma R_I_expr : forall AE BE ae be,
-    A.value ae ->
-    R AE BE ae be ->
-    I_expr ae be.
-induction ae using A.expr_ind'; intros0 Aval RR; invc Aval; invc RR.
-- constructor; eauto. list_magic_on (args, (bargs, tt)).
-- constructor; eauto. list_magic_on (free, (bfree, tt)).
-Qed.
 
 Lemma compile_list_I_expr : forall aes bes,
     compile_list aes = Some bes ->
@@ -497,97 +473,155 @@ intros0 Hcomp. unfold compile_cu in *. break_bind_option. inject_some.
 simpl. eauto using compile_list_I_expr.
 Qed.
 
+Lemma I_expr_expr_value : forall ae av be bv,
+    A.expr_value ae av ->
+    B.expr_value be bv ->
+    I_expr ae be ->
+    I_value av bv.
+induction ae using A.expr_rect_mut with
+    (Pl := fun ae => forall av be bv,
+        Forall2 A.expr_value ae av ->
+        Forall2 B.expr_value be bv ->
+        Forall2 I_expr ae be ->
+        Forall2 I_value av bv);
+intros0 Aev Bev II; invc Aev; invc II; invc Bev; i_ctor.
+Qed.
+
+Lemma I_value_ex : forall ae av be,
+    A.expr_value ae av ->
+    I_expr ae be ->
+    exists bv,
+        B.expr_value be bv.
+induction ae using A.expr_rect_mut with
+    (Pl := fun ae => forall av be,
+        Forall2 A.expr_value ae av ->
+        Forall2 I_expr ae be ->
+        exists bv,
+            Forall2 B.expr_value be bv);
+intros0 Aval II; invc Aval; invc II.
+
+- destruct (IHae _ _ ** **).
+  eexists. i_ctor.
+
+- destruct (IHae _ _ ** **).
+  eexists. i_ctor.
+
+- eexists. i_ctor.
+
+- destruct (IHae _ _ ** **).
+  destruct (IHae0 _ _ ** **).
+  eexists. i_ctor.
+Qed.
+
+Lemma I_value_ex' : forall be bv ae,
+    B.expr_value be bv ->
+    I_expr ae be ->
+    exists av,
+        A.expr_value ae av.
+induction be using B.expr_rect_mut with
+    (Pl := fun be => forall bv ae,
+        Forall2 B.expr_value be bv ->
+        Forall2 I_expr ae be ->
+        exists av,
+            Forall2 A.expr_value ae av)
+    (Pp := fun _ => True)
+    (Plp := fun _ => True);
+try auto;
+intros0 Bval II; invc Bval; invc II.
+
+- destruct (IHbe _ _ ** **).
+  eexists. i_ctor.
+
+- destruct (IHbe _ _ ** **).
+  eexists. i_ctor.
+
+- eexists. i_ctor.
+
+- destruct (IHbe _ _ ** **).
+  destruct (IHbe0 _ _ ** **).
+  eexists. i_ctor.
+Qed.
+
+Lemma I_value_ex'_list : forall be bv ae,
+    Forall2 B.expr_value be bv ->
+    Forall2 I_expr ae be ->
+    exists av,
+        Forall2 A.expr_value ae av.
+induction be; intros0 Hbv II; invc Hbv; invc II.
+- eexists. i_ctor.
+- destruct (I_value_ex' _ _ _ ** **).
+  destruct (IHbe _ _ ** **).
+  eexists. i_ctor.
+Qed.
+
+Lemma A_expr_value_ex : forall bv b av,
+    B.expr_value b bv ->
+    I_value av bv ->
+    exists a, A.expr_value a av /\ I_expr a b.
+mut_induction bv using HigherValue.value_rect_mut' with
+    (Pl := fun bv => forall b av,
+        Forall2 B.expr_value b bv ->
+        Forall2 I_value av bv ->
+        exists a, Forall2 A.expr_value a av /\ Forall2 I_expr a b);
+[ intros0 Bev II; invc Bev; invc II.. | ].
+
+- destruct (IHbv _ _ ** **) as (? & ? & ?).
+  eexists; split; i_ctor.
+
+- destruct (IHbv _ _ ** **) as (? & ? & ?).
+  eexists; split; i_ctor.
+
+- eexists; split; i_ctor.
+
+- destruct (IHbv _ _ ** **) as (? & ? & ?).
+  destruct (IHbv0 _ _ ** **) as (? & ? & ?).
+  eexists; split; i_ctor.
+
+- finish_mut_induction A_expr_value_ex using list.
+Qed exporting.
+
+
+
 Require Import Semantics.
 
 Section Preservation.
 
-  Variable prog : list A.expr * list metadata.
-  Variable tprog : list B.expr * list metadata.
+    Variable aprog : A.prog_type.
+    Variable bprog : B.prog_type.
 
-  Hypothesis TRANSF : compile_cu prog = Some tprog.
+    Hypothesis Hcomp : compile_cu aprog = Some bprog.
 
-  Lemma prog_init_expr :
-    forall expr,
-      In expr (A.initial_env prog) ->
-      exists expr',
-        In expr' (B.initial_env tprog) /\ I_expr expr expr'.
-  Proof.
-    destruct prog. generalize dependent tprog.
-    clear TRANSF.
-    unfold compile_cu.
-    unfold bind_option.
-    induction l; intros.
-    solve [simpl in H; inv H].
-    simpl in IHl.
-    repeat (break_match_hyp; try congruence; [idtac]).
-    repeat (break_inner_match_hyp; try congruence; [idtac]).
-    subst. simpl in H. unfold B.initial_env. inv TRANSF. simpl.
-    simpl in Heqo.
-    unfold seq in *. unfold bind_option in *.
-    unfold fmap in *.
-    repeat (break_match_hyp; try congruence; [idtac]).
-    inv Heqo. inv Heqo2. inv Heqo0.
-    destruct H.
-    * subst. eapply compile_I_expr in H1. simpl.
-      eexists. split. left. reflexivity. eauto.
-    * edestruct IHl; eauto. unfold B.initial_env in *.
-      simpl in *. break_and.
-      exists x. split. right. assumption. assumption.
-  Qed.
-(*  
-  Lemma initial_state_match :
-    forall s,
-      initial_state (A.semantics prog) s ->
-      exists s',
-        initial_state (B.semantics tprog) s' /\ I s s'.
-  Proof.
-    intros. inv H.
-    eapply prog_init_expr in H0.
-    break_exists. break_and.
-    eexists. split. econstructor; eauto.
-    econstructor; eauto. intros.
-    econstructor; eauto.
-  Qed.
- *)
-  Definition match_values (v : A.valtype) (v' : B.valtype) :=
-    v = v'.
-  
-  Lemma match_final_state :
-    forall s s' v,
-      I s s' ->
-      final_state (A.semantics prog) s v ->
-      exists v',
-        final_state (B.semantics tprog) s' v' /\ match_values v v'.
-  Proof.
-    intros. inv H0. inv H.
-    eexists; split.
-    econstructor; eauto.
-    reflexivity.
-  Qed.
+    Theorem fsim : Semantics.forward_simulation (A.semantics aprog) (B.semantics bprog).
+    destruct aprog as [A Ameta], bprog as [B Bmeta].
+    fwd eapply compile_cu_I_expr; eauto.
 
-  Lemma match_initial_env :
-    Forall2 I_expr (A.initial_env prog) (B.initial_env tprog).
-  Proof.
-    unfold A.initial_env.
-    unfold B.initial_env.
-    unfold compile_cu in *.
-    repeat (break_match_hyp; try congruence). subst.
-    simpl.
-    eapply compile_list_I_expr; eauto.
-    unfold bind_option in *. break_match_hyp; try congruence. inv TRANSF. reflexivity.
-  Qed.
+    eapply Semantics.forward_simulation_step with
+        (match_states := I)
+        (match_values := I_value).
 
-  Theorem fsim :
-    forward_simulation (Lifted.semantics prog) (Tagged.semantics tprog).
-  Proof.
-    eapply forward_simulation_step.
-    admit.
-    eapply match_final_state; eauto.
-    intros.
-    unfold Lifted.semantics in *. simpl in *.
-    eapply I_sim; eauto.
-    eapply match_initial_env.
-  Admitted.
+    - simpl. intros0 Bcall Hf Ha. invc Bcall.
+      on (I_value _ (_ _ _)), invc.
+
+      fwd eapply Forall2_nth_error_ex' with (ys := B) as HH; eauto.
+        destruct HH as (abody & ? & ?).
+      fwd eapply A_expr_value_ex as HH; eauto. destruct HH as (? & ? & ?).
+      fwd eapply A_expr_value_ex_list as HH; eauto. destruct HH as (? & ? & ?).
+
+      eexists. split.
+      + econstructor. 4: eauto.
+        all: eauto using A.expr_value_is_value, A.expr_value_is_value_list.
+        i_ctor.
+      + i_ctor.
+
+    - simpl. intros0 II Afinal. invc Afinal. invc II.
+      fwd eapply I_value_ex as HH; eauto.  destruct HH as [bv ?].
+      fwd eapply I_expr_expr_value; eauto.
+
+      eexists. split. i_ctor. auto.
+
+    - intros0 Astep. intros0 II.
+      i_lem I_sim.
+
+    Qed.
 
 End Preservation.
-
