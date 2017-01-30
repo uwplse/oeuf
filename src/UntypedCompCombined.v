@@ -4,9 +4,11 @@ Require CompilationUnit.
 Require Import Metadata.
 Require Import CompilerUtil.
 
-Require SourceLifted Untyped8.
+(* Note that we start at Untyped1, not SourceLifted.  The SourceLifted
+   semantics have lots of dependent indices and are hard to fit into the
+   Semantics.semantics record. *)
+Require Untyped1 Untyped8.
 Require
-    UntypedComp1
     UntypedComp2
     UntypedComp3
     UntypedComp4
@@ -16,12 +18,11 @@ Require
     UntypedComp8
 .
 
-Module A := SourceLifted.
+Module A := Untyped1.
 Module B := Untyped8.
 
-Definition compile_cu {G} (cu : A.genv G * list metadata) : res (B.env * list metadata) :=
+Definition compile_cu (cu : A.env * list metadata) : res (B.env * list metadata) :=
   OK cu
-  @@ UntypedComp1.compile_cu
   @@ UntypedComp2.compile_cu
   @@ UntypedComp3.compile_cu
   @@ UntypedComp4.compile_cu
@@ -33,42 +34,38 @@ Definition compile_cu {G} (cu : A.genv G * list metadata) : res (B.env * list me
 
 
 
-(*
 Require Semantics.
 
 Section Preservation.
 
-  Variable prog : A.prog_type.
-  Variable tprog : B.prog_type.
+Variable aprog : A.prog_type.
+Variable bprog : B.prog_type.
 
-  Hypothesis TRANSF : compile_cu prog = OK tprog.
+Hypothesis Hcomp : compile_cu aprog = OK bprog.
 
-  Theorem fsim :
-    Semantics.forward_simulation (A.semantics prog) (B.semantics tprog).
-  Proof.
-    unfold compile_cu in TRANSF.
+Theorem fsim : Semantics.forward_simulation (A.semantics aprog) (B.semantics bprog).
+    unfold compile_cu in Hcomp.
     break_result_chain.
 
     eapply Semantics.compose_forward_simulation.
-    eapply StackMachComp.fsim; try eassumption.
+    eapply UntypedComp2.fsim; try eassumption.
 
     eapply Semantics.compose_forward_simulation.
-    eapply StackContComp.fsim; try eassumption.
+    eapply UntypedComp3.fsim; try eassumption.
 
     eapply Semantics.compose_forward_simulation.
-    eapply StackContComp2.fsim; try eassumption.
+    eapply UntypedComp4.fsim; try eassumption.
 
     eapply Semantics.compose_forward_simulation.
-    eapply StackContComp3.fsim; try eassumption.
+    eapply UntypedComp5.fsim; try eassumption.
 
     eapply Semantics.compose_forward_simulation.
-    eapply StackFlatComp.fsim; try eassumption.
+    eapply UntypedComp6.fsim; try eassumption.
 
     eapply Semantics.compose_forward_simulation.
-    eapply StackFlatterComp.fsim; try eassumption.
+    eapply UntypedComp7.fsim; try eassumption.
 
-    eapply StackFlatterComp2.fsim; try eassumption.
-  Qed.
+    eapply UntypedComp8.fsim; try eassumption.
+Qed.
 
 End Preservation.
-*)
