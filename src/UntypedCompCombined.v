@@ -26,7 +26,7 @@ Definition compile_cu (cu : A.env * list metadata) : res (B.env * list metadata)
   @@ UntypedComp2.compile_cu
   @@ UntypedComp3.compile_cu
   @@ UntypedComp4.compile_cu
-  @@ UntypedComp5.compile_cu
+ @@@ UntypedComp5.compile_cu
   @@ UntypedComp6.compile_cu
  @@@ UntypedComp7.compile_cu
   @@ UntypedComp8.compile_cu
