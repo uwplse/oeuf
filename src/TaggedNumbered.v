@@ -1195,3 +1195,30 @@ Definition semantics (prog : prog_type) : Semantics.semantics :=
                  (initial_env prog).
 
 
+
+Lemma expr_value_value : forall e v,
+    expr_value e v ->
+    value e.
+induction e using expr_rect_mut with
+    (Pl := fun es => forall vs,
+        Forall2 expr_value es vs ->
+        Forall value es)
+    (Pp := fun e => forall v,
+        expr_value (fst e) v ->
+        value (fst e))
+    (Plp := fun es => forall vs,
+        Forall2 (fun e v => expr_value (fst e) v) es vs ->
+        Forall (fun e => value (fst e)) es) ;
+intros0 Hev; try solve [invc Hev + simpl in *; eauto].
+
+- invc Hev. constructor. eauto.
+- invc Hev. constructor. eauto.
+Qed.
+Hint Resolve expr_value_value.
+
+Lemma expr_value_value_list : forall e v,
+    Forall2 expr_value e v ->
+    Forall value e.
+induction e; intros0 Hev; invc Hev; eauto using expr_value_value.
+Qed.
+Hint Resolve expr_value_value_list.

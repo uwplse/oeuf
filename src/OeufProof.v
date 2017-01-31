@@ -69,9 +69,9 @@ Section Simulation.
     eapply UntypedComp.fsim; try eassumption.
     repeat (break_match_hyp; try congruence); try solve [inv H0].
     inv H0. reflexivity.
-    
+
     repeat (break_match_hyp; try congruence); try solve [inv H0].
-    inv H0. 
+    inv H0.
 
     (* Break down structure of compiler *)
     unfold transf_untyped_to_cminor in *.
@@ -81,14 +81,14 @@ Section Simulation.
     repeat (break_match_hyp; try congruence).
     break_result_chain.
 
-    
+
     (* Untyped to Lifted *)
     eapply compose_notrace_mix_forward_simulation.
     eapply LiftedComp.fsim; try solve [eauto].
     unfold Metadata.check_length. simpl.
     rewrite e. break_match; try congruence.
     reflexivity.
-    
+
     (* Lifted to Tagged *)
     eapply compose_notrace_mix_forward_simulation.
     eapply TaggedComp.fsim; try eassumption.
@@ -96,10 +96,11 @@ Section Simulation.
     (* Tagged to TaggedNumbered *)
     eapply compose_notrace_mix_forward_simulation.
     eapply TaggedNumberedComp.fsim; try eassumption.
-    
+
     (* TaggedNumbered to ElimFunc *)
     eapply compose_notrace_mix_forward_simulation.
     eapply ElimFuncComp.fsim; try eassumption.
+      { admit. }
       { eapply TaggedNumberedComp.compile_cu_elims_match'. eassumption. }
 
     (* ElimFunc to ElimFunc2 *)
@@ -113,7 +114,7 @@ Section Simulation.
     (* ElimFunc3 to Switched *)
     eapply compose_notrace_mix_forward_simulation.
     eapply SwitchedComp.fsim; try eassumption.
-    
+
     (* Switched to SelfClose *)
     eapply compose_notrace_mix_forward_simulation.
     eapply SelfCloseComp.fsim; try eassumption.
@@ -149,7 +150,7 @@ Section Simulation.
     (* Emajor to Dmajor *)
     eapply TraceSemantics.compose_forward_simulation.
     eapply Emajortodmajor.fsim; try eassumption.
-    
+
     (* Dmajor to Dflatmajor *)
     eapply TraceSemantics.compose_forward_simulation.
     eapply Dmajortodflatmajor.fsim; try eassumption.
@@ -163,9 +164,9 @@ Section Simulation.
     eapply Cmajortominor.fsim; try eassumption.
     rewrite OeufCompcertCompiler.print_identity in *.
     congruence.
-    
-  Qed.
+
+  Admitted.
 
 
-  
+
 End Simulation.

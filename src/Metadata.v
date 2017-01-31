@@ -28,3 +28,7 @@ Definition check_length {A} (cu : list A * list metadata) :=
 Definition m_is_public m :=
     if access_eq_dec (m_access m) Public
         then true else false.
+
+Definition public_fname metas fname :=
+    exists m, nth_error metas fname = Some m /\
+        m_access m = Public.

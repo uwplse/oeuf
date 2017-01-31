@@ -4,6 +4,7 @@ Require String.
 Require TaggedNumbered ElimFunc.
 Require Import ListLemmas.
 Require Import StepLib.
+Require Import HigherValue.
 
 Require Import Psatz.
 
@@ -845,51 +846,137 @@ eapply T_state_ok_sim; try eassumption.
 - rewrite <- T.elims_match_list_Forall. auto.
 Qed.
 
+
+
+Lemma compile_cu_env_ok : forall A Ameta Aelims Aelim_names B Bmeta,
+    compile_cu (A, Ameta, Aelims, Aelim_names) = (B, Bmeta) ->
+    env_ok A B Aelims.
+intros. simpl in *. inject_pair.
+unfold env_ok, compile_env. reflexivity.
+Qed.
+
+Lemma public_fname_Ameta : forall A Ameta Aelims Aelim_names B Bmeta fname,
+    compile_cu (A, Ameta, Aelims, Aelim_names) = (B, Bmeta) ->
+    public_fname Bmeta fname ->
+    public_fname Ameta fname.
+intros0 Hcomp Hb; simpl in *. inject_pair.
+unfold public_fname in Hb. destruct Hb as (m & Hnth & Hacc).
+destruct (lt_dec fname (length Ameta)).
+- rewrite nth_error_app1 in Hnth by auto. eexists; eauto.
+- rewrite nth_error_app2 in Hnth by omega.
+  fwd eapply map_nth_error' as HH; eauto. destruct HH as (? & ? & ?).
+  contradict Hacc. subst m. simpl. discriminate.
+Qed.
+
+Lemma public_fname_nth_error_ex : forall {A} (E : list A) Meta fname,
+    length E = length Meta ->
+    public_fname Meta fname ->
+    exists body, nth_error E fname = Some body.
+intros0 Hlen Hpf.
+destruct Hpf as (? & ? & ?).
+eapply length_nth_error_Some; try eassumption; eauto.
+Qed.
+
+Lemma expr_value_I_expr : forall A B be v,
+    E.expr_value be v ->
+    exists ae,
+        T.expr_value ae v /\
+        I_expr A B [] ae be.
+make_first v. intros v A B. revert v.
+mut_induction v using value_rect_mut' with
+    (Pl := fun vs => forall bes,
+        Forall2 E.expr_value bes vs ->
+        exists aes,
+            Forall2 T.expr_value aes vs /\
+            Forall2 (I_expr A B []) aes bes);
+[intros0 Hev; invc Hev.. | ].
+
+- destruct (IHv ?? **) as (? & ? & ?).
+  eauto using T.EvConstr, IConstr.
+
+- destruct (IHv ?? **) as (? & ? & ?).
+  eauto using T.EvClose, IClose.
+
+- eauto.
+
+- destruct (IHv ?? **) as (? & ? & ?).
+  destruct (IHv0 ?? **) as (? & ? & ?).
+  eauto.
+
+- finish_mut_induction expr_value_I_expr using list.
+Qed exporting.
+
+Lemma expr_value_I_expr' : forall A B ELIMS ae be v,
+    T.expr_value ae v ->
+    I_expr A B ELIMS ae be ->
+    E.expr_value be v.
+intros A B ELIMS.
+induction ae using T.expr_rect_mut with
+    (Pl := fun ae => forall be v,
+        Forall2 T.expr_value ae v ->
+        Forall2 (I_expr A B ELIMS) ae be ->
+        Forall2 E.expr_value be v)
+    (Pp := fun ap => forall be v,
+        T.expr_value (fst ap) v ->
+        I_expr A B ELIMS (fst ap) be ->
+        E.expr_value be v)
+    (Plp := fun aps => forall bes vs,
+        Forall2 (fun ap v => T.expr_value (fst ap) v) aps vs ->
+        Forall2 (fun ap be => I_expr A B ELIMS (fst ap) be) aps bes ->
+        Forall2 (fun be v => E.expr_value be v) bes vs);
+intros0 Hae II; try solve [invc Hae; invc II; econstructor; eauto | simpl in *; eauto].
+Qed.
+
+
+Require Import Semantics.
+
 Section Preservation.
 
-  Variable prog : T.prog_type.
-  Variable tprog : E.prog_type.
+    Variable aprog : T.prog_type.
+    Variable bprog : E.prog_type.
 
-  Definition elims := snd (fst prog).
-  
-  Hypothesis TRANSF : compile_cu prog = tprog.
+    Hypothesis Hcomp : compile_cu aprog = bprog.
+    Hypothesis Hlen : length (fst (fst (fst aprog))) = length (snd (fst (fst aprog))).
+    Hypothesis Helims : Forall (T.elims_match (snd (fst aprog))) (T.initial_env aprog).
 
-  Hypothesis T_elims_match :
-      Forall (T.elims_match elims) (T.initial_env prog).
+    Theorem fsim : Semantics.forward_simulation (T.semantics aprog) (E.semantics bprog).
+    destruct aprog as [[[A Ameta] Aelims] Aelim_names], bprog as [B Bmeta].
+    fwd eapply compile_cu_env_ok; eauto.
 
-  Definition match_states TE EE ts es : Prop :=
-    I TE EE ts es /\ T_state_ok elims ts.
-
-  Lemma env_ok_compile :
-    env_ok (T.initial_env prog) (E.initial_env tprog) elims.
-  Proof.
-    unfold env_ok.
-    unfold compile_env.
-    unfold E.initial_env.
-    unfold T.initial_env.
-    unfold compile_cu in *.
-    break_match_hyp. unfold elims.
-    subst. simpl.
-    destruct p. simpl. destruct p. simpl. reflexivity.
-  Qed.
-
-  Theorem fsim :
-    Semantics.forward_simulation (T.semantics prog) (E.semantics tprog).
-  Proof.
     eapply Semantics.forward_simulation_plus with
-        (match_states := I' (T.initial_env prog) (E.initial_env tprog) elims).
-    - admit. (* TODO - replace with callstate matching *)
-    - intros0 II Afinal. invc Afinal. invc II. on >I, invc.
-      admit.
-      (*
-      eexists; split.
-      constructor. eauto using I_expr_value.
-      reflexivity.
-  *)
+        (match_states := I' A B Aelims)
+        (match_values := @eq value).
+
+    - simpl. intros0 Bcall Hf Ha. invc Bcall. unfold fst, snd in *.
+      on (public_value _ (Close _ _)), invc.
+      fwd eapply public_fname_Ameta; eauto.
+      fwd eapply public_fname_nth_error_ex as HH; eauto.  destruct HH as [abody ?].
+      fwd eapply env_ok_nth_error as HH; eauto.  destruct HH as (body' & ? & ?).
+      assert (body' = body) by congruence. subst body'.
+
+      destruct (expr_value_I_expr A B ae ?? ** ) as (? & ? & ?).
+      fwd eapply expr_value_I_expr_list as HH; eauto.  destruct HH as (? & ? & ?).
+
+      eexists. split. 1: econstructor. 1: econstructor. 4: eauto. all: eauto.
+      + eapply compile_I_expr; eauto.
+        eapply Forall_nth_error; eauto.
+      + intros. econstructor; eauto.
+      + econstructor; eauto.
+        * eapply Forall_nth_error; eauto.
+        * intros. econstructor. eauto using T.value_elims_match.
+      + econstructor; eauto.
+
+    - simpl. intros0 II Afinal. invc Afinal. invc II. on >I, invc.
+
+      eexists. split. 2: reflexivity.
+      econstructor; eauto.
+      + eapply expr_value_I_expr'; eauto.
+      + simpl. admit.
+
     - intros0 Astep. intros0 II.
       eapply splus_semantics_sim, I'_sim; eauto.
-      + eapply env_ok_compile.
       + rewrite T.elims_match_list_Forall. auto.
-  Admitted.
+
+    Admitted.
 
 End Preservation.
