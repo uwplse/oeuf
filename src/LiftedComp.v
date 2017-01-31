@@ -160,25 +160,5 @@ Section Simulation.
     forward_simulation (Untyped.semantics prog) (Lifted.semantics tprog).
   Proof.
   Admitted.
-  (* Inductive match_states : L.env -> U.expr -> L.expr -> Prop :=. *)
-
-  (* Lemma step_sim : *)
-  (*   forall el el' er E, *)
-  (*     match_states E el er -> *)
-  (*     U.step el el' -> *)
-  (*     exists er', *)
-  (*       L.step E er er' /\ match_states E el' er'. *)
-  (* Proof. *)
-  (* Admitted. *)
-
-  (* Lemma initial_state_exists : *)
-  (*     forall expr, *)
-  (*       U.initial_state prog expr -> *)
-  (*       exists expr' E, *)
-  (*         L.initial_state tprog expr' /\ *)
-  (*         match_states E expr expr'. *)
-  (* Proof. *)
-  (* Admitted. *)
-
   
 End Simulation.

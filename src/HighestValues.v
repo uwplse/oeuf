@@ -1,5 +1,6 @@
 Require Import Common.
 Require Import Utopia.
+Require Import Metadata.
 
 Definition function_name := nat.
 
@@ -53,15 +54,20 @@ Definition value_rect_mut'
     (go, go_list).
 
 
-        (*
-Tactic Notation "multi_induction" constr(x) "using" uconstr(scm)
-    "with" bindings(bnd) "prefixed" ident(name) :=
-    induction x using scm with bnd.
-*)
-
 Definition value_ind' (P : value -> Prop)
     (HConstr :  forall ctor args, Forall P args -> P (Constr ctor args))
     (HClose :   forall fname free, Forall P free -> P (Close fname free))
     (v : value) : P v :=
     ltac:(refine (@value_rect_mut P (Forall P)
         HConstr HClose _ _ v); eauto).
+
+
+Inductive public_value (M : list metadata) : value -> Prop :=
+| PvConstr : forall tag args,
+        Forall (public_value M) args ->
+        public_value M (Constr tag args)
+| PvClose : forall fname free,
+        public_fname M fname ->
+        Forall (public_value M) free ->
+        public_value M (Close fname free).
+

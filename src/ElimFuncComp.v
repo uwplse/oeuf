@@ -81,12 +81,15 @@ Definition compile_env elims exprs :=
 Definition compile_cu (cu :
             list T.expr * list metadata *
             list (list (T.expr * T.rec_info)) * list String.string) :
-        list E.expr * list metadata :=
+        option (list E.expr * list metadata) :=
     let '(exprs, metas, elims, elim_names) := cu in
-    let exprs' := compile_list (length exprs) exprs in
-    let elims' := compile_eliminator_list (length exprs) elims in
-    let elim_metas := map (fun name => Metadata name Private) elim_names in
-    (exprs' ++ elims', metas ++ elim_metas).
+    if eq_nat_dec (length exprs) (length metas) then
+        let exprs' := compile_list (length exprs) exprs in
+        let elims' := compile_eliminator_list (length exprs) elims in
+        let elim_metas := map (fun name => Metadata name Private) elim_names in
+        Some (exprs' ++ elims', metas ++ elim_metas)
+    else
+        None.
 
 
 
@@ -849,23 +852,51 @@ Qed.
 
 
 Lemma compile_cu_env_ok : forall A Ameta Aelims Aelim_names B Bmeta,
-    compile_cu (A, Ameta, Aelims, Aelim_names) = (B, Bmeta) ->
+    compile_cu (A, Ameta, Aelims, Aelim_names) = Some (B, Bmeta) ->
     env_ok A B Aelims.
-intros. simpl in *. inject_pair.
+intros. simpl in *. break_match; try discriminate. inject_some.
 unfold env_ok, compile_env. reflexivity.
 Qed.
 
+Lemma compile_cu_length : forall A Ameta Aelims Aelim_names B Bmeta,
+    compile_cu (A, Ameta, Aelims, Aelim_names) = Some (B, Bmeta) ->
+    length A = length Ameta.
+intros. simpl in *. break_match; try discriminate. auto.
+Qed.
+
 Lemma public_fname_Ameta : forall A Ameta Aelims Aelim_names B Bmeta fname,
-    compile_cu (A, Ameta, Aelims, Aelim_names) = (B, Bmeta) ->
+    compile_cu (A, Ameta, Aelims, Aelim_names) = Some (B, Bmeta) ->
     public_fname Bmeta fname ->
     public_fname Ameta fname.
-intros0 Hcomp Hb; simpl in *. inject_pair.
+intros0 Hcomp Hb; simpl in *. break_match; try discriminate. inject_some.
 unfold public_fname in Hb. destruct Hb as (m & Hnth & Hacc).
 destruct (lt_dec fname (length Ameta)).
 - rewrite nth_error_app1 in Hnth by auto. eexists; eauto.
 - rewrite nth_error_app2 in Hnth by omega.
   fwd eapply map_nth_error' as HH; eauto. destruct HH as (? & ? & ?).
   contradict Hacc. subst m. simpl. discriminate.
+Qed.
+
+Lemma public_fname_Bmeta : forall A Ameta Aelims Aelim_names B Bmeta fname,
+    compile_cu (A, Ameta, Aelims, Aelim_names) = Some (B, Bmeta) ->
+    public_fname Ameta fname ->
+    public_fname Bmeta fname.
+intros0 Hcomp Ha; simpl in *. break_match; try discriminate. inject_some.
+unfold public_fname in Ha. destruct Ha as (m & Hnth & Hacc).
+eexists. split; eauto. erewrite nth_error_app1; eauto.
+- rewrite <- nth_error_Some. congruence.
+Qed.
+
+Lemma public_value_Bmeta : forall A Ameta Aelims Aelim_names B Bmeta v,
+    compile_cu (A, Ameta, Aelims, Aelim_names) = Some (B, Bmeta) ->
+    public_value Ameta v ->
+    public_value Bmeta v.
+intros0 Hcomp. revert v.
+induction v using value_rect_mut with
+    (Pl := fun v =>
+        Forall (public_value Ameta) v ->
+        Forall (public_value Bmeta) v);
+intros0 Ha; invc Ha; econstructor; eauto using public_fname_Bmeta.
 Qed.
 
 Lemma public_fname_nth_error_ex : forall {A} (E : list A) Meta fname,
@@ -935,13 +966,13 @@ Section Preservation.
     Variable aprog : T.prog_type.
     Variable bprog : E.prog_type.
 
-    Hypothesis Hcomp : compile_cu aprog = bprog.
-    Hypothesis Hlen : length (fst (fst (fst aprog))) = length (snd (fst (fst aprog))).
+    Hypothesis Hcomp : compile_cu aprog = Some bprog.
     Hypothesis Helims : Forall (T.elims_match (snd (fst aprog))) (T.initial_env aprog).
 
     Theorem fsim : Semantics.forward_simulation (T.semantics aprog) (E.semantics bprog).
     destruct aprog as [[[A Ameta] Aelims] Aelim_names], bprog as [B Bmeta].
     fwd eapply compile_cu_env_ok; eauto.
+    fwd eapply compile_cu_length; eauto.
 
     eapply Semantics.forward_simulation_plus with
         (match_states := I' A B Aelims)
@@ -971,12 +1002,12 @@ Section Preservation.
       eexists. split. 2: reflexivity.
       econstructor; eauto.
       + eapply expr_value_I_expr'; eauto.
-      + simpl. admit.
+      + unfold fst, snd in *. eauto using public_value_Bmeta.
 
     - intros0 Astep. intros0 II.
       eapply splus_semantics_sim, I'_sim; eauto.
       + rewrite T.elims_match_list_Forall. auto.
 
-    Admitted.
+    Qed.
 
 End Preservation.

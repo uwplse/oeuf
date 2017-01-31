@@ -567,6 +567,12 @@ inject_pair.
 eauto using compile_list_I_expr.
 Qed.
 
+Lemma compile_cu_metas : forall A Ameta B Bmeta Belims Belim_names,
+    compile_cu (A, Ameta) = (B, Bmeta, Belims, Belim_names) ->
+    Ameta = Bmeta.
+simpl. inversion 1. repeat break_match. subst. inject_pair. auto.
+Qed.
+
 Lemma expr_value_I_expr : forall be v,
     B.expr_value be v ->
     exists ae,
@@ -629,6 +635,7 @@ Section Preservation.
     Theorem fsim : Semantics.forward_simulation (A.semantics aprog) (B.semantics bprog).
     destruct aprog as [A Ameta], bprog as [[[B Bmeta] Belims] Belim_names].
     fwd eapply compile_cu_I_expr; eauto.
+    fwd eapply compile_cu_metas; eauto.
 
     eapply Semantics.forward_simulation_step with
         (match_states := I)

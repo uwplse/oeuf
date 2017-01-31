@@ -719,6 +719,12 @@ Lemma compile_cu_I_expr : forall A Ameta B Bmeta,
 simpl. inversion 1. i_lem compile_genv_I_expr.
 Qed.
 
+Lemma compile_cu_metas : forall A Ameta B Bmeta,
+    compile_cu (A, Ameta) = (B, Bmeta) ->
+    Ameta = Bmeta.
+simpl. inversion 1. auto.
+Qed.
+
 Section Preservation.
 
     Variable aprog : A.prog_type.
@@ -729,6 +735,7 @@ Section Preservation.
     Theorem fsim : Semantics.forward_simulation (A.semantics aprog) (B.semantics bprog).
     destruct aprog as [A Ameta], bprog as [B Bmeta].
     fwd eapply compile_cu_I_expr; eauto.
+    fwd eapply compile_cu_metas; eauto.
 
     eapply Semantics.forward_simulation_star with
         (match_states := I)
