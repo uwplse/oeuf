@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-DIRS=(src demos/verdi/echo)
+DIRS=(src demos/verdi/echo shim_verif)
 NAMESPACE_compcert=compcert
 LOCALDEPS=(compcert)
 DEPS=(StructTact PrettyParsing)
