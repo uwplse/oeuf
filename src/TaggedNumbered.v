@@ -4,6 +4,7 @@ Require StepLib.
 Require Import Utopia.
 Require Import Monads.
 Require Import ListLemmas.
+Require HigherValue.
 
 
 Definition function_name := nat.
@@ -1011,36 +1012,6 @@ Definition SPlusOne := @StepLib.SPlusOne state.
 Definition SPlusCons := @StepLib.SPlusCons state.
 
 
-(*
-Require Import Metadata.
-
-(* ugly return type of compile_cu *)
-Definition prog_type : Type := list expr * list metadata * list (list (expr * rec_info)) * list String.string.
-
-Require Semantics.
-
-Definition initial_env (prog : prog_type) : env := fst (fst (fst prog)).
-
-Inductive initial_state (prog : prog_type) : state -> Prop :=
-| init :
-    forall expr,
-      In expr (initial_env prog) ->
-      initial_state prog (Run expr nil (fun x => Stop x)).
-
-Inductive final_state (prog : prog_type) : state -> Prop :=
-| fine :
-    forall expr,
-      value expr ->
-      final_state prog (Stop expr).
-
-Definition semantics (prog : prog_type) : Semantics.semantics :=
-  @Semantics.Semantics_gen state env
-                 (sstep)
-                 (initial_state prog)
-                 (final_state prog)
-                 (initial_env prog).
-
-*)
 
 Theorem add_1_2_s : { x | sstar add_env
         (Run (Call (Call add_reflect (nat_reflect 1)) (nat_reflect 2)) [] Stop)
@@ -1184,37 +1155,42 @@ induction e using expr_ind''; intros0 II.
 Qed.
 
 Require Import Metadata.
-
-(* ugly return type of compile_cu *)
-Definition prog_type : Type := list expr * list metadata * list (list (expr * rec_info)) * list String.string.
-
 Require Semantics.
 
-Definition valtype := unit. 
+Definition prog_type : Type := list expr * list metadata * list (list (expr * rec_info)) * list String.string.
+Definition valtype := HigherValue.value.
+
+Inductive expr_value : expr -> valtype -> Prop :=
+| EvConstr : forall tag args1 args2,
+        Forall2 expr_value args1 args2 ->
+        expr_value (Constr tag args1)
+                   (HigherValue.Constr tag args2)
+| EvClose : forall tag free1 free2,
+        Forall2 expr_value free1 free2 ->
+        expr_value (Close tag free1)
+                   (HigherValue.Close tag free2)
+.
 
 Definition initial_env (prog : prog_type) : env := fst (fst (fst prog)).
 
-Inductive is_callstate (prog : prog_type) : valtype -> valtype -> state -> Prop := .
-(* TODO: stub *)
-
-
-(* Inductive initial_state (prog : prog_type) : state -> Prop := *)
-(* | init : *)
-(*     forall expr, *)
-(*       In expr (initial_env prog) -> *)
-(*       initial_state prog (Run expr nil (fun x => Stop x)). *)
+Inductive is_callstate (prog : prog_type) : valtype -> valtype -> state -> Prop :=
+| IsCallstate : forall fname free free_e av ae body,
+        nth_error (initial_env prog) fname = Some body ->
+        let fv := HigherValue.Close fname free in
+        expr_value ae av ->
+        Forall2 expr_value free_e free ->
+        is_callstate prog fv av
+            (Run body (ae :: free_e) Stop).
 
 Inductive final_state (prog : prog_type) : state -> valtype -> Prop :=
-| fine :
-    forall expr,
-      value expr ->
-      final_state prog (Stop expr) tt.
+| FinalState : forall e v,
+        expr_value e v ->
+        final_state prog (Stop e) v.
 
 Definition semantics (prog : prog_type) : Semantics.semantics :=
   @Semantics.Semantics_gen state env valtype
                  (is_callstate prog)
                  (sstep)
-                 (* (initial_state prog) *)
                  (final_state prog)
                  (initial_env prog).
 
