@@ -195,6 +195,12 @@ simpl. inversion 1. break_bind_option. inject_some.
 eauto using compile_genv_eq.
 Qed.
 
+Lemma compile_cu_metas : forall A Ameta B Bmeta,
+    compile_cu (A, Ameta) = Some (B, Bmeta) ->
+    Ameta = Bmeta.
+simpl. inversion 1. break_bind_option. inject_some. auto.
+Qed.
+
 Lemma compile_genv_no_values : forall A B,
     compile_genv A = Some B ->
     Forall A.no_values A.
@@ -221,6 +227,7 @@ Section Preservation.
     Theorem fsim : Semantics.forward_simulation (A.semantics aprog) (B.semantics bprog).
     destruct aprog as [A Ameta], bprog as [B Bmeta].
     fwd eapply compile_cu_eq; eauto.
+    fwd eapply compile_cu_metas; eauto.
     fwd eapply compile_cu_no_values; eauto.
 
     eapply Semantics.forward_simulation_star with

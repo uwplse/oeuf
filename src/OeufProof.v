@@ -47,6 +47,7 @@ Require Import StructTact.StructTactics.
 Require Import StructTact.Util.
 
 Require Import EricTact.
+Require Import StuartTact.
 
 Section Simulation.
 
@@ -100,7 +101,6 @@ Section Simulation.
     (* TaggedNumbered to ElimFunc *)
     eapply compose_notrace_mix_forward_simulation.
     eapply ElimFuncComp.fsim; try eassumption.
-      { admit. }
       { eapply TaggedNumberedComp.compile_cu_elims_match'. eassumption. }
 
     (* ElimFunc to ElimFunc2 *)
@@ -165,7 +165,7 @@ Section Simulation.
     rewrite OeufCompcertCompiler.print_identity in *.
     congruence.
 
-  Admitted.
+  Qed.
 
 
 

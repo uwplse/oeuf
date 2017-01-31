@@ -403,6 +403,12 @@ Lemma compile_cu_I_expr : forall A Ameta B Bmeta,
 simpl. inversion 1. break_bind_option. inject_some. i_lem compile_genv_I_expr.
 Qed.
 
+Lemma compile_cu_metas : forall A Ameta B Bmeta,
+    compile_cu (A, Ameta) = Some (B, Bmeta) ->
+    Ameta = Bmeta.
+simpl. inversion 1. break_bind_option. inject_some. auto.
+Qed.
+
 Lemma A_expr_value_ex : forall v b,
     B.expr_value b v ->
     exists a, A.expr_value a v /\ I_expr a b.
@@ -437,6 +443,7 @@ Section Preservation.
     Theorem fsim : Semantics.forward_simulation (A.semantics aprog) (B.semantics bprog).
     destruct aprog as [A Ameta], bprog as [B Bmeta].
     fwd eapply compile_cu_I_expr; eauto.
+    fwd eapply compile_cu_metas; eauto.
 
     eapply Semantics.forward_simulation_step with
         (match_states := I)

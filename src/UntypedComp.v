@@ -332,10 +332,4 @@ Theorem fsim:
     forall ty,
       forward_simulation (@CompilationUnit.source_semantics ty cu) (Untyped.semantics tprog).
 Proof.
-  intros.
-  apply forward_simulation_step with (match_states := fun a b => compile a = b) (match_values := match_values); simpl; intros.
-  - admit.
-  - eauto using final_states_match.
-  - subst. eexists. split; eauto.
-    eauto using forward_simulation_closed.
 Admitted.

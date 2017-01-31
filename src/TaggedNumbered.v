@@ -1185,6 +1185,7 @@ Inductive is_callstate (prog : prog_type) : valtype -> valtype -> state -> Prop 
 Inductive final_state (prog : prog_type) : state -> valtype -> Prop :=
 | FinalState : forall e v,
         expr_value e v ->
+        HigherValue.public_value (snd (fst (fst prog))) v ->
         final_state prog (Stop e) v.
 
 Definition semantics (prog : prog_type) : Semantics.semantics :=

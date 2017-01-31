@@ -510,7 +510,6 @@ Section Preservation.
     forward_simulation (Lifted.semantics prog) (Tagged.semantics tprog).
   Proof.
     (* This whole proof needs to be redone to connect up to Untyped8 instead of Lifted. *)
-    admit.
   Admitted.
 
 End Preservation.
