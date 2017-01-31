@@ -284,7 +284,7 @@ Definition f_make_nat := {|
             (Sseq
               (Sblock
                 (Sseq
-                  (Sifthenelse (Ebinop OcmpCle (Evar _i) (Evar _n))
+                  (Sifthenelse (Ebinop (Ocmp Cle) (Evar _i) (Evar _n))
                     Sskip
                     (Sexit (S O)))
                   (Sseq
@@ -321,7 +321,7 @@ Definition f_read_nat := {|
       (Sloop
         (Sblock
           (Sseq
-            (Sifthenelse (Ebinop OcmpCeq (Eload Mint32 (Evar _n))
+            (Sifthenelse (Ebinop (Ocmp Ceq) (Eload Mint32 (Evar _n))
                            (Econst (Ointconst (Int.repr 1))))
               Sskip
               (Sexit (S O)))
@@ -367,7 +367,7 @@ Definition f_make_bool := {|
     (Sassign _result (Evar 121%positive)))
   (Sseq
     (Sseq
-      (Sifthenelse (Ebinop OcmpCne (Evar _b)
+      (Sifthenelse (Ebinop (Ocmp Cne) (Evar _b)
                      (Econst (Ointconst (Int.repr 0))))
         (Sassign 122%positive (Econst (Ointconst (Int.repr 0))))
         (Sassign 122%positive (Econst (Ointconst (Int.repr 1)))))
@@ -381,7 +381,7 @@ Definition f_read_bool := {|
   fn_vars := nil;
   fn_stackspace := 0;
   fn_body :=
-(Sreturn (Some (Ebinop OcmpCeq (Eload Mint32 (Evar _b))
+(Sreturn (Some (Ebinop (Ocmp Ceq) (Eload Mint32 (Evar _b))
                  (Econst (Ointconst (Int.repr 0))))))
 |}.
 
@@ -395,7 +395,7 @@ Definition f_print_list_nat := {|
   (Sloop
     (Sblock
       (Sseq
-        (Sifthenelse (Ebinop OcmpCeq (Eload Mint32 (Evar _l))
+        (Sifthenelse (Ebinop (Ocmp Ceq) (Eload Mint32 (Evar _l))
                        (Econst (Ointconst (Int.repr 1))))
           Sskip
           (Sexit (S O)))
@@ -463,7 +463,7 @@ Definition f_vcall := {|
                       ((Econst (Oaddrstack (Int.repr 0))) :: nil))
                     (Sassign 126%positive (Evar 125%positive)))
                   (Sassign _a (Evar 126%positive)))
-                (Sifthenelse (Ebinop OcmpuCne (Evar 126%positive)
+                (Sifthenelse (Ebinop (Ocmpu Cne) (Evar 126%positive)
                                (Econst (Ointconst (Int.repr 0))))
                   Sskip
                   (Sexit (S O))))
