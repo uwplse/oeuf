@@ -1,5 +1,6 @@
 Require Import Common Monads ListLemmas.
 Require Import Metadata.
+Require Import HigherValue.
 Require Tagged TaggedNumbered.
 Require String.
 
@@ -555,113 +556,103 @@ inv Astep; invc II; try on (I_expr _ _), invc.
   i_ctor.
 Qed.
 
-Require Semantics.
 
-Section Simulation.
 
-  Variable prog : list A.expr * list metadata.
-  Variable tprog : list B.expr * list metadata * list (list (B.expr * B.rec_info)) * list String.string.
 
-  Hypothesis TRANSF : compile_cu prog = tprog.
+Lemma compile_cu_I_expr : forall A Ameta B Bmeta Belims Belim_names,
+    compile_cu (A, Ameta) = (B, Bmeta, Belims, Belim_names) ->
+    Forall2 I_expr A B.
+intros0 Hcomp. unfold compile_cu in *. repeat break_match. subst.
+inject_pair.
+eauto using compile_list_I_expr.
+Qed.
 
-  
-  (* This lemma was harder to prove than was necessary *)
-  Lemma prog_init_expr :
-    forall expr,
-      In expr (A.initial_env prog) ->
-      exists expr',
-        In expr' (B.initial_env tprog) /\ I_expr expr expr'.
-  Proof.
-    destruct prog. generalize dependent tprog.
-    clear TRANSF.
-    unfold compile_cu.
-    remember [] as l2. clear Heql2.
-    remember [] as l1. clear Heql1.
-    remember 0 as n. clear Heqn.
-    unfold gen_elim_names_list.
-    remember [] as l3. clear Heql3.
-    unfold bind_state. unfold ret_state.
-    generalize dependent l2.
-    induction l; intros.
-    solve [simpl in H; inv H].
-    simpl in IHl.
-    repeat (break_match_hyp; try congruence; [idtac]).
-    repeat (break_inner_match_hyp; try congruence; [idtac]).
-    subst. simpl in H. unfold B.initial_env. simpl.
-    clear -Heqp H IHl. simpl in Heqp.
-    unfold seq in *. unfold bind_state in *.
-    unfold fmap in *.
-    repeat break_match_hyp; try congruence.
-    unfold ret_state in *. inv Heqp. inv Heqp0.
-    destruct H.
-    * subst. eapply compile_I_expr in Heqp2. simpl.
-      eexists. split. left. reflexivity. eauto.
-    * edestruct IHl; eauto. unfold B.initial_env in *.
-      simpl in *. erewrite Heqp1 in H0. simpl in *. break_and.
-      exists x. split. right. assumption. assumption.
-  Qed.
+Lemma expr_value_I_expr : forall be v,
+    B.expr_value be v ->
+    exists ae,
+        A.expr_value ae v /\
+        I_expr ae be.
+make_first v. intros v. revert v.
+mut_induction v using value_rect_mut' with
+    (Pl := fun vs => forall bes,
+        Forall2 B.expr_value bes vs ->
+        exists aes,
+            Forall2 A.expr_value aes vs /\
+            Forall2 I_expr aes bes);
+[intros0 Hev; invc Hev.. | ].
 
-  
-  Lemma match_initial_env :
-    Forall2 I_expr (A.initial_env prog) (TaggedNumbered.initial_env tprog).
-  Proof.
-    unfold A.initial_env.
-    unfold TaggedNumbered.initial_env.
-    unfold compile_cu in *.
-    repeat (break_match_hyp; try congruence). subst.
-    simpl.
-    eapply compile_list_I_expr; eauto.
-  Qed.
-    
-      
-(*  
-  Lemma match_initial_state :
-    forall s,
-      Semantics.initial_state (A.semantics prog) s ->
-      exists s',
-        Semantics.initial_state (B.semantics tprog) s' /\ I s s'.
-  Proof.
-    intros.
-    inversion H.
-    eapply prog_init_expr in H0.
-    break_exists. break_and.
-    eexists. split.
-    econstructor; eauto.
-    econstructor; eauto.
-    intros. econstructor; eauto.
-  Qed.
- *)
+- destruct (IHv ?? **) as (? & ? & ?).
+  eauto using A.EvConstr, IConstr.
 
-  Definition match_values (v : A.valtype) (v' : B.valtype) := v = v'.
+- destruct (IHv ?? **) as (? & ? & ?).
+  eauto using A.EvClose, IClose.
 
-  Lemma final_state_match :
-    forall s s' v,
-      Semantics.final_state (A.semantics prog) s v ->
-      I s s' ->
-      exists v',
-        Semantics.final_state (B.semantics tprog) s' v' /\ match_values v v'.
-  Proof.
-    intros. inv H. inv H0.
-    eexists; split.
-    econstructor; eauto.
-    reflexivity.
-  Qed.
-  
-  Theorem fsim :
-    Semantics.forward_simulation (A.semantics prog) (TaggedNumbered.semantics tprog).
-  Proof.
-    eapply Semantics.forward_simulation_step.
-    admit.
-    (*intros. eapply match_initial_state; eauto.*)
-    
-    intros. eapply final_state_match; eauto.
+- eauto.
 
-    intros.
-    simpl in H.
+- destruct (IHv ?? **) as (? & ? & ?).
+  destruct (IHv0 ?? **) as (? & ? & ?).
+  eauto.
 
-    eapply I_sim in H; eauto.
-    simpl. eapply match_initial_env.
-  Admitted.
-  
-End Simulation.
+- finish_mut_induction expr_value_I_expr using list.
+Qed exporting.
 
+Lemma expr_value_I_expr' : forall ae be v,
+    A.expr_value ae v ->
+    I_expr ae be ->
+    B.expr_value be v.
+induction ae using A.expr_rect_mut with
+    (Pl := fun ae => forall be v,
+        Forall2 A.expr_value ae v ->
+        Forall2 I_expr ae be ->
+        Forall2 B.expr_value be v)
+    (Pp := fun ap => forall be v,
+        A.expr_value (fst ap) v ->
+        I_expr (fst ap) be ->
+        B.expr_value be v)
+    (Plp := fun aps => forall bes vs,
+        Forall2 (fun ap v => A.expr_value (fst ap) v) aps vs ->
+        Forall2 (fun ap be => I_expr (fst ap) be) aps bes ->
+        Forall2 (fun be v => B.expr_value be v) bes vs);
+intros0 Hae II; try solve [invc Hae; invc II; i_ctor | simpl in *; eauto].
+Qed.
+
+
+Require Import Semantics.
+
+Section Preservation.
+
+    Variable aprog : A.prog_type.
+    Variable bprog : B.prog_type.
+
+    Hypothesis Hcomp : compile_cu aprog = bprog.
+
+    Theorem fsim : Semantics.forward_simulation (A.semantics aprog) (B.semantics bprog).
+    destruct aprog as [A Ameta], bprog as [[[B Bmeta] Belims] Belim_names].
+    fwd eapply compile_cu_I_expr; eauto.
+
+    eapply Semantics.forward_simulation_step with
+        (match_states := I)
+        (match_values := @eq value).
+
+    - simpl. intros0 Bcall Hf Ha. invc Bcall.
+      fwd eapply Forall2_nth_error_ex' with (ys := B) as HH; eauto.
+        destruct HH as (abody & ? & ?).
+      destruct (expr_value_I_expr ae ?? **) as (? & ? & ?).
+      fwd eapply expr_value_I_expr_list as HH; eauto.  destruct HH as (? & ? & ?).
+
+      eexists. split. 1: econstructor; try eassumption.
+        3: i_ctor. all: eauto.
+      + i_ctor.
+      + i_ctor.
+
+    - simpl. intros0 II Afinal. invc Afinal. invc II.
+
+      eexists. split. 2: reflexivity.
+      i_ctor. i_lem expr_value_I_expr'.
+
+    - intros0 Astep. intros0 II.
+      i_lem I_sim.
+
+    Qed.
+
+End Preservation.
