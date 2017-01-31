@@ -4,7 +4,7 @@ Require Import Utopia.
 Require Import Metadata.
 Require Import Semantics.
 Require Import HighestValues.
-
+Require Import ListLemmas.
 
 
 Inductive expr :=
@@ -234,3 +234,233 @@ Definition semantics (prog : prog_type) : Semantics.semantics :=
                  (sstep)
                  (final_state prog)
                  (initial_env prog).
+
+
+
+Definition no_values : expr -> Prop :=
+    let fix go e :=
+        let fix go_list es :=
+            match es with
+            | [] => True
+            | e :: es => go e /\ go_list es
+            end in
+        match e with
+        | Value _ => False
+        | Arg => True
+        | UpVar _ => True
+        | App f a => go f /\ go a
+        | MkConstr _ args => go_list args
+        | MkClose _ free => go_list free
+        | Elim _ cases target => go_list cases /\ go target
+        end in go.
+
+Definition no_values_list : list expr -> Prop :=
+    let go := no_values in
+    let fix go_list es :=
+        match es with
+        | [] => True
+        | e :: es => go e /\ go_list es
+        end in go_list.
+
+Ltac refold_no_values :=
+    fold no_values_list in *.
+
+Lemma no_values_list_is_Forall : forall es,
+    no_values_list es <-> Forall no_values es.
+induction es; simpl; split; inversion 1; constructor; firstorder eauto.
+Qed.
+
+Definition no_values_dec e : { no_values e } + { ~ no_values e }.
+induction e using expr_rect_mut with
+    (Pl := fun es => { no_values_list es } + { ~ no_values_list es });
+simpl in *; refold_no_values;
+try solve [ assumption | left; constructor | right; inversion 1 ].
+
+- destruct IHe1; [ | right; inversion 1; intuition ].
+  destruct IHe2; [ | right; inversion 1; intuition ].
+  left. constructor; auto.
+
+- destruct IHe; [ | right; inversion 1; intuition ].
+  destruct IHe0; [ | right; inversion 1; intuition ].
+  left. constructor; auto.
+
+- destruct IHe; [ | right; inversion 1; intuition ].
+  destruct IHe0; [ | right; inversion 1; intuition ].
+  left. constructor; auto.
+Defined.
+
+Definition no_values_list_dec es : { no_values_list es } + { ~ no_values_list es }.
+induction es.
+- left. constructor.
+- simpl; refold_no_values.  rename a into e.
+  destruct (no_values_dec e); [ | right; intuition ].
+  destruct IHes; [ | right; intuition ].
+  left. auto.
+Defined.
+
+
+
+Definition cases_arent_values : expr -> Prop :=
+    let fix go e :=
+        let fix go_list es :=
+            match es with
+            | [] => True
+            | e :: es => go e /\ go_list es
+            end in
+        match e with
+        | Value _ => True
+        | Arg => True
+        | UpVar _ => True
+        | App f a => go f /\ go a
+        | MkConstr _ args => go_list args
+        | MkClose _ free => go_list free
+        | Elim _ cases target =>
+                Forall (fun e => ~ is_value e) cases /\
+                go_list cases /\ go target
+        end in go.
+
+Definition cases_arent_values_list : list expr -> Prop :=
+    let go := cases_arent_values in
+    let fix go_list es :=
+        match es with
+        | [] => True
+        | e :: es => go e /\ go_list es
+        end in go_list.
+
+Ltac refold_cases_arent_values :=
+    fold cases_arent_values_list in *.
+
+Lemma cases_arent_values_list_is_Forall : forall es,
+    cases_arent_values_list es <-> Forall cases_arent_values es.
+induction es; simpl; split; inversion 1; constructor; firstorder eauto.
+Qed.
+
+Inductive cases_arent_values_cont : cont -> Prop :=
+| CavkAppL : forall e2 l k,
+        cases_arent_values e2 ->
+        cases_arent_values_cont k ->
+        cases_arent_values_cont (KAppL e2 l k)
+| CavkAppR : forall e1 l k,
+        cases_arent_values e1 ->
+        cases_arent_values_cont k ->
+        cases_arent_values_cont (KAppR e1 l k)
+| CavkConstr : forall ctor vs es l k,
+        Forall cases_arent_values vs ->
+        Forall cases_arent_values es ->
+        cases_arent_values_cont k ->
+        cases_arent_values_cont (KConstr ctor vs es l k)
+| CavkClose : forall fname vs es l k,
+        Forall cases_arent_values vs ->
+        Forall cases_arent_values es ->
+        cases_arent_values_cont k ->
+        cases_arent_values_cont (KClose fname vs es l k)
+| CavkElim : forall ty cases l k,
+        Forall (fun e => ~ is_value e) cases ->
+        Forall cases_arent_values cases ->
+        cases_arent_values_cont k ->
+        cases_arent_values_cont (KElim ty cases l k)
+| CavkStop : cases_arent_values_cont KStop
+.
+
+Inductive cases_arent_values_state : state -> Prop :=
+| CavsRun : forall e l k,
+        cases_arent_values e ->
+        cases_arent_values_cont k ->
+        cases_arent_values_state (Run e l k)
+| CavsStop : forall v,
+        cases_arent_values_state (Stop v)
+.
+
+
+
+Ltac i_ctor := intros; constructor; simpl; eauto.
+Ltac i_lem H := intros; eapply H; simpl; eauto.
+
+Lemma run_cont_cases_arent_values : forall k v,
+    cases_arent_values_cont k ->
+    cases_arent_values_state (run_cont k v).
+induction k; intros0 Hcavk; invc Hcavk; i_ctor.
+all: fold cases_arent_values_list.
+all: rewrite cases_arent_values_list_is_Forall.
+
+- i_lem Forall_app. i_ctor.
+- i_lem Forall_app. i_ctor.
+- eauto.
+Qed.
+
+Lemma unroll_elim'_cases_arent_values : forall case ctor args mk_rec idx,
+    cases_arent_values case ->
+    (forall e, cases_arent_values e -> cases_arent_values (mk_rec e)) ->
+    cases_arent_values (unroll_elim' case ctor args mk_rec idx).
+first_induction args; intros0 Hcase Hmk_rec; simpl; eauto.
+- break_match.
+  + i_lem IHargs. split; eauto. eapply Hmk_rec. i_ctor.
+  + i_lem IHargs.
+Qed.
+
+Lemma unroll_elim_cases_arent_values : forall case ctor args mk_rec,
+    cases_arent_values case ->
+    (forall e, cases_arent_values e -> cases_arent_values (mk_rec e)) ->
+    cases_arent_values (unroll_elim case ctor args mk_rec).
+intros. i_lem unroll_elim'_cases_arent_values.
+Qed.
+
+Lemma step_cases_arent_values : forall E s s',
+    Forall cases_arent_values E ->
+    cases_arent_values_state s ->
+    sstep E s s' ->
+    cases_arent_values_state s'.
+intros0 Henv Hcases Hstep; invc Hstep; invc Hcases;
+simpl in *; refold_cases_arent_values.
+all: repeat break_and; try solve [repeat i_ctor].
+all: try rewrite cases_arent_values_list_is_Forall in *.
+
+- i_lem run_cont_cases_arent_values.
+- i_ctor. i_lem Forall_nth_error.
+- on _, invc_using Forall_3part_inv. i_ctor. i_ctor.
+- on _, invc_using Forall_3part_inv. i_ctor. i_ctor.
+- i_ctor. i_ctor.
+- i_ctor. i_lem unroll_elim_cases_arent_values; refold_cases_arent_values.
+  + i_lem Forall_nth_error.
+  + intros; split; eauto. split; eauto.
+    rewrite cases_arent_values_list_is_Forall. auto.
+Qed.
+
+
+Lemma no_values_not_value : forall e,
+    no_values e ->
+    ~ is_value e.
+intros. inversion 1. subst. simpl in *. auto.
+Qed.
+
+Lemma no_values_not_value_list : forall es,
+    Forall no_values es ->
+    Forall (fun e => ~ is_value e) es.
+induction es; intros; simpl in *; eauto.
+on >Forall, invc. eauto using no_values_not_value.
+Qed.
+
+Lemma no_values_cases_arent_values : forall e,
+    no_values e ->
+    cases_arent_values e.
+induction e using expr_rect_mut with
+    (Pl := fun e =>
+        Forall no_values e ->
+        Forall cases_arent_values e);
+simpl; intros0 Hnv; refold_no_values; refold_cases_arent_values.
+all: repeat break_and.
+all: try rewrite no_values_list_is_Forall in *;
+     try rewrite cases_arent_values_list_is_Forall in *.
+all: eauto.
+
+- split; eauto. i_lem no_values_not_value_list.
+
+- on >Forall, invc. i_ctor.
+Qed.
+
+Lemma no_values_cases_arent_values_list : forall es,
+    Forall no_values es ->
+    Forall cases_arent_values es.
+induction es; intros; simpl in *; eauto.
+on >Forall, invc. eauto using no_values_cases_arent_values.
+Qed.
