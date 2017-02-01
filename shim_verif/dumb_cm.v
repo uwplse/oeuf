@@ -502,16 +502,20 @@ Definition f_main := {|
   (Sseq
     (Sseq
       (Scall (Some 129%positive)
-        (mksignature nil (Some AST.Tint)
+        (mksignature (AST.Tint :: AST.Tint :: nil) (Some AST.Tint)
           {|cc_vararg:=false; cc_unproto:=true; cc_structret:=false|})
-        (Econst (Oaddrsymbol _zero (Int.repr 0))) nil)
+        (Econst (Oaddrsymbol _zero (Int.repr 0)))
+        ((Econst (Ointconst (Int.repr 0))) ::
+         (Econst (Ointconst (Int.repr 0))) :: nil))
       (Sassign _zero_value (Evar 129%positive)))
     (Sseq
       (Sseq
         (Scall (Some 130%positive)
-          (mksignature nil (Some AST.Tint)
+          (mksignature (AST.Tint :: AST.Tint :: nil) (Some AST.Tint)
             {|cc_vararg:=false; cc_unproto:=true; cc_structret:=false|})
-          (Econst (Oaddrsymbol _id (Int.repr 0))) nil)
+          (Econst (Oaddrsymbol _id (Int.repr 0)))
+          ((Econst (Ointconst (Int.repr 0))) ::
+           (Econst (Ointconst (Int.repr 0))) :: nil))
         (Sassign _id_closure (Evar 130%positive)))
       (Sseq
         (Sseq
