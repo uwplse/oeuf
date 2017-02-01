@@ -361,6 +361,13 @@ Qed.
 
 
 
+Lemma compile_cu_metas : forall A Ameta B Bmeta,
+    compile_cu (A, Ameta) = Some (B, Bmeta) ->
+    Ameta = Bmeta.
+unfold compile_cu. simpl. inversion 1.
+break_match; try discriminate. inject_some. auto.
+Qed.
+
 Require Semantics.
 
 Section Preservation.
@@ -375,6 +382,7 @@ Section Preservation.
   Proof.
     destruct prog as [A Ameta], tprog as [B Bmeta].
     fwd eapply compile_cu_I_env; eauto.
+    fwd eapply compile_cu_metas; eauto.
     fwd eapply compile_cu_no_values; eauto.
 
     eapply Semantics.forward_simulation_step with

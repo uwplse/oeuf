@@ -1403,6 +1403,13 @@ eapply compile_list_Forall.
 eapply compile_cu_compile_list. eauto.
 Qed.
 
+Lemma compile_cu_metas : forall A Ameta B Bmeta,
+    compile_cu (A, Ameta) = Some (B, Bmeta) ->
+    Ameta = Bmeta.
+simpl. inversion 1. break_bind_option.
+do 2 (break_match; try discriminate). inject_some. auto.
+Qed.
+
 (* `match_values` is the relevant parts of `I_expr` lifted to `HigherValue.value`s *)
 Inductive match_values (AE : A.env) (BE : B.env) : value -> value -> Prop :=
 | MvConstr : forall tag aargs bargs,
@@ -1526,52 +1533,53 @@ mut_induction bv using value_rect_mut' with
 - finish_mut_induction match_values_I_expr using list.
 Qed exporting.
 
-Lemma I_expr_match_values : forall A B,
+Lemma I_expr_match_values : forall A B M,
     Forall2 (fun a b => compile a = b) A B ->
-    forall ae av be,
+    forall av ae be,
     A.expr_value ae av ->
+    public_value M av ->
     I_expr A B ae be ->
     exists bv,
         B.expr_value be bv /\
-        match_values A B av bv.
-make_first av. intros0 Hcomp. move av at bottom.
-mut_induction av using value_rect_mut' with
+        match_values A B av bv /\
+        public_value M bv.
+intros0 Hcomp.
+induction av using value_rect_mut with
     (Pl := fun avs => forall n aes bes,
         Forall2 A.expr_value aes avs ->
+        Forall (public_value M) avs ->
         Forall2 (I_expr A B) (firstn n aes) bes ->
         exists bvs,
             Forall2 B.expr_value bes bvs /\
-            Forall2 (match_values A B) (firstn n avs) bvs);
-[intros0 Aev II.. | ].
+            Forall2 (match_values A B) (firstn n avs) bvs /\
+            Forall (public_value M) bvs);
+intros0 Aev Apub II.
 
 all: unfold A.valtype, B.valtype in *.
 
-- invc Aev. invc II.
+- invc Aev. invc II. invc Apub.
   fwd eapply IHav as HH ; eauto.
     { erewrite firstn_all by eauto. eauto. }
-    destruct HH as (? & ? & Hfa).
-  eexists. split; i_ctor.
+    destruct HH as (? & ? & Hfa & ?).
+  eexists. split; [|split]; i_ctor.
   + rewrite firstn_all in Hfa by (collect_length_hyps; congruence).
     auto.
 
-- invc Aev. invc II.
+- invc Aev. invc II. invc Apub.
   fwd eapply IHav as HH; eauto.
-    destruct HH as (? & ? & Hfa).
-  eexists. split; i_ctor.
+    destruct HH as (? & ? & Hfa & ?).
+  eexists. split; [|split]; i_ctor.
   + collect_length_hyps. rewrite firstn_length, min_l in * by auto. omega.
   + collect_length_hyps. rewrite firstn_length, min_l in * by auto. omega.
   + subst n. collect_length_hyps. congruence.
 
 - invc Aev. destruct n; invc II; simpl; eauto.
 
-- invc Aev. destruct n; invc II; simpl; eauto.
-  destruct (IHav ?? ?? ** **) as (? & ? & ?).
-  destruct (IHav0 ?? ?? ?? ** **) as (? & ? & ?).
-  eauto.
-
-- finish_mut_induction I_expr_match_values using list.
-Qed exporting.
-
+- invc Aev. destruct n; invc II; invc Apub; simpl; eauto.
+  destruct (IHav ?? ?? ** ** **) as (? & ? & ? & ?).
+  destruct (IHav0 ?? ?? ?? ** ** **) as (? & ? & ? & ?).
+  eexists. split; [|split]; i_ctor.
+Qed.
 
 
 
@@ -1589,6 +1597,7 @@ Section Preservation.
     fwd eapply compile_cu_close_dyn_placement; eauto.
     fwd eapply compile_cu_enough_free; eauto.
     fwd eapply compile_cu_Forall; eauto.
+    fwd eapply compile_cu_metas; eauto.
 
     eapply Semantics.forward_simulation_star with
         (match_states := I' A B)
@@ -1629,7 +1638,7 @@ Section Preservation.
 
     - intros0 II Afinal. invc Afinal. invc II. on >I, invc.
       fwd eapply I_expr_match_values as HH; eauto.
-        destruct HH as (bv & ? & ?).
+        destruct HH as (bv & ? & ? & ?).
       eexists. split; eauto.
       i_ctor.
 

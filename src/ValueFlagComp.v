@@ -966,6 +966,27 @@ try on >I_value, invc.
 Qed.
 
 
+Lemma compile_cu_metas : forall A Ameta B Bmeta,
+    compile_cu (A, Ameta) = (B, Bmeta) ->
+    Ameta = Bmeta.
+simpl. inversion 1. auto.
+Qed.
+
+Lemma I_value_public : forall M av ae bv,
+    A.expr_value ae av ->
+    I_value ae bv ->
+    public_value M av ->
+    public_value M bv.
+intro M.
+induction av using value_rect_mut with
+    (Pl := fun avs => forall aes bvs,
+        Forall2 A.expr_value aes avs ->
+        Forall2 I_value aes bvs ->
+        Forall (public_value M) avs ->
+        Forall (public_value M) bvs);
+intros0 Aev II Apub; invc Aev; invc II; invc Apub; i_ctor.
+Qed.
+
 Require Semantics.
 
 Section Preservation.
@@ -980,6 +1001,7 @@ Section Preservation.
   Proof.
     destruct prog as [A Ameta], tprog as [B Bmeta].
     fwd eapply compile_cu_Forall; eauto.
+    fwd eapply compile_cu_metas; eauto.
 
     eapply Semantics.forward_simulation_plus with
         (match_states := I')
@@ -998,7 +1020,7 @@ Section Preservation.
 
     - intros0 II Afinal. invc Afinal. invc II. on >I, invc.
       eexists; split.
-      + econstructor.
+      + i_ctor. i_lem I_value_public.
       + i_lem expr_value_I_value_eq.
 
     - intros0 Astep. intros0 II.
