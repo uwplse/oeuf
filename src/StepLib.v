@@ -52,6 +52,12 @@ induction 1; intros.
 - econstructor; eauto.
 Qed.
 
+Lemma sstep_sstar : forall s s',
+    sstep s s' ->
+    sstar s s'.
+intros. eapply splus_sstar. eapply SPlusOne. auto.
+Qed.
+
 Lemma sstar_then_sstar : forall s s' s'',
     sstar s s' ->
     sstar s' s'' ->
