@@ -5,8 +5,8 @@ extern void* id();
 
 int main() {
     //TODO: the next two calls should be malloc/write instead
-    void* zero_value = zero();
-    void* id_closure = id();
+    void* zero_value = zero(NULL, NULL);
+    void* id_closure = id(NULL, NULL);
 
     
     void* result = call(id_closure,zero_value);
