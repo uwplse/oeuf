@@ -1,7 +1,7 @@
 #include "shim.h"
 
-extern void* zero();
-extern void* id();
+extern void* zero(void*, void*);
+extern void* id(void*, void*);
 
 int main() {
     //TODO: the next two calls should be malloc/write instead
