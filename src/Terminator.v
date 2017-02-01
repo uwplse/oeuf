@@ -119,6 +119,194 @@ Ltac invert_nullary I x x' :=
     eapply I with (x := x'); eauto; intros.
 
 
+Lemma happ_hnil_r : forall A B l1 (h1 : @hlist A B l1),
+    existT _ _ (happ h1 hnil) = existT _ _ h1.
+induction h1.
+- simpl. reflexivity.
+- simpl in *.
+  dependent rewrite IHh1.
+  reflexivity.
+Qed.
+
+Lemma happ_assoc : forall A B l1 l2 l3 (h1 : @hlist A B l1) (h2 : hlist _ l2) (h3 : hlist _ l3),
+    existT _ _ (happ h1 (happ h2 h3)) = existT _ _ (happ (happ h1 h2) h3).
+induction h1; intros; simpl in *.
+- reflexivity.
+- dependent rewrite (IHh1 h2 h3). reflexivity.
+Qed.
+
+Lemma happ_hcons_assoc : forall A B l1 a2 l3 (h1 : @hlist A B l1) (b2 : B a2) (h3 : hlist _ l3),
+    existT _ _ (happ h1 (hcons b2 h3)) = existT _ _ (happ (happ h1 (hcons b2 hnil)) h3).
+induction h1; intros; simpl in *.
+- reflexivity.
+- dependent rewrite (IHh1 b2 h3). reflexivity.
+Qed.
+
+Lemma hmap_Value_is_value : forall G L tys (vs : hlist (value G) tys),
+    HForall (@is_value G L) (hmap (@Value G L) vs).
+induction vs; simpl.
+- constructor.
+- constructor; eauto. constructor.
+Qed.
+
+Lemma rewrite_exists_hlist : forall A (B : A -> Type) l l'
+        (P : forall l, hlist B l -> Prop),
+    (forall h h', existT (hlist B) l h = existT (hlist B) l' h') ->
+    (exists h : hlist B l, P l h) ->
+    (exists h' : hlist B l', P l' h').
+Admitted.
+
+
+Ltac use_term H kk result :=
+    let Hresult := fresh "H" result in
+    let T := fresh "T" in
+    evar (T : Type);
+    evar (kk : T);
+    unfold T in *; clear T;
+    destruct (H kk) as [result Hresult];
+    unfold kk in *; clear kk.
+
+Lemma terminate_constr : forall G (g : genv G) rty L l,
+    forall ctor ty,
+    forall k,
+    forall rest_tys (rest : hlist _ rest_tys) init_tys (init_vs : hlist _ init_tys),
+    forall (ct : constr_type ctor (init_tys ++ rest_tys) ty),
+    let init := hmap (@Value G L) init_vs in
+    HForall (fun ty e => forall k,
+        exists v, sstar (rty := rty) g (Run e l k) (run_cont k v)) rest ->
+    exists vs, sstar (rty := rty) g
+        (Run (Constr ct (happ init rest)) l k)
+        (Run (Constr ct (hmap (@Value G L) vs)) l k).
+intros until k.
+change (fun x => expr G L x) with (expr G L) in *. (* fix implicit arg problem *)
+induction rest; intros0 Hterm_rest.
+
+- unfold init.
+
+  revert ct. 
+  pattern (init_tys ++ []), (happ (hmap (@Value G L) init_vs) hnil).
+  change (?f ?l ?h) with ((fun lh => f (projT1 lh) (projT2 lh)) (existT _ l h)).
+  rewrite happ_hnil_r. simpl.  intros.
+
+  eexists. eapply SStarNil.
+
+
+- rename a into mid_ty. rename b into mid. rename l0 into rest_tys.
+  inversion Hterm_rest. subst a l0. fix_existT. subst b h. clear Hterm_rest.
+    rename H2 into Hterm_mid. rename H4 into Hterm_rest.
+
+  destruct (is_value_dec mid).
+
+  + assert (HH : exists mid_v, mid = Value mid_v).
+      { on _, invc_using expr_is_value_inv. eauto. }
+      destruct HH as [mid_v Hmid_v].
+
+    revert ct. 
+    pattern (init_tys ++ mid_ty :: rest_tys), (happ init (hcons mid rest)).
+    change (?f ?l ?h) with ((fun lh => f (projT1 lh) (projT2 lh)) (existT _ l h)).
+    rewrite happ_hcons_assoc. simpl.  intros.
+
+    fwd eapply (IHrest (init_tys ++ [mid_ty]) (happ init_vs (hcons mid_v hnil))) as HH.
+      { assumption. }
+    rewrite Hmid_v. rewrite hmap_app in HH. exact HH.
+
+  + use_term Hterm_mid kmid mid_v.
+
+    B_start HS.
+    B_step HS.
+      { eapply SConstrStep. eapply hmap_Value_is_value. assumption. }
+    B_star HS.
+      { exact Hmid_v. }
+      simpl in S2.
+
+    assert (HH : exists vs, sstar (rty := rty) g
+            (Run (Constr ct (happ init (hcons (Value mid_v) rest))) l k)
+            (Run (Constr ct (hmap (@Value G L) vs)) l k)).
+      { clear Hmid_v HS S0 S1 S2.  revert ct.
+        pattern (init_tys ++ mid_ty :: rest_tys), (happ init (hcons (Value mid_v) rest)).
+        change (?f ?l ?h) with ((fun lh => f (projT1 lh) (projT2 lh)) (existT _ l h)).
+        rewrite happ_hcons_assoc. simpl.  intros.
+
+        change (hcons (Value mid_v) hnil) with (hmap (@Value G L) (hcons mid_v hnil)).
+        unfold init. rewrite <- hmap_app.
+        eapply IHrest. auto.
+      }
+      destruct HH as [vs Hvs].
+    B_star HS.
+      { exact Hvs. }
+    eexists. eapply splus_sstar. exact HS.
+Qed.
+
+Lemma terminate_close : forall G (g : genv G) rty L l,
+    forall arg_ty ret_ty,
+    forall k,
+    forall rest_tys (rest : hlist _ rest_tys) init_tys (init_vs : hlist _ init_tys),
+    forall (mb : member (arg_ty, init_tys ++ rest_tys, ret_ty) G),
+    let init := hmap (@Value G L) init_vs in
+    HForall (fun ty e => forall k,
+        exists v, sstar (rty := rty) g (Run e l k) (run_cont k v)) rest ->
+    exists vs, sstar (rty := rty) g
+        (Run (Close mb (happ init rest)) l k)
+        (Run (Close mb (hmap (@Value G L) vs)) l k).
+intros until k.
+change (fun x => expr G L x) with (expr G L) in *. (* fix implicit arg problem *)
+induction rest; intros0 Hterm_rest.
+
+- unfold init.
+
+  revert mb. 
+  pattern (init_tys ++ []), (happ (hmap (@Value G L) init_vs) hnil).
+  change (?f ?l ?h) with ((fun lh => f (projT1 lh) (projT2 lh)) (existT _ l h)).
+  rewrite happ_hnil_r. simpl.  intros.
+
+  eexists. eapply SStarNil.
+
+
+- rename a into mid_ty. rename b into mid. rename l0 into rest_tys.
+  inversion Hterm_rest. subst a l0. fix_existT. subst b h. clear Hterm_rest.
+    rename H2 into Hterm_mid. rename H4 into Hterm_rest.
+
+  destruct (is_value_dec mid).
+
+  + assert (HH : exists mid_v, mid = Value mid_v).
+      { on _, invc_using expr_is_value_inv. eauto. }
+      destruct HH as [mid_v Hmid_v].
+
+    revert mb. 
+    pattern (init_tys ++ mid_ty :: rest_tys), (happ init (hcons mid rest)).
+    change (?f ?l ?h) with ((fun lh => f (projT1 lh) (projT2 lh)) (existT _ l h)).
+    rewrite happ_hcons_assoc. simpl.  intros.
+
+    fwd eapply (IHrest (init_tys ++ [mid_ty]) (happ init_vs (hcons mid_v hnil))) as HH.
+      { assumption. }
+    rewrite Hmid_v. rewrite hmap_app in HH. exact HH.
+
+  + use_term Hterm_mid kmid mid_v.
+
+    B_start HS.
+    B_step HS.
+      { eapply SCloseStep. eapply hmap_Value_is_value. assumption. }
+    B_star HS.
+      { exact Hmid_v. }
+      simpl in S2.
+
+    assert (HH : exists vs, sstar (rty := rty) g
+            (Run (Close mb (happ init (hcons (Value mid_v) rest))) l k)
+            (Run (Close mb (hmap (@Value G L) vs)) l k)).
+      { clear Hmid_v HS S0 S1 S2.  revert mb.
+        pattern (init_tys ++ mid_ty :: rest_tys), (happ init (hcons (Value mid_v) rest)).
+        change (?f ?l ?h) with ((fun lh => f (projT1 lh) (projT2 lh)) (existT _ l h)).
+        rewrite happ_hcons_assoc. simpl.  intros.
+
+        change (hcons (Value mid_v) hnil) with (hmap (@Value G L) (hcons mid_v hnil)).
+        unfold init. rewrite <- hmap_app.
+        eapply IHrest. auto.
+      }
+      destruct HH as [vs Hvs].
+    B_star HS.
+      { exact Hvs. }
+    eexists. eapply splus_sstar. exact HS.
+Qed.
 
 Lemma terminate_expr : forall G (g : genv G) rty,
     (forall arg_ty free_tys ret_ty (mb : member (arg_ty, free_tys, ret_ty) G) l k,
@@ -245,13 +433,36 @@ simpl; try intro k.
 
 
 - (* Constr *)
-  admit.
+  fwd eapply terminate_constr with (init_vs := hnil) as HH; eauto.
+    destruct HH as [vs Hvs].
+
+  B_start HS.
+  B_star HS.
+    { exact Hvs. }
+  B_step HS.
+    { eapply SConstrDone. }
+  B_step HS.
+    { eapply SValue. }
+    eexists. eapply splus_sstar. exact HS.
+
 
 - (* Close *)
-  admit.
+  fwd eapply terminate_close with (init_vs := hnil) as HH; eauto.
+    destruct HH as [vs Hvs].
+
+  B_start HS.
+  B_star HS.
+    { exact Hvs. }
+  B_step HS.
+    { eapply SCloseDone. }
+  B_step HS.
+    { eapply SValue. }
+    eexists. eapply splus_sstar. exact HS.
+
 
 - (* Elim *)
   admit.
+
 
 - (* hnil *) constructor.
 
