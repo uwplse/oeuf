@@ -87,6 +87,12 @@ Implicit Arguments expr.
 Inductive is_value {G L ty} : expr G L ty -> Prop :=
 | IsValue : forall v, is_value (Value v).
 
+Definition is_value_dec {G L ty} : forall (e : expr G L ty), { is_value e } + { ~ is_value e }.
+destruct e.
+1: left; constructor.
+all: right; hide; inversion 1.
+Defined.
+
 Definition body_expr G fn_sig :=
     let '(arg_ty, free_tys, ret_ty) := fn_sig in
     expr G (arg_ty :: free_tys) ret_ty.
