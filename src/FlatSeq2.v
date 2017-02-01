@@ -140,6 +140,8 @@ Inductive is_callstate (prog : prog_type) : valtype -> valtype -> state -> Prop 
 | IsCallstate : forall fname free av body ret,
         nth_error (fst prog) fname = Some (body, ret) ->
         let fv := Close fname free in
+        HigherValue.public_value (snd prog) fv ->
+        HigherValue.public_value (snd prog) av ->
         is_callstate prog fv av
             (Run body
                  (Frame av fv [])

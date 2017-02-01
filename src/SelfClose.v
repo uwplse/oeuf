@@ -123,6 +123,8 @@ Inductive is_callstate (prog : prog_type) : valtype -> valtype -> state -> Prop 
         let fv := HigherValue.Close fname free in
         expr_value fe fv ->
         expr_value ae av ->
+        HigherValue.public_value (snd prog) fv ->
+        HigherValue.public_value (snd prog) av ->
         is_callstate prog fv av
             (Run body ae fe Stop).
 
