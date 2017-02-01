@@ -1698,6 +1698,8 @@ Qed.
       + simpl. replace (pred _) with an; eauto.
         fwd eapply I_id_sur with (k1 := IkFunc an) (k2 := IkFunc (pred _)); eauto.
         congruence.
+      + admit. (* public_value *)
+      + admit. (* public_value *)
 
     - intro. intros0 II Afinal.
       invc Afinal. invc II. on >I, invc. on >I_cont, invc. eexists. split. constructor.
@@ -1710,7 +1712,7 @@ Qed.
       + eapply I_prog_env. eapply compile_I_prog; eauto.
       + eapply compile_prog_fnames_below. eauto.
       + eapply compile_prog_switch_placement. eauto.
-  Qed.
+  Admitted.
 
 End Preservation.
 
