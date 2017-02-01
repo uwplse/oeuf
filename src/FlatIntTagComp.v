@@ -476,6 +476,53 @@ Lemma nat_pos_nat : forall n,
 intros.  rewrite SuccNat2Pos.id_succ. reflexivity.
 Qed.
 
+Lemma I_value_public : forall M av bv,
+    I_value av bv ->
+    HigherValue.public_value M av ->
+    B.fit_public_value M bv.
+intros until M.
+mut_induction av using HigherValue.value_rect_mut' with
+    (Pl := fun av => forall bv,
+        Forall2 I_value av bv ->
+        Forall (HigherValue.public_value M) av ->
+        Forall (B.fit_public_value M) bv);
+[ intros0 II Apub; invc II.. | ].
+
+- invc Apub. i_ctor.
+- invc Apub. i_ctor. rewrite nat_pos_nat. auto.
+- auto.
+- invc Apub. i_ctor.
+
+- finish_mut_induction I_value_public using list.
+Qed exporting.
+
+Lemma I_value_public' : forall M bv av,
+    I_value av bv ->
+    B.fit_public_value M bv ->
+    HigherValue.public_value M av.
+intros until M.
+mut_induction bv using HighValues.value_rect_mut' with
+    (Pl := fun bv => forall av,
+        Forall2 I_value av bv ->
+        Forall (B.fit_public_value M) bv ->
+        Forall (HigherValue.public_value M) av);
+[ intros0 II Bpub; invc II.. | ].
+
+- invc Bpub. i_ctor.
+- invc Bpub. rewrite nat_pos_nat in *. i_ctor.
+- auto.
+- invc Bpub. i_ctor.
+
+- finish_mut_induction I_value_public' using list.
+Qed exporting.
+
+Lemma compile_cu_metas : forall A Ameta B Bmeta,
+    compile_cu (A, Ameta) = Some (B, Bmeta) ->
+    Ameta = Bmeta.
+simpl. inversion 1.
+break_bind_option. inject_some. auto.
+Qed.
+
 Require Semantics.
 
 Section Preservation.
@@ -488,16 +535,18 @@ Section Preservation.
   Theorem fsim :
     Semantics.forward_simulation (A.semantics prog) (B.semantics tprog).
   Proof.
+    destruct prog as [A Ameta], tprog as [B Bmeta].
+    fwd eapply compile_cu_I_env; eauto.
+    fwd eapply compile_cu_metas; eauto.
+
     eapply Semantics.forward_simulation_step with
         (match_states := I)
         (match_values := I_value).
 
     - simpl. intros. on >B.is_callstate, invc. on >I_value, inv.
-      destruct prog as [A Ameta], tprog as [B Bmeta]. simpl in *.
 
       rewrite nat_pos_nat in *.
 
-      fwd eapply compile_cu_I_env; eauto.
       fwd eapply length_nth_error_Some with (xs := B) (ys := A) as HH;
         eauto using Forall2_length, eq_sym.
         destruct HH as ([abody aret] & ?).
@@ -506,16 +555,16 @@ Section Preservation.
       on >I_func, invc.
       eexists. split; i_ctor.
       + i_ctor. i_ctor.
-      + admit. (* public_value *)
-      + admit. (* public_value *)
+      + i_lem I_value_public'.
+      + i_lem I_value_public'.
 
-    - intros0 II Afinal. invc Afinal. invc II. on >I_cont, invc. eexists; split; eauto.
-      constructor.
+    - intros0 II Afinal. invc Afinal. invc II. on >I_cont, invc.
+      eexists; split; eauto.
+      i_ctor. i_lem I_value_public.
 
     - intros0 Astep. intros0 II.
       eapply I_sim; eauto.
-      destruct prog, tprog. eapply compile_cu_I_env; eauto.
 
-  Admitted.
+  Qed.
 
 End Preservation.
