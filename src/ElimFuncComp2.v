@@ -1411,31 +1411,48 @@ do 2 (break_match; try discriminate). inject_some. auto.
 Qed.
 
 (* `match_values` is the relevant parts of `I_expr` lifted to `HigherValue.value`s *)
-Inductive match_values (AE : A.env) (BE : B.env) : value -> value -> Prop :=
+Inductive match_values (AE : A.env) (BE : B.env) (M : list metadata) : value -> value -> Prop :=
 | MvConstr : forall tag aargs bargs,
-        Forall2 (match_values AE BE) aargs bargs ->
-        match_values AE BE (Constr tag aargs) (Constr tag bargs)
+        Forall2 (match_values AE BE M) aargs bargs ->
+        match_values AE BE M (Constr tag aargs) (Constr tag bargs)
 | MvClose : forall fname afree bfree body,
         nth_error BE fname = Some body ->
         let n := length bfree in
         B.num_locals body <= S n ->
         n <= length afree ->
-        Forall2 (match_values AE BE) (firstn n afree) bfree ->
-        match_values AE BE (Close fname afree) (Close fname bfree)
+        Forall2 (match_values AE BE M) (firstn n afree) bfree ->
+        (* This hack is used for the callstate case.  We need to show that the
+           A-side value is public_value, but there might be values in `afree`
+           that aren't in `bfree`, for which we have no guarantees. *)
+        (Forall (public_value M) bfree -> Forall (public_value M) afree) ->
+        match_values AE BE M (Close fname afree) (Close fname bfree)
 .
 
 
+Lemma match_values_public : forall A B M bv av,
+    match_values A B M av bv ->
+    public_value M bv ->
+    public_value M av.
+intros until M.
+mut_induction bv using value_rect_mut' with
+    (Pl := fun bv => forall av,
+        Forall2 (match_values A B M) av bv ->
+        Forall (public_value M) bv ->
+        Forall (public_value M) av);
+[ intros0 Hmv Bpub; invc Hmv; invc Bpub; i_ctor.. | ].
+- finish_mut_induction match_values_public using list.
+Qed exporting.
 
-Lemma match_values_enough_free : forall A B,
+Lemma match_values_enough_free : forall A B M,
     Forall2 (fun a b => compile a = b) A B ->
     forall av bv be,
-    match_values A B av bv ->
+    match_values A B M av bv ->
     B.expr_value be bv ->
     B.enough_free B be.
 intros0 Hcomp.
 mut_induction av using value_rect_mut' with
     (Pl := fun avs => forall n bvs bes,
-        Forall2 (match_values A B) (firstn n avs) bvs ->
+        Forall2 (match_values A B M) (firstn n avs) bvs ->
         Forall2 B.expr_value bes bvs ->
         Forall (B.enough_free B) bes);
 [ intros0 Hmval Bev.. | ];
@@ -1478,11 +1495,11 @@ mut_induction av using value_rect_mut' with
 - finish_mut_induction A_expr_value_ex using list.
 Qed exporting.
 
-Lemma match_values_I_expr : forall A B,
+Lemma match_values_I_expr : forall A B M,
     Forall2 (fun a b => compile a = b) A B ->
     forall av be bv,
     B.expr_value be bv ->
-    match_values A B av bv ->
+    match_values A B M av bv ->
     exists ae,
         A.expr_value ae av /\
         I_expr A B ae be.
@@ -1490,7 +1507,7 @@ make_first bv. intros0 Hcomp. move bv at bottom.
 mut_induction bv using value_rect_mut' with
     (Pl := fun bvs => forall n avs bes,
         Forall2 B.expr_value bes bvs ->
-        Forall2 (match_values A B) (firstn n avs) bvs ->
+        Forall2 (match_values A B M) (firstn n avs) bvs ->
         exists aes,
             Forall2 A.expr_value aes avs /\
             Forall2 (I_expr A B) (firstn n aes) bes);
@@ -1541,7 +1558,7 @@ Lemma I_expr_match_values : forall A B M,
     I_expr A B ae be ->
     exists bv,
         B.expr_value be bv /\
-        match_values A B av bv /\
+        match_values A B M av bv /\
         public_value M bv.
 intros0 Hcomp.
 induction av using value_rect_mut with
@@ -1551,7 +1568,7 @@ induction av using value_rect_mut with
         Forall2 (I_expr A B) (firstn n aes) bes ->
         exists bvs,
             Forall2 B.expr_value bes bvs /\
-            Forall2 (match_values A B) (firstn n avs) bvs /\
+            Forall2 (match_values A B M) (firstn n avs) bvs /\
             Forall (public_value M) bvs);
 intros0 Aev Apub II.
 
@@ -1601,7 +1618,7 @@ Section Preservation.
 
     eapply Semantics.forward_simulation_star with
         (match_states := I' A B)
-        (match_values := match_values A B).
+        (match_values := match_values A B Ameta).
 
     - simpl. intros. on >B.is_callstate, invc. simpl in *.
       fwd eapply Forall2_nth_error_ex' with (xs := A) (ys := B) as HH; eauto.
@@ -1609,7 +1626,7 @@ Section Preservation.
 
       fwd eapply match_values_I_expr with (bv := av2) as HH; eauto.
         destruct HH as (av1_e & ? & ?).
-      on (match_values _ _ _ (Close _ _)), invc.
+      on (match_values _ _ _ _ (Close _ _)), invc.
       fwd eapply match_values_I_expr_list with (avs := afree) as HH; eauto.
         destruct HH as (afree_e & ? & ?).
 
@@ -1634,7 +1651,9 @@ Section Preservation.
           -- eapply match_values_enough_free_list; eauto.
         * i_ctor.
 
-      + i_ctor. all: admit.
+      + i_ctor.
+        * on (public_value _ (Close _ _)), invc. i_ctor.
+        * i_lem match_values_public.
 
     - intros0 II Afinal. invc Afinal. invc II. on >I, invc.
       fwd eapply I_expr_match_values as HH; eauto.
@@ -1645,6 +1664,7 @@ Section Preservation.
     - intros0 Astep. intros0 II.
       eapply sstar_semantics_sim, I'_sim; try eassumption.
       + eapply compile_cu_compile_list; eauto.
-  Admitted.
+
+  Qed.
 
 End Preservation.
