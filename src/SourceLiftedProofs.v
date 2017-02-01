@@ -393,4 +393,134 @@ Qed.
 
 
 
+Lemma expr_is_value_inv : forall G L ty (e : expr G L ty)
+        (Q : _ -> Prop),
+    (forall v, Q (Value v)) ->
+    is_value e ->
+    Q e.
+intros0 HQ.
+destruct e.
+all: try solve [inversion 1].
+intro. eapply HQ.
+Qed.
+
+Lemma value_adt_inv : forall G tyn (v : value G (ADT tyn))
+        (Q : _ -> Prop),
+    (forall ctor arg_tys (ct : constr_type ctor arg_tys tyn) args,
+        Q (VConstr ct args)) ->
+    Q v.
+intros until v.
+pattern tyn, v.
+refine (
+    match v as v_ in value _ (ADT tyn_) return _ tyn_ v_ with
+    | @VConstr _ tyn ctor arg_tys ct args => _
+    | VClose _ _ => idProp
+    end).
+clear v tyn0.
+intros ? HQ.
+eapply HQ.
+Qed.
+
+Lemma value_arrow_inv : forall G arg_ty ret_ty (v : value G (Arrow arg_ty ret_ty))
+        (Q : _ -> Prop),
+    (forall free_tys (mb : member (arg_ty, free_tys, ret_ty) G) free,
+        Q (VClose mb free)) ->
+    Q v.
+intros until v.
+pattern arg_ty, ret_ty, v.
+refine (
+    match v as v_ in value _ (Arrow arg_ty_ ret_ty_) return _ arg_ty_ ret_ty_ v_ with
+    | VConstr _ _ => idProp
+    | @VClose _ arg_ty free_tys ret_ty mb free => _
+    end).
+clear v arg_ty0 ret_ty0.
+intros ? HQ.
+eapply HQ.
+Qed.
+
+Ltac invert_nullary I x x' :=
+    generalize dependent x'; intro x';
+    eapply I with (x := x'); eauto; intros.
+
+
+Lemma find_first_non_value : forall {G L tys} (xs : hlist (expr G L) tys),
+    (exists vtys ety etys vs e es,
+        HForall (@is_value G L) vs /\
+        ~ is_value e /\
+        existT _ tys xs = existT _ (vtys ++ ety :: etys) (happ vs (hcons e es))) \/
+    (exists vs, xs = hmap (@Value G L) vs).
+induction xs.
+  { right. exists hnil. reflexivity. }
+
+rename a into ty. rename b into x. rename l into tys.
+destruct (is_value_dec x); cycle 1.
+- (* found it here *)
+  left. exists _, _, _, hnil, x, xs. split; eauto.
+
+- (* didn't find it here - check the tail *)
+  destruct IHxs as [ (vtys & ety & etys & vs & e & es & ? & ? & ?) | (vs & ?) ].
+
+  + (* found it in the tail *)
+    left.  exists _, _, _, (hcons x vs), e, es.
+    do 2 (split; eauto).
+    on _, fun H => dependent rewrite H. simpl. reflexivity.
+
+  + (* found no values anywhere *)
+    on _, invc_using expr_is_value_inv.
+    right.  exists (hcons v vs).
+    simpl. reflexivity.
+Qed.
+
+Theorem progress : forall G L ty rty
+    (g : genv G)
+    (e : expr G L ty)
+    (l : hlist (value G) L)
+    (k : cont G rty ty),
+    exists s', sstep g (Run e l k) s'.
+destruct e; intros; simpl.
+
+- eexists. eapply SValue.
+
+- eexists. eapply SVar.
+
+- destruct (is_value_dec e1); cycle 1.
+    { eexists. eapply SAppL. auto. }
+  destruct (is_value_dec e2); cycle 1.
+    { eexists. eapply SAppR. all: auto. }
+
+  do 2 on _, invc_using expr_is_value_inv.
+    rename v into v2. rename v0 into v1.
+  on _, invert_nullary value_arrow_inv v.
+  eexists. eapply SMakeCall.
+
+- rename h into args.
+  destruct (find_first_non_value args) as
+    [ (vtys & ety & etys & vs & e & es & ? & ? & Heq) | (vs & Heq) ].
+
+  + revert ct. dependent rewrite Heq.
+    intros. eexists. eapply SConstrStep; auto.
+
+  + rewrite Heq.
+    eexists. eapply SConstrDone.
+
+- rename m into mb. rename h into free.
+  destruct (find_first_non_value free) as
+    [ (vtys & ety & etys & vs & e & es & ? & ? & Heq) | (vs & Heq) ].
+
+  + revert mb. dependent rewrite Heq.
+    intros. eexists. eapply SCloseStep; auto.
+
+  + rewrite Heq.
+    eexists. eapply SCloseDone.
+
+- rename h into cases. rename e0 into target.
+  destruct (is_value_dec target); cycle 1.
+    { eexists. eapply SElimTarget. auto. }
+
+  on _, invc_using expr_is_value_inv.
+  on _, invert_nullary value_adt_inv v.
+  eexists. eapply SEliminate.
+
+Qed.
+
 
