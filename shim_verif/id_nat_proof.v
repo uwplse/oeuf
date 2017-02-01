@@ -1,5 +1,5 @@
 (* Specific program we care about *)
-Require Import id_nat_cm.
+(*Require Import id_nat_cm.
 
 Require Import compcert.common.Globalenvs.
 Require Import compcert.common.Memory.
@@ -118,4 +118,4 @@ Section SIM.
 
   Admitted.
 
-End SIM.
+End SIM.*)
