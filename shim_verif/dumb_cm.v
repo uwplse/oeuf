@@ -503,8 +503,7 @@ Definition f_main := {|
     (Sseq
       (Scall (Some 129%positive)
         (mksignature (AST.Tint :: AST.Tint :: nil) (Some AST.Tint)
-          {|cc_vararg:=false; cc_unproto:=true; cc_structret:=false|})
-        (Econst (Oaddrsymbol _zero (Int.repr 0)))
+          cc_default) (Econst (Oaddrsymbol _zero (Int.repr 0)))
         ((Econst (Ointconst (Int.repr 0))) ::
          (Econst (Ointconst (Int.repr 0))) :: nil))
       (Sassign _zero_value (Evar 129%positive)))
@@ -512,8 +511,7 @@ Definition f_main := {|
       (Sseq
         (Scall (Some 130%positive)
           (mksignature (AST.Tint :: AST.Tint :: nil) (Some AST.Tint)
-            {|cc_vararg:=false; cc_unproto:=true; cc_structret:=false|})
-          (Econst (Oaddrsymbol _id (Int.repr 0)))
+            cc_default) (Econst (Oaddrsymbol _id (Int.repr 0)))
           ((Econst (Ointconst (Int.repr 0))) ::
            (Econst (Ointconst (Int.repr 0))) :: nil))
         (Sassign _id_closure (Evar 130%positive)))
