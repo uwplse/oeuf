@@ -157,7 +157,9 @@ Inductive is_callstate (prog : prog_type) : valtype -> valtype -> state -> Prop 
                  (Kreturn ret Kstop)).
 
 Inductive final_state (prog : prog_type) : state -> valtype -> Prop :=
-| FinalState : forall v, final_state prog (Return v Kstop) v.
+| FinalState : forall v,
+        (* TODO(admit) - HigherValue.public_value (snd prog) v -> *)
+        final_state prog (Return v Kstop) v.
 
 Definition initial_env (prog : prog_type) : env := fst prog.
 

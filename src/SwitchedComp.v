@@ -1379,6 +1379,12 @@ Qed.
 
 
 
+Lemma compile_cu_metas : forall A Ameta B Bmeta,
+    compile_cu (A, Ameta) = Some (B, Bmeta) ->
+    Ameta = Bmeta.
+simpl. inversion 1. break_bind_option. break_match; try discriminate. inject_some. auto.
+Qed.
+
 Require Semantics.
 
 Section Preservation.
@@ -1393,6 +1399,7 @@ Section Preservation.
   Proof.
     destruct prog as [A Ameta], tprog as [B Bmeta].
     fwd eapply compile_cu_Forall; eauto.
+    fwd eapply compile_cu_metas; eauto.
     fwd eapply compile_cu_elim_rec_shape; eauto.
 
     eapply Semantics.forward_simulation_star with
@@ -1415,9 +1422,10 @@ Section Preservation.
       + i_ctor.
 
     - intros0 II Afinal. invc Afinal. invc II.
-      eexists; split.
-      constructor. eauto using expr_value_I_expr'.
-      reflexivity.
+      eexists; split.  1: constructor.
+      + eauto using expr_value_I_expr'.
+      + auto.
+      + reflexivity.
 
     - intros0 Astep. intros0 II.
       eapply sstar_semantics_sim, I_sim; eauto.

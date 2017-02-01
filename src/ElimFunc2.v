@@ -354,6 +354,7 @@ Inductive is_callstate (prog : prog_type) : valtype -> valtype -> state -> Prop 
 Inductive final_state (prog : prog_type) : state -> valtype -> Prop :=
 | FinalState : forall e v,
         expr_value e v ->
+        HigherValue.public_value (snd prog) v ->
         final_state prog (Stop e) v.
 
 Definition initial_env (prog : prog_type) : env := fst prog.

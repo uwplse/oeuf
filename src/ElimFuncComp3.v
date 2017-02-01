@@ -689,6 +689,13 @@ intros. unfold compile_cu in *. break_if; try discriminate. inject_some.
 eapply compile_list_Forall. auto.
 Qed.
 
+Lemma compile_cu_metas : forall A Ameta B Bmeta,
+    compile_cu (A, Ameta) = Some (B, Bmeta) ->
+    Ameta = Bmeta.
+unfold compile_cu, compile_cu'. simpl. inversion 1. break_match; try discriminate.
+break_bind_option. inject_some. auto.
+Qed.
+
 Lemma expr_value_I_expr : forall AE BE be v,
     B.expr_value be v ->
     exists ae,
@@ -753,6 +760,7 @@ Section Preservation.
     destruct prog as [A Ameta], tprog as [B Bmeta].
     fwd eapply compile_cu_elim_body_placement; eauto.
     fwd eapply compile_cu_Forall; eauto.
+    fwd eapply compile_cu_metas; eauto.
 
     eapply Semantics.forward_simulation_step with
         (match_states := I A B)
@@ -773,9 +781,10 @@ Section Preservation.
 
 
     - intros0 II Afinal. invc Afinal. invc II.
-      eexists; split.
-      constructor. eauto using expr_value_I_expr'.
-      reflexivity.
+      eexists; split.  1: constructor.
+      + eauto using expr_value_I_expr'.
+      + auto.
+      + reflexivity.
 
     - intros0 Astep. intros0 II.
       eapply I_sim; eauto.
