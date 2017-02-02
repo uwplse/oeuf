@@ -147,13 +147,21 @@ Require Semantics.
 Definition prog_type : Type := env * list metadata.
 Definition valtype := value.
 
+Inductive fit_public_value (M : list metadata) : value -> Prop :=
+| PvConstr : forall tag args,
+        Forall (fit_public_value M) args ->
+        fit_public_value M (Constr tag args)
+| PvClose : forall fname free,
+        public_fname M (pred (Pos.to_nat fname)) ->
+        Forall (fit_public_value M) free ->
+        fit_public_value M (Close fname free).
+
 Inductive is_callstate (prog : prog_type) : valtype -> valtype -> state -> Prop :=
 | IsCallstate : forall fname free av body ret,
         nth_error (fst prog) (pred (Pos.to_nat fname)) = Some (body, ret) ->
         let fv := Close fname free in
-        (* TODO(admit) -
-        HigherValue.public_value (snd prog) fv ->
-        HigherValue.public_value (snd prog) av -> *)
+        fit_public_value (snd prog) fv ->
+        fit_public_value (snd prog) av ->
         is_callstate prog fv av
             (Run body
                  (Frame av fv [])
@@ -161,7 +169,7 @@ Inductive is_callstate (prog : prog_type) : valtype -> valtype -> state -> Prop 
 
 Inductive final_state (prog : prog_type) : state -> valtype -> Prop :=
 | FinalState : forall v,
-        (* TODO(admit) - HigherValue.public_value (snd prog) v -> *)
+        fit_public_value (snd prog) v ->
         final_state prog (Return v Kstop) v.
 
 Definition initial_env (prog : prog_type) : env := fst prog.
