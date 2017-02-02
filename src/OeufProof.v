@@ -53,7 +53,7 @@ Section Simulation.
 
   Variable prog : compilation_unit.
   Variable tprog : Cminor.program.
-  Hypothesis TRANSF : transf_to_cminor prog = OK tprog.
+  Hypothesis TRANSF : transf_oeuf_to_cminor prog = OK tprog.
 
   (* In this theorem we grab all of the things we need from all of the passes *)
   Theorem Oeuf_forward_simulation :
@@ -61,7 +61,7 @@ Section Simulation.
       mix_forward_simulation (@CompilationUnit.source_semantics ty prog) (Cminor_semantics tprog).
   Proof.
     (* SourceLang to Untyped *)
-    unfold transf_to_cminor in TRANSF.
+    unfold transf_oeuf_to_cminor in TRANSF.
     unfold OeufCompcertCompiler.apply_partial in *.
     break_match_hyp; try congruence.
     simpl in Heqr. inversion Heqr. clear Heqr.
@@ -165,7 +165,7 @@ Section Simulation.
     rewrite OeufCompcertCompiler.print_identity in *.
     congruence.
 
-  Qed.
+  Defined.
 
   Definition establish_matching (ty : type) :=
     (TopLevel.establish_matching _ _ _ _ _ _ (Oeuf_forward_simulation ty)).
@@ -175,6 +175,21 @@ Section Simulation.
 
   Definition final_states (ty : type) :=
     (TopLevel.final_states _ _ _ _ _ _ (Oeuf_forward_simulation ty)).
+
+
+  Definition match_values (ty : type) := MixSemantics.fsim_match_val _ _ (Oeuf_forward_simulation ty).
+
+  (* TODO: We need an alternate definition of the match_values above that is easily provable, and we need an equivalence lemma to convert between the two *)
+  Inductive match_vals (ty : type) : SourceLang.expr nil ty -> HighValues.value -> Prop :=
+  | Triv :
+      forall v v',
+        match_vals ty v v'.
+
+  Lemma match_vals_values :
+    forall ty v v',
+      match_values ty v v' <-> match_vals ty v v'.
+  Proof.
+  Admitted.
   
 End Simulation.
 
