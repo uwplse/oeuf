@@ -938,7 +938,7 @@ Qed.
 End DETERMINACY.
 
 (** * Backward simulations between two transition semantics. *)
-(*
+
 Definition safe (L: semantics) (s: state L) : Prop :=
   forall s',
   Star L s E0 s' ->
@@ -961,32 +961,30 @@ Record backward_simulation (L1 L2: semantics) : Type :=
     bsim_order_wf: well_founded bsim_order;
     bsim_match_values : valtype L1 -> valtype L2 -> Prop;
     bsim_match_states :> bsim_index -> state L1 -> state L2 -> Prop;
-    bsim_is_callstate_exist:
-      forall fv1 av1 fv2 av2 s1,
-        is_callstate L1 fv1 a1 s1 ->
-        bsim_match_values fv1 fv2 ->
-        bsim_match_values av1 av2 ->
-        exists s2, is_callstate L2 fv2 av2 s2;
-    bsim_match_initial_states:
-      forall s1 s2, initial_state L1 s1 -> initial_state L2 s2 ->
-      exists i, exists s1', initial_state L1 s1' /\ bsim_match_states i s1' s2;
-    bsim_match_final_states:
-      forall i s1 s2 r,
-      bsim_match_states i s1 s2 -> safe L1 s1 -> final_state L2 s2 r ->
-      exists s1', Star L1 s1 E0 s1' /\ final_state L1 s1' r;
-    bsim_progress:
-      forall i s1 s2,
-      bsim_match_states i s1 s2 -> safe L1 s1 ->
-      (exists r, final_state L2 s2 r) \/
-      (exists t, exists s2', Step L2 s2 t s2');
+    (* bsim_is_callstate_exist: *)
+    (*   forall fv1 av1 fv2 av2 s1, *)
+    (*     is_callstate L1 fv1 a1 s1 -> *)
+    (*     bsim_match_values fv1 fv2 -> *)
+    (*     bsim_match_values av1 av2 -> *)
+    (*     exists s2, is_callstate L2 fv2 av2 s2; *)
+    (* bsim_match_initial_states: *)
+    (*   forall s1 s2, initial_state L1 s1 -> initial_state L2 s2 -> *)
+    (*   exists i, exists s1', initial_state L1 s1' /\ bsim_match_states i s1' s2; *)
+    (* bsim_match_final_states: *)
+    (*   forall i s1 s2 r, *)
+    (*   bsim_match_states i s1 s2 -> safe L1 s1 -> final_state L2 s2 r -> *)
+    (*   exists s1', Star L1 s1 E0 s1' /\ final_state L1 s1' r; *)
+    (* bsim_progress: *)
+    (*   forall i s1 s2, *)
+    (*   bsim_match_states i s1 s2 -> safe L1 s1 -> *)
+    (*   (exists r, final_state L2 s2 r) \/ *)
+    (*   (exists t, exists s2', Step L2 s2 t s2'); *)
     bsim_simulation:
       forall s2 t s2', Step L2 s2 t s2' ->
       forall i s1, bsim_match_states i s1 s2 -> safe L1 s1 ->
       exists i', exists s1',
          (Plus L1 s1 t s1' \/ (Star L1 s1 t s1' /\ bsim_order i' i))
       /\ bsim_match_states i' s1' s2';
-(*    bsim_public_preserved:
-      forall id, Senv.public_symbol (symbolenv L2) id = Senv.public_symbol (symbolenv L1) id *)
   }.
 
 (** An alternate form of the simulation diagram *)
@@ -1009,18 +1007,18 @@ Qed.
 (** ** Backward simulation diagrams. *)
 
 (** Various simulation diagrams that imply backward simulation. *)
-
+(*
 Section BACKWARD_SIMU_DIAGRAMS.
 
 Variable L1: semantics.
 Variable L2: semantics.
 
-Hypothesis public_preserved:
-  forall id, Senv.public_symbol (symbolenv L2) id = Senv.public_symbol (symbolenv L1) id.
+(*Hypothesis public_preserved:
+  forall id, Senv.public_symbol (symbolenv L2) id = Senv.public_symbol (symbolenv L1) id.*)
 
 Variable match_states: state L1 -> state L2 -> Prop.
 
-Hypothesis initial_states_exist:
+(*Hypothesis initial_states_exist:
   forall s1, initial_state L1 s1 -> exists s2, initial_state L2 s2.
 
 Hypothesis match_initial_states:
@@ -1036,7 +1034,7 @@ Hypothesis progress:
   match_states s1 s2 -> safe L1 s1 ->
   (exists r, final_state L2 s2 r) \/
   (exists t, exists s2', Step L2 s2 t s2').
-
+*)
 Section BACKWARD_SIMULATION_PLUS.
 
 Hypothesis simulation:
@@ -1060,9 +1058,9 @@ Qed.
 End BACKWARD_SIMULATION_PLUS.
 
 End BACKWARD_SIMU_DIAGRAMS.
-
+*)
 (** ** Backward simulation of transition sequences *)
-
+(*
 Section BACKWARD_SIMULATION_SEQUENCES.
 
 Variable L1: semantics.
@@ -1132,9 +1130,9 @@ Proof.
 Qed.
 
 End BACKWARD_SIMULATION_SEQUENCES.
-
+*)
 (** ** Composing two backward simulations *)
-
+(*
 Section COMPOSE_BACKWARD_SIMULATIONS.
 
 Variable L1: semantics.
@@ -1261,7 +1259,7 @@ Proof.
 Qed.
 
 End COMPOSE_BACKWARD_SIMULATIONS.
-
+*)
 (** ** Converting a forward simulation to a backward simulation *)
 
 Section FORWARD_TO_BACKWARD.
@@ -1273,7 +1271,7 @@ Hypothesis L1_receptive: receptive L1.
 Hypothesis L2_determinate: determinate L2.
 
 (** Exploiting forward simulation *)
-
+(*
 Inductive f2b_transitions: state L1 -> state L2 -> Prop :=
   | f2b_trans_final: forall s1 s2 s1' r,
       Star L1 s1 E0 s1' ->
@@ -1311,7 +1309,7 @@ Proof.
   eapply f2b_trans_final; eauto. eapply star_left; eauto.
   eapply f2b_trans_step; eauto. eapply star_left; eauto.
 Qed.
-
+*)
 Lemma fsim_simulation_not_E0:
   forall s1 t s1', Step L1 s1 t s1' -> t <> E0 ->
   forall i s2, FS i s1 s2 ->
@@ -1337,6 +1335,7 @@ Proof.
   unfold Eapp, E0; intros. rewrite app_length in H.
   destruct t1; destruct t2; auto. simpl in H. omegaContradiction.
 Qed.
+
 (*
 Lemma f2b_determinacy_inv:
   forall s2 t' s2' t'' s2'',
@@ -1356,6 +1355,7 @@ Proof.
   eapply match_traces_preserved with (ge1 := (symbolenv L2)); auto.
   intros; symmetry; apply (fsim_public_preserved FS).
 Qed.
+
 
 Lemma f2b_determinacy_star:
   forall s s1, Star L2 s E0 s1 ->
@@ -1425,7 +1425,7 @@ Remark f2b_match_after':
 Proof.
   intros. inv H.
   econstructor; eauto.
-  econstructor; eauto. econstructor; eauto.
+  econstructor; eauto. 
 Qed.
 
 (** Backward simulation of L2 steps *)
@@ -1439,7 +1439,7 @@ Lemma f2b_simulation_step:
 Proof.
   intros s2 t s2' STEP2 i s1 MATCH SAFE.
   inv MATCH.
-(* 1. At matching states *)
+  (* 1. At matching states *)
   exploit f2b_progress; eauto. intros TRANS; inv TRANS.
   (* 1.1  L1 can reach final state and L2 is at final state: impossible! *)
   exploit (sd_final_nostep L2_determinate); eauto. contradiction.
@@ -1554,7 +1554,7 @@ Qed.
 End FORWARD_TO_BACKWARD.
 
 (** * Transforming a semantics into a single-event, equivalent semantics *)
-
+(*
 Definition well_behaved_traces (L: semantics) : Prop :=
   forall s t s', Step L s t s' ->
   match t with nil => True | ev :: t' => output_trace t' end.

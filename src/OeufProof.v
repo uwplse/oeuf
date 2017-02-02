@@ -167,6 +167,15 @@ Section Simulation.
 
   Qed.
 
+  Definition establish_matching (ty : type) :=
+    (TopLevel.establish_matching _ _ _ _ _ _ (Oeuf_forward_simulation ty)).
 
+  Definition star_step_simulation (ty : type) :=
+    (TopLevel.star_step_simulation _ _ _ _ _ _ (Oeuf_forward_simulation ty)).
 
+  Definition final_states (ty : type) :=
+    (TopLevel.final_states _ _ _ _ _ _ (Oeuf_forward_simulation ty)).
+  
 End Simulation.
+
+  
