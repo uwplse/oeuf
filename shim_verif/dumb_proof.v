@@ -158,10 +158,29 @@ Section SIM.
     
     assert (Cmajor.cminor_is_callstate prog (HighValues.Close _id_lambda0 nil) (HighValues.Constr Integers.Int.zero nil) ST).
     {
-      subst. econstructor; admit. (* We will need to expose many of these facts, or prove them *)
+      subst. econstructor.
+      econstructor. Focus 3. unfold Genv.find_symbol. simpl. reflexivity.
+      Focus 2. unfold Genv.find_funct_ptr. simpl. reflexivity.
+      admit. (* is true, but mem fact *)
+      simpl. reflexivity.
+      intros. simpl in H6. inv H6.
+      econstructor. admit. (* true, but mem fact *)
+      simpl. reflexivity.
+      intros. simpl in H6. inv H6.
+      Focus 3. unfold Genv.find_symbol. simpl. reflexivity.
+      Focus 2. unfold Genv.find_funct_ptr. simpl. reflexivity.
+      admit. (* true, but mem fact *)
+      simpl. reflexivity.
+
+      admit. (* True, but mem fact *)
+
+      admit. (* True, but deeper mem fact *)
+      
     } idtac.
 
-    
+    (* We will need to swap out "prog" in the "is_callstate" fact above *)
+    eapply OeufProof.establish_matching in H6.
+    Focus 2. unfold TopLevel.match_values. 
     
     
     

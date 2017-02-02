@@ -323,7 +323,7 @@ let process_c_file sourcename =
 
 (* Processing of .oeuf "files" *)
 
-let compile_oeuf cu shim_ast sourcename asmname cmname =
+let compile_oeuf cu shim_ast sourcename asmname linked_cmname oeuf_cmname =
   (* Prepare to dump Clight, RTL, etc, if requested *)
   let set_dest dst opt ext =
     dst := if !opt then Some (output_filename sourcename ".oeuf" ext)
@@ -336,11 +336,11 @@ let compile_oeuf cu shim_ast sourcename asmname cmname =
   set_dest PrintMach.destination option_dmach ".mach";
 
   (* Convert to Asm *)
-  let cm,asm =
+  let ocm,lcm,asm =
   match Oeuf.transf_whole_program cu shim_ast with
-    | Errors.OK (cm,asm) -> 
+    | Errors.OK ((ocm,lcm),asm) -> 
       (match Asmexpand.expand_program asm with
-      | Errors.OK asm' -> cm,asm'
+      | Errors.OK asm' -> ocm,lcm,asm'
       | Errors.Error msg ->
         eprintf "it's busted\n";
         eprintf "%s: %a" sourcename print_error msg;
@@ -354,11 +354,17 @@ let compile_oeuf cu shim_ast sourcename asmname cmname =
   (* Dump Asm in binary and JSON format *)
   if !option_sdump then
       dump_jasm asm sourcename (output_filename sourcename ".oeuf" !sdump_suffix);
-  (* Print cminor in coq defn form *)
-  let ocm = open_out cmname in
-  ExportCminor.print_program ocm cm;
-  close_out ocm;
 
+  (* Print linked cminor in coq defn form *)
+  let out_cm = open_out linked_cmname in
+  ExportCminor.print_program out_cm lcm;
+  close_out out_cm;
+
+  (* Print oeuf cminor in coq defn form *)
+  let out_cm = open_out oeuf_cmname in
+  ExportCminor.print_program out_cm ocm;
+  close_out out_cm;
+  
   (* Print Asm in text form *)
   let oc = open_out asmname in
   PrintAsm.print_program oc asm (*debug=*)None;
@@ -380,17 +386,18 @@ let process_oeuf sourcename =
   let preproname = Filename.temp_file "compcert" ".i" in
   preprocess shimname preproname;
   let shim_ast,_ = parse_c_file shimname preproname in
-  let cmname = (output_filename sourcename ".oeuf" "_cm.v") in
+  let all_cmname = (output_filename sourcename ".oeuf" "_cm.v") in
+  let oeuf_cmname = (output_filename sourcename ".oeuf" "_oeuf.v") in
   let s = if !option_S then begin
               compile_oeuf cu shim_ast sourcename 
-                           (output_filename ~final:true sourcename ".oeuf" ".s") cmname;
+                           (output_filename ~final:true sourcename ".oeuf" ".s") all_cmname oeuf_cmname;
               ""
             end else begin
               let asmname =
                 if !option_dasm
                 then output_filename sourcename ".oeuf" ".s"
                 else Filename.temp_file "compcert" ".s" in
-              compile_oeuf cu shim_ast sourcename asmname cmname;
+              compile_oeuf cu shim_ast sourcename asmname all_cmname oeuf_cmname;
               let objname = output_filename ~final: !option_c sourcename ".oeuf" ".o" in
               assemble asmname objname;
               if not !option_dasm then safe_remove asmname;
