@@ -13,6 +13,7 @@ Require Import StructTact.StructTactics.
 Require Import StructTact.Util.
 
 Require Import EricTact.
+Require Import OeufProof.
 
 Require Cmajor.
 
@@ -118,10 +119,9 @@ Section SIM.
     assert (Mem.loadv AST.Mint32 m11 (Values.Val.add (Values.Vptr b3 Integers.Int.zero) (Values.Vint (Integers.Int.repr 0))) = Some (Values.Vptr 3%positive (Integers.Int.zero))) by admit.
     take_step.
 
-    (* HERE is where we call into Oeuf *)
-    (* This is the state that we want to be a callstate *)
-    remember ((Callstate (AST.Internal f_id_lambda0) (Values.Vptr b3 Integers.Int.zero :: Values.Vptr b1 Integers.Int.zero :: nil)
-         (Kcall (Some 125%positive) f_call (Values.Vptr b4 Integers.Int.zero)
+    (* This is the complicated continuation we've built up *)
+    (* We'll need this later, after we're back from oeuf *)
+    remember ((Kcall (Some 125%positive) f_call (Values.Vptr b4 Integers.Int.zero)
             (set_locals (fn_vars f_call)
                (set_params (Values.Vptr b3 Integers.Int.zero :: Values.Vptr b1 Integers.Int.zero :: nil) (fn_params f_call)))
             (Kseq (Sreturn (Some (Evar 125%positive)))
@@ -149,11 +149,21 @@ Section SIM.
                                  (Econst (Oaddrsymbol _printf (Integers.Int.repr 0)))
                                  (Econst (Oaddrsymbol ___stringlit_3 (Integers.Int.repr 0)) :: Evar 132%positive :: nil)))
                            (Sreturn (Some (Econst (Ointconst (Integers.Int.repr 0))))))
-                        (Kseq (Sreturn (Some (Econst (Ointconst (Integers.Int.repr 0))))) Kstop)))))) m11)) as ST.
+                        (Kseq (Sreturn (Some (Econst (Ointconst (Integers.Int.repr 0))))) Kstop))))))) as K.
+    
+    (* HERE is where we call into Oeuf *)
+    (* This is the state that we want to be a callstate *)
+    remember ((Callstate (AST.Internal f_id_lambda0) (Values.Vptr b3 Integers.Int.zero :: Values.Vptr b1 Integers.Int.zero :: nil)
+                         Kstop m11)) as ST.
     
     assert (Cmajor.cminor_is_callstate prog (HighValues.Close _id_lambda0 nil) (HighValues.Constr Integers.Int.zero nil) ST).
     {
-      subst. Print Cmajor.cminor_is_callstate.
+      subst. econstructor; admit. (* We will need to expose many of these facts, or prove them *)
+    } idtac.
+
+    
+    
+    
     
 
   Admitted.
