@@ -1592,6 +1592,155 @@ Qed.
 
 
 
+
+Lemma compile_cu_public : forall A Ameta B M fname meta id,
+    compile_cu (A, Ameta) = Some B ->
+    build_id_list (A, Ameta) = Some M ->
+    nth_error Ameta fname = Some meta ->
+    I_id M (IkFunc fname) id ->
+    m_access meta = Public <-> In id (prog_public B).
+intros0 Hcomp HM Hmeta II. split; intro Hpub.
+
+- unfold compile_cu in Hcomp. break_bind_option.
+  assert (l = M) by congruence. subst l.
+  inject_some. simpl.
+  on _, eapply_lem map_partial_Forall2.
+  unfold I_id in II.
+
+  assert (In fname
+        (map fst (filter (fun n_m => m_is_public (snd n_m)) (numbered Ameta)))).
+    { change fname with (fst (fname, meta)).
+      eapply in_map. rewrite filter_In.
+      split; cycle 1.
+      - simpl. unfold m_is_public. rewrite Hpub. break_match; eauto.
+      - eapply numbered_nth_error in Hmeta. eapply nth_error_in in Hmeta. auto. }
+  on _, eapply_lem In_nth_error. break_exists.
+  fwd eapply Forall2_nth_error_ex; eauto. break_exists. break_and.
+  assert (x0 = id) by congruence. subst x0.
+  eapply nth_error_In. eauto.
+
+- unfold compile_cu in Hcomp. break_bind_option.
+  assert (l = M) by congruence. subst l.
+  inject_some. simpl in *.
+  on _, eapply_lem map_partial_Forall2.
+  unfold I_id in II.
+
+  eapply In_nth_error in Hpub. destruct Hpub as (? & ?).
+  fwd eapply Forall2_nth_error_ex' as HH; eauto. break_exists. break_and.
+  assert (IkFunc fname = IkFunc x0).
+    { eapply I_id_sur; eauto using build_id_list_ok. }
+  assert (x0 = fname) by congruence. subst x0.
+  fwd eapply map_nth_error'; eauto. break_exists. break_and.
+  fwd eapply nth_error_in as HH; eauto.
+  eapply filter_In in HH. break_and.
+  on _, eapply_lem In_nth_error. break_exists. break_and.
+  fwd eapply numbered_nth_error_fst; eauto.
+  assert (x1 = fname) by congruence. subst x1.
+  replace (fst x0) with fname in * by congruence.
+  eapply numbered_nth_error in Hmeta.
+  rewrite Hmeta in *. inject_some.
+
+  simpl in *. unfold m_is_public in *. break_match; try discriminate.
+  auto.
+Qed.
+
+Lemma IkFunc_metas_length : forall A Ameta M fname id,
+    build_id_list (A, Ameta) = Some M ->
+    I_id M (IkFunc fname) id ->
+    fname < length Ameta.
+intros0 HM II.
+eapply id_key_assoc_nth_error in II. destruct II as [? Hfname].
+eapply map_nth_error with (f := fst) in Hfname. simpl in Hfname.
+unfold build_id_list in HM. break_if; try discriminate.
+unfold intern_id_list in *. break_if; try discriminate.
+assert (intern_id_list' (build_id_list' (A, Ameta)) = M) by congruence.  subst M.
+rewrite intern_id_list'_map_fst in Hfname.
+unfold build_id_list' in Hfname. repeat rewrite map_app in Hfname.
+eapply nth_error_In in Hfname.
+
+let rec go :=
+    rewrite in_app_iff in Hfname;
+    destruct Hfname as [Hfname | Hfname];
+    [ | try go ] in go.
+
+- simpl in Hfname.
+  repeat (on (_ \/ _), invc); try discriminate.
+  contradiction.
+
+- eapply vars_keys_IkVar in Hfname. break_exists. discriminate.
+
+- eapply In_nth_error in Hfname. destruct Hfname as [? Hfname]. simpl in Hfname.
+  fwd eapply map_nth_error' as HH; eauto. destruct HH as (? & Hnth & ?).
+  unfold build_funcs_id_list in Hnth.
+  fwd eapply map_nth_error' as HH; eauto. destruct HH as (? & Hnth' & ?).
+  fwd eapply numbered_nth_error_fst; eauto.
+  rewrite <- numbered_length.  rewrite <- nth_error_Some.
+  assert (x0 = fname).
+    { unfold func_id_entry in *.  subst. destruct x2.
+      unfold fst, snd in *. congruence. }
+  subst x0. congruence.
+
+- eapply extra_keys_IkRuntime_IkMalloc in Hfname.
+  on (_ \/ _), invc.
+  + break_exists. discriminate.
+  + discriminate.
+Qed.
+
+Lemma compile_cu_public' : forall A Ameta B M fname id,
+    compile_cu (A, Ameta) = Some B ->
+    build_id_list (A, Ameta) = Some M ->
+    I_id M (IkFunc fname) id ->
+    public_fname Ameta fname <-> In id (prog_public B).
+intros. split; intro.
+
+- unfold public_fname in *. break_exists. break_and.
+  rewrite <- compile_cu_public; eauto.
+  
+- unfold I_id in *.
+  fwd eapply IkFunc_metas_length as HH; eauto.
+  rewrite <- nth_error_Some in HH.
+  destruct (nth_error _ _) eqn:?; try congruence.
+  erewrite <- compile_cu_public in *; eauto.
+  eexists; eauto.
+Qed.
+
+Lemma I_value_public : forall A Ameta B M,
+    compile_cu (A, Ameta) = Some B ->
+    build_id_list (A, Ameta) = Some M ->
+    forall av bv,
+    I_value M av bv ->
+    A.fit_public_value Ameta av ->
+    public_value B bv.
+intros until av.
+induction av using value_rect_mut with
+    (Pl := fun av => forall bv,
+        Forall2 (I_value M) av bv ->
+        Forall (A.fit_public_value Ameta) av ->
+        Forall (public_value B) bv);
+intros0 II Apub; invc II; invc Apub; i_ctor.
+
+- unfold public_fname in *.
+  rewrite <- compile_cu_public'; eauto.
+Qed.
+
+Lemma I_value_public' : forall A Ameta B M,
+    compile_cu (A, Ameta) = Some B ->
+    build_id_list (A, Ameta) = Some M ->
+    forall bv av,
+    I_value M av bv ->
+    public_value B bv ->
+    A.fit_public_value Ameta av.
+intros until bv.
+induction bv using value_rect_mut with
+    (Pl := fun bv => forall av,
+        Forall2 (I_value M) av bv ->
+        Forall (public_value B) bv ->
+        Forall (A.fit_public_value Ameta) av);
+intros0 II Bpub; invc II; invc Bpub; i_ctor.
+
+- rewrite -> compile_cu_public'; eauto.
+Qed.
+
 Require Semantics.
 Require MixSemantics.
 
@@ -1680,7 +1829,7 @@ Qed.
 
     - apply well_founded_ltof.
 
-    - simpl. intros.  on >B.is_callstate, invc. on (I_value _ _ (Close _ _)), invc.
+    - simpl. intros.  on >B.is_callstate, invc. on (I_value _ _ (Close _ _)), inv.
       fwd eapply compile_I_prog; eauto. fwd eapply I_prog_env as HH; eauto.  invc HH.
       on _, fun H => destruct (H ?? ?? ?? ** **) as (an & af & ? & ? & ?).
       on >I_func, invc. simpl.
@@ -1698,12 +1847,13 @@ Qed.
       + simpl. replace (pred _) with an; eauto.
         fwd eapply I_id_sur with (k1 := IkFunc an) (k2 := IkFunc (pred _)); eauto.
         congruence.
-      + admit. (* public_value *)
-      + admit. (* public_value *)
+      + eapply I_value_public'; eauto.
+      + eapply I_value_public'; eauto.
 
     - intro. intros0 II Afinal.
       invc Afinal. invc II. on >I, invc. on >I_cont, invc. eexists. split. constructor.
-      assumption.
+      + eapply I_value_public; eauto.
+      + assumption.
 
     - intros0 Astep. intros0 II.
       eapply raw_sim_lockstep; eauto. simpl.
@@ -1712,7 +1862,7 @@ Qed.
       + eapply I_prog_env. eapply compile_I_prog; eauto.
       + eapply compile_prog_fnames_below. eauto.
       + eapply compile_prog_switch_placement. eauto.
-  Admitted.
+  Qed.
 
 End Preservation.
 

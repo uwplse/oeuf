@@ -585,3 +585,13 @@ Fixpoint zip {A B} (a : list A) (b : list B) : list (A * B) :=
   end.
 
 
+
+Inductive public_value {F V} (P : AST.program F V) : value -> Prop :=
+| PvConstr : forall tag args,
+        Forall (public_value P) args ->
+        public_value P (Constr tag args)
+| PvClose : forall fname free,
+        In fname (prog_public P) ->
+        Forall (public_value P) free ->
+        public_value P (Close fname free).
+
