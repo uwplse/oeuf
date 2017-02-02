@@ -195,16 +195,19 @@ Inductive is_callstate (p : program) : value -> value -> state -> Prop :=
       Genv.find_symbol (Genv.globalenv p) fname = Some bcode ->
       Genv.find_funct_ptr (Genv.globalenv p) bcode = Some (Internal fn) ->
       length (fn_params fn) = 2%nat ->
+      public_value p (Close fname vs) ->
+      public_value p av ->
       is_callstate p (Close fname vs) av
                    (State (fst (fn_body fn)) (Kreturn (snd (fn_body fn)) Kstop)
                           (set_params ((Close fname vs) :: av :: nil) (fn_params fn))).
 
-Inductive final_state: state -> value -> Prop :=
+Inductive final_state (p : program) : state -> value -> Prop :=
   | final_state_intro: forall v,
-      final_state (Returnstate v Kstop) v.
+      public_value p v ->
+      final_state p (Returnstate v Kstop) v.
 
 Definition semantics (p: program) :=
-  Semantics step (is_callstate p) final_state (Genv.globalenv p).
+  Semantics step (is_callstate p) (final_state p) (Genv.globalenv p).
 
 Lemma semantics_receptive:
   forall (p: program), receptive (semantics p).
