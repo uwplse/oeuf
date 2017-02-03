@@ -7,6 +7,7 @@ Require Import compcert.common.Values.
 Require Import compcert.common.Globalenvs.
 Require Import compcert.common.Memory.
 Require Import compcert.common.Events.
+Require Import compcert.common.Errors.
 Require Import compcert.common.Switch.
 Require Import compcert.common.Smallstep.
 
@@ -595,3 +596,68 @@ Inductive public_value {F V} (P : AST.program F V) : value -> Prop :=
         Forall (public_value P) free ->
         public_value P (Close fname free).
 
+Lemma prog_public_public_value : forall F V F' V'
+        (p : AST.program F V) (p' : AST.program F' V'),
+    prog_public p = prog_public p' ->
+    forall v,
+    public_value p v ->
+    public_value p' v.
+intros until v.
+induction v using value_rect_mut with
+    (Pl := fun vs =>
+        Forall (public_value p) vs ->
+        Forall (public_value p') vs);
+intros Apub; invc Apub; econstructor; eauto.
+- find_rewrite. auto.
+Qed.
+
+Lemma prog_public_public_value' : forall F V F' V'
+        (p : AST.program F V) (p' : AST.program F' V'),
+    prog_public p = prog_public p' ->
+    forall v,
+    public_value p' v ->
+    public_value p v.
+intros until v.
+induction v using value_rect_mut with
+    (Pl := fun vs =>
+        Forall (public_value p') vs ->
+        Forall (public_value p) vs);
+intros Bpub; invc Bpub; econstructor; eauto.
+- find_rewrite. auto.
+Qed.
+
+Lemma transf_public_value : forall A B V (f : A -> B) (p : AST.program A V) v,
+    public_value p v ->
+    public_value (AST.transform_program f p) v.
+intros.
+eapply prog_public_public_value; try eassumption; eauto.
+Qed.
+
+Lemma transf_public_value' : forall A B V (f : A -> B) (p : AST.program A V) v,
+    public_value (AST.transform_program f p) v ->
+    public_value p v.
+intros.
+eapply prog_public_public_value'; try eassumption; eauto.
+Qed.
+
+Lemma transf_partial_public_value : forall A B V (f : A -> res B)
+        (p : AST.program A V) p',
+    AST.transform_partial_program f p = OK p' ->
+    forall v,
+    public_value p v ->
+    public_value p' v.
+intros.
+eapply prog_public_public_value; try eassumption.
+symmetry. eauto using transform_partial_program_public.
+Qed.
+
+Lemma transf_partial_public_value' : forall A B V (f : A -> res B)
+        (p : AST.program A V) p',
+    AST.transform_partial_program f p = OK p' ->
+    forall v,
+    public_value p' v ->
+    public_value p v.
+intros.
+eapply prog_public_public_value'; try eassumption.
+symmetry. eauto using transform_partial_program_public.
+Qed.

@@ -273,6 +273,8 @@ Inductive is_callstate (p : program) : value -> value -> state -> Prop :=
       length (fn_params fn) = 2%nat ->
       global_blocks_valid (Genv.globalenv p) (Mem.nextblock m) ->
       no_future_pointers m ->
+      public_value p (Close fname vs) ->
+      public_value p arg ->
       is_callstate p (Close fname vs) arg (Callstate fn ((Vptr fb fofs) :: argptr :: nil) Kstop m z).
 
 (** A final state is a [Returnstate] with an empty continuation. *)
@@ -280,6 +282,7 @@ Inductive is_callstate (p : program) : value -> value -> state -> Prop :=
 Inductive final_state (p : program) : state -> value -> Prop :=
 | final_state_intro: forall m v v' z,
     value_inject (Genv.globalenv p) m v v' ->
+    public_value p v ->
     final_state p (Returnstate v' Kstop m z) v.
 
 (** The corresponding small-step semantics. *)
