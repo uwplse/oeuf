@@ -9,6 +9,8 @@ Require Import CompilationUnit.
 Require Import Semantics.
 Require Import HighestValues.
 
+Require SourceLiftedProofs.
+
 Require SourceLifted.
 Require Untyped1.
 
@@ -228,20 +230,31 @@ intros0 Aval; try solve [invc Aval].
 - simpl. invc Aval. fix_existT. subst. constructor; eauto.
 Qed.
 
-Lemma compile_isnt_value : forall G L ty (e : A.expr G L ty),
-    ~ A.is_value e ->
-    ~ B.is_value (compile_expr e).
+Lemma compile_is_value' : forall G L ty (e : A.expr G L ty),
+    B.is_value (compile_expr e) ->
+    A.is_value e.
 intros ? ?.
 induction e using A.expr_rect_mut with
     (Pl := fun tys es =>
-            HForall (fun ty e => ~ A.is_value e) es ->
-            Forall (fun e => ~ B.is_value e) (compile_expr_list es));
-intros0 Aval; try solve [simpl; inversion 1].
-
-- contradict Aval. constructor.
+            Forall B.is_value (compile_expr_list es) ->
+            HForall (fun ty e => A.is_value e) es);
+intros0 Bval; try solve [invc Bval].
 
 - simpl. constructor.
-- simpl. invc Aval. fix_existT. subst. constructor; eauto.
+- simpl. constructor.
+- simpl. invc Bval. constructor; eauto.
+Qed.
+
+Lemma compile_isnt_value : forall G L ty (e : A.expr G L ty),
+    ~ A.is_value e ->
+    ~ B.is_value (compile_expr e).
+intros0 HH. contradict HH. eauto using compile_is_value'.
+Qed.
+
+Lemma compile_isnt_value' : forall G L ty (e : A.expr G L ty),
+    ~ B.is_value (compile_expr e) ->
+    ~ A.is_value e.
+intros0 HH. contradict HH. eauto using compile_is_value.
 Qed.
 
 Lemma compile_is_value_list : forall G L tys (es : hlist (A.expr G L) tys),
@@ -258,6 +271,22 @@ Lemma compile_isnt_value_list : forall G L tys (es : hlist (A.expr G L) tys),
 induction es; intros0 Aval; simpl.
 - constructor.
 - invc Aval. fix_existT. subst. eauto using compile_isnt_value.
+Qed.
+
+Lemma compile_is_value_list' : forall G L tys (es : hlist (A.expr G L) tys),
+    Forall B.is_value (compile_expr_list es) ->
+    HForall (fun ty e => A.is_value e) es.
+induction es; intros0 Bval; simpl.
+- constructor.
+- invc Bval. econstructor; eauto using compile_is_value'.
+Qed.
+
+Lemma compile_isnt_value_list' : forall G L tys (es : hlist (A.expr G L) tys),
+    Forall (fun e => ~ B.is_value e) (compile_expr_list es) ->
+    HForall (fun ty e => ~ A.is_value e) es.
+induction es; intros0 Bval; simpl.
+- constructor.
+- invc Bval. econstructor; eauto using compile_isnt_value'.
 Qed.
 
 Lemma compile_hmap_value : forall G L tys (vs : hlist (A.value G) tys),
@@ -573,5 +602,204 @@ all: fix_existT; subst.
       with (compile_value (A.VConstr ct args)).
     eapply compile_run_elim.
   + simpl. reflexivity.
+
+Qed.
+
+
+Lemma compile_state_inv : forall G rty (a : A.state G rty) be bl bk
+        (Q : _ -> Prop),
+    (forall L ty (ae : A.expr G L ty)  al ak,
+        compile_expr ae = be ->
+        compile_value_list al = bl ->
+        compile_cont ak = bk ->
+        Q (A.Run ae al ak)) ->
+    compile_state a = B.Run be bl bk ->
+    Q a.
+intros0 HQ Hcomp.
+destruct a as [L ty ae al ak | av]; try discriminate.
+simpl in Hcomp.
+eapply HQ; congruence.
+Qed.
+
+Lemma compile_expr_Value_inv : forall G L ty (ae : A.expr G L ty) bv
+        (Q : _ -> Prop),
+    (forall av,
+        compile_value av = bv ->
+        Q (A.Value av)) ->
+    compile_expr ae = B.Value bv ->
+    Q ae.
+intros0 HQ Hcomp.
+destruct ae; try discriminate.
+simpl in Hcomp. eapply HQ. congruence.
+Qed.
+
+Lemma compile_value_Constr_inv : forall G tyn
+        (av : A.value G (A.ADT tyn))
+        bctor bargs
+        (Q : _ -> Prop),
+    (forall ctor arg_tys (ct : A.constr_type ctor arg_tys tyn) args,
+        ctor = bctor ->
+        compile_value_list args = bargs ->
+        Q (A.VConstr ct args)) ->
+    compile_value av = Constr bctor bargs->
+    Q av.
+intros0 HQ Hcomp.
+on _, SourceLiftedProofs.invert_nullary SourceLiftedProofs.value_adt_inv v.
+simpl in Hcomp. fold (@compile_value_list G arg_tys) in *.
+eapply HQ; congruence.
+Qed.
+
+Lemma compile_value_Close_inv : forall G arg_ty ret_ty
+        (av : A.value G (A.Arrow arg_ty ret_ty))
+        bfname bfree
+        (Q : _ -> Prop),
+    (forall free_tys (mb : member (arg_ty, free_tys, ret_ty) G) free,
+        compile_member mb = bfname ->
+        compile_value_list free = bfree ->
+        Q (A.VClose mb free)) ->
+    compile_value av = Close bfname bfree ->
+    Q av.
+intros0 HQ Hcomp.
+on _, SourceLiftedProofs.invert_nullary SourceLiftedProofs.value_arrow_inv v.
+simpl in Hcomp. fold (@compile_value_list G free_tys) in *.
+eapply HQ; congruence.
+Qed.
+
+Lemma compile_expr_list_3part_inv : forall G L
+        tys (es : hlist (A.expr G L) tys)
+        bvs be bes
+        (Q : forall tys, hlist _ tys -> Prop),
+    (forall av_tys ae_ty ae_tys avs ae aes,
+        compile_expr_list avs = bvs ->
+        compile_expr ae = be ->
+        compile_expr_list aes = bes ->
+        Q (av_tys ++ ae_ty :: ae_tys) (happ avs (hcons ae aes))) ->
+    compile_expr_list es = bvs ++ be :: bes ->
+    Q tys es.
+induction es; intros0 HQ Hcomp.
+- simpl in *. destruct bvs; simpl in Hcomp; discriminate Hcomp.
+- rename a into av0_ty. rename b into av0. rename l into tys.
+  destruct bvs as [ | bv0 bvs].
+  + simpl in *. eapply HQ with (av_tys := []) (avs := hnil); simpl; congruence.
+  + simpl in *. eapply IHes; eauto; cycle 1.
+      { invc Hcomp. eassumption. }
+    intros. eapply HQ with (av_tys := av0_ty :: av_tys) (avs := hcons av0 avs).
+    all: simpl; congruence.
+Qed.
+
+Lemma compile_expr_list_map_value_inv : forall G L
+        tys (aes : hlist (A.expr G L) tys)
+        bvs
+        (Q : _ -> Prop),
+    (forall avs,
+        compile_value_list avs = bvs ->
+        Q (hmap (@A.Value G L) avs)) ->
+    compile_expr_list aes = map B.Value bvs ->
+    Q aes.
+induction aes; intros0 HQ Hcomp.
+
+- simpl in *. eapply HQ with (avs := hnil). simpl.
+  destruct bvs; try discriminate. auto.
+
+- rename a into ae0_ty. rename b into ae0. rename l into tys.
+  destruct bvs as [ | bv0 bvs]; try discriminate.
+
+  invc Hcomp. on _, invc_using compile_expr_Value_inv.
+
+  eapply IHaes; eauto. intros.
+
+  eapply HQ with (avs := hcons av avs).
+  simpl. congruence.
+Qed.
+
+Theorem I_bsim : forall G rty (AE : A.genv G) (BE : list B.expr)
+    (a : A.state G rty) (b b' : B.state),
+    compile_genv AE = BE ->
+    compile_state a = b ->
+    B.sstep BE b b' ->
+    exists a',
+        A.sstep AE a a' /\
+        compile_state a' = b'.
+
+destruct b as [be bl bk | bv];
+intros0 Henv II Bstep; inv Bstep.
+all: on _, invc_using compile_state_inv.
+(* all: fix_existT; subst. *)
+all: destruct ae; try discriminate.
+all: on (compile_expr _ = _), invc.
+
+
+- eexists. split. i_lem @A.SValue.
+  + i_lem compile_run_cont.
+
+- eexists. split. i_lem @A.SVar.
+  + on _, rewrite_fwd compile_hget_value.
+    simpl. congruence.
+
+
+- eexists. split. i_lem @A.SAppL.
+  + i_lem compile_isnt_value'.
+  + simpl. reflexivity.
+
+- eexists. split. i_lem @A.SAppR.
+  + i_lem compile_is_value'.
+  + i_lem compile_isnt_value'.
+  + simpl. reflexivity.
+
+- do 2 on _, invc_using compile_expr_Value_inv.
+  on _, invc_using compile_value_Close_inv.
+
+  eexists. split. i_lem @A.SMakeCall.
+  + simpl in *. rewrite compile_gget_weaken in *. congruence.
+
+
+- fold (@compile_expr_list G L arg_tys) in *.
+  revert ct. pattern arg_tys, h.
+  eapply compile_expr_list_3part_inv; eauto. intros.
+  subst.
+
+  eexists. split. i_lem @A.SConstrStep.
+  + i_lem compile_is_value_list'.
+  + i_lem compile_isnt_value'.
+  + simpl. reflexivity.
+
+- fold (@compile_expr_list G L arg_tys) in *.
+  on _, invc_using compile_expr_list_map_value_inv.
+
+  eexists. split. i_lem @A.SConstrDone.
+  + simpl. fold (@compile_value_list G arg_tys). reflexivity.
+
+
+- fold (@compile_expr_list G L free_tys) in *.
+  revert m Bstep. pattern free_tys, h.
+  eapply compile_expr_list_3part_inv; eauto. intros.
+  subst.
+
+  eexists. split. i_lem @A.SCloseStep.
+  + i_lem compile_is_value_list'.
+  + i_lem compile_isnt_value'.
+  + simpl. reflexivity.
+
+- fold (@compile_expr_list G L free_tys) in *.
+  on _, invc_using compile_expr_list_map_value_inv.
+
+  eexists. split. i_lem @A.SCloseDone.
+  + simpl. fold (@compile_value_list G free_tys). reflexivity.
+
+
+- fold (@compile_expr_list G L case_tys) in *.
+
+  eexists. split. i_lem @A.SElimTarget.
+  + i_lem compile_isnt_value'.
+  + simpl. reflexivity.
+
+- fold (@compile_expr_list G L case_tys) in *.
+  on _, invc_using compile_expr_Value_inv.
+  on _, invc_using compile_value_Constr_inv.
+
+  eexists. split. i_lem @A.SEliminate.
+  + unfold compile_state. f_equal.
+    erewrite compile_run_elim with (e := e) (target := A.VConstr ct args0) in *.
+    congruence.
 
 Qed.
