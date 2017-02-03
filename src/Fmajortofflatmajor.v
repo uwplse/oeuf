@@ -20,6 +20,7 @@ Require Import StructTact.Util.
 
 Require Import HighValues.
 
+Require Import StuartTact.
 Require Import EricTact.
 
 Require Import Fmajor.
@@ -415,13 +416,14 @@ Lemma match_final_states :
   forall s1 s2 r,
     match_states s1 s2 ->
     Fmajor.final_state prog s1 r ->
-    Fflatmajor.final_state s2 r.
+    Fflatmajor.final_state tprog s2 r.
 Proof.
   intros.
   invp Fmajor.final_state.
   invp match_states.
   invp match_cont.
   econstructor.
+  eapply transf_public_value; eauto.
 Qed.
 
 Lemma is_callstate_match :
@@ -435,12 +437,12 @@ Proof.
   unfold transf_program in *.
   eapply Genv.find_funct_ptr_rev_transf in H1. break_exists. break_and.
   erewrite Genv.find_symbol_transf in H0; eauto.
-  destruct x; simpl in *; try congruence. inversion H3.
+  destruct x; simpl in *; try congruence. on (Internal _ = Internal _), invc.
   eexists; split; try econstructor; eauto.
-  econstructor; eauto. 
-  destruct fn; destruct f; unfold transf_function in *; simpl in *; congruence.
-  all: admit. (* public_value *)
-Admitted.
+  - econstructor; eauto. 
+  - eauto using transf_public_value'.
+  - eauto using transf_public_value'.
+Qed.
   
 Theorem fsim :
   forward_simulation (Fmajor.semantics prog) (Fflatmajor.semantics tprog).

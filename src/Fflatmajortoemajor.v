@@ -678,14 +678,15 @@ Qed.
 Lemma match_final_states :
   forall s1 s2 r,
     match_states s1 s2 ->
-    Fflatmajor.final_state s1 r ->
-    Emajor.final_state s2 r.
+    Fflatmajor.final_state prog s1 r ->
+    Emajor.final_state tprog s2 r.
 Proof.
   intros.
   invp Fflatmajor.final_state.
   invp match_states.
   invp match_cont.
   econstructor.
+  eauto using transf_public_value.
 Qed.
 
 Lemma is_callstate_match :
@@ -699,11 +700,13 @@ Proof.
   eapply Genv.find_funct_ptr_rev_transf in H1; eauto.
   break_exists. break_and.
   erewrite Genv.find_symbol_transf in H0; eauto.
-  destruct x; simpl in *; try congruence. inv H3.
+  destruct x; simpl in *; try congruence. inv H5.
   assert (length (Fflatmajor.fn_params f) = 2%nat).
   destruct f; simpl in *; eauto.
   eexists; split; try econstructor; eauto.
-  econstructor; eauto.
+  - econstructor; eauto.
+  - eauto using transf_public_value'.
+  - eauto using transf_public_value'.
 Qed.
 
 Theorem fsim :

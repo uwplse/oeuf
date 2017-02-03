@@ -1294,6 +1294,7 @@ Proof.
   eapply HighValues.value_val_inject; eauto.
   unfold wf_mem in *. unfold wf_inj in *. intuition.
   unfold wf_mem in *. unfold wf_inj in *. intuition.
+  auto.
 Qed.
 
 Lemma value_inject_not_empty :

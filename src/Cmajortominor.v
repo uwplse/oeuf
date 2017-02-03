@@ -452,8 +452,9 @@ Proof.
   econstructor; eauto.
   eapply HighValues.value_inject_mem_extends; eauto.
   eapply HighValues.value_inject_swap_ge; try eassumption.
-  intros. eapply Hft in H2. eauto.
+  intros. eapply Hft in H3. eauto.
   intros. rewrite Hst. eauto.
+  eauto using HighValues.transf_public_value.
 Qed.
 
 Lemma is_callstate_match :
@@ -466,7 +467,7 @@ Proof.
   remember no_new_functions as Hnn.
   remember find_symbol_transf as Hfs.
   eapply no_new_functions in H3. break_exists. break_and.
-  destruct x;  simpl in H11; try congruence.
+  destruct x;  simpl in H13; try congruence.
   eexists; split; econstructor; try eapply Mem.extends_refl; try eassumption.
   econstructor.
   econstructor. econstructor.
@@ -474,21 +475,24 @@ Proof.
   econstructor.
   eapply HighValues.value_inject_swap_ge. eauto.
   intros.
-  eapply Hnn in H12. break_exists; break_and; eauto.
+  eapply Hnn in H14. break_exists; break_and; eauto.
   intros.
   erewrite <- Hfs; eauto.
   eapply HighValues.value_inject_swap_ge. eauto.
   intros.
-  eapply Hnn in H12. break_exists; break_and; eauto.
+  eapply Hnn in H14. break_exists; break_and; eauto.
   intros.
   erewrite <- Hfs; eauto.
   erewrite <- Hfs; eauto.
   subst. destruct f; destruct fn; simpl in *.
-  unfold transf_function in H11. simpl in H11. inv H11. 
+  unfold transf_function in H13. simpl in H13. inv H13. 
   eauto.
   unfold HighValues.global_blocks_valid in *.
   unfold transf_prog in TRANSF.
   erewrite HighValues.genv_next_transf in *; eauto.
+
+  rewrite <- TRANSF in *.  eauto using HighValues.transf_public_value'.
+  rewrite <- TRANSF in *.  eauto using HighValues.transf_public_value'.
 Qed.
 
 Theorem fsim :

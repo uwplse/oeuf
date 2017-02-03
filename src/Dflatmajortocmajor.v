@@ -424,6 +424,26 @@ Proof.
     econstructor; eauto.
 Qed.
 
+Lemma transf_prog_malloc_public : forall p malloc_id p',
+    transf_prog_malloc p malloc_id = OK p' ->
+    prog_public p = prog_public p'.
+clear.
+intros ? ? ? Htransf.
+unfold transf_prog_malloc in Htransf.
+symmetry. eapply transform_partial_program_public; eauto.
+Qed.
+
+Lemma transf_prog_public : forall p p',
+    transf_prog p = OK p' ->
+    prog_public p = prog_public p'.
+clear.
+intros ? ? Htransf.
+unfold transf_prog in Htransf.
+break_if; try discriminate.
+break_match; try discriminate.
+eauto using transf_prog_malloc_public.
+Qed.
+
 Lemma is_callstate_match :
   forall fv av st',
     Cmajor.is_callstate tprog fv av st' ->
@@ -432,7 +452,7 @@ Lemma is_callstate_match :
 Proof.
   intros. inv H.
   copy TRANSF.
-  unfold transf_prog in H8.
+  unfold transf_prog in H10.
   break_match_hyp; try congruence.
   rewrite malloc_id_found in *.
   eapply Genv.find_funct_ptr_rev_transf_partial in H3; eauto.
@@ -451,7 +471,7 @@ Proof.
              Genv.find_symbol (Genv.globalenv tprog) fname = Some b ->
              Genv.find_symbol (Genv.globalenv prog) fname = Some b).
   {
-    intros. erewrite Genv.find_symbol_transf_partial in H10; eauto.
+    intros. erewrite Genv.find_symbol_transf_partial in H12; eauto.
   }
 
   assert (global_blocks_valid (Genv.globalenv prog) (Mem.nextblock m)).
@@ -464,12 +484,18 @@ Proof.
     
   }
   
-  destruct x; unfold transf_fundef in *; simpl in H9; try congruence.
+  destruct x; unfold transf_fundef in *; simpl in H11; try congruence.
   
   eexists; split; econstructor; eauto;
     try solve [repeat (econstructor; eauto)];
     try eapply value_inject_swap_ge; eauto.
-  destruct f; destruct fn; inversion H9; subst; simpl in *; eauto.
+  destruct f; destruct fn; inversion H11; subst; simpl in *; eauto.
+
+  eapply prog_public_public_value'; try eassumption.
+    eauto using transf_prog_malloc_public.
+
+  eapply prog_public_public_value'; try eassumption.
+    eauto using transf_prog_malloc_public.
 
   Grab Existential Variables.
   exact 0.
@@ -486,10 +512,13 @@ Proof.
   econstructor; eauto.
   eapply value_inject_swap_ge; eauto.
   intros.
-  eapply find_funct_ptr_transf in H2.
+  eapply find_funct_ptr_transf in H3.
   break_exists. break_and. eauto.
   intros.
   erewrite find_symbol_transf; eauto.
+
+  eapply prog_public_public_value; try eassumption.
+    eauto using transf_prog_public.
 Qed.
 
 End PRESERVATION.

@@ -1586,7 +1586,7 @@ Qed.
 Lemma match_final_states :
   forall st st' r,
     match_states st st' ->
-    Emajor.final_state st r ->
+    Emajor.final_state prog st r ->
     Dmajor.final_state tprog st' r.
 Proof.
   intros.
@@ -1594,6 +1594,7 @@ Proof.
   invp match_states.
   invp match_cont.
   econstructor. eassumption.
+  - eauto using transf_partial_public_value.
 Qed.
 
 Lemma callstate_match :
@@ -1607,15 +1608,17 @@ Proof.
   eapply Genv.find_funct_ptr_rev_transf_partial in H3; eauto.
   break_exists. break_and. copy H5.
   erewrite Genv.find_symbol_transf_partial in H4; eauto.
-  destruct x; simpl in H6; unfold bind in H6; simpl in H6; try congruence.
+  destruct x; simpl in H8; unfold bind in H8; simpl in H8; try congruence.
   break_match_hyp; try congruence. invc H5.
   eexists; split; econstructor; eauto.
   congruence.
   repeat (econstructor; eauto).
-  econstructor; eauto.
-  destruct f; destruct fn; unfold transf_function in *; simpl in *.
-  repeat break_match_hyp; congruence.
-Qed.  
+  - econstructor; eauto.
+  - destruct f; destruct fn; unfold transf_function in *; simpl in *.
+    repeat break_match_hyp; congruence.
+  - eauto using transf_partial_public_value'.
+  - eauto using transf_partial_public_value'.
+Qed.
 
 Theorem fsim :
   forward_simulation (Emajor.semantics prog) (Dmajor.semantics tprog).

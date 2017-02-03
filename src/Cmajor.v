@@ -299,6 +299,8 @@ Inductive is_callstate (p : program) : value -> value -> state -> Prop :=
       length (fn_params fn) = 2%nat ->
       global_blocks_valid (Genv.globalenv p) (Mem.nextblock m) ->
       no_future_pointers m ->
+      public_value p (Close fname vs) ->
+      public_value p arg ->
       is_callstate p (Close fname vs) arg (Callstate (Internal fn) ((Vptr fb fofs) :: argptr :: nil) Kstop m).
 
 (** A final state is a [Returnstate] with an empty continuation. *)
@@ -306,6 +308,7 @@ Inductive is_callstate (p : program) : value -> value -> state -> Prop :=
 Inductive final_state (p : program) : state -> value -> Prop :=
 | final_state_intro: forall v v' m,
     value_inject (Genv.globalenv p) m v v' ->
+    public_value p v ->
     final_state p (Returnstate v' Kstop m) v.
 
 (** The corresponding small-step semantics. *)
@@ -338,6 +341,7 @@ Require Import compcert.backend.Cminor.
 Inductive cminor_final_state(p : Cminor.program): Cminor.state -> value -> Prop :=
 | cminor_final_state_intro: forall v v' m,
     value_inject (Genv.globalenv p) m v v' ->
+    public_value p v ->
     cminor_final_state p (Cminor.Returnstate v' Cminor.Kstop m) v.
 
 
@@ -352,6 +356,8 @@ Inductive cminor_is_callstate (p : Cminor.program) : value -> value -> state -> 
       length (fn_params fn) = 2%nat ->
       global_blocks_valid (Genv.globalenv p) (Mem.nextblock m) ->
       no_future_pointers m ->
+      public_value p (Close fname vs) ->
+      public_value p arg ->
       cminor_is_callstate p (Close fname vs) arg (Callstate (Internal fn) ((Vptr fb fofs) :: argptr :: nil) Kstop m).
 
 
@@ -443,8 +449,9 @@ Proof.
   - unfold single_events. intros.
     inv H; simpl; try omega;
       eapply external_call_trace_length; eauto.
+
   - intros. inv H. simpl.
-    unfold nostep. intros. intro. inv H1; try congruence.
+    unfold nostep. intros. intro. inv H2; try congruence.
 
 Qed.
 
