@@ -959,22 +959,14 @@ Qed.
 
 (* semantics *)
 
-(*
-Definition prog_type G : Type := genv G * list metadata.
-Definition valtype := value.
+Inductive is_callstate {G} (g : genv G) : forall {ty1 ty2},
+        value G (Arrow ty1 ty2) -> value G ty1 -> state G ty2 -> Prop :=
+| IsCallstate : forall arg_ty free_tys ret_ty
+            (mb : member (arg_ty, free_tys, ret_ty) G) free av,
+        let fv := VClose mb free in
+        is_callstate g fv av
+            (Run (gget_weaken g mb) (hcons av free) KStop).
 
-Definition initial_env (prog : prog_type) : env := fst prog.
-
-Inductive is_callstate (prog : prog_type) : valtype -> valtype -> state -> Prop := .
-(* TODO: stub *)
-
-Inductive final_state (prog : prog_type) : state -> valtype -> Prop :=
-| FinalState : forall v, final_state prog (Stop v) v.
-
-Definition semantics (prog : prog_type) : Semantics.semantics :=
-  @Semantics_gen state env valtype
-                 (is_callstate prog)
-                 (sstep)
-                 (final_state prog)
-                 (initial_env prog).
-*)
+Inductive final_state {G} : forall {ty}, state G ty -> value G ty -> Prop :=
+| FinalState : forall ty (v : value G ty),
+        final_state (Stop v) v.

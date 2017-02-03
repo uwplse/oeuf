@@ -803,3 +803,46 @@ all: on (compile_expr _ = _), invc.
     congruence.
 
 Qed.
+
+
+Lemma match_callstate : forall G (AE : A.genv G) BE Bmeta
+    ty1 ty2 (af : A.value G (A.Arrow ty1 ty2)) (aa : A.value G ty1)
+    bf ba b,
+    compile_genv AE = BE ->
+    B.is_callstate (BE, Bmeta) bf ba b ->
+    compile_value af = bf ->
+    compile_value aa = ba ->
+    exists a,
+        compile_state a = b /\
+        A.is_callstate AE af aa a.
+intros0 Henv Bcall Hf Ha.
+invc Bcall.
+
+on (_ = compile_value af), fun H => symmetry in H.
+on _, invc_using compile_value_Close_inv.
+
+eexists. split; cycle 1.
+- econstructor.
+- simpl. simpl in *. rewrite compile_gget_weaken in *.
+  f_equal. congruence.
+Qed.
+
+Lemma match_final_state : forall G (AE : A.genv G) BE Bmeta
+    ty (av : A.value G ty) (a : A.state G ty)
+    (b : B.state),
+    compile_genv AE = BE ->
+    Forall (fun m => m_access m = Public) Bmeta ->
+    length BE = length Bmeta ->
+    compile_state a = b ->
+    A.final_state a av ->
+    exists bv,
+        B.final_state (BE, Bmeta) b bv /\
+        compile_value av = bv.
+intros0 Henv Bpub Blen Hcomp Afin.
+invc Afin. fix_existT. subst.
+
+eexists. split.
+- econstructor. admit.
+- reflexivity.
+Admitted.
+
