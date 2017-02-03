@@ -1,4 +1,6 @@
 Require Import MixSemantics.
+Require Import SourceLang.
+
 
 Require Import StructTact.StructTactics.
 Require Import StructTact.Util.
@@ -12,7 +14,7 @@ Section Spec.
   Variable p2 : T2.
   Variable sem1 : T1 -> notrace_semantics.
   Variable sem2 : T2 -> trace_semantics.
-  Variable fsim : mix_forward_simulation (sem1 p1) (sem2 p2).
+  Variable fsim : (forall (ty : type), mix_forward_simulation (sem1 p1) (sem2 p2)).
 
   Definition L1 := sem1 p1.
   Definition L2 := sem2 p2.
@@ -20,22 +22,23 @@ Section Spec.
   Definition tge := TraceSemantics.globalenv L2.
   Definition step1 := Semantics.step L1.
   Definition step2 := TraceSemantics.step L2.
-    
-  Definition match_states := (fsim_match_states _ _ fsim).
-  Definition match_values := (fsim_match_val _ _ fsim).
+
+  Definition match_states (ty : type) := (fsim_match_states _ _ (fsim ty)).
+  Definition match_values (ty : type) := (fsim_match_val _ _ (fsim ty)).
+
 
   Lemma establish_matching :
-    forall f v lst hf hv,
+    forall argty resty f v lst hf hv,
       TraceSemantics.is_callstate (sem2 p2) f v lst -> (* This is what the users need to establish *)
-      match_values hf f -> (* this too *)
-      match_values hv v -> (* this as well *)
+      match_values (Arrow argty resty) hf f -> (* this too *)
+      match_values argty hv v -> (* this as well *)
       exists hst i,
         Semantics.is_callstate (sem1 p1) hf hv hst /\
-        match_states i hst lst.
+        match_states resty i hst lst.
   Proof.        
     intros.
     unfold match_values in *. unfold MixSemantics.fsim_match_val in *.
-    eapply (MixSemantics.fsim_match_callstate _ _ fsim) in H; eauto.
+    eapply (MixSemantics.fsim_match_callstate _ _ (fsim resty)) in H; eauto.
     destruct H. destruct H. destruct H.
     repeat eexists; repeat split; eauto.
   Qed.

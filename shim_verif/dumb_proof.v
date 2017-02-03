@@ -1,5 +1,8 @@
 (* Specific program we care about *)
-Require Import dumb_cm.
+Require Import dumb_oeuf. (* Oeuf program in cminor *)
+Require Import dumb_cm. (* Linked program in cminor *)
+Require Import Dumb. (* Original Oeuf program *)
+Require Import dumb_axioms. (* necessary axioms for proof *)
 
 Require Import compcert.common.Globalenvs.
 Require Import compcert.common.Memory.
@@ -19,6 +22,8 @@ Require Cmajor.
 
 Section SIM.
 
+  Definition prog := dumb_cm.prog. (* make sure we get correct prog *)
+  Definition oprog := dumb_oeuf.prog.
   Definition ge := Genv.globalenv prog.
   Variable st : Cminor.state.
   Hypothesis init_state : initial_state prog st.
@@ -154,9 +159,13 @@ Section SIM.
     (* HERE is where we call into Oeuf *)
     (* This is the state that we want to be a callstate *)
     remember ((Callstate (AST.Internal f_id_lambda0) (Values.Vptr b3 Integers.Int.zero :: Values.Vptr b1 Integers.Int.zero :: nil)
-                         Kstop m11)) as ST.
-    
-    assert (Cmajor.cminor_is_callstate prog (HighValues.Close _id_lambda0 nil) (HighValues.Constr Integers.Int.zero nil) ST).
+                         Kstop m11)) as OST. (* Oeuf state *)
+
+    remember ((Callstate (AST.Internal f_id_lambda0) (Values.Vptr b3 Integers.Int.zero :: Values.Vptr b1 Integers.Int.zero :: nil)
+                         K m11)) as LST. (* linked state *)
+
+    (* make sure it's a callstate *)
+    assert (Cmajor.cminor_is_callstate oprog (HighValues.Close _id_lambda0 nil) (HighValues.Constr Integers.Int.zero nil) OST).
     {
       subst. econstructor.
       econstructor. Focus 3. unfold Genv.find_symbol. simpl. reflexivity.
@@ -178,11 +187,21 @@ Section SIM.
       
     } idtac.
 
-    (* We will need to swap out "prog" in the "is_callstate" fact above *)
+    (* We need a handle on the compilation unit name *)
     eapply OeufProof.establish_matching in H6.
-    Focus 2. unfold TopLevel.match_values. 
+    Focus 2.
+    instantiate (4 := Dumb.oeuf_prog).
+    instantiate (3 := dumb_axioms.TRANSF).
+    instantiate (2 := Dumb.id_ty).
+    instantiate (1 := Dumb.id_reflect).
+    apply OeufProof.match_vals_values; econstructor; eauto.
+    Focus 2.
+    instantiate (2 := Dumb.zero_ty).
+    instantiate (1 := Dumb.id_reflect).
     
-    
+      try solve [].
+    instantiate (3 := Dumb.oeuf_prog) in H6.    
+
     
 
   Admitted.
