@@ -506,51 +506,55 @@ Module value.
   Qed.
 End value.
 
-(* TODO
 
 Module expr.
-  Fixpoint to_tree {G ty} (e : expr G ty) {struct e} : tree symbol.t.
-    refine (let fix go_hlist {G l} (h : hlist (expr G) l) : list (tree symbol.t) :=
+  Fixpoint to_tree {G L ty} (e : expr G L ty) {struct e} : tree symbol.t.
+    refine (let fix go_hlist {G L l} (h : hlist (expr G L) l) : list (tree symbol.t) :=
                 match h with
                 | hnil => []
-                | hcons e h => to_tree _ _ e :: go_hlist h
+                | hcons e h => to_tree _ _ _ e :: go_hlist h
                 end
             in _).
     refine match e with
+           | Value v => 
+             node [atom (symbol.of_string_unsafe "value");
+                   value.to_tree v]
            | Var m => node [atom (symbol.of_string_unsafe "var"); atom (nat_to_symbol (member_to_nat m))]
-           | @Lam ty1 _ _ e' =>
-             node [atom (symbol.of_string_unsafe "lambda"); type.to_tree ty1; to_tree _ _ e']
            | App e1 e2 =>
-             node [atom (symbol.of_string_unsafe "app"); to_tree _ _ e1; to_tree _ _ e2]
-           | @Constr tyn _ _ cn c args =>
+             node [atom (symbol.of_string_unsafe "app"); to_tree _ _ _ e1; to_tree _ _ _ e2]
+           | @Constr _ _ tyn cn _ c args =>
              node [atom (symbol.of_string_unsafe "constr");
                    type_name.to_tree tyn;
                    atom (constr_name.to_symbol cn);
-                   node (go_hlist _ _ args)]
-           | @Elim case_tys target_tyn ty l e cases target =>
+                   node (go_hlist _ _ _ args)]
+           | @Close _ _ _ _ _ mb free =>
+             node [atom (symbol.of_string_unsafe "close");
+                   atom (nat_to_symbol (member_to_nat mb));
+                   node (go_hlist _ _ _ free)]
+           | @Elim _ _ case_tys target_tyn ty e cases target =>
              node [atom (symbol.of_string_unsafe "elim");
                    type.to_tree ty;
-                   node (go_hlist _ _ cases);
-                   to_tree _ _ target]
+                   node (go_hlist _ _ _ cases);
+                   to_tree _ _ _ target]
            end.
   Defined.
 
   Definition to_tree_hlist :=
-    fix go_hlist {G l} (h : hlist (expr G) l) : list (tree symbol.t) :=
+    fix go_hlist {G L tys} (h : hlist (expr G L) tys) : list (tree symbol.t) :=
       match h with
       | hnil => []
       | hcons e h => to_tree e :: go_hlist h
       end.
 
-  Fixpoint from_tree (t : tree symbol.t) {G} {struct t} : option {ty : type & expr G ty}.
-    refine (let fix go_list (l : list (tree symbol.t)) G :
-                  option {l : list type & hlist (expr G) l} :=
+  Fixpoint from_tree (t : tree symbol.t) {G L} {struct t} : option {ty : type & expr G L ty}.
+    refine (let fix go_list (l : list (tree symbol.t)) G L :
+                  option {tys : list type & hlist (expr G L) tys} :=
                 match l with
                 | [] => Some ([], hnil)
                 | t :: l =>
-                  match from_tree t G with
+                  match from_tree t G L with
                   | Some (ty, e) =>
-                  match go_list l G with
+                  match go_list l G L with
                   | Some (l, h) => Some (ty :: l, hcons e h)
                   | None => None
                   end
@@ -560,7 +564,15 @@ Module expr.
             in _).
     refine match t with
            | node (atom tag :: l) =>
-             if symbol.eq_dec tag (symbol.of_string_unsafe "var")
+             if symbol.eq_dec tag (symbol.of_string_unsafe "value")
+             then match l with
+                  | [t_v] =>
+                    match value.from_tree t_v with None => None
+                    | Some (ty, v) => Some (ty, Value v)
+                    end
+                  | _ => None
+                  end
+             else if symbol.eq_dec tag (symbol.of_string_unsafe "var")
              then match l with
                   | [atom n] => match member_from_nat (nat_from_symbol n) with
                           | Some (ty, m) => Some (ty, Var m)
@@ -568,25 +580,15 @@ Module expr.
                           end
                   | _ => None
                   end
-             else if symbol.eq_dec tag (symbol.of_string_unsafe "lambda")
-             then match l with
-                  | [t_ty; t_e] =>
-                    match type.from_tree t_ty with None => None
-                    | Some ty1 =>
-                    match from_tree t_e (ty1 :: G) with None => None
-                    | Some (ty2, e) => Some (Arrow ty1 ty2, Lam e)
-                    end end
-                  | _ => None
-                  end
              else if symbol.eq_dec tag (symbol.of_string_unsafe "app")
              then match l with
                   | [t_e1; t_e2] =>
-                    match from_tree t_e1 G with None => None
+                    match from_tree t_e1 G L with None => None
                     | Some (ty1, e1) =>
-                    match from_tree t_e2 G with None => None
+                    match from_tree t_e2 G L with None => None
                     | Some (ty2, e2) =>
                     match ty1 with
-                    | Arrow ty11 ty12 => fun e1 : expr _ (Arrow ty11 ty12) =>
+                    | Arrow ty11 ty12 => fun e1 : expr _ _ (Arrow ty11 ty12) =>
                     match type_eq_dec ty11 ty2 with right _ => None
                     | left pf => match pf with eq_refl => fun e2 => Some (ty12 , App e1 e2)
                     end e2 end
@@ -597,7 +599,7 @@ Module expr.
              else if symbol.eq_dec tag (symbol.of_string_unsafe "constr")
              then match l with
                   | [t_tyn; atom s_cn; node t_args] =>
-                  match go_list t_args G with None => None
+                  match go_list t_args G L with None => None
                   | Some (arg_tys, args) =>
                   match type_name.from_tree t_tyn with None => None
                   | Some tyn =>
@@ -608,14 +610,27 @@ Module expr.
                   end end end end
                   | _ => None
                   end
+             else if symbol.eq_dec tag (symbol.of_string_unsafe "close")
+             then match l with
+                  | [atom t_mb; node t_free] =>
+                  match member_from_nat (nat_from_symbol t_mb) with None => None
+                  | Some (pair (pair arg_ty free_tys) ret_ty, mb) =>
+                  match go_list t_free G L with None => None
+                  | Some (free_tys', free) =>
+                  match list_eq_dec type_eq_dec free_tys free_tys' with right _ => None
+                  | left pf => match pf with eq_refl => fun free =>
+                        Some (Arrow arg_ty ret_ty, Close mb free)
+                  end free end end end
+                  | _ => None
+                  end
              else if symbol.eq_dec tag (symbol.of_string_unsafe "elim")
              then match l with
                   | [t_ty; node ts_cases; t_target] =>
                   match type.from_tree t_ty with None => None
                   | Some ty =>
-                  match go_list ts_cases G with None => None
+                  match go_list ts_cases G L with None => None
                   | Some (case_tys, cases) =>
-                  match from_tree t_target G with
+                  match from_tree t_target G L with
                   | Some (ADT target_tyn, target) =>
                   match @elim.check_elim case_tys target_tyn ty with None => None
                   | Some e => Some (ty, Elim e cases target)
@@ -630,14 +645,14 @@ Module expr.
   Defined.
 
   Definition from_tree_list :=
-    fix go_list (l : list (tree symbol.t)) G :
-      option {l : list type & hlist (expr G) l} :=
+    fix go_list (l : list (tree symbol.t)) G L :
+      option {tys : list type & hlist (expr G L) tys} :=
       match l with
       | [] => Some ([], hnil)
       | t :: l =>
-        match @from_tree t G with
+        match @from_tree t G L with
         | Some (ty, e) =>
-          match go_list l G with
+          match go_list l G L with
           | Some (l, h) => Some (ty :: l, hcons e h)
           | None => None
           end
@@ -645,13 +660,14 @@ Module expr.
         end
       end.
 
-  Lemma to_from_tree_id_and :
-    (forall G ty (e : expr G ty), from_tree (to_tree e) = Some (ty,e)) *
-    (forall G args h, from_tree_list (to_tree_hlist h) G = Some (args, h)).
+  Lemma to_from_tree_id_and : forall G L,
+    (forall ty (e : expr G L ty), from_tree (to_tree e) = Some (ty,e)) *
+    (forall args h, from_tree_list (to_tree_hlist h) G L = Some (args, h)).
   Proof.
-    apply expr_mut_rect_and; simpl; intros.
+    intros G L.
+    apply expr_rect_mut_comb; simpl; intros.
+    - now rewrite value.to_from_tree_id.
     - now rewrite nat_to_from_symbol, member_to_from_nat_id.
-    - now rewrite type.to_from_tree_id, H.
     - rewrite H, H0.
       break_match; try congruence.
       now dependent destruction e.
@@ -661,44 +677,53 @@ Module expr.
       now rewrite constr_type.check_constr_type_correct with (ct := ct).
     - fold @from_tree_list.
       fold @to_tree_hlist.
+      rewrite nat_to_from_symbol, member_to_from_nat_id, H.
+      break_match; try congruence.
+      now dependent destruction e.
+    - fold @from_tree_list.
+      fold @to_tree_hlist.
       rewrite type.to_from_tree_id, H, H0.
       now rewrite elim.check_elim_correct with (e := e).
+
     - auto.
     - now rewrite H, H0.
   Qed.
 
-  Lemma to_from_tree_id : forall G ty (e : expr G ty), from_tree (to_tree e) = Some (ty, e).
+  Lemma to_from_tree_id : forall G L ty (e : expr G L ty),
+      from_tree (to_tree e) = Some (ty, e).
   Proof. apply to_from_tree_id_and. Qed.
 
-  Lemma to_from_tree_list_id : forall G args h, from_tree_list (to_tree_hlist h) G = Some (args, h).
+  Lemma to_from_tree_list_id : forall G L args h,
+      from_tree_list (to_tree_hlist h) G L = Some (args, h).
   Proof. apply to_from_tree_id_and. Qed.
 
-  Lemma to_tree_wf_and :
-    (forall G ty (e : expr G ty), Tree.Forall symbol.wf (to_tree e)) *
-    (forall G l (h : hlist (expr G) l), List.Forall (Tree.Forall symbol.wf) (to_tree_hlist h)).
+  Lemma to_tree_wf_and : forall G L,
+    (forall ty (e : expr G L ty), Tree.Forall symbol.wf (to_tree e)) *
+    (forall l (h : hlist (expr G L) l), List.Forall (Tree.Forall symbol.wf) (to_tree_hlist h)).
   Proof.
-    apply expr_mut_rect_and; simpl; auto 10 using nat_to_symbol_wf.
+    intros G L.
+    apply expr_rect_mut_comb; simpl; auto 10 using nat_to_symbol_wf.
   Qed.
 
-  Lemma to_tree_wf : forall G ty (e : expr G ty), Tree.Forall symbol.wf (to_tree e).
+  Lemma to_tree_wf : forall G L ty (e : expr G L ty), Tree.Forall symbol.wf (to_tree e).
   Proof. apply to_tree_wf_and. Qed.
   Hint Resolve to_tree_wf.
 
   Lemma to_tree_hlist_wf :
-    forall G l (h : hlist (expr G) l), List.Forall (Tree.Forall symbol.wf) (to_tree_hlist h).
+    forall G L l (h : hlist (expr G L) l), List.Forall (Tree.Forall symbol.wf) (to_tree_hlist h).
   Proof. apply to_tree_wf_and. Qed.
   Hint Resolve to_tree_hlist_wf.
 
-  Definition print {G ty} (e : expr G ty) : String.string :=
+  Definition print {G L ty} (e : expr G L ty) : String.string :=
     print_tree (to_tree e).
 
-  Definition pretty w {G ty} (e : expr G ty) : String.string :=
+  Definition pretty w {G L ty} (e : expr G L ty) : String.string :=
     pretty_tree w (to_tree e).
 
-  Definition parse (s : String.string) {G} : option {ty : type & expr G ty} :=
+  Definition parse (s : String.string) {G L} : option {ty : type & expr G L ty} :=
     parse s >>= (fun t => from_tree t).
 
-  Lemma parse_print_id : forall G ty (e : expr G ty), parse (print e) = Some (ty, e).
+  Lemma parse_print_id : forall G L ty (e : expr G L ty), parse (print e) = Some (ty, e).
   Proof.
     unfold parse, print.
     intros.
@@ -706,7 +731,7 @@ Module expr.
     now rewrite parse_print_tree, to_from_tree_id by auto.
   Qed.
 
-  Lemma parse_pretty_id : forall w G ty (e : expr G ty), parse (pretty w e) = Some (ty, e).
+  Lemma parse_pretty_id : forall w G L ty (e : expr G L ty), parse (pretty w e) = Some (ty, e).
   Proof.
     unfold parse, pretty.
     intros.
@@ -715,6 +740,7 @@ Module expr.
   Qed.
 End expr.
 
+(*
 Require Import String.
 (* Eval compute in expr.print (@id_nat_reflect []).
 Eval compute in expr.print (@map_reflect []).
