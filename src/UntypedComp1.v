@@ -827,6 +827,36 @@ eexists. split; cycle 1.
   f_equal. congruence.
 Qed.
 
+Lemma compile_member_lt : forall A (a : A) xs (mb : member a xs),
+    compile_member mb < length xs.
+induction mb; simpl; omega.
+Qed.
+
+Lemma compile_value_public : forall G Bmeta,
+    Forall (fun m => m_access m = Public) Bmeta ->
+    length G = length Bmeta ->
+    forall ty (av : A.value G ty),
+    public_value Bmeta (compile_value av).
+intros0 Bpub Blen.
+induction av using A.value_rect_mut with
+    (Pl := fun tys avs => Forall (public_value Bmeta) (compile_value_list avs));
+simpl.
+1: fold (@compile_value_list G arg_tys).
+2: fold (@compile_value_list G free_tys).
+all: i_ctor.
+
+- unfold public_fname.
+  fwd eapply compile_member_lt with (mb := mb) as Hmb; eauto.
+  rewrite Blen in Hmb. rewrite <- nth_error_Some in Hmb.
+  destruct (nth_error _ _) eqn:Hmb'; try congruence.
+  fwd eapply Forall_nth_error with (xs := Bmeta); eauto.
+Qed.
+
+Lemma compile_genv_length : forall G (g : A.genv G),
+    length (compile_genv g) = length G.
+induction g; simpl; eauto.
+Qed.
+
 Lemma match_final_state : forall G (AE : A.genv G) BE Bmeta
     ty (av : A.value G ty) (a : A.state G ty)
     (b : B.state),
@@ -842,7 +872,9 @@ intros0 Henv Bpub Blen Hcomp Afin.
 invc Afin. fix_existT. subst.
 
 eexists. split.
-- econstructor. admit.
+- econstructor.
+  rewrite compile_genv_length in Blen.
+  eapply compile_value_public; eauto.
 - reflexivity.
-Admitted.
+Qed.
 
