@@ -6,6 +6,7 @@ Require Import dumb_axioms. (* necessary axioms for proof *)
 
 Require Import compcert.common.Globalenvs.
 Require Import compcert.common.Memory.
+Require Import compcert.common.Values.
 Require Import compcert.lib.Coqlib.
 Require Import compcert.common.Events.
 Require Import compcert.common.Smallstep.
@@ -19,6 +20,69 @@ Require Import EricTact.
 Require Import OeufProof.
 
 Require Cmajor.
+
+
+  Inductive storable (b : block) (lo hi : Z) : mem -> Type :=
+  | store :
+      forall m,
+        storable b lo hi m ->
+        forall c b' ofs v m',
+          Mem.store c m b' ofs v = Some m' ->
+          storable b lo hi m'
+  | other_alloc :
+      forall m,
+        storable b lo hi m ->
+        forall x y b' m',
+          Mem.alloc m x y = (m',b') ->
+          storable b lo hi m'
+  | init_alloc :
+      forall m m',
+        Mem.alloc m lo hi = (m',b) ->
+        storable b lo hi m'
+  | other_free :
+      forall m,
+        storable b lo hi m ->
+        forall b' lo' hi' m',
+          b <> b' ->
+          Mem.free m b' lo' hi' = Some m' ->
+          storable b lo hi m'.
+  
+  Lemma storable_store :
+    forall m b lo hi,
+      storable b lo hi m ->
+      forall v c ofs,
+        ofs >= lo ->
+        (align_chunk c | ofs) ->
+        ofs + size_chunk c <= hi ->
+        { m' : mem | Mem.store c m b ofs v = Some m' }.
+  Proof.
+    induction 1; intros.
+    (* stores don't interfere *)
+    + copy e. 
+      eapply Mem.store_access in e.
+      edestruct IHX; eauto.
+      eapply Mem.store_valid_access_3 in e0; eauto.
+      eapply Mem.valid_access_store ; eauto.
+      clear -e0 e.
+      
+      unfold Mem.valid_access in *.
+      break_and; split; eauto.
+      unfold Mem.range_perm in *. unfold Mem.perm in *.
+      rewrite e.
+      eauto.
+    (* alloc doesn't interfere *)
+    + admit.
+    (* base : just allocated *)
+    + app Mem.valid_access_alloc_same Mem.alloc; try omega.
+      app Mem.valid_access_implies Mem.valid_access.
+      2: instantiate (1 := Writable); econstructor; eauto.
+      eapply Mem.valid_access_store; eauto.
+    (* frees of other blocks don't interfere *)
+    + admit.
+
+  Admitted.
+  
+
 
 Section SIM.
 
@@ -46,6 +110,7 @@ Section SIM.
                     | [ |- _ ] => repeat (econstructor; eauto)
                     end.
 
+  
   Lemma steps :
     exists st1,
       Smallstep.star step ge st E0 st1.
@@ -74,16 +139,38 @@ Section SIM.
     take_step.
     take_step.
     destruct (Mem.alloc m1 (-4) (Integers.Int.unsigned (Integers.Int.repr 4))) eqn:?.
-    destruct (Mem.store AST.Mint32 m2 b1 (-4) (Values.Vint (Integers.Int.repr 4))) eqn:?.
-    Focus 2. admit.
+    edestruct storable_store; eauto.
+    eapply init_alloc; eauto.
+    Focus 4.
+    take_step.
+    Unfocus.
+    omega. simpl. 
+    rewrite <- Z.divide_Zpos_Zneg_r.
+    eapply Z.divide_refl.
+    simpl. rewrite Integers.Int.unsigned_repr. omega.
+    unfold Integers.Int.max_unsigned. simpl. omega.
+    rename x into m3.
     take_step.
     take_step.
+
+    edestruct storable_store;
+      try take_step; try unfold Mem.storev; eauto.
+    eapply store; eauto.
+    eapply init_alloc; eauto.
+    unfold Integers.Int.zero.
+    rewrite Integers.Int.unsigned_repr. omega.
+    unfold Integers.Int.max_unsigned. simpl. omega.
+    unfold Integers.Int.zero.
+    rewrite Integers.Int.unsigned_repr.
+    simpl. eapply Z.divide_0_r.
+    unfold Integers.Int.max_unsigned. simpl. omega.
+    unfold Integers.Int.zero.
+    repeat rewrite Integers.Int.unsigned_repr by (unfold Integers.Int.max_unsigned; simpl; omega).
+    simpl. omega.
+    rename x into m4.
+
     take_step.
-    destruct (Mem.storev AST.Mint32 m3 (Values.Vptr b1 Integers.Int.zero) (Values.Vint (Integers.Int.repr 0))) eqn:?.
-    Focus 2. admit.
-    take_step.
-    take_step.
-    destruct (Mem.free m4 b0 0 (fn_stackspace f_zero)) eqn:?. Focus 2. admit.
+    destruct (Mem.free m4 b0 0 (fn_stackspace f_zero)) eqn:?. Focus 2. admit. (* need similar "freeable" fact/lemma *)
     take_step.
     take_step.
     take_step.
@@ -98,30 +185,50 @@ Section SIM.
     take_step.
     take_step.
     destruct (Mem.alloc m6 (-4) (Integers.Int.unsigned (Integers.Int.repr 4))) eqn:?.
-    destruct (Mem.store AST.Mint32 m7 b3 (-4) (Values.Vint (Integers.Int.repr 4))) eqn:?. Focus 2. admit.
-    take_step.
+    edestruct storable_store;
+      try take_step. eapply init_alloc; eauto. omega.
+    rewrite <- Z.divide_Zpos_Zneg_r.
+    eapply Z.divide_refl.
+    simpl. 
+    repeat rewrite Integers.Int.unsigned_repr by (unfold Integers.Int.max_unsigned; simpl; omega);
+      try omega.
     take_step.
     take_step.
     assert (Genv.find_symbol ge _id_lambda0 = Some 3%positive).
     {
       unfold Genv.find_symbol. unfold ge. simpl. reflexivity.
     } idtac.
-    destruct (Mem.storev AST.Mint32 m8 (Values.Vptr b3 Integers.Int.zero) (Values.Vptr 3%positive (Integers.Int.repr 0))) eqn:?. Focus 2. admit.
+    edestruct storable_store;
+      try take_step;
+      try unfold Mem.storev;
+      try collapse_match;
+      eauto.
+
+    eapply store; try eapply init_alloc; eauto.
+    unfold Integers.Int.zero.
+    repeat rewrite Integers.Int.unsigned_repr by (unfold Integers.Int.max_unsigned; simpl; omega);
+      try omega.
+    simpl. unfold Integers.Int.zero.
+    repeat rewrite Integers.Int.unsigned_repr by (unfold Integers.Int.max_unsigned; simpl; omega).
+    eapply Z.divide_0_r.
+    simpl. unfold Integers.Int.zero.
+    repeat rewrite Integers.Int.unsigned_repr by (unfold Integers.Int.max_unsigned; simpl; omega).
+    omega.
+      
+    take_step.
+    destruct (Mem.free x0 b2 0 (fn_stackspace f_id)) eqn:?. Focus 2. admit. 
     take_step.
     take_step.
-    destruct (Mem.free m9 b2 0 (fn_stackspace f_id)) eqn:?. Focus 2. admit.
     take_step.
     take_step.
     take_step.
     take_step.
     take_step.
     take_step.
+    destruct (Mem.alloc m8 0 (fn_stackspace f_call)) eqn:?.
     take_step.
     take_step.
-    destruct (Mem.alloc m10 0 (fn_stackspace f_call)) eqn:?.
-    take_step.
-    take_step.
-    assert (Mem.loadv AST.Mint32 m11 (Values.Val.add (Values.Vptr b3 Integers.Int.zero) (Values.Vint (Integers.Int.repr 0))) = Some (Values.Vptr 3%positive (Integers.Int.zero))) by admit.
+    assert (Mem.loadv AST.Mint32 m9 (Values.Val.add (Values.Vptr b3 Integers.Int.zero) (Values.Vint (Integers.Int.repr 0))) = Some (Values.Vptr 3%positive (Integers.Int.zero))) by admit.
     take_step.
 
     (* This is the complicated continuation we've built up *)
@@ -159,10 +266,10 @@ Section SIM.
     (* HERE is where we call into Oeuf *)
     (* This is the state that we want to be a callstate *)
     remember ((Callstate (AST.Internal f_id_lambda0) (Values.Vptr b3 Integers.Int.zero :: Values.Vptr b1 Integers.Int.zero :: nil)
-                         Kstop m11)) as OST. (* Oeuf state *)
+                         Kstop m9)) as OST. (* Oeuf state *)
 
     remember ((Callstate (AST.Internal f_id_lambda0) (Values.Vptr b3 Integers.Int.zero :: Values.Vptr b1 Integers.Int.zero :: nil)
-                         K m11)) as LST. (* linked state *)
+                         K m9)) as LST. (* linked state *)
 
     (* make sure it's a callstate *)
     assert (Cmajor.cminor_is_callstate oprog (HighValues.Close _id_lambda0 nil) (HighValues.Constr Integers.Int.zero nil) OST).
