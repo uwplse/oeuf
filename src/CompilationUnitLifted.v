@@ -8,7 +8,7 @@ Record compilation_unit :=
   CompilationUnit {
       types : list (type * list type * type);
       exprs : genv types;
-       names : list string (* invariant: no duplicates and same length as types *)
+      names : list string (* invariant: no duplicates and same length as types *)
   }.
 
 Definition singleton {ty} (e : body_expr [] ty) (name : string) : compilation_unit :=
