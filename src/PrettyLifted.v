@@ -1,5 +1,6 @@
 Require Import Program.
-Require Import SourceLifted Utopia List Monads HList CompilationUnit ListLemmas.
+Require Import SourceLifted Utopia List Monads HList CompilationUnitLifted ListLemmas.
+Require Import StuartTact.
 Import ListNotations.
 
 From StructTact Require Import StructTactics.
@@ -739,6 +740,111 @@ Module expr.
     now rewrite parse_pretty_tree, to_from_tree_id by auto.
   Qed.
 End expr.
+
+
+Module genv.
+  Fixpoint to_tree {G} (g : genv G) {struct g} : tree symbol.t.
+    refine match g with
+           | GenvNil => node [atom (symbol.of_string_unsafe "genvnil")]
+           | @GenvCons fn_sig G' e g' =>
+             match fn_sig as fn_sig_ return body_expr G' fn_sig_ -> _ with
+             | pair (pair arg_ty free_tys) ret_ty => fun e =>
+               node [atom (symbol.of_string_unsafe "genvcons");
+                     type.to_tree arg_ty;
+                     node (map type.to_tree free_tys);
+                     expr.to_tree e;
+                     to_tree _ g']
+             end e
+           end.
+  Defined.
+
+  Fixpoint from_tree (t : tree symbol.t) {struct t} : option {G : list _ & genv G}.
+    refine match t with
+           | node (atom tag :: l) =>
+             if symbol.eq_dec tag (symbol.of_string_unsafe "genvnil")
+             then match l with
+                  | [] => Some ([], GenvNil)
+                  | _ => None
+                  end
+             else if symbol.eq_dec tag (symbol.of_string_unsafe "genvcons")
+             then match l with
+                  | [t_arg_ty; node t_free_tys; t_e; t_g'] =>
+                    match type.from_tree t_arg_ty with None => None
+                    | Some arg_ty =>
+                    match map_partial type.from_tree t_free_tys with None => None
+                    | Some free_tys =>
+                    match from_tree t_g' with None => None
+                    | Some (G, g) =>
+                    match @expr.from_tree t_e G (arg_ty :: free_tys) with None => None
+                    | Some (ret_ty, e) =>
+                      let fn_sig := pair (pair arg_ty free_tys) ret_ty in
+                      Some (fn_sig :: G, @GenvCons fn_sig _ e g)
+                    end end end end
+                  | _ => None
+                  end
+             else None
+           | _ => None
+           end.
+  Defined.
+
+  Lemma to_from_tree_id :
+    (forall G (g : genv G), from_tree (to_tree g) = Some (G, g)).
+  Proof.
+    induction g; simpl; intros.
+
+    - auto.
+    - break_match. break_match. simpl.
+      rewrite type.to_from_tree_id.
+      rewrite Forall2_map_partial with (ys := l); cycle 1.
+        { eapply nth_error_Forall2.
+          - rewrite map_length. auto.
+          - intros. erewrite map_nth_error in *; eauto. inject_some.
+            eapply type.to_from_tree_id. }
+      rewrite IHg, expr.to_from_tree_id.
+      auto.
+  Qed.
+
+  Lemma to_tree_wf :
+    (forall G (g : genv G), Tree.Forall symbol.wf (to_tree g)).
+  Proof.
+    induction g; simpl; auto.
+    do 2 break_match. econstructor.
+    econstructor; eauto.
+    econstructor; eauto using type.to_tree_wf.
+    econstructor.
+      { econstructor. rewrite <- Forall_map, Forall_forall. intros.
+        eauto using type.to_tree_wf. }
+    econstructor; eauto using expr.to_tree_wf.
+  Qed.
+
+  Definition print {G} (g : genv G) : String.string :=
+    print_tree (to_tree g).
+
+  Definition pretty w {G} (g : genv G) : String.string :=
+    pretty_tree w (to_tree g).
+
+  Definition parse (s : String.string) : option {G : list _ & genv G} :=
+    parse s >>= (fun t => from_tree t).
+
+  Lemma parse_print_id : forall G (g : genv G), parse (print g) = Some (G, g).
+  Proof.
+    unfold parse, print.
+    intros.
+    unfold_option.
+    rewrite parse_print_tree by auto using to_tree_wf.
+    now rewrite to_from_tree_id by auto.
+  Qed.
+
+  Lemma parse_pretty_id : forall w G (g : genv G), parse (pretty w g) = Some (G, g).
+  Proof.
+    unfold parse, pretty.
+    intros.
+    unfold_option.
+    rewrite parse_pretty_tree by auto using to_tree_wf.
+    now rewrite to_from_tree_id by auto.
+  Qed.
+End genv.
+
 
 (*
 Require Import String.
