@@ -807,15 +807,13 @@ Module genv.
   Lemma to_tree_wf :
     (forall G (g : genv G), Tree.Forall symbol.wf (to_tree g)).
   Proof.
-    induction g; simpl; auto.
+    induction g; unfold to_tree.
+      { auto 10. }
     do 2 break_match. econstructor.
-    econstructor; eauto.
-    econstructor; eauto using type.to_tree_wf.
-    econstructor.
-      { econstructor. rewrite <- Forall_map, Forall_forall. intros.
-        eauto using type.to_tree_wf. }
-    econstructor; eauto using expr.to_tree_wf.
+    fold @to_tree.
+    auto 10 using Forall_map_intro, Forall_forall_intro, symbol.of_string_safe_wf.
   Qed.
+  Hint Resolve to_tree_wf.
 
   Definition print {G} (g : genv G) : String.string :=
     print_tree (to_tree g).
@@ -846,24 +844,11 @@ Module genv.
 End genv.
 
 
-(*
 Require Import String.
-(* Eval compute in expr.print (@id_nat_reflect []).
-Eval compute in expr.print (@map_reflect []).
-Eval compute in expr.print (@add_reflect []).
-Eval compute in expr.print (@fib_reflect []).
-Eval compute in expr.print add_1_2.
-Eval compute in expr.print (@long_id_reflect []).
-
-Eval lazy in expr.pretty 80 (@id_nat_reflect []).
-Eval lazy in expr.pretty 80 (@map_reflect []).
-Eval lazy in expr.pretty 80 (@add_reflect []).
-Eval lazy in expr.pretty 80 (@fib_reflect []).
-Eval lazy in expr.pretty 80 add_1_2. *)
 
 Module compilation_unit.
-  Definition current_major_version : symbol.t := symbol.of_string_unsafe "0".
-  Definition current_minor_version : symbol.t := symbol.of_string_unsafe "2".
+  Definition current_major_version : symbol.t := symbol.of_string_unsafe "1".
+  Definition current_minor_version : symbol.t := symbol.of_string_unsafe "0".
   Definition current_version_vector : list (tree symbol.t) :=
     [atom current_major_version;
      atom current_minor_version].
@@ -876,18 +861,18 @@ Module compilation_unit.
   Definition to_tree (j : compilation_unit) : tree symbol.t :=
     node [node [atom (symbol.of_string_unsafe "version"); node current_version_vector];
           node (List.map (fun s => atom (symbol.of_string_safe s)) (names j));
-          node (expr.to_tree_hlist (exprs j))].
+          genv.to_tree (exprs j)].
 
   Definition from_tree (t : tree symbol.t) : option compilation_unit :=
     match t with
-    | node [node [atom tag; node vs]; node names; node ts] =>
+    | node [node [atom tag; node vs]; node name_ts; genv_t] =>
       if symbol.eq_dec tag (symbol.of_string_unsafe "version")
       then if list_eq_dec (tree_eq_dec symbol.eq_dec) vs current_version_vector
-      then match expr.from_tree_list ts [] with None => None
-           | Some (tys, es) =>
-           match sequence (List.map (fun t => get_atom t >>= symbol.to_string) names) with
+      then match genv.from_tree genv_t with None => None
+           | Some (G, g) =>
+           match sequence (List.map (fun t => get_atom t >>= symbol.to_string) name_ts) with
            | None => None
-           | Some names => Some (CompilationUnit tys es names)
+           | Some names => Some (CompilationUnit G g names)
            end
            end
       else None
@@ -901,7 +886,7 @@ Module compilation_unit.
     unfold from_tree, to_tree.
     intros.
     repeat break_if; try congruence.
-    rewrite expr.to_from_tree_list_id.
+    rewrite genv.to_from_tree_id.
     rewrite map_map.
     rewrite map_ext with (g := Some).
     - rewrite sequence_map_Some.
@@ -941,5 +926,3 @@ Module compilation_unit.
     now rewrite parse_pretty_tree, to_from_tree_id by auto.
   Qed.
 End compilation_unit.
-
-*)
