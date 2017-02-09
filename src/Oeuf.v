@@ -38,10 +38,13 @@ Definition transf_untyped_to_cminor (l : list Untyped1.expr * list Metadata.meta
   @@ print print_Cminor
 .
 
-Definition transf_oeuf_to_cminor (j : CompilationUnit.compilation_unit) : res Cminor.program :=
+Definition transf_oeuf_to_untyped1 (j : CompilationUnit.compilation_unit) : res Untyped1.prog_type :=
   OK (Metadata.init_metadata j)
   @@ UntypedComp1.compile_cu
- @@@ Metadata.check_length
+ @@@ Metadata.check_length.
+
+Definition transf_oeuf_to_cminor (j : CompilationUnit.compilation_unit) : res Cminor.program :=
+     transf_oeuf_to_untyped1 j
  @@@ transf_untyped_to_cminor.
 
 Definition transf_c_to_cminor (p : Csyntax.program) : res Cminor.program :=

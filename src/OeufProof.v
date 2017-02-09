@@ -10,6 +10,7 @@ Require Import SourceLifted.
 Require Import HighValues.
 
 Require Untyped1.
+Require UntypedComp1.
 Require UntypedCompCombined.
 Require TaggedComp.
 Require TaggedNumberedComp.
@@ -47,6 +48,175 @@ Require Import StructTact.Util.
 
 Require Import EricTact.
 Require Import StuartTact.
+Require Import ListLemmas.
+
+
+
+
+Lemma transf_oeuf_to_untyped1_genv : forall prog tprog,
+    transf_oeuf_to_untyped1 prog = OK tprog ->
+    UntypedComp1.compile_genv (CompilationUnit.exprs prog) = fst tprog.
+intros. unfold transf_oeuf_to_untyped1 in *.
+break_result_chain.
+simpl in *. subst. simpl in *. break_if; try discriminate. inject_some. simpl.
+reflexivity.
+Qed.
+
+Lemma transf_oeuf_to_untyped1_meta_len : forall prog tprog,
+    transf_oeuf_to_untyped1 prog = OK tprog ->
+    length (fst tprog) = length (snd tprog).
+intros. unfold transf_oeuf_to_untyped1 in *.
+break_result_chain.
+unfold Metadata.check_length in *. do 2 (break_match; try discriminate).
+inject_some. auto.
+Qed.
+
+Lemma transf_oeuf_to_untyped1_meta_public : forall prog tprog,
+    transf_oeuf_to_untyped1 prog = OK tprog ->
+    Forall (fun m => Metadata.m_access m = Metadata.Public) (snd tprog).
+intros. unfold transf_oeuf_to_untyped1 in *.
+break_result_chain.
+simpl in *; eauto.
+unfold Metadata.check_length in *. do 2 (break_match; try discriminate).
+inject_some. inject_pair. simpl.
+eapply Forall_map. rewrite Forall_forall.
+intros. simpl. reflexivity.
+Qed.
+
+
+Section ComposeSourceLifted.
+
+    Variable P1 : CompilationUnit.compilation_unit.
+    Let G := CompilationUnit.types P1.
+    Let g := CompilationUnit.exprs P1.
+
+    Variable P2 : Untyped1.prog_type.
+    Let L2 : Semantics.semantics := Untyped1.semantics P2.
+
+    Variable L3 : TraceSemantics.semantics.
+
+    Hypothesis TRANSF12 : transf_oeuf_to_untyped1 P1 = OK P2.
+    Variable S23 : mix_forward_simulation L2 L3.
+
+
+    Let ff_index : Type := MixSemantics.fsim_index _ _ S23.
+    Let ff_order : ff_index -> ff_index -> Prop := MixSemantics.fsim_order _ _ S23.
+
+    Let ff_match_states {rty}
+            (i : ff_index)
+            (s1 : SourceLifted.state G rty)
+            (s3 : TraceSemantics.state L3) :=
+        exists s2,
+            UntypedComp1.compile_state s1 = s2 /\
+            S23 i s2 s3.
+
+    Let ff_match_values {ty}
+            (v1 : SourceLifted.value G ty)
+            (v3 : TraceSemantics.valtype L3) :=
+        exists v2,
+            UntypedComp1.compile_value v1 = v2 /\
+            MixSemantics.fsim_match_val _ _ S23 v2 v3.
+
+    Definition sl_index := ff_index.
+    Definition sl_order := ff_order.
+    Definition sl_match_states {rty} := @ff_match_states rty.
+    Definition sl_match_values {ty} := @ff_match_values ty.
+
+    Lemma sl_match_callstate :
+        forall tyA tyR
+            (fv1 : SourceLifted.value G (SourceLifted.Arrow tyA tyR))
+            (av1 : SourceLifted.value G tyA)
+            (fv3 av3 : TraceSemantics.valtype L3)
+            (s3 : TraceSemantics.state L3),
+        TraceSemantics.is_callstate L3 fv3 av3 s3 ->
+        ff_match_values fv1 fv3 ->
+        ff_match_values av1 av3 ->
+        exists s1 i,
+            ff_match_states i s1 s3 /\
+            SourceLifted.is_callstate g fv1 av1 s1.
+    intros0 Hcs Hmv_f Hmv_a.
+    destruct Hmv_f as (fv2 & ? & ?).
+    destruct Hmv_a as (av2 & ? & ?).
+
+    fwd eapply (MixSemantics.fsim_match_callstate _ _ S23) as HH; eauto.
+      destruct HH as (s2 & i & ? & ?).
+
+    destruct P2 as [P2env P2meta].
+    fwd eapply transf_oeuf_to_untyped1_genv; eauto. simpl in *.
+    fwd eapply UntypedComp1.match_callstate as HH; eauto.
+      destruct HH as (s1 & ? & ?).
+
+    unfold ff_match_states. eauto 7.
+    Qed.
+
+    Lemma sl_match_final_states :
+        forall ty i
+            (s1 : SourceLifted.state G ty)
+            (s3 : TraceSemantics.state L3)
+            (v1 : SourceLifted.value G ty),
+        ff_match_states i s1 s3 ->
+        SourceLifted.final_state s1 v1 ->
+        exists v3,
+            TraceSemantics.final_state L3 s3 v3 /\
+            ff_match_values v1 v3.
+    intros0 Hms Hfin.
+    destruct Hms as (s2 & ? & ?).
+
+    destruct P2 as [P2env P2meta].
+    fwd eapply transf_oeuf_to_untyped1_genv; eauto. simpl in *.
+    fwd eapply transf_oeuf_to_untyped1_meta_len; eauto.
+    fwd eapply transf_oeuf_to_untyped1_meta_public; eauto.
+    simpl in *.
+
+    fwd eapply UntypedComp1.match_final_state with (Bmeta := P2meta) as HH; eauto.
+      destruct HH as (v2 & ? & ?).
+
+    fwd eapply (MixSemantics.fsim_match_final_states _ _ S23) as HH; eauto.
+      destruct HH as (v3 & ? & ?).
+
+    unfold ff_match_values. eauto.
+    Qed.
+
+
+    Lemma sl_simulation :
+        forall rty (s1 s1' : SourceLifted.state G rty),
+        SourceLifted.sstep g s1 s1' ->
+        forall i s3,
+        ff_match_states i s1 s3 ->
+        exists i', exists s3',
+            ((TraceSemantics.plus
+                    (TraceSemantics.step L3)
+                    (TraceSemantics.globalenv L3)
+                    s3 Events.E0 s3') \/
+                (TraceSemantics.star
+                        (TraceSemantics.step L3)
+                        (TraceSemantics.globalenv L3)
+                        s3 Events.E0 s3' /\
+                    ff_order i' i)) /\
+            ff_match_states i' s1' s3'.
+    intros0 Hstep. intros0 Hmatch.
+    destruct Hmatch as (s2 & ? & ?).
+
+    destruct P2 as [P2env P2meta].
+    fwd eapply transf_oeuf_to_untyped1_genv; eauto. simpl in *.
+    fwd eapply transf_oeuf_to_untyped1_meta_len; eauto.
+    fwd eapply transf_oeuf_to_untyped1_meta_public; eauto.
+    simpl in *.
+
+    fwd eapply UntypedComp1.I_sim as HH; eauto.
+      destruct HH as (s2' & ? & ?).
+
+    fwd eapply (MixSemantics.fsim_simulation _ _ S23) as HH; eauto.
+      destruct HH as (i' & s3' & ? & ?).
+
+    unfold ff_match_states. eauto 7.
+    Qed.
+
+    (* TODO: backward sim? *)
+
+End ComposeSourceLifted.
+
+
 
 Section Simulation.
 
@@ -144,33 +314,86 @@ Section Simulation.
     congruence.
 
   Defined.
-
-  (*
-  Definition establish_matching (ty : type) :=
-    (TopLevel.establish_matching _ _ _ _ _ _ (Oeuf_forward_simulation ty)).
-
-  Definition star_step_simulation :=
-    (TopLevel.star_step_simulation _ _ _ _ _ _ Oeuf_forward_simulation).
-
-  Definition final_states :=
-    (TopLevel.final_states _ _ _ _ _ _ Oeuf_forward_simulation).
-
-
-  Definition match_values := MixSemantics.fsim_match_val _ _ Oeuf_forward_simulation.
-
-  (* TODO: We need an alternate definition of the match_values above that is easily provable, and we need an equivalence lemma to convert between the two *)
-  (*
-  Inductive match_vals (ty : type) : SourceLifted.expr nil ty -> HighValues.value -> Prop :=
-  | Triv :
-      forall v v',
-        match_vals ty v v'.
-
-  Lemma match_vals_values :
-    forall ty v v',
-      match_values ty v v' <-> match_vals ty v v'.
-  Proof.
-  Admitted.
-   *)  
-*)
-
 End Simulation.
+
+Section OeufSimulation.
+    Variable P1 : CompilationUnit.compilation_unit.
+    Let G := CompilationUnit.types P1.
+    Let g := CompilationUnit.exprs P1.
+
+    Variable P3 : Cminor.program.
+    Let L3 := Cminor_semantics P3.
+
+    Hypothesis TRANSF : transf_oeuf_to_cminor P1 = OK P3.
+
+    Definition P2_sig :
+        { P2 : Untyped1.prog_type | 
+                transf_oeuf_to_untyped1 P1 = OK P2 /\
+                transf_untyped_to_cminor P2 = OK P3 }.
+    unfold transf_oeuf_to_cminor in *. break_result_chain.
+    eauto.
+    Defined.
+
+    Let P2 := proj1_sig P2_sig.
+
+    Definition P2_comp := proj1 (proj2_sig P2_sig).
+    Definition P2_comp' := proj2 (proj2_sig P2_sig).
+
+    Definition oeuf_index :=
+        sl_index P2 L3 (Oeuf_forward_simulation P2 P3 P2_comp').
+    Definition oeuf_order :=
+        sl_order P2 L3 (Oeuf_forward_simulation P2 P3 P2_comp').
+    Definition oeuf_match_states {rty} :=
+        @sl_match_states P1 P2 L3 (Oeuf_forward_simulation P2 P3 P2_comp') rty.
+    Definition oeuf_match_values {ty} :=
+        @sl_match_values P1 P2 L3 (Oeuf_forward_simulation P2 P3 P2_comp') ty.
+
+    Theorem oeuf_match_callstate :
+        forall tyA tyR
+            (fv1 : SourceLifted.value G (SourceLifted.Arrow tyA tyR))
+            (av1 : SourceLifted.value G tyA)
+            (fv3 av3 : HighValues.value)
+            (s3 : Cminor.state),
+        cminor_is_callstate P3 fv3 av3 s3 ->
+        oeuf_match_values fv1 fv3 ->
+        oeuf_match_values av1 av3 ->
+        exists s1 i,
+            oeuf_match_states i s1 s3 /\
+            SourceLifted.is_callstate g fv1 av1 s1.
+    intros. eapply sl_match_callstate; try eassumption.
+    eapply P2_comp.
+    Qed.
+
+    Theorem oeuf_match_final_states :
+        forall ty i
+            (s1 : SourceLifted.state G ty)
+            (s3 : Cminor.state)
+            (v1 : SourceLifted.value G ty),
+        oeuf_match_states i s1 s3 ->
+        SourceLifted.final_state s1 v1 ->
+        exists v3,
+            cminor_final_state P3 s3 v3 /\
+            oeuf_match_values v1 v3.
+    intros.
+    fwd eapply sl_match_final_states; try eassumption.
+    eapply P2_comp.
+    Qed.
+
+    Theorem oeuf_simulation :
+        forall rty (s1 s1' : SourceLifted.state G rty),
+        SourceLifted.sstep g s1 s1' ->
+        forall i s3,
+        oeuf_match_states i s1 s3 ->
+        exists i', exists s3',
+            ((TraceSemantics.plus Cminor.step (Genv.globalenv P3)
+                    s3 Events.E0 s3') \/
+                (TraceSemantics.star Cminor.step (Genv.globalenv P3)
+                        s3 Events.E0 s3' /\
+                    oeuf_order i' i)) /\
+            oeuf_match_states i' s1' s3'.
+    intros.
+    eapply sl_simulation; try eassumption.
+    eapply P2_comp.
+    Qed.
+
+End OeufSimulation.
