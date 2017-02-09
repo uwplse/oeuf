@@ -50,6 +50,7 @@ Require Import StuartTact.
 
 Section Simulation.
 
+  
   Variable prog : Untyped1.prog_type.
   Variable tprog : Cminor.program.
   Hypothesis TRANSF : transf_untyped_to_cminor prog = OK tprog.
@@ -144,8 +145,9 @@ Section Simulation.
 
   Defined.
 
-  Definition establish_matching :=
-    (TopLevel.establish_matching _ _ _ _ _ _ Oeuf_forward_simulation).
+  (*
+  Definition establish_matching (ty : type) :=
+    (TopLevel.establish_matching _ _ _ _ _ _ (Oeuf_forward_simulation ty)).
 
   Definition star_step_simulation :=
     (TopLevel.star_step_simulation _ _ _ _ _ _ Oeuf_forward_simulation).
@@ -168,6 +170,7 @@ Section Simulation.
       match_values ty v v' <-> match_vals ty v v'.
   Proof.
   Admitted.
-  *)
+   *)  
+*)
 
 End Simulation.
