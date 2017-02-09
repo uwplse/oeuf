@@ -26,7 +26,7 @@ Section Spec.
   Definition match_states (ty : type) := (fsim_match_states _ _ (fsim ty)).
   Definition match_values (ty : type) := (fsim_match_val _ _ (fsim ty)).
 
-
+  (*
   Lemma establish_matching :
     forall argty resty f v lst hf hv,
       TraceSemantics.is_callstate (sem2 p2) f v lst -> (* This is what the users need to establish *)
@@ -83,5 +83,5 @@ Section Spec.
     eapply (MixSemantics.fsim_match_final_states) in H0; eauto.
   Qed.
 
-  
+*)  
 End Spec.

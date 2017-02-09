@@ -21,68 +21,8 @@ Require Import OeufProof.
 
 Require Cmajor.
 
-
-  Inductive storable (b : block) (lo hi : Z) : mem -> Type :=
-  | store :
-      forall m,
-        storable b lo hi m ->
-        forall c b' ofs v m',
-          Mem.store c m b' ofs v = Some m' ->
-          storable b lo hi m'
-  | other_alloc :
-      forall m,
-        storable b lo hi m ->
-        forall x y b' m',
-          Mem.alloc m x y = (m',b') ->
-          storable b lo hi m'
-  | init_alloc :
-      forall m m',
-        Mem.alloc m lo hi = (m',b) ->
-        storable b lo hi m'
-  | other_free :
-      forall m,
-        storable b lo hi m ->
-        forall b' lo' hi' m',
-          b <> b' ->
-          Mem.free m b' lo' hi' = Some m' ->
-          storable b lo hi m'.
+Require Import CminorLib.
   
-  Lemma storable_store :
-    forall m b lo hi,
-      storable b lo hi m ->
-      forall v c ofs,
-        ofs >= lo ->
-        (align_chunk c | ofs) ->
-        ofs + size_chunk c <= hi ->
-        { m' : mem | Mem.store c m b ofs v = Some m' }.
-  Proof.
-    induction 1; intros.
-    (* stores don't interfere *)
-    + copy e. 
-      eapply Mem.store_access in e.
-      edestruct IHX; eauto.
-      eapply Mem.store_valid_access_3 in e0; eauto.
-      eapply Mem.valid_access_store ; eauto.
-      clear -e0 e.
-      
-      unfold Mem.valid_access in *.
-      break_and; split; eauto.
-      unfold Mem.range_perm in *. unfold Mem.perm in *.
-      rewrite e.
-      eauto.
-    (* alloc doesn't interfere *)
-    + admit.
-    (* base : just allocated *)
-    + app Mem.valid_access_alloc_same Mem.alloc; try omega.
-      app Mem.valid_access_implies Mem.valid_access.
-      2: instantiate (1 := Writable); econstructor; eauto.
-      eapply Mem.valid_access_store; eauto.
-    (* frees of other blocks don't interfere *)
-    + admit.
-
-  Admitted.
-  
-
 
 Section SIM.
 
@@ -92,25 +32,7 @@ Section SIM.
   Variable st : Cminor.state.
   Hypothesis init_state : initial_state prog st.
 
-  Lemma estar_left :
-    forall st t t' t0 st0,
-      (step ge st t st0 /\ (exists st', Smallstep.star step ge st0 t' st')) ->
-      t0 = t ** t' ->
-      (exists st',
-          Smallstep.star step ge st t0 st').
-  Proof.
-    intros. break_and. break_exists.
-    subst. eexists.
-    eapply star_left; eauto.
-  Qed.
 
-  Ltac take_step := eapply estar_left; eauto; nil_trace; split;
-                    match goal with
-                    | [ |- exists _, _ ] => idtac
-                    | [ |- _ ] => repeat (econstructor; eauto)
-                    end.
-
-  
   Lemma steps :
     exists st1,
       Smallstep.star step ge st E0 st1.
@@ -127,109 +49,77 @@ Section SIM.
     unfold Genv.find_funct_ptr in H1. unfold prog in H1. simpl in H1.
     inv H1.
 
-    destruct (Mem.alloc m0 0 (fn_stackspace f_main)) eqn:?.
-    take_step.
-    take_step.
-    take_step.
-    take_step.
-    take_step.
-    destruct (Mem.alloc m 0 (fn_stackspace f_zero)) eqn:?.
-    take_step.
-    take_step.
-    take_step.
-    take_step.
-    destruct (Mem.alloc m1 (-4) (Integers.Int.unsigned (Integers.Int.repr 4))) eqn:?.
-    edestruct storable_store; eauto.
-    eapply init_alloc; eauto.
-    Focus 4.
-    take_step.
-    Unfocus.
-    omega. simpl. 
-    rewrite <- Z.divide_Zpos_Zneg_r.
-    eapply Z.divide_refl.
-    simpl. rewrite Integers.Int.unsigned_repr. omega.
-    unfold Integers.Int.max_unsigned. simpl. omega.
-    rename x into m3.
-    take_step.
-    take_step.
+    (* more steps *)
 
-    edestruct storable_store;
-      try take_step; try unfold Mem.storev; eauto.
-    eapply store; eauto.
-    eapply init_alloc; eauto.
-    unfold Integers.Int.zero.
-    rewrite Integers.Int.unsigned_repr. omega.
-    unfold Integers.Int.max_unsigned. simpl. omega.
-    unfold Integers.Int.zero.
-    rewrite Integers.Int.unsigned_repr.
-    simpl. eapply Z.divide_0_r.
-    unfold Integers.Int.max_unsigned. simpl. omega.
-    unfold Integers.Int.zero.
-    repeat rewrite Integers.Int.unsigned_repr by (unfold Integers.Int.max_unsigned; simpl; omega).
-    simpl. omega.
-    rename x into m4.
-
-    take_step.
-    destruct (Mem.free m4 b0 0 (fn_stackspace f_zero)) eqn:?. Focus 2. admit. (* need similar "freeable" fact/lemma *)
+    alloc.
     take_step.
     take_step.
+    take_step.
+    take_step.
+    take_step.
+    alloc.
+    take_step.
+    take_step.
+    take_step.
+    take_step.
+    alloc.
+    store_step.
+    take_step.
+    take_step.
+    store_step. 
+    take_step.
+    free_step.
     take_step.
     take_step.
     take_step.
     take_step.
     take_step.
     take_step.
-    destruct (Mem.alloc m5 0 (fn_stackspace f_id)) eqn:?.
+    take_step.
+    alloc.
     take_step.
     take_step.
     take_step.
     take_step.
-    destruct (Mem.alloc m6 (-4) (Integers.Int.unsigned (Integers.Int.repr 4))) eqn:?.
-    edestruct storable_store;
-      try take_step. eapply init_alloc; eauto. omega.
-    rewrite <- Z.divide_Zpos_Zneg_r.
-    eapply Z.divide_refl.
-    simpl. 
-    repeat rewrite Integers.Int.unsigned_repr by (unfold Integers.Int.max_unsigned; simpl; omega);
-      try omega.
+    alloc.
+    store_step.
     take_step.
     take_step.
     assert (Genv.find_symbol ge _id_lambda0 = Some 3%positive).
     {
       unfold Genv.find_symbol. unfold ge. simpl. reflexivity.
     } idtac.
-    edestruct storable_store;
-      try take_step;
-      try unfold Mem.storev;
-      try collapse_match;
-      eauto.
+    store_step.
+    find_rewrite.
+    take_step.
+    free_step.
+    take_step.
+    take_step.
+    take_step.
+    take_step.
+    take_step.
+    take_step.
+    take_step.
+    alloc.
+    take_step.
+    take_step.
 
-    eapply store; try eapply init_alloc; eauto.
-    unfold Integers.Int.zero.
-    repeat rewrite Integers.Int.unsigned_repr by (unfold Integers.Int.max_unsigned; simpl; omega);
-      try omega.
-    simpl. unfold Integers.Int.zero.
-    repeat rewrite Integers.Int.unsigned_repr by (unfold Integers.Int.max_unsigned; simpl; omega).
-    eapply Z.divide_0_r.
-    simpl. unfold Integers.Int.zero.
-    repeat rewrite Integers.Int.unsigned_repr by (unfold Integers.Int.max_unsigned; simpl; omega).
-    omega.
-      
-    take_step.
-    destruct (Mem.free x0 b2 0 (fn_stackspace f_id)) eqn:?. Focus 2. admit. 
-    take_step.
-    take_step.
-    take_step.
-    take_step.
-    take_step.
-    take_step.
-    take_step.
-    take_step.
-    destruct (Mem.alloc m8 0 (fn_stackspace f_call)) eqn:?.
-    take_step.
-    take_step.
-    assert (Mem.loadv AST.Mint32 m9 (Values.Val.add (Values.Vptr b3 Integers.Int.zero) (Values.Vint (Integers.Int.repr 0))) = Some (Values.Vptr 3%positive (Integers.Int.zero))) by admit.
-    take_step.
+
+
+    load_step.
+    (* b2 <> b3 *)
+    copy Heqp2.
+    eapply Mem.nextblock_alloc in Heqp2.
+    copy Heqp3.
+    eapply Mem.nextblock_alloc in Heqp3.
+    eapply Mem.alloc_result in H5. eapply Mem.alloc_result in H6.
+    rewrite <- H5 in *. rewrite <- H6 in *.
+    assert (Plt b2 b3). subst. eapply Plt_succ.
+    intro. symmetry in H8. eapply Plt_ne; eauto.
+    
+    simpl. unfold Integers.Int.zero. break_match; try congruence.
+    unfold ge. unfold Genv.find_funct_ptr. simpl. reflexivity.
+    simpl. reflexivity.
 
     (* This is the complicated continuation we've built up *)
     (* We'll need this later, after we're back from oeuf *)
@@ -266,10 +156,10 @@ Section SIM.
     (* HERE is where we call into Oeuf *)
     (* This is the state that we want to be a callstate *)
     remember ((Callstate (AST.Internal f_id_lambda0) (Values.Vptr b3 Integers.Int.zero :: Values.Vptr b1 Integers.Int.zero :: nil)
-                         Kstop m9)) as OST. (* Oeuf state *)
+                         Kstop m5)) as OST. (* Oeuf state *)
 
     remember ((Callstate (AST.Internal f_id_lambda0) (Values.Vptr b3 Integers.Int.zero :: Values.Vptr b1 Integers.Int.zero :: nil)
-                         K m9)) as LST. (* linked state *)
+                         K m5)) as LST. (* linked state *)
 
     (* make sure it's a callstate *)
     assert (Cmajor.cminor_is_callstate oprog (HighValues.Close _id_lambda0 nil) (HighValues.Constr Integers.Int.zero nil) OST).
@@ -277,15 +167,43 @@ Section SIM.
       subst. econstructor.
       econstructor. Focus 3. unfold Genv.find_symbol. simpl. reflexivity.
       Focus 2. unfold Genv.find_funct_ptr. simpl. reflexivity.
-      admit. (* is true, but mem fact *)
+      eapply loadable_load. simpl_int_add. loadable_chain.
+
+      (* b3 <> b2 *)
+      copy Heqp2.
+      eapply Mem.nextblock_alloc in Heqp2.
+      copy Heqp3.
+      eapply Mem.nextblock_alloc in Heqp3.
+      eapply Mem.alloc_result in H5. eapply Mem.alloc_result in H6.
+      rewrite <- H5 in *. rewrite <- H6 in *.
+      assert (Plt b2 b3). subst. eapply Plt_succ.
+      intro. symmetry in H8. eapply Plt_ne; eauto.
+
+      
       simpl. reflexivity.
-      intros. simpl in H6. inv H6.
-      econstructor. admit. (* true, but mem fact *)
+      intros. simpl in H5. inv H5.
+      econstructor.
+
+      eapply loadable_load. simpl_int_add. loadable_chain.
+
+      (* b1 <> b0 *)
+      copy Heqp0.
+      eapply Mem.nextblock_alloc in Heqp0.
+      copy Heqp1.
+      eapply Mem.nextblock_alloc in Heqp1.
+      eapply Mem.alloc_result in H5. eapply Mem.alloc_result in H6.
+      rewrite <- H5 in *. rewrite <- H6 in *.
+      assert (Plt b0 b1). subst. eapply Plt_succ.
+      intro. symmetry in H8. eapply Plt_ne; eauto.
+      admit.
+      admit.
+      admit.
       simpl. reflexivity.
-      intros. simpl in H6. inv H6.
+      intros. simpl in H5. inv H5.
       Focus 3. unfold Genv.find_symbol. simpl. reflexivity.
       Focus 2. unfold Genv.find_funct_ptr. simpl. reflexivity.
-      admit. (* true, but mem fact *)
+
+      admit.
       simpl. reflexivity.
 
       admit. (* True, but mem fact *)
@@ -294,7 +212,12 @@ Section SIM.
       
     } idtac.
 
+    (* TODO above: *)
+    (* 1. make a better way to prove blocks disjoint *)
+    (* 2. global_blocks_valid and no_future_pointers chaining lemmas *)
+    
     (* We need a handle on the compilation unit name *)
+    (*
     eapply OeufProof.establish_matching in H6.
     Focus 2.
     instantiate (4 := Dumb.oeuf_prog).
@@ -308,7 +231,7 @@ Section SIM.
     
       try solve [].
     instantiate (3 := Dumb.oeuf_prog) in H6.    
-
+     *)
     
 
   Admitted.
