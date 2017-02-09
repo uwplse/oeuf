@@ -877,6 +877,18 @@ destruct (lt_dec fname (length Ameta)).
   contradict Hacc. subst m. simpl. discriminate.
 Qed.
 
+Lemma public_value_Ameta : forall A Ameta Aelims Aelim_names B Bmeta v,
+    compile_cu (A, Ameta, Aelims, Aelim_names) = Some (B, Bmeta) ->
+    public_value Bmeta v ->
+    public_value Ameta v.
+intros0 Hcomp. revert v.
+induction v using value_rect_mut with
+    (Pl := fun v =>
+        Forall (public_value Bmeta) v ->
+        Forall (public_value Ameta) v);
+intros0 Hb; invc Hb; econstructor; eauto using public_fname_Ameta.
+Qed.
+
 Lemma public_fname_Bmeta : forall A Ameta Aelims Aelim_names B Bmeta fname,
     compile_cu (A, Ameta, Aelims, Aelim_names) = Some (B, Bmeta) ->
     public_fname Ameta fname ->
@@ -996,6 +1008,8 @@ Section Preservation.
         * eapply Forall_nth_error; eauto.
         * intros. econstructor. eauto using T.value_elims_match.
       + econstructor; eauto.
+        * eapply public_value_Ameta; eauto. econstructor; eauto.
+        * eapply public_value_Ameta; eauto.
 
     - simpl. intros0 II Afinal. invc Afinal. invc II. on >I, invc.
 

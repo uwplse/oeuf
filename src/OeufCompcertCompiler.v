@@ -29,6 +29,7 @@ Require compcert.backend.CleanupLabels.
 Require compcert.backend.Debugvar.
 Require compcert.backend.Stacking.
 Require compcert.ia32.Asmgen.
+Require compcert.driver.Compiler.
 
 
 
@@ -39,24 +40,17 @@ Parameter print_LTL: LTL.program -> unit.
 Parameter print_Mach: Mach.program -> unit.
 
 
-Open Local Scope string_scope.
+Local Open Scope string_scope.
 
 (** * Composing the translation passes *)
 
 (** We first define useful monadic composition operators,
     along with funny (but convenient) notations. *)
 
-Definition apply_total (A B: Type) (x: res A) (f: A -> B) : res B :=
-  match x with Error msg => Error msg | OK x1 => OK (f x1) end.
-
-Definition apply_partial (A B: Type)
-                         (x: res A) (f: A -> res B) : res B :=
-  match x with Error msg => Error msg | OK x1 => f x1 end.
-
 Notation "a @@@ b" :=
-   (apply_partial _ _ a b) (at level 50, left associativity).
+   (compcert.driver.Compiler.apply_partial _ _ a b) (at level 50, left associativity).
 Notation "a @@ b" :=
-   (apply_total _ _ a b) (at level 50, left associativity).
+   (compcert.driver.Compiler.apply_total _ _ a b) (at level 50, left associativity).
 
 Definition print {A: Type} (printer: A -> unit) (prog: A) : A :=
   let unused := printer prog in prog.

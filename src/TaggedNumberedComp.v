@@ -1,8 +1,8 @@
 Require Import Common Monads ListLemmas.
 Require Import Metadata.
-Require Import HigherValue.
 Require Tagged TaggedNumbered.
 Require String.
+Require Import HigherValue.
 
 Module A := Tagged.
 Module B := TaggedNumbered.
@@ -558,19 +558,19 @@ Qed.
 
 
 
+Check compile_cu.
 
 Lemma compile_cu_I_expr : forall A Ameta B Bmeta Belims Belim_names,
     compile_cu (A, Ameta) = (B, Bmeta, Belims, Belim_names) ->
     Forall2 I_expr A B.
-intros0 Hcomp. unfold compile_cu in *. repeat break_match. subst.
-inject_pair.
-eauto using compile_list_I_expr.
+intros0 Hcomp. unfold compile_cu in *. repeat break_match. subst. inject_pair.
+simpl. eauto using compile_list_I_expr.
 Qed.
 
 Lemma compile_cu_metas : forall A Ameta B Bmeta Belims Belim_names,
     compile_cu (A, Ameta) = (B, Bmeta, Belims, Belim_names) ->
     Ameta = Bmeta.
-simpl. inversion 1. repeat break_match. subst. inject_pair. auto.
+simpl. intros. repeat break_match. subst. inject_pair. auto.
 Qed.
 
 Lemma expr_value_I_expr : forall be v,
@@ -619,8 +619,10 @@ induction ae using A.expr_rect_mut with
         Forall2 (fun ap v => A.expr_value (fst ap) v) aps vs ->
         Forall2 (fun ap be => I_expr (fst ap) be) aps bes ->
         Forall2 (fun be v => B.expr_value be v) bes vs);
-intros0 Hae II; try solve [invc Hae; invc II; i_ctor | simpl in *; eauto].
+intros0 Hae II; try solve [invc Hae; invc II; econstructor; eauto | simpl in *; eauto].
 Qed.
+
+
 
 
 Require Import Semantics.
@@ -642,20 +644,23 @@ Section Preservation.
         (match_values := @eq value).
 
     - simpl. intros0 Bcall Hf Ha. invc Bcall.
+
       fwd eapply Forall2_nth_error_ex' with (ys := B) as HH; eauto.
         destruct HH as (abody & ? & ?).
-      destruct (expr_value_I_expr ae ?? **) as (? & ? & ?).
-      fwd eapply expr_value_I_expr_list as HH; eauto.  destruct HH as (? & ? & ?).
+      fwd eapply expr_value_I_expr as HH; eauto. destruct HH as (? & ? & ?).
+      fwd eapply expr_value_I_expr_list as HH; eauto. destruct HH as (? & ? & ?).
 
-      eexists. split. 1: econstructor; try eassumption.
-        3: i_ctor. all: eauto.
-      + i_ctor.
+      eexists. split.
+      + econstructor. 4: eauto.
+        all: eauto using A.expr_value_value, A.expr_value_value_list.
+        i_ctor.
       + i_ctor.
 
     - simpl. intros0 II Afinal. invc Afinal. invc II.
+      fwd eapply expr_value_I_expr'; eauto.
+      (*fwd eapply I_expr_expr_value; eauto.*)
 
-      eexists. split. 2: reflexivity.
-      i_ctor. i_lem expr_value_I_expr'.
+      eexists. split. i_ctor. auto.
 
     - intros0 Astep. intros0 II.
       i_lem I_sim.

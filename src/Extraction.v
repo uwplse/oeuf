@@ -34,8 +34,8 @@ Require compcert.cfrontend.Initializers.
 Require Int31.
 
 Require Oeuf.
-Require SourceLang.
-Require Echo.
+Require SourceLifted.
+(*Require Echo.*)
 Require Pretty.
 
 (* Standard lib *)
