@@ -2,16 +2,15 @@ Require Import Oeuf.
 Require TopLevel.
 Require Import CompilationUnit.
 Require Import HList.
-Require Import Untyped.
 Require Import StepLib.
 Require Import MixSemantics.
 Require Import CompilerUtil.
 
-Require Import SourceLang.
+Require Import SourceLifted.
 Require Import HighValues.
 
-Require UntypedComp.
-Require LiftedComp.
+Require Untyped1.
+Require UntypedCompCombined.
 Require TaggedComp.
 Require TaggedNumberedComp.
 Require ElimFuncComp.
@@ -51,46 +50,24 @@ Require Import StuartTact.
 
 Section Simulation.
 
-  Variable prog : compilation_unit.
+  Variable prog : Untyped1.prog_type.
   Variable tprog : Cminor.program.
-  Hypothesis TRANSF : transf_oeuf_to_cminor prog = OK tprog.
+  Hypothesis TRANSF : transf_untyped_to_cminor prog = OK tprog.
 
   (* In this theorem we grab all of the things we need from all of the passes *)
   Theorem Oeuf_forward_simulation :
-    forall ty,
-      mix_forward_simulation (@CompilationUnit.source_semantics ty prog) (Cminor_semantics tprog).
+      mix_forward_simulation (@Untyped1.semantics prog) (Cminor_semantics tprog).
   Proof.
-    (* SourceLang to Untyped *)
-    unfold transf_oeuf_to_cminor in TRANSF.
-    unfold OeufCompcertCompiler.apply_partial in *.
-    break_match_hyp; try congruence.
-    simpl in Heqr. inversion Heqr. clear Heqr.
-    intro.
-    eapply compose_notrace_mix_forward_simulation.
-    eapply UntypedComp.fsim; try eassumption.
-    repeat (break_match_hyp; try congruence); try solve [inv H0].
-    inv H0. reflexivity.
-
-    repeat (break_match_hyp; try congruence); try solve [inv H0].
-    inv H0.
-
-    (* Break down structure of compiler *)
-    unfold transf_untyped_to_cminor in *.
-    unfold OeufCompcertCompiler.apply_partial in *.
-    unfold OeufCompcertCompiler.apply_total in *.
-    unfold print in *.
-    repeat (break_match_hyp; try congruence).
+    (* SourceLifted to Untyped *)
+    unfold transf_untyped_to_cminor in TRANSF.
     break_result_chain.
 
 
-    (* Untyped to Lifted *)
+    (* Untyped1 to Untyped8 *)
     eapply compose_notrace_mix_forward_simulation.
-    eapply LiftedComp.fsim; try solve [eauto].
-    unfold Metadata.check_length. simpl.
-    rewrite e. break_match; try congruence.
-    reflexivity.
+    eapply UntypedCompCombined.fsim; try eassumption.
 
-    (* Lifted to Tagged *)
+    (* Untyped8 to Tagged *)
     eapply compose_notrace_mix_forward_simulation.
     eapply TaggedComp.fsim; try eassumption.
 
@@ -167,20 +144,21 @@ Section Simulation.
 
   Defined.
 
-  Definition establish_matching (ty : type) :=
-    (TopLevel.establish_matching _ _ _ _ _ _ (Oeuf_forward_simulation ty)).
+  Definition establish_matching :=
+    (TopLevel.establish_matching _ _ _ _ _ _ Oeuf_forward_simulation).
 
-  Definition star_step_simulation (ty : type) :=
-    (TopLevel.star_step_simulation _ _ _ _ _ _ (Oeuf_forward_simulation ty)).
+  Definition star_step_simulation :=
+    (TopLevel.star_step_simulation _ _ _ _ _ _ Oeuf_forward_simulation).
 
-  Definition final_states (ty : type) :=
-    (TopLevel.final_states _ _ _ _ _ _ (Oeuf_forward_simulation ty)).
+  Definition final_states :=
+    (TopLevel.final_states _ _ _ _ _ _ Oeuf_forward_simulation).
 
 
-  Definition match_values (ty : type) := MixSemantics.fsim_match_val _ _ (Oeuf_forward_simulation ty).
+  Definition match_values := MixSemantics.fsim_match_val _ _ Oeuf_forward_simulation.
 
   (* TODO: We need an alternate definition of the match_values above that is easily provable, and we need an equivalence lemma to convert between the two *)
-  Inductive match_vals (ty : type) : SourceLang.expr nil ty -> HighValues.value -> Prop :=
+  (*
+  Inductive match_vals (ty : type) : SourceLifted.expr nil ty -> HighValues.value -> Prop :=
   | Triv :
       forall v v',
         match_vals ty v v'.
@@ -190,7 +168,6 @@ Section Simulation.
       match_values ty v v' <-> match_vals ty v v'.
   Proof.
   Admitted.
-  
-End Simulation.
+  *)
 
-  
+End Simulation.
