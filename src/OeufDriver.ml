@@ -380,7 +380,8 @@ let parse_oeuf sourcename =
 
 let process_oeuf sourcename =
   let shimname = !c_source_file in
-  let cu = parse_oeuf sourcename in
+  (*let cu = parse_oeuf sourcename in*)
+  let cu = IdProg.oeuf_prog in
   Hashtbl.clear Camlcoq.atom_of_string;
   Hashtbl.clear Camlcoq.string_of_atom;
   let preproname = Filename.temp_file "compcert" ".i" in
