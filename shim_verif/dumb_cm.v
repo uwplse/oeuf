@@ -474,31 +474,35 @@ Definition f_main := {|
       (Sseq
         (Sseq
           (Scall (Some 128%positive)
-            (mksignature (AST.Tint :: AST.Tint :: nil) (Some AST.Tint)
-              cc_default) (Econst (Oaddrsymbol _id (Int.repr 0)))
-            ((Econst (Ointconst (Int.repr 0))) ::
-             (Econst (Ointconst (Int.repr 0))) :: nil))
+            (mksignature (AST.Tint :: nil) (Some AST.Tint) cc_default)
+            (Econst (Oaddrsymbol _malloc (Int.repr 0)))
+            ((Econst (Ointconst (Int.repr 4))) :: nil))
           (Sassign _id_closure (Evar 128%positive)))
         (Sseq
-          (Sseq
-            (Scall (Some 129%positive)
-              (mksignature (AST.Tint :: AST.Tint :: nil) (Some AST.Tint)
-                cc_default) (Econst (Oaddrsymbol _call (Int.repr 0)))
-              ((Evar _id_closure) :: (Evar _zero_value) :: nil))
-            (Sassign _result (Evar 129%positive)))
+          (Sstore Mint32
+            (Ebinop Oadd (Evar _id_closure)
+              (Econst (Ointconst (Int.repr 0))))
+            (Econst (Oaddrsymbol _id (Int.repr 0))))
           (Sseq
             (Sseq
-              (Scall (Some 130%positive)
-                (mksignature (AST.Tint :: nil) (Some AST.Tint) cc_default)
-                (Econst (Oaddrsymbol _read_nat (Int.repr 0)))
-                ((Evar _result) :: nil))
-              (Scall None
+              (Scall (Some 129%positive)
                 (mksignature (AST.Tint :: AST.Tint :: nil) (Some AST.Tint)
-                  {|cc_vararg:=true; cc_unproto:=false; cc_structret:=false|})
-                (Econst (Oaddrsymbol _printf (Int.repr 0)))
-                ((Econst (Oaddrsymbol ___stringlit_3 (Int.repr 0))) ::
-                 (Evar 130%positive) :: nil)))
-            (Sreturn (Some (Econst (Ointconst (Int.repr 0))))))))))
+                  cc_default) (Econst (Oaddrsymbol _call (Int.repr 0)))
+                ((Evar _id_closure) :: (Evar _zero_value) :: nil))
+              (Sassign _result (Evar 129%positive)))
+            (Sseq
+              (Sseq
+                (Scall (Some 130%positive)
+                  (mksignature (AST.Tint :: nil) (Some AST.Tint) cc_default)
+                  (Econst (Oaddrsymbol _read_nat (Int.repr 0)))
+                  ((Evar _result) :: nil))
+                (Scall None
+                  (mksignature (AST.Tint :: AST.Tint :: nil) (Some AST.Tint)
+                    {|cc_vararg:=true; cc_unproto:=false; cc_structret:=false|})
+                  (Econst (Oaddrsymbol _printf (Int.repr 0)))
+                  ((Econst (Oaddrsymbol ___stringlit_3 (Int.repr 0))) ::
+                   (Evar 130%positive) :: nil)))
+              (Sreturn (Some (Econst (Ointconst (Int.repr 0)))))))))))
   (Sreturn (Some (Econst (Ointconst (Int.repr 0))))))
 |}.
 
