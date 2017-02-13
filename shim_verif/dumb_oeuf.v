@@ -10,19 +10,19 @@ Local Open Scope Z_scope.
 Definition _t : ident := 85%positive.
 Definition ___builtin_ctzll : ident := 65%positive.
 Definition ___compcert_va_int32 : ident := 40%positive.
-Definition _id_lambda0 : ident := 112%positive.
-Definition ___stringlit_3 : ident := 110%positive.
+Definition __switch_target : ident := 112%positive.
+Definition _main : ident := 110%positive.
 Definition _n : ident := 16%positive.
 Definition ___builtin_va_copy : ident := 38%positive.
 Definition ___i64_stod : ident := 46%positive.
 Definition ___builtin_fmadd : ident := 69%positive.
 Definition ___builtin_clzll : ident := 62%positive.
 Definition ___i64_shl : ident := 54%positive.
-Definition _main : ident := 111%positive.
+Definition __x0 : ident := 111%positive.
 Definition __682 : ident := 22%positive.
 Definition _tm : ident := 12%positive.
 Definition _make_nat : ident := 92%positive.
-Definition _zero_value : ident := 108%positive.
+Definition _id_closure : ident := 108%positive.
 Definition _ap : ident := 104%positive.
 Definition ___builtin_ctz : ident := 63%positive.
 Definition ___tm_gmtoff : ident := 10%positive.
@@ -38,13 +38,13 @@ Definition ___i64_utof : ident := 49%positive.
 Definition ___builtin_fsqrt : ident := 66%positive.
 Definition ___builtin_bswap16 : ident := 59%positive.
 Definition _tm_mday : ident := 4%positive.
-Definition _id_closure : ident := 109%positive.
+Definition ___stringlit_3 : ident := 109%positive.
 Definition ___builtin_debug : ident := 78%positive.
 Definition _result : ident := 94%positive.
 Definition ___builtin_fmin : ident := 68%positive.
 Definition ___builtin_bswap32 : ident := 58%positive.
 Definition _cons : ident := 28%positive.
-Definition __x0 : ident := 113%positive.
+Definition __self : ident := 113%positive.
 Definition _a : ident := 102%positive.
 Definition _tm_wday : ident := 7%positive.
 Definition _call : ident := 103%positive.
@@ -54,7 +54,7 @@ Definition _O : ident := 18%positive.
 Definition _print_list_nat : ident := 101%positive.
 Definition _ptr : ident := 89%positive.
 Definition ___i64_dtou : ident := 45%positive.
-Definition _zero : ident := 106%positive.
+Definition _id : ident := 106%positive.
 Definition _snprintf : ident := 80%positive.
 Definition _tag : ident := 13%positive.
 Definition _nil : ident := 27%positive.
@@ -65,9 +65,8 @@ Definition ___i64_sar : ident := 56%positive.
 Definition _next : ident := 25%positive.
 Definition _nat : ident := 15%positive.
 Definition ___builtin_clz : ident := 60%positive.
-Definition __self : ident := 115%positive.
 Definition ___stringlit_2 : ident := 100%positive.
-Definition __switch_target : ident := 114%positive.
+Definition __arg : ident := 114%positive.
 Definition _unit : ident := 20%positive.
 Definition ___builtin_memcpy_aligned : ident := 32%positive.
 Definition _read_nat : ident := 93%positive.
@@ -85,7 +84,7 @@ Definition ___compcert_va_composite : ident := 43%positive.
 Definition ___builtin_read32_reversed : ident := 74%positive.
 Definition ___i64_umod : ident := 53%positive.
 Definition ___i64_utod : ident := 47%positive.
-Definition _id : ident := 107%positive.
+Definition _zero_value : ident := 107%positive.
 Definition ___builtin_bswap : ident := 57%positive.
 Definition _tmp : ident := 91%positive.
 Definition ___builtin_va_start : ident := 36%positive.
@@ -99,7 +98,6 @@ Definition _i : ident := 90%positive.
 Definition _localtime : ident := 83%positive.
 Definition ___builtin_clzl : ident := 61%positive.
 Definition ___tm_zone : ident := 11%positive.
-Definition __arg : ident := 116%positive.
 Definition _make_bool : ident := 97%positive.
 Definition ___builtin_va_arg : ident := 37%positive.
 Definition _malloc : ident := 81%positive.
@@ -131,48 +129,12 @@ Definition f_id := {|
   fn_vars := (__x0 :: nil);
   fn_stackspace := 0;
   fn_body :=
-(Sseq
-  (Sseq
-    (Scall (Some __x0)
-      (mksignature (AST.Tint :: nil) (Some AST.Tint) cc_default)
-      (Econst (Oaddrsymbol _malloc (Int.repr 0)))
-      ((Econst (Ointconst (Int.repr 4))) :: nil))
-    (Sstore Mint32 (Evar __x0)
-      (Econst (Oaddrsymbol _id_lambda0 (Int.repr 0)))))
-  (Sreturn (Some (Evar __x0))))
-|}.
-
-Definition f_zero := {|
-  fn_sig := (mksignature (AST.Tint :: AST.Tint :: nil) (Some AST.Tint)
-              cc_default);
-  fn_params := (__self :: __arg :: nil);
-  fn_vars := (__x0 :: nil);
-  fn_stackspace := 0;
-  fn_body :=
-(Sseq
-  (Sseq
-    (Scall (Some __x0)
-      (mksignature (AST.Tint :: nil) (Some AST.Tint) cc_default)
-      (Econst (Oaddrsymbol _malloc (Int.repr 0)))
-      ((Econst (Ointconst (Int.repr 4))) :: nil))
-    (Sstore Mint32 (Evar __x0) (Econst (Ointconst (Int.repr 0)))))
-  (Sreturn (Some (Evar __x0))))
-|}.
-
-Definition f_id_lambda0 := {|
-  fn_sig := (mksignature (AST.Tint :: AST.Tint :: nil) (Some AST.Tint)
-              cc_default);
-  fn_params := (__self :: __arg :: nil);
-  fn_vars := (__x0 :: nil);
-  fn_stackspace := 0;
-  fn_body :=
 (Sseq (Sassign __x0 (Evar __arg)) (Sreturn (Some (Evar __x0))))
 |}.
 
 Definition prog : Cminor.program := {|
 prog_defs :=
-((_id, Gfun(Internal f_id)) :: (_zero, Gfun(Internal f_zero)) ::
- (_id_lambda0, Gfun(Internal f_id_lambda0)) ::
+((_id, Gfun(Internal f_id)) ::
  (___i64_dtos,
    Gfun(External (EF_external "__i64_dtos"
                    (mksignature (AST.Tfloat :: nil) (Some AST.Tlong)
@@ -227,7 +189,7 @@ prog_defs :=
                      (Some AST.Tlong) cc_default)))) ::
  (_malloc, Gfun(External EF_malloc)) :: nil);
 prog_public :=
-(_id :: _zero :: nil);
+(_id :: nil);
 prog_main := _tm_sec;
 |}.
 
