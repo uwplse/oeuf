@@ -10,19 +10,19 @@ Local Open Scope Z_scope.
 Definition _t : ident := 85%positive.
 Definition ___builtin_ctzll : ident := 65%positive.
 Definition ___compcert_va_int32 : ident := 40%positive.
-Definition _id_lambda0 : ident := 112%positive.
-Definition ___stringlit_3 : ident := 110%positive.
+Definition __switch_target : ident := 112%positive.
+Definition _main : ident := 110%positive.
 Definition _n : ident := 16%positive.
 Definition ___builtin_va_copy : ident := 38%positive.
 Definition ___i64_stod : ident := 46%positive.
 Definition ___builtin_fmadd : ident := 69%positive.
 Definition ___builtin_clzll : ident := 62%positive.
 Definition ___i64_shl : ident := 54%positive.
-Definition _main : ident := 111%positive.
+Definition __x0 : ident := 111%positive.
 Definition __682 : ident := 22%positive.
 Definition _tm : ident := 12%positive.
 Definition _make_nat : ident := 92%positive.
-Definition _zero_value : ident := 108%positive.
+Definition _id_closure : ident := 108%positive.
 Definition _ap : ident := 104%positive.
 Definition ___builtin_ctz : ident := 63%positive.
 Definition ___tm_gmtoff : ident := 10%positive.
@@ -38,13 +38,13 @@ Definition ___i64_utof : ident := 49%positive.
 Definition ___builtin_fsqrt : ident := 66%positive.
 Definition ___builtin_bswap16 : ident := 59%positive.
 Definition _tm_mday : ident := 4%positive.
-Definition _id_closure : ident := 109%positive.
+Definition ___stringlit_3 : ident := 109%positive.
 Definition ___builtin_debug : ident := 78%positive.
 Definition _result : ident := 94%positive.
 Definition ___builtin_fmin : ident := 68%positive.
 Definition ___builtin_bswap32 : ident := 58%positive.
 Definition _cons : ident := 28%positive.
-Definition __x0 : ident := 113%positive.
+Definition __self : ident := 113%positive.
 Definition _a : ident := 102%positive.
 Definition _tm_wday : ident := 7%positive.
 Definition _call : ident := 103%positive.
@@ -54,7 +54,7 @@ Definition _O : ident := 18%positive.
 Definition _print_list_nat : ident := 101%positive.
 Definition _ptr : ident := 89%positive.
 Definition ___i64_dtou : ident := 45%positive.
-Definition _zero : ident := 106%positive.
+Definition _id : ident := 106%positive.
 Definition _snprintf : ident := 80%positive.
 Definition _tag : ident := 13%positive.
 Definition _nil : ident := 27%positive.
@@ -65,9 +65,8 @@ Definition ___i64_sar : ident := 56%positive.
 Definition _next : ident := 25%positive.
 Definition _nat : ident := 15%positive.
 Definition ___builtin_clz : ident := 60%positive.
-Definition __self : ident := 115%positive.
 Definition ___stringlit_2 : ident := 100%positive.
-Definition __switch_target : ident := 114%positive.
+Definition __arg : ident := 114%positive.
 Definition _unit : ident := 20%positive.
 Definition ___builtin_memcpy_aligned : ident := 32%positive.
 Definition _read_nat : ident := 93%positive.
@@ -85,7 +84,7 @@ Definition ___compcert_va_composite : ident := 43%positive.
 Definition ___builtin_read32_reversed : ident := 74%positive.
 Definition ___i64_umod : ident := 53%positive.
 Definition ___i64_utod : ident := 47%positive.
-Definition _id : ident := 107%positive.
+Definition _zero_value : ident := 107%positive.
 Definition ___builtin_bswap : ident := 57%positive.
 Definition _tmp : ident := 91%positive.
 Definition ___builtin_va_start : ident := 36%positive.
@@ -99,7 +98,6 @@ Definition _i : ident := 90%positive.
 Definition _localtime : ident := 83%positive.
 Definition ___builtin_clzl : ident := 61%positive.
 Definition ___tm_zone : ident := 11%positive.
-Definition __arg : ident := 116%positive.
 Definition _make_bool : ident := 97%positive.
 Definition ___builtin_va_arg : ident := 37%positive.
 Definition _malloc : ident := 81%positive.
@@ -125,41 +123,6 @@ Definition ___i64_udiv : ident := 51%positive.
 Definition ___i64_stof : ident := 48%positive.
 
 Definition f_id := {|
-  fn_sig := (mksignature (AST.Tint :: AST.Tint :: nil) (Some AST.Tint)
-              cc_default);
-  fn_params := (__self :: __arg :: nil);
-  fn_vars := (__x0 :: nil);
-  fn_stackspace := 0;
-  fn_body :=
-(Sseq
-  (Sseq
-    (Scall (Some __x0)
-      (mksignature (AST.Tint :: nil) (Some AST.Tint) cc_default)
-      (Econst (Oaddrsymbol _malloc (Int.repr 0)))
-      ((Econst (Ointconst (Int.repr 4))) :: nil))
-    (Sstore Mint32 (Evar __x0)
-      (Econst (Oaddrsymbol _id_lambda0 (Int.repr 0)))))
-  (Sreturn (Some (Evar __x0))))
-|}.
-
-Definition f_zero := {|
-  fn_sig := (mksignature (AST.Tint :: AST.Tint :: nil) (Some AST.Tint)
-              cc_default);
-  fn_params := (__self :: __arg :: nil);
-  fn_vars := (__x0 :: nil);
-  fn_stackspace := 0;
-  fn_body :=
-(Sseq
-  (Sseq
-    (Scall (Some __x0)
-      (mksignature (AST.Tint :: nil) (Some AST.Tint) cc_default)
-      (Econst (Oaddrsymbol _malloc (Int.repr 0)))
-      ((Econst (Ointconst (Int.repr 4))) :: nil))
-    (Sstore Mint32 (Evar __x0) (Econst (Ointconst (Int.repr 0)))))
-  (Sreturn (Some (Evar __x0))))
-|}.
-
-Definition f_id_lambda0 := {|
   fn_sig := (mksignature (AST.Tint :: AST.Tint :: nil) (Some AST.Tint)
               cc_default);
   fn_params := (__self :: __arg :: nil);
@@ -222,24 +185,24 @@ Definition v_time_buf := {|
 Definition f_get_time := {|
   fn_sig := (mksignature nil (Some AST.Tint) cc_default);
   fn_params := nil;
-  fn_vars := (118%positive :: 117%positive :: nil);
+  fn_vars := (116%positive :: 115%positive :: nil);
   fn_stackspace := 52;
   fn_body :=
 (Sseq
   (Sseq
-    (Scall (Some 117%positive)
+    (Scall (Some 115%positive)
       (mksignature (AST.Tint :: nil) (Some AST.Tint) cc_default)
       (Econst (Oaddrsymbol _time (Int.repr 0)))
       ((Econst (Ointconst (Int.repr 0))) :: nil))
-    (Sstore Mint32 (Econst (Oaddrstack (Int.repr 0))) (Evar 117%positive)))
+    (Sstore Mint32 (Econst (Oaddrstack (Int.repr 0))) (Evar 115%positive)))
   (Sseq
     (Sseq
-      (Scall (Some 118%positive)
+      (Scall (Some 116%positive)
         (mksignature (AST.Tint :: nil) (Some AST.Tint) cc_default)
         (Econst (Oaddrsymbol _localtime (Int.repr 0)))
         ((Econst (Oaddrstack (Int.repr 0))) :: nil))
       (Sbuiltin None (EF_memcpy 44 4)
-        ((Econst (Oaddrstack (Int.repr 8))) :: (Evar 118%positive) :: nil)))
+        ((Econst (Oaddrstack (Int.repr 8))) :: (Evar 116%positive) :: nil)))
     (Sseq
       (Scall None
         (mksignature
@@ -279,16 +242,16 @@ Definition f_get_time := {|
 Definition f_make_nat := {|
   fn_sig := (mksignature (AST.Tint :: nil) (Some AST.Tint) cc_default);
   fn_params := (_n :: nil);
-  fn_vars := (_ptr :: _i :: _tmp :: 120%positive :: 119%positive :: nil);
+  fn_vars := (_ptr :: _i :: _tmp :: 118%positive :: 117%positive :: nil);
   fn_stackspace := 0;
   fn_body :=
 (Sseq
   (Sseq
-    (Scall (Some 119%positive)
+    (Scall (Some 117%positive)
       (mksignature (AST.Tint :: nil) (Some AST.Tint) cc_default)
       (Econst (Oaddrsymbol _malloc (Int.repr 0)))
       ((Econst (Ointconst (Int.repr 4))) :: nil))
-    (Sassign _ptr (Evar 119%positive)))
+    (Sassign _ptr (Evar 117%positive)))
   (Sseq
     (Sstore Mint32 (Evar _ptr) (Econst (Ointconst (Int.repr 0))))
     (Sseq
@@ -304,12 +267,12 @@ Definition f_make_nat := {|
                     (Sexit (S O)))
                   (Sseq
                     (Sseq
-                      (Scall (Some 120%positive)
+                      (Scall (Some 118%positive)
                         (mksignature (AST.Tint :: nil) (Some AST.Tint)
                           cc_default)
                         (Econst (Oaddrsymbol _malloc (Int.repr 0)))
                         ((Econst (Ointconst (Int.repr 8))) :: nil))
-                      (Sassign _tmp (Evar 120%positive)))
+                      (Sassign _tmp (Evar 118%positive)))
                     (Sseq
                       (Sstore Mint32 (Evar _tmp)
                         (Econst (Ointconst (Int.repr 1))))
@@ -352,16 +315,16 @@ Definition f_read_nat := {|
 Definition f_make_unit := {|
   fn_sig := (mksignature nil (Some AST.Tint) cc_default);
   fn_params := nil;
-  fn_vars := (_result :: 121%positive :: nil);
+  fn_vars := (_result :: 119%positive :: nil);
   fn_stackspace := 0;
   fn_body :=
 (Sseq
   (Sseq
-    (Scall (Some 121%positive)
+    (Scall (Some 119%positive)
       (mksignature (AST.Tint :: nil) (Some AST.Tint) cc_default)
       (Econst (Oaddrsymbol _malloc (Int.repr 0)))
       ((Econst (Ointconst (Int.repr 4))) :: nil))
-    (Sassign _result (Evar 121%positive)))
+    (Sassign _result (Evar 119%positive)))
   (Sseq
     (Sstore Mint32 (Evar _result) (Econst (Ointconst (Int.repr 0))))
     (Sreturn (Some (Evar _result)))))
@@ -370,23 +333,23 @@ Definition f_make_unit := {|
 Definition f_make_bool := {|
   fn_sig := (mksignature (AST.Tint :: nil) (Some AST.Tint) cc_default);
   fn_params := (_b :: nil);
-  fn_vars := (_result :: 123%positive :: 122%positive :: nil);
+  fn_vars := (_result :: 121%positive :: 120%positive :: nil);
   fn_stackspace := 0;
   fn_body :=
 (Sseq
   (Sseq
-    (Scall (Some 122%positive)
+    (Scall (Some 120%positive)
       (mksignature (AST.Tint :: nil) (Some AST.Tint) cc_default)
       (Econst (Oaddrsymbol _malloc (Int.repr 0)))
       ((Econst (Ointconst (Int.repr 4))) :: nil))
-    (Sassign _result (Evar 122%positive)))
+    (Sassign _result (Evar 120%positive)))
   (Sseq
     (Sseq
       (Sifthenelse (Ebinop (Ocmp Cne) (Evar _b)
                      (Econst (Ointconst (Int.repr 0))))
-        (Sassign 123%positive (Econst (Ointconst (Int.repr 0))))
-        (Sassign 123%positive (Econst (Ointconst (Int.repr 1)))))
-      (Sstore Mint32 (Evar _result) (Evar 123%positive)))
+        (Sassign 121%positive (Econst (Ointconst (Int.repr 0))))
+        (Sassign 121%positive (Econst (Ointconst (Int.repr 1)))))
+      (Sstore Mint32 (Evar _result) (Evar 121%positive)))
     (Sreturn (Some (Evar _result)))))
 |}.
 
@@ -403,7 +366,7 @@ Definition f_read_bool := {|
 Definition f_print_list_nat := {|
   fn_sig := (mksignature (AST.Tint :: nil) None cc_default);
   fn_params := (_l :: nil);
-  fn_vars := (_i :: 124%positive :: nil);
+  fn_vars := (_i :: 122%positive :: nil);
   fn_stackspace := 0;
   fn_body :=
 (Sblock
@@ -416,13 +379,13 @@ Definition f_print_list_nat := {|
           (Sexit (S O)))
         (Sseq
           (Sseq
-            (Scall (Some 124%positive)
+            (Scall (Some 122%positive)
               (mksignature (AST.Tint :: nil) (Some AST.Tint) cc_default)
               (Econst (Oaddrsymbol _read_nat (Int.repr 0)))
               ((Eload Mint32
                  (Ebinop Oadd (Evar _l) (Econst (Ointconst (Int.repr 4))))) ::
                nil))
-            (Sassign _i (Evar 124%positive)))
+            (Sassign _i (Evar 122%positive)))
           (Sseq
             (Scall None
               (mksignature (AST.Tint :: AST.Tint :: nil) (Some AST.Tint)
@@ -439,22 +402,22 @@ Definition f_call := {|
   fn_sig := (mksignature (AST.Tint :: AST.Tint :: nil) (Some AST.Tint)
               cc_default);
   fn_params := (_f :: _a :: nil);
-  fn_vars := (125%positive :: nil);
+  fn_vars := (123%positive :: nil);
   fn_stackspace := 0;
   fn_body :=
 (Sseq
-  (Scall (Some 125%positive)
+  (Scall (Some 123%positive)
     (mksignature (AST.Tint :: AST.Tint :: nil) (Some AST.Tint) cc_default)
     (Eload Mint32 (Ebinop Oadd (Evar _f) (Econst (Ointconst (Int.repr 0)))))
     ((Evar _f) :: (Evar _a) :: nil))
-  (Sreturn (Some (Evar 125%positive))))
+  (Sreturn (Some (Evar 123%positive))))
 |}.
 
 Definition f_vcall := {|
   fn_sig := (mksignature (AST.Tint :: nil) (Some AST.Tint)
               {|cc_vararg:=true; cc_unproto:=false; cc_structret:=false|});
   fn_params := (_f :: nil);
-  fn_vars := (_a :: 128%positive :: 127%positive :: 126%positive :: nil);
+  fn_vars := (_a :: 126%positive :: 125%positive :: 124%positive :: nil);
   fn_stackspace := 4;
   fn_body :=
 (Sseq
@@ -471,77 +434,77 @@ Definition f_vcall := {|
               (Sseq
                 (Sseq
                   (Sseq
-                    (Scall (Some 126%positive)
+                    (Scall (Some 124%positive)
                       (mksignature (AST.Tint :: nil) (Some AST.Tint)
                         cc_default)
                       (Econst (Oaddrsymbol ___compcert_va_int32 (Int.repr 0)))
                       ((Econst (Oaddrstack (Int.repr 0))) :: nil))
-                    (Sassign 127%positive (Evar 126%positive)))
-                  (Sassign _a (Evar 127%positive)))
-                (Sifthenelse (Ebinop (Ocmpu Cne) (Evar 127%positive)
+                    (Sassign 125%positive (Evar 124%positive)))
+                  (Sassign _a (Evar 125%positive)))
+                (Sifthenelse (Ebinop (Ocmpu Cne) (Evar 125%positive)
                                (Econst (Ointconst (Int.repr 0))))
                   Sskip
                   (Sexit (S O))))
               (Sseq
-                (Scall (Some 128%positive)
+                (Scall (Some 126%positive)
                   (mksignature (AST.Tint :: AST.Tint :: nil) (Some AST.Tint)
                     cc_default) (Econst (Oaddrsymbol _call (Int.repr 0)))
                   ((Evar _f) :: (Evar _a) :: nil))
-                (Sassign _f (Evar 128%positive)))))))
+                (Sassign _f (Evar 126%positive)))))))
       (Sreturn (Some (Evar _f))))))
 |}.
 
 Definition f_main := {|
   fn_sig := (mksignature nil (Some AST.Tint) cc_default);
   fn_params := nil;
-  fn_vars := (_zero_value :: _id_closure :: _result :: 132%positive ::
-              131%positive :: 130%positive :: 129%positive :: nil);
+  fn_vars := (_zero_value :: _id_closure :: _result :: 130%positive ::
+              129%positive :: 128%positive :: 127%positive :: nil);
   fn_stackspace := 0;
   fn_body :=
 (Sseq
   (Sseq
     (Sseq
-      (Scall (Some 129%positive)
-        (mksignature (AST.Tint :: AST.Tint :: nil) (Some AST.Tint)
-          cc_default) (Econst (Oaddrsymbol _zero (Int.repr 0)))
-        ((Econst (Ointconst (Int.repr 0))) ::
-         (Econst (Ointconst (Int.repr 0))) :: nil))
-      (Sassign _zero_value (Evar 129%positive)))
+      (Scall (Some 127%positive)
+        (mksignature (AST.Tint :: nil) (Some AST.Tint) cc_default)
+        (Econst (Oaddrsymbol _malloc (Int.repr 0)))
+        ((Econst (Ointconst (Int.repr 4))) :: nil))
+      (Sassign _zero_value (Evar 127%positive)))
     (Sseq
-      (Sseq
-        (Scall (Some 130%positive)
-          (mksignature (AST.Tint :: AST.Tint :: nil) (Some AST.Tint)
-            cc_default) (Econst (Oaddrsymbol _id (Int.repr 0)))
-          ((Econst (Ointconst (Int.repr 0))) ::
-           (Econst (Ointconst (Int.repr 0))) :: nil))
-        (Sassign _id_closure (Evar 130%positive)))
+      (Sstore Mint32 (Evar _zero_value) (Econst (Ointconst (Int.repr 0))))
       (Sseq
         (Sseq
-          (Scall (Some 131%positive)
+          (Scall (Some 128%positive)
             (mksignature (AST.Tint :: AST.Tint :: nil) (Some AST.Tint)
-              cc_default) (Econst (Oaddrsymbol _call (Int.repr 0)))
-            ((Evar _id_closure) :: (Evar _zero_value) :: nil))
-          (Sassign _result (Evar 131%positive)))
+              cc_default) (Econst (Oaddrsymbol _id (Int.repr 0)))
+            ((Econst (Ointconst (Int.repr 0))) ::
+             (Econst (Ointconst (Int.repr 0))) :: nil))
+          (Sassign _id_closure (Evar 128%positive)))
         (Sseq
           (Sseq
-            (Scall (Some 132%positive)
-              (mksignature (AST.Tint :: nil) (Some AST.Tint) cc_default)
-              (Econst (Oaddrsymbol _read_nat (Int.repr 0)))
-              ((Evar _result) :: nil))
-            (Scall None
+            (Scall (Some 129%positive)
               (mksignature (AST.Tint :: AST.Tint :: nil) (Some AST.Tint)
-                {|cc_vararg:=true; cc_unproto:=false; cc_structret:=false|})
-              (Econst (Oaddrsymbol _printf (Int.repr 0)))
-              ((Econst (Oaddrsymbol ___stringlit_3 (Int.repr 0))) ::
-               (Evar 132%positive) :: nil)))
-          (Sreturn (Some (Econst (Ointconst (Int.repr 0)))))))))
+                cc_default) (Econst (Oaddrsymbol _call (Int.repr 0)))
+              ((Evar _id_closure) :: (Evar _zero_value) :: nil))
+            (Sassign _result (Evar 129%positive)))
+          (Sseq
+            (Sseq
+              (Scall (Some 130%positive)
+                (mksignature (AST.Tint :: nil) (Some AST.Tint) cc_default)
+                (Econst (Oaddrsymbol _read_nat (Int.repr 0)))
+                ((Evar _result) :: nil))
+              (Scall None
+                (mksignature (AST.Tint :: AST.Tint :: nil) (Some AST.Tint)
+                  {|cc_vararg:=true; cc_unproto:=false; cc_structret:=false|})
+                (Econst (Oaddrsymbol _printf (Int.repr 0)))
+                ((Econst (Oaddrsymbol ___stringlit_3 (Int.repr 0))) ::
+                 (Evar 130%positive) :: nil)))
+            (Sreturn (Some (Econst (Ointconst (Int.repr 0))))))))))
   (Sreturn (Some (Econst (Ointconst (Int.repr 0))))))
 |}.
 
 Definition prog : Cminor.program := {|
 prog_defs :=
-((_id, Gfun(Internal f_id)) :: (_zero, Gfun(Internal f_zero)) ::
- (_id_lambda0, Gfun(Internal f_id_lambda0)) ::
+((_id, Gfun(Internal f_id)) ::
  (___i64_dtos,
    Gfun(External (EF_external "__i64_dtos"
                    (mksignature (AST.Tfloat :: nil) (Some AST.Tlong)
@@ -754,7 +717,7 @@ prog_defs :=
  (_call, Gfun(Internal f_call)) :: (_vcall, Gfun(Internal f_vcall)) ::
  (_main, Gfun(Internal f_main)) :: nil);
 prog_public :=
-(_main :: _id :: _zero :: _vcall :: _call :: _print_list_nat :: _read_bool ::
+(_main :: _id :: _vcall :: _call :: _print_list_nat :: _read_bool ::
  _make_bool :: _make_unit :: _read_nat :: _make_nat :: _get_time ::
  _localtime :: _time :: _malloc :: _snprintf :: _printf ::
  ___builtin_debug :: ___builtin_nop :: ___builtin_write32_reversed ::
