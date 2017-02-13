@@ -4,10 +4,10 @@
 extern void* id(void*, void*);
 
 int main() {
-    //TODO: the next two calls should be malloc/write instead
   void* zero_value = malloc(4);
   *((int*)zero_value) = 0;
-  void* id_closure = id(NULL, NULL);
+  struct closure* id_closure = malloc(4);
+  id_closure->f = id;
 
     
   void* result = call(id_closure,zero_value);
