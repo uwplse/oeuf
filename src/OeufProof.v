@@ -348,6 +348,24 @@ Section OeufSimulation.
     Definition oeuf_match_values {ty} :=
         @sl_match_values P1 P2 L3 (Oeuf_forward_simulation P2 P3 P2_comp') ty.
 
+    
+    Inductive match_values {ty : type} : SourceLifted.value (types P1) ty -> valtype L3 -> Prop :=
+    | match_all_the_way :
+        forall slval hstval hrval hrval2 hval e1 e2 l,
+          UntypedComp1.compile_value slval = hstval ->
+          TaggedComp.I_value hstval hrval ->
+          ElimFuncComp2.match_values e1 e2 l hrval hrval2 ->
+          FlatIntTagComp.I_value hrval2 hval ->
+          match_values slval hval.
+          
+    Lemma same_match_values :
+      forall {ty : type} sv hv,
+        @oeuf_match_values ty sv hv <-> @match_values ty sv hv.
+    Proof.
+      (* I have no idea how to prove either direction of this *)
+      (* Both directions are necessary, however *)
+    Admitted.
+      
     Theorem oeuf_match_callstate :
         forall tyA tyR
             (fv1 : SourceLifted.value G (SourceLifted.Arrow tyA tyR))
