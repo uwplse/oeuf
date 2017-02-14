@@ -181,6 +181,28 @@ Proof.
   eapply star_left; eauto.
 Qed.
 
+Lemma star_to_star :
+  forall {genv state : Type} step (ge : genv) (st : state) t st',
+    TraceSemantics.star step ge st t st' <-> Smallstep.star step ge st t st'.
+Proof.
+  split;
+    induction 1; intros;
+      econstructor; eauto.
+Qed.
+
+
+Lemma estar_left_app :
+  forall ge st t t' t0 st0,
+    (Smallstep.star step ge st t st0 /\ (exists st', Smallstep.star step ge st0 t' st')) ->
+    t0 = t ** t' ->
+    (exists st',
+        Smallstep.star step ge st t0 st').
+Proof.
+  intros. break_and. break_exists.
+  subst. eexists.
+  eapply star_trans; eauto.
+Qed.
+
 Ltac take_step := eapply estar_left; eauto; nil_trace; split;
                   match goal with
                   | [ |- exists _, _ ] => idtac
