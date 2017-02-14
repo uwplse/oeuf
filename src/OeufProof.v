@@ -395,5 +395,34 @@ Section OeufSimulation.
     eapply sl_simulation; try eassumption.
     eapply P2_comp.
     Qed.
-
+    
+    Theorem oeuf_star_simulation :
+        forall rty (s1 s1' : SourceLifted.state G rty),
+          Semantics.star _ _ SourceLifted.sstep g s1 s1' ->
+        forall i s3,
+          oeuf_match_states i s1 s3 ->
+          exists i' s3',
+            TraceSemantics.star Cminor.step (Genv.globalenv P3) s3 Events.E0 s3' /\
+            oeuf_match_states i' s1' s3'.
+    Proof.
+      induction 1; intros.
+      exists i. exists s3.
+      split. econstructor. eassumption.
+      eapply oeuf_simulation in H.
+      Focus 2. eassumption.
+      repeat break_exists. repeat break_and.
+      break_or. eapply TraceSemantics.plus_star in H.
+      eapply IHstar in H2. repeat break_exists; repeat break_and.
+      eexists; eexists; split.
+      eapply TraceSemantics.star_trans. eassumption.
+      eassumption. reflexivity.
+      eassumption.
+      break_and.
+      eapply IHstar in H2. repeat break_exists; repeat break_and.
+      eexists; eexists; split.
+      eapply TraceSemantics.star_trans. eassumption.
+      eassumption. reflexivity.
+      eassumption.
+    Qed.
+      
 End OeufSimulation.
