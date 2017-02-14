@@ -28,14 +28,7 @@ Require Cmajor.
 
 Require Import CminorLib.
 
-Lemma star_to_star :
-  forall {genv state : Type} step (ge : genv) (st : state) t st',
-    TraceSemantics.star step ge st t st' <-> Smallstep.star step ge st t st'.
-Proof.
-  split;
-    induction 1; intros;
-      econstructor; eauto.
-Qed.
+
 
 
 Section SIM.
@@ -270,8 +263,49 @@ Section SIM.
     
     eapply star_to_star in H11.
 
-    (* Here we have the correct state, we only need to change up the global environment *)
+    assert (Linker.match_states LST LST). {
+      subst.
+      econstructor. repeat econstructor.
+      econstructor.
+      econstructor.
+      econstructor.
+      econstructor.
+      econstructor.
+      econstructor.
+      econstructor.
+      simpl. exact I.
+      simpl. split; try split; exact I.
+      simpl. exact I.
+      econstructor.
+      unfold Linker.env_lessdef. intros. eexists; split.
+      eassumption. econstructor.
+      simpl. repeat (try split; try exact I).
+      simpl. repeat (try split; try exact I).
+      econstructor.
+      unfold Linker.env_lessdef. intros. eexists; split.
+      eassumption. econstructor.
+      simpl. split; exact I.
+      eapply Mem.extends_refl.
+      simpl. exact I.
+      simpl. split; exact I.
+    } idtac.
+    
+    eapply Linker.star_step_sim in H11; try eapply H13.
 
+    instantiate (1 := prog) in H11. unfold Linker.link_ge in H11. unfold ge.
+
+    break_exists. break_and.
+    eapply estar_left_app; nil_trace. split. eassumption.
+
+
+    (* Now we have to pick apart all of these final_state and matching state definitions *)
+
+    inversion H8.
+    eapply existT_eq in H18. subst v.
+    clear H17. subst ty.
+    inversion H10. repeat break_and.
+    (* HERE we need a better definition of match_val again *)
+    
     
       
       
