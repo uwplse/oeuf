@@ -508,60 +508,7 @@ Definition f_main := {|
 
 Definition prog : Cminor.program := {|
 prog_defs :=
-((_id, Gfun(Internal f_id)) ::
- (___i64_dtos,
-   Gfun(External (EF_external "__i64_dtos"
-                   (mksignature (AST.Tfloat :: nil) (Some AST.Tlong)
-                     cc_default)))) ::
- (___i64_dtou,
-   Gfun(External (EF_external "__i64_dtou"
-                   (mksignature (AST.Tfloat :: nil) (Some AST.Tlong)
-                     cc_default)))) ::
- (___i64_stod,
-   Gfun(External (EF_external "__i64_stod"
-                   (mksignature (AST.Tlong :: nil) (Some AST.Tfloat)
-                     cc_default)))) ::
- (___i64_utod,
-   Gfun(External (EF_external "__i64_utod"
-                   (mksignature (AST.Tlong :: nil) (Some AST.Tfloat)
-                     cc_default)))) ::
- (___i64_stof,
-   Gfun(External (EF_external "__i64_stof"
-                   (mksignature (AST.Tlong :: nil) (Some AST.Tsingle)
-                     cc_default)))) ::
- (___i64_utof,
-   Gfun(External (EF_external "__i64_utof"
-                   (mksignature (AST.Tlong :: nil) (Some AST.Tsingle)
-                     cc_default)))) ::
- (___i64_sdiv,
-   Gfun(External (EF_external "__i64_sdiv"
-                   (mksignature (AST.Tlong :: AST.Tlong :: nil)
-                     (Some AST.Tlong) cc_default)))) ::
- (___i64_udiv,
-   Gfun(External (EF_external "__i64_udiv"
-                   (mksignature (AST.Tlong :: AST.Tlong :: nil)
-                     (Some AST.Tlong) cc_default)))) ::
- (___i64_smod,
-   Gfun(External (EF_external "__i64_smod"
-                   (mksignature (AST.Tlong :: AST.Tlong :: nil)
-                     (Some AST.Tlong) cc_default)))) ::
- (___i64_umod,
-   Gfun(External (EF_external "__i64_umod"
-                   (mksignature (AST.Tlong :: AST.Tlong :: nil)
-                     (Some AST.Tlong) cc_default)))) ::
- (___i64_shl,
-   Gfun(External (EF_external "__i64_shl"
-                   (mksignature (AST.Tlong :: AST.Tint :: nil)
-                     (Some AST.Tlong) cc_default)))) ::
- (___i64_shr,
-   Gfun(External (EF_external "__i64_shr"
-                   (mksignature (AST.Tlong :: AST.Tint :: nil)
-                     (Some AST.Tlong) cc_default)))) ::
- (___i64_sar,
-   Gfun(External (EF_external "__i64_sar"
-                   (mksignature (AST.Tlong :: AST.Tint :: nil)
-                     (Some AST.Tlong) cc_default)))) ::
- (_malloc, Gfun(External EF_malloc)) ::
+((_id, Gfun(Internal f_id)) :: (_malloc, Gfun(External EF_malloc)) ::
  (___stringlit_2, Gvar v___stringlit_2) ::
  (___stringlit_1, Gvar v___stringlit_1) ::
  (___stringlit_3, Gvar v___stringlit_3) ::
@@ -614,6 +561,58 @@ prog_defs :=
    Gfun(External (EF_external "__compcert_va_composite"
                    (mksignature (AST.Tint :: AST.Tint :: nil) (Some AST.Tint)
                      cc_default)))) ::
+ (___i64_dtos,
+   Gfun(External (EF_external "__i64_dtos"
+                   (mksignature (AST.Tfloat :: nil) (Some AST.Tlong)
+                     cc_default)))) ::
+ (___i64_dtou,
+   Gfun(External (EF_external "__i64_dtou"
+                   (mksignature (AST.Tfloat :: nil) (Some AST.Tlong)
+                     cc_default)))) ::
+ (___i64_stod,
+   Gfun(External (EF_external "__i64_stod"
+                   (mksignature (AST.Tlong :: nil) (Some AST.Tfloat)
+                     cc_default)))) ::
+ (___i64_utod,
+   Gfun(External (EF_external "__i64_utod"
+                   (mksignature (AST.Tlong :: nil) (Some AST.Tfloat)
+                     cc_default)))) ::
+ (___i64_stof,
+   Gfun(External (EF_external "__i64_stof"
+                   (mksignature (AST.Tlong :: nil) (Some AST.Tsingle)
+                     cc_default)))) ::
+ (___i64_utof,
+   Gfun(External (EF_external "__i64_utof"
+                   (mksignature (AST.Tlong :: nil) (Some AST.Tsingle)
+                     cc_default)))) ::
+ (___i64_sdiv,
+   Gfun(External (EF_external "__i64_sdiv"
+                   (mksignature (AST.Tlong :: AST.Tlong :: nil)
+                     (Some AST.Tlong) cc_default)))) ::
+ (___i64_udiv,
+   Gfun(External (EF_external "__i64_udiv"
+                   (mksignature (AST.Tlong :: AST.Tlong :: nil)
+                     (Some AST.Tlong) cc_default)))) ::
+ (___i64_smod,
+   Gfun(External (EF_external "__i64_smod"
+                   (mksignature (AST.Tlong :: AST.Tlong :: nil)
+                     (Some AST.Tlong) cc_default)))) ::
+ (___i64_umod,
+   Gfun(External (EF_external "__i64_umod"
+                   (mksignature (AST.Tlong :: AST.Tlong :: nil)
+                     (Some AST.Tlong) cc_default)))) ::
+ (___i64_shl,
+   Gfun(External (EF_external "__i64_shl"
+                   (mksignature (AST.Tlong :: AST.Tint :: nil)
+                     (Some AST.Tlong) cc_default)))) ::
+ (___i64_shr,
+   Gfun(External (EF_external "__i64_shr"
+                   (mksignature (AST.Tlong :: AST.Tint :: nil)
+                     (Some AST.Tlong) cc_default)))) ::
+ (___i64_sar,
+   Gfun(External (EF_external "__i64_sar"
+                   (mksignature (AST.Tlong :: AST.Tint :: nil)
+                     (Some AST.Tlong) cc_default)))) ::
  (___builtin_bswap,
    Gfun(External (EF_builtin "__builtin_bswap"
                    (mksignature (AST.Tint :: nil) (Some AST.Tint) cc_default)))) ::
