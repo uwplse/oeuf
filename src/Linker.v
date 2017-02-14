@@ -3,6 +3,7 @@ Require Import compcert.common.AST.
 Require Import compcert.common.Globalenvs.
 Require Import compcert.backend.Cminor.
 Require Import compcert.common.Errors.
+Require Import compcert.common.Values.
 
 Require Import StructTact.StructTactics.
 Require Import StructTact.Util.
@@ -330,6 +331,24 @@ Proof.
   eapply prog_def_link_fundefs_r; eauto.
 Qed.
 
+
+Lemma link_fundefs_head :
+  forall l l' lres,
+    link_fundefs l l' = OK lres ->
+    exists l0,
+      lres = l ++ l0.
+Proof.
+  induction l; intros.
+  simpl in H. inv H. simpl. eauto.
+  simpl in H. repeat (break_match_hyp; try congruence); subst.
+  inv H.
+  eapply IHl in Heqr0. break_exists. subst l0.
+  simpl. eapply link_fundef_left in Heqr. subst. eauto.
+  inv H.
+  eapply IHl in Heqr. break_exists. subst l0.
+  simpl. eauto.
+Qed.
+
 Section LINKED.
 
   Variable oeuf_code shim_code link_code : Cminor.program.
@@ -338,8 +357,19 @@ Section LINKED.
   Definition oeuf_ge := Genv.globalenv oeuf_code.
   Definition shim_ge := Genv.globalenv shim_code.
   Definition link_ge := Genv.globalenv link_code.
-  
+
   Lemma oeuf_ident_transf :
+    forall id fd b,
+      Genv.find_symbol oeuf_ge id = Some b ->
+      Genv.find_funct_ptr oeuf_ge b = Some fd ->
+      Genv.find_symbol link_ge id = Some b /\ Genv.find_funct_ptr link_ge b = Some fd.
+  Proof.
+    intros.
+    (* This is true due to how the linker is defined *)
+  Admitted.
+      
+(*  
+  Lemma oeuf_ident_transf_weak :
     forall id fd,
       (exists b, Genv.find_symbol oeuf_ge id = Some b /\ Genv.find_funct_ptr oeuf_ge b = Some fd) ->
       (exists b, Genv.find_symbol link_ge id = Some b /\ Genv.find_funct_ptr link_ge b = Some fd).
@@ -352,7 +382,7 @@ Section LINKED.
     eapply prog_def_transf_l; eauto.
   Qed.
 
-  Lemma shim_ident_transf :
+  Lemma shim_ident_transf_weak :
     forall id f,
       (exists b, Genv.find_symbol shim_ge id = Some b /\ Genv.find_funct_ptr shim_ge b = Some (Internal f)) ->
       (exists b, Genv.find_symbol link_ge id = Some b /\ Genv.find_funct_ptr link_ge b = Some (Internal f)).
@@ -364,26 +394,45 @@ Section LINKED.
     eapply list_norepet_link; eauto.
     eapply prog_def_transf_r; eauto.
   Qed.
+*)
 
-End LINKED.
-
-
-(*
-(* Use these here? *)
-Require NewCont.
-Require GenvSwap.
-
-(* There are a couple of linker things we need *)
-(* 1. we need to be able to manufacture an is_callstate fact about a call to a correct oeuf pointer *)
-(*     - this boils down to match_values between cminor level and source_lang level *)
-(*     - which we want to manufacture for compiled oeuf symbols *)
-(* 2. we need to be able to convert steps given to us from the oeuf top level theorem into steps in our program *)
-(*    - done below *)
+  (* We need a simple simulation *)
+  (* We'll use the fact that we linked up *)
+  (* to show that we simply never made any external calls *)
 
 
-Section LINK_SIM.
+  (*
+    Lemma eval_expr_transf :
+      forall sp e m a v,
+        eval_expr oeuf_ge sp e m a v ->
+        exists v',
+          eval_expr link_ge sp e m a v' /\ Val.lessdef v v'.
+    Proof.
+      induction 1; intros;
+        try solve [eexists; split; try econstructor; eauto].
+      eexists; split; try econstructor; eauto.
+      
+
+  
+  Lemma step_sim :
+    forall st t st',
+      step oeuf_ge st t st' ->
+      step link_ge st t st'.
+  Proof.
+    intros.
+    inv H; try solve [econstructor; eauto].
+*)
+    
+
+  (* TODO: shim should have i64 definitions *)
+  (* no need to manually add them *)
+  (* Use the fact that Oeuf before only had malloc to show that steps are well behaved *)
+  (* and to create a simple simulation argument *)
+  (* that doesn't need Mem.inject or anything (same memory) *)
   
   
+
+End LINKED.  
   
 
-End LINK_SIM.*)
+

@@ -67,7 +67,7 @@ Definition crt_make_i64_def name sig : ((id_key * String.string) * Fmajor.fundef
     let name' := String.append "__i64_" name in
     ((IkRuntime name', name'), External (EF_external name' sig)).
 
-Definition crt_i64_funcs:=
+(*Definition crt_i64_funcs:= 
     [ crt_make_i64_def "dtos" SelectLong.sig_f_l
     ; crt_make_i64_def "dtou" SelectLong.sig_f_l
     ; crt_make_i64_def "stod" SelectLong.sig_l_f
@@ -81,10 +81,10 @@ Definition crt_i64_funcs:=
     ; crt_make_i64_def "shl" SelectLong.sig_li_l
     ; crt_make_i64_def "shr" SelectLong.sig_li_l
     ; crt_make_i64_def "sar" SelectLong.sig_li_l
-    ]%string.
+    ]%string.*)
 
-Definition extra_funcs :=
-    crt_i64_funcs ++
+Definition extra_funcs : list ((id_key * String.string) * Fmajor.fundef) :=
+  (*crt_i64_funcs ++*)
     [ ((IkMalloc, "malloc"), External EF_malloc) ]%string.
 
 Definition extra_keys := map fst (map fst extra_funcs).
