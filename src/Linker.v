@@ -430,13 +430,26 @@ Section LINKED.
     | External ef => ef = EF_malloc
     end.
 
+  (* Prove from translation val *)
   Lemma oeuf_funs_internal :
     forall b fd,
       Genv.find_funct_ptr oeuf_ge b = Some fd ->
       internal_or_malloc fd.
   Proof.
   Admitted.
-      
+
+  (* Prove from translation val *)
+  Lemma oeuf_no_builtin :
+    forall b fd,
+      Genv.find_funct_ptr oeuf_ge b = Some fd ->
+      match fd with
+      | Internal f0 => no_builtin (fn_body f0)
+      | External _ => True
+      end.
+  Proof.
+  Admitted.
+
+  
   
 
 (*  
@@ -680,15 +693,6 @@ Section LINKED.
   Proof.
   Admitted.
 
-  Lemma oeuf_no_builtin :
-    forall b fd,
-      Genv.find_funct_ptr oeuf_ge b = Some fd ->
-      match fd with
-      | Internal f0 => no_builtin (fn_body f0)
-      | External _ => True
-      end.
-  Proof.
-  Admitted.
   
 
   Lemma env_lessdef_set_params :
