@@ -168,7 +168,15 @@ Section SIM.
     assert (Cmajor.cminor_is_callstate oprog (HighValues.Close _id nil) (HighValues.Constr Integers.Int.zero nil) OST).
     {
       assert (b1 <> b0). {
-        admit.
+        copy Heqp0. eapply Mem.nextblock_alloc in Heqp0.
+        eapply Mem.alloc_result in H5.
+        copy Heqp1. eapply Mem.nextblock_alloc in Heqp1.
+        eapply Mem.alloc_result in H6.
+        eapply Mem.nextblock_store in e.
+        eapply Mem.nextblock_store in e0.
+        subst. rewrite e0. rewrite e. rewrite Heqp0.
+        assert (Plt (Mem.nextblock m) (Pos.succ (Mem.nextblock m))) by (eapply Plt_succ).
+        eapply Plt_ne in H5. congruence.
       } idtac.
       subst. econstructor.
       econstructor. Focus 3. unfold Genv.find_symbol. simpl. reflexivity.
@@ -203,14 +211,23 @@ Section SIM.
     (* establish matching callstates *)
     copy H5.
     eapply (OeufProof.oeuf_match_callstate Dumb.oeuf_prog _ dumb_axioms.TRANSF) in H5.
-    
-    Focus 3. 
-    instantiate (1 := SZero).
-    econstructor; eauto. split. reflexivity.
-    admit. (* TODO: make sure we can prove this *)
+
     Focus 2. instantiate (1 := SID).
-    econstructor; eauto. split. reflexivity.
-    admit. (* TODO: make sure we can prove this *)
+    rewrite OeufProof.same_match_values.
+    admit. (* TODO: need help here *)
+    (* This is the match values case for a closure *)
+
+    
+    Focus 2.
+    instantiate (1 := SZero).
+    rewrite OeufProof.same_match_values.
+    repeat (econstructor; eauto).
+    instantiate (1 := O).
+    subst SZero. simpl. econstructor; eauto.
+    simpl. unfold Integers.Int.zero. store_auto.
+
+    (* END establish matching *)
+
     repeat progress (try break_exists; try break_and).
 
 
@@ -303,14 +320,13 @@ Section SIM.
     inversion H8.
     eapply existT_eq in H18. subst v.
     clear H17. subst ty.
-    inversion H10. repeat break_and.
-    (* HERE we need a better definition of match_val again *)
-    
-    
-      
-      
-    
-    
+    rewrite same_match_values in H10.
+    inversion H10.
+
+
+    (* TODO: pick apart definitions until we get something concrete for x6 *)
+    (* Then we can step to the print call *)
+        
 
   Admitted.
 

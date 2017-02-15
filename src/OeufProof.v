@@ -362,6 +362,17 @@ Section OeufSimulation.
       forall {ty : type} sv hv,
         @oeuf_match_values ty sv hv <-> @match_values ty sv hv.
     Proof.
+      split.
+      admit.
+
+      intros. inv H.
+      unfold oeuf_match_values.
+      econstructor; eauto. split. reflexivity.
+      unfold Oeuf_forward_simulation.
+      unfold apply_partial.
+      unfold apply_total.
+      unfold MixSemantics.fsim_match_val.
+      
       (* I have no idea how to prove either direction of this *)
       (* Both directions are necessary, however *)
     Admitted.
