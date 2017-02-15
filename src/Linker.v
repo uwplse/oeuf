@@ -464,12 +464,32 @@ Proof.
 Qed.
 
 
+Lemma find_symbol_add_globals_same :
+  forall {A B} l (ge1 ge2 : Genv.t A B),
+    (forall id, Genv.find_symbol ge1 id = Genv.find_symbol ge2 id) ->
+    Genv.genv_next ge1 = Genv.genv_next ge2 ->
+    forall id,
+      Genv.find_symbol (Genv.add_globals ge1 l) id = Genv.find_symbol (Genv.add_globals ge2 l) id.
+Proof.
+  induction l; intros; simpl; eauto.
+  erewrite IHl; eauto. intros.
+  destruct a.
+  unfold Genv.add_global. unfold Genv.find_symbol. simpl.
+  destruct (peq i id0). subst. repeat rewrite PTree.gss.
+  congruence.
+  repeat rewrite PTree.gso by congruence.
+  unfold Genv.find_symbol in H. eapply H.
+  unfold Genv.add_global. simpl. congruence.
+Qed.
+
 Lemma find_symbol_prog_public :
   forall {A B} l pub1 pub2 id,
     Genv.find_symbol (Genv.add_globals (Genv.empty_genv A B pub1) l) id =
     Genv.find_symbol (Genv.add_globals (Genv.empty_genv A B pub2) l) id.
 Proof.
-Admitted.
+  intros.
+  eapply find_symbol_add_globals_same; eauto.
+Qed.
 
 Section LINKED.
 
@@ -513,6 +533,18 @@ Section LINKED.
       Genv.find_funct_ptr oeuf_ge b = Some fd ->
       Genv.find_funct_ptr link_ge b = Some fd.
   Proof.
+    intros.
+    unfold oeuf_ge in *.
+    unfold link_ge in *.
+    unfold shim_link in TRANSF.
+    repeat break_match_hyp; try congruence.
+    invc TRANSF.
+    copy Heqr.
+    eapply link_fundefs_head in Heqr.
+    break_exists. subst l1.
+
+    unfold Genv.globalenv in *. simpl.
+    
   Admitted.
 
   Definition internal_or_malloc (fd : fundef) : Prop :=
@@ -685,8 +717,26 @@ Section LINKED.
 
     try solve [inv H1; inv H2; eexists; split; simpl; try reflexivity; eauto; destruct_undef; simpl; eauto; simpl in *; try congruence; repeat break_match_hyp; try congruence; inv H1; inv H2; try congruence; simpl; try find_rewrite; try congruence].
 
-    (* close, look at when awake *)    
-  Admitted.
+    (* cmpu *)
+    unfold Val.cmpu.
+    simpl. eexists; split; eauto.
+    unfold Val.of_optbool.
+    break_match; try solve [econstructor].
+    eapply Val.cmpu_bool_lessdef in Heqo; unfold Val.cmpu; try rewrite Heqo; eauto.
+    intros.
+    eapply Mem.valid_pointer_extends; eauto.
+    
+    (* cmpl *)
+    simpl.
+    inv H1; inv H2; simpl in *; try solve [eexists; split; try econstructor; eauto];
+      try solve [unfold Val.cmpl in *; unfold Val.cmpl_bool in *; try break_match_hyp; simpl in *; try congruence].
+
+    (* cmplu *)
+    simpl.
+    inv H1; inv H2; simpl in *; try solve [eexists; split; try econstructor; eauto];
+      try solve [unfold Val.cmplu in *; unfold Val.cmplu_bool in *; try break_match_hyp; simpl in *; try congruence].
+    
+  Qed.    
   
   Lemma eval_expr_transf :
     forall sp sp' e e' m m' a v,
@@ -807,6 +857,24 @@ Section LINKED.
     eapply oeuf_funs_internal; eauto.
   Qed.
 
+  (* TODO: dedup from NewCont *)
+  Lemma find_label_none :
+    forall l b k,
+      find_label l b k = None ->
+      forall k',
+        find_label l b k' = None.
+  Proof.
+    induction b; intros;
+      simpl in *; eauto.
+    break_match_hyp; try congruence.
+    erewrite IHb1; eauto.
+    break_match_hyp; try congruence.
+    erewrite IHb1; eauto.
+    break_match_hyp; try congruence.
+    eauto.
+  Qed.
+
+  
   Lemma find_label_match_cont :
     forall l s k s' k',
       find_label l s k = Some (s',k') ->
@@ -816,9 +884,31 @@ Section LINKED.
         exists k'0,
           find_label l s k0 = Some (s',k'0) /\ match_cont k' k'0 /\ no_builtin s'.
   Proof.
-    (* Do this when more awake *)
-  Admitted.
-
+    induction s; intros; simpl in *; try congruence;
+      repeat (break_match_hyp; try congruence);
+      repeat match goal with
+             | [ H : Some _ = Some _ |- _ ] => invc H
+             end;
+      repeat break_and.
+    - eapply IHs1 in Heqo; try solve [try econstructor; eauto].
+      repeat break_exists; repeat break_and.
+      collapse_match. eexists; split; eauto.
+    - erewrite find_label_none; eauto.
+    - eapply IHs1 in Heqo; try solve [try econstructor; eauto].
+      repeat break_exists; repeat break_and.
+      collapse_match. eexists; split; eauto.
+    - erewrite find_label_none; eauto.
+    - eapply IHs in H; try solve [try econstructor; eauto].
+      repeat break_exists; repeat break_and.
+      eexists; split; eauto.
+    - eapply IHs in H; try solve [try econstructor; eauto].
+      repeat break_exists; repeat break_and.
+      eexists; split; eauto.
+    - eauto.
+    - eapply IHs in H; try solve [try econstructor; eauto].
+      repeat break_exists; repeat break_and.
+      eexists; split; eauto.
+  Qed.
 
   Lemma env_lessdef_set_params :
     forall l vs vs',
@@ -997,7 +1087,9 @@ Section LINKED.
   Qed.
     
 
-End LINKED.  
+End LINKED.
+
+
   
 
 
