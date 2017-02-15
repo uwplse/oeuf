@@ -401,6 +401,76 @@ Proof.
   simpl. eauto.
 Qed.
 
+
+Lemma not_or_distr :
+  forall A B,
+    ~ (A \/ B) -> (~ A) /\ (~ B).
+Proof.
+  intros.
+  split;
+    intro; apply H.
+  left. auto.
+  right. auto.
+Qed.
+
+
+Lemma find_symbol_not_in :
+  forall {F V} l id,
+    ~ In id (map fst l) ->
+    forall (ge : Genv.t F V),
+      Genv.find_symbol (Genv.add_globals ge l) id = Genv.find_symbol ge id.
+Proof.
+  induction l; intros.
+  simpl. reflexivity.
+  simpl.
+  simpl in H. eapply not_or_distr in H.
+  break_and.
+  rewrite IHl; eauto.
+  destruct a.
+  simpl in H.
+  unfold Genv.find_symbol. unfold Genv.add_global. simpl.
+  rewrite PTree.gso by congruence. reflexivity.
+Qed.
+ 
+
+Lemma find_symbol_head :
+  forall {A B} (l : list (ident * globdef A B)) l',
+    list_norepet (map fst (l ++ l')) ->
+    forall id b ge,
+      Genv.find_symbol ge id = None ->
+      Genv.find_symbol (Genv.add_globals ge l) id = Some b ->
+      Genv.find_symbol (Genv.add_globals ge (l ++ l')) id = Some b.
+Proof.
+  induction l; intros.
+  unfold Genv.find_symbol in *. simpl in *. congruence.
+  simpl in *.
+  destruct (Genv.find_symbol (Genv.add_global ge a) id) eqn:?.
+  unfold Genv.add_global in Heqo. unfold Genv.find_symbol in Heqo.
+  simpl in Heqo. destruct a. simpl in *.
+  destruct (peq i id). Focus 2.
+  rewrite PTree.gso in Heqo; try congruence.
+  unfold Genv.find_symbol in H0. congruence.
+  subst i.
+  rewrite PTree.gss in Heqo. inv Heqo.
+  inv H.
+  rewrite find_symbol_not_in; eauto.
+  copy H4.
+  rewrite map_app in H4. rewrite in_app in H4.
+  eapply not_or_distr in H4.
+  break_and.
+  rewrite find_symbol_not_in in H1; eauto.
+  eapply IHl in Heqo; eauto.
+  inv H. eauto.
+Qed.
+
+
+Lemma find_symbol_prog_public :
+  forall {A B} l pub1 pub2 id,
+    Genv.find_symbol (Genv.add_globals (Genv.empty_genv A B pub1) l) id =
+    Genv.find_symbol (Genv.add_globals (Genv.empty_genv A B pub2) l) id.
+Proof.
+Admitted.
+
 Section LINKED.
 
   Variable oeuf_code shim_code link_code : Cminor.program.
@@ -410,12 +480,33 @@ Section LINKED.
   Definition shim_ge := Genv.globalenv shim_code.
   Definition link_ge := Genv.globalenv link_code.
 
+
+  
   Lemma oeuf_symbol_transf :
     forall id b,
       Genv.find_symbol oeuf_ge id = Some b ->
       Genv.find_symbol link_ge id = Some b.
   Proof.
-  Admitted.
+    intros.
+    unfold oeuf_ge in *.
+    unfold link_ge in *.
+    unfold shim_link in TRANSF.
+    repeat break_match_hyp; try congruence.
+    invc TRANSF.
+    copy Heqr.
+    eapply link_fundefs_head in Heqr.
+    break_exists. subst l1.
+
+    unfold Genv.globalenv in *. simpl.
+    eapply find_symbol_head; eauto.
+    Focus 3.
+    erewrite find_symbol_prog_public; eauto.
+    Focus 2. unfold Genv.find_symbol. simpl.
+    eapply PTree.gempty.
+
+    eapply link_fundefs_norepet in H0; eauto.
+  Qed.    
+    
 
   Lemma oeuf_funct_ptr_transf :
     forall b fd,
