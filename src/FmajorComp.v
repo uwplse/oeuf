@@ -17,6 +17,7 @@ Require PrettyParsing.NatToSymbol String.
 Delimit Scope string_scope with string.
 Local Notation "s1 ++ s2" := (String.append s1 s2) : string_scope.
 Require FlatIntTag Fmajor.
+Require MatchValues.
 
 Close Scope Z_scope.
 
@@ -46,21 +47,18 @@ Definition numbered {A} (xs : list A) := numbered' 0 xs.
 
 (* types of identifiers we might need for the compiled program *)
 
-Inductive id_key :=
-| IkArg
-| IkSelf
-| IkSwitchTarget
-| IkVar (l : nat)
-| IkFunc (fname : nat)
-| IkRuntime (name : String.string)
-| IkMalloc
-.
+Notation id_key := MatchValues.id_key.
+Notation IkArg := MatchValues.IkArg.
+Notation IkSelf := MatchValues.IkSelf.
+Notation IkSwitchTarget := MatchValues.IkSwitchTarget.
+Notation IkVar := MatchValues.IkVar.
+Notation IkFunc := MatchValues.IkFunc.
+Notation IkRuntime := MatchValues.IkRuntime.
+Notation IkMalloc := MatchValues.IkMalloc.
 
-Definition id_key_eq_dec (a b : id_key) : { a = b } + { a <> b }.
-decide equality; eauto using eq_nat_dec, String.string_dec.
-Defined.
+Notation id_key_eq_dec := MatchValues.id_key_eq_dec.
 
-Definition id_key_assoc {V} := assoc id_key_eq_dec (V := V).
+Notation id_key_assoc := MatchValues.id_key_assoc.
 
 
 Definition crt_make_i64_def name sig : ((id_key * String.string) * Fmajor.fundef):=
@@ -161,10 +159,11 @@ Definition build_id_list (cu : list (A.stmt * A.expr) * list metadata) :
 
 (* main compilation *)
 
+Notation id_map := MatchValues.id_map.
+
 Section compile.
 Open Scope option_monad.
 
-Definition id_map := list (id_key * ident).
 Variable M : id_map.
 Let get_id := id_key_assoc M.
 
@@ -288,7 +287,7 @@ Section match_states.
 
 Variable M : id_map.
 
-Definition I_id k i := id_key_assoc M k = Some i.
+Definition I_id k i := MatchValues.I_id M k i.
 Hint Unfold I_id.
 
 Inductive I_expr : A.expr -> B.expr -> Prop :=
@@ -376,15 +375,9 @@ Inductive I_prog : A.env -> B.program -> Prop :=
         I_env AP (Genv.globalenv BP) ->
         I_prog AP BP.
 
-Inductive I_value : value -> value -> Prop :=
-| IConstr : forall tag aargs bargs,
-        Forall2 I_value aargs bargs ->
-        I_value (Constr tag aargs) (Constr tag bargs)
-| IClose : forall afname afree bfname bfree,
-        I_id (IkFunc (pred (Pos.to_nat afname))) bfname ->
-        Forall2 I_value afree bfree ->
-        I_value (Close afname afree) (Close bfname bfree)
-.
+Definition I_value := (MatchValues.mv_fmajor M).
+Definition IConstr {M} := MatchValues.FmConstr M.
+Definition IClose {M} := MatchValues.FmClose M.
 
 Inductive I_opt_value : option value -> option value -> Prop :=
 | IOVSome : forall v1 v2,
@@ -451,6 +444,7 @@ Inductive I : A.state -> B.state -> Prop :=
 End match_states.
 Hint Resolve ISkip.
 Hint Unfold B.is_call_cont.
+Hint Unfold I_value IConstr IClose.
 
 Inductive id_map_ok : id_map -> Prop :=
 | IdMapOk : forall M,
@@ -1339,7 +1333,7 @@ unfold A.set. simpl. econstructor; eauto.
 Qed.
 Hint Resolve set_switch_target_I_frame.
 
-Hint Constructors I_value.
+Hint Constructors MatchValues.mv_fmajor.
 
 Lemma eval_sim : forall M af ae av bf be,
     I_frame M af bf ->
