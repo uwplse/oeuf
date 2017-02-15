@@ -560,8 +560,18 @@ Section LINKED.
       try solve [eexists; split; simpl; try reflexivity;
                  try eapply Val.zero_ext_lessdef;
                  try eapply Val.sign_ext_lessdef;
-                 eauto].
-  Admitted.
+                 eauto];
+      try solve [invp Val.lessdef; simpl; eauto];
+      destruct x; simpl in *; try congruence;
+        invp Val.lessdef; eauto.
+  Qed.
+
+  Ltac destruct_undef :=
+    match goal with
+    | [ H : context[ _ ?V Vundef] |- _ ] => destruct V
+    | [ |- context[_ ?V Vundef] ] => destruct V
+    | [ |- _ ] => idtac
+    end.
 
   Lemma eval_binop_transf :
     forall op v1 v2 m v v1' v2' m',
@@ -572,6 +582,19 @@ Section LINKED.
       exists v',
         eval_binop op v1' v2' m' = Some v' /\ Val.lessdef v v'.
   Proof.
+    intros.
+    destruct op; simpl in H;
+      match goal with
+      | [ H : Some _ = Some _ |- _ ] => invc H
+      | [ H : None = Some _ |- _ ] => congruence
+      | [ |- _ ] => idtac
+      end;
+
+      try solve [inv H1; inv H2; eexists; split; simpl; try reflexivity; eauto; destruct_undef; simpl; eauto];
+
+    try solve [inv H1; inv H2; eexists; split; simpl; try reflexivity; eauto; destruct_undef; simpl; eauto; simpl in *; try congruence; repeat break_match_hyp; try congruence; inv H1; inv H2; try congruence; simpl; try find_rewrite; try congruence].
+
+    (* close, look at when awake *)    
   Admitted.
   
   Lemma eval_expr_transf :
@@ -627,7 +650,12 @@ Section LINKED.
       exists vl',
         eval_exprlist link_ge sp' e' m' expl vl' /\ Val.lessdef_list vl vl'.
   Proof.
-  Admitted.
+    induction 1; intros. exists nil; split; econstructor; eauto.
+    destruct IHeval_exprlist; eauto. break_and.
+    eapply eval_expr_transf in H; eauto.
+    break_exists; break_and.
+    eexists; split; econstructor; eauto.
+  Qed.
 
   
   Lemma match_is_call_cont :
@@ -648,7 +676,13 @@ Section LINKED.
         Val.lessdef v v' ->
         env_lessdef (PTree.set id v e) (PTree.set id v' e').
   Proof.
-  Admitted.
+    intros.
+    unfold env_lessdef in *.
+    intros. destruct (peq id id0). subst.
+    rewrite PTree.gss in *. eexists; split; eauto. congruence.
+    rewrite PTree.gso in * by congruence.
+    eapply H; eauto.
+  Qed.
 
   Lemma find_funct_transf :
     forall vf vf' fd,
@@ -691,25 +725,30 @@ Section LINKED.
         exists k'0,
           find_label l s k0 = Some (s',k'0) /\ match_cont k' k'0 /\ no_builtin s'.
   Proof.
+    (* Do this when more awake *)
   Admitted.
 
-  
 
   Lemma env_lessdef_set_params :
     forall l vs vs',
       Val.lessdef_list vs vs' ->
       env_lessdef (set_params vs l) (set_params vs' l).
   Proof.
-  Admitted.
+    induction l; intros. simpl. unfold env_lessdef. intros.
+    rewrite PTree.gempty in H0. congruence.
+    inv H. simpl. eapply env_lessdef_set; eauto.
+    simpl. eapply env_lessdef_set; eauto.
+  Qed.
   
   Lemma env_lessdef_set_locals :
-    forall e e',
+    forall l e e',
       env_lessdef e e' ->
-      forall l,
-        env_lessdef (set_locals l e) (set_locals l e').
+      env_lessdef (set_locals l e) (set_locals l e').
   Proof.
-  Admitted.
-
+    induction l; intros; 
+      simpl; eauto.
+    eapply env_lessdef_set; eauto.
+  Qed.
   
   Lemma step_sim :
     forall st t st' lst,
