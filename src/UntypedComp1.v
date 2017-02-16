@@ -17,33 +17,12 @@ Require Untyped1.
 Module A := SourceLifted.
 Module B := Untyped1.
 
+Require MatchValues.
 
-Definition compile_member {A : Type} {x : A} {l} :=
-    let fix go {x l} (mb : member x l)  :=
-        match mb with
-        | Here => 0
-        | There mb' => S (go mb')
-        end in @go x l.
 
-Definition compile_value {G ty} :=
-    let fix go {ty} (v : A.value G ty) :=
-        let fix go_list {tys} (vs : hlist (A.value G) tys) :=
-            match vs with
-            | hnil => []
-            | hcons v vs => go v :: go_list vs
-            end in
-        match v with
-        | @A.VConstr _ _ ctor _ _ args => Constr ctor (go_list args)
-        | @A.VClose _ _ _ _ mb free => Close (compile_member mb) (go_list free)
-        end in @go ty.
-
-Definition compile_value_list {G tys} :=
-    let go {ty} := @compile_value G ty in
-    let fix go_list {tys} (vs : hlist (A.value G) tys) :=
-        match vs with
-        | hnil => []
-        | hcons v vs => go v :: go_list vs
-        end in @go_list tys.
+Notation compile_member := MatchValues.compile_member.
+Notation compile_value := MatchValues.compile_highest.
+Notation compile_value_list := MatchValues.compile_highest_list.
 
 Definition compile_expr {G L ty} :=
     let fix go {ty} (e : A.expr G L ty) :=

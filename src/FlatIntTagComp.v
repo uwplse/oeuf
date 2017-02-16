@@ -16,6 +16,8 @@ Module B := FlatIntTag.
 Module V1 := HigherValue.
 Module V2 := HighValues.
 
+Require MatchValues.
+
 Add Printing Constructor A.frame.
 Add Printing Constructor B.frame.
 
@@ -137,16 +139,9 @@ Inductive I_func : (A.stmt * A.expr) -> (B.stmt * B.expr) -> Prop :=
         I_expr aret bret ->
         I_func (acode, aret) (bcode, bret).
 
-Inductive I_value : V1.value -> V2.value -> Prop :=
-| IConstr : forall atag aargs btag bargs,
-        Z.of_nat atag = Int.unsigned btag ->
-        Forall2 I_value aargs bargs ->
-        I_value (V1.Constr atag aargs) (V2.Constr btag bargs)
-| IClose : forall afname afree bfname bfree,
-        Pos.of_succ_nat afname = bfname ->
-        Forall2 I_value afree bfree ->
-        I_value (V1.Close afname afree) (V2.Close bfname bfree)
-.
+Notation I_value := MatchValues.mv_high.
+Notation IConstr := MatchValues.HgConstr.
+Notation IClose := MatchValues.HgClose.
 
 Inductive I_frame : A.frame -> B.frame -> Prop :=
 | IFrame : forall aarg aself alocals barg bself blocals,
