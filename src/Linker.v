@@ -491,6 +491,52 @@ Proof.
   eapply find_symbol_add_globals_same; eauto.
 Qed.
 
+Lemma find_funct_ptr_add_globals_same :
+  forall {A B} l (ge1 ge2 : Genv.t A B),
+    (forall b, Genv.find_funct_ptr ge1 b = Genv.find_funct_ptr ge2 b) ->
+    Genv.genv_next ge1 = Genv.genv_next ge2 ->
+    forall b,
+      Genv.find_funct_ptr (Genv.add_globals ge1 l) b = Genv.find_funct_ptr (Genv.add_globals ge2 l) b.
+Proof.
+  induction l; intros; simpl; eauto.
+  erewrite IHl; eauto. intros.
+  destruct a.
+  unfold Genv.add_global. unfold Genv.find_funct_ptr. simpl.
+  destruct g; simpl; eauto.
+  destruct (peq b0 (Genv.genv_next ge1)). subst. rewrite PTree.gss.
+  rewrite <- H0. rewrite PTree.gss. eauto.
+  repeat rewrite PTree.gso by congruence.
+  eapply H.
+  unfold Genv.add_global. simpl. congruence.
+Qed.
+
+Lemma find_funct_ptr_prog_public :
+  forall {A B} l pub1 pub2 id,
+    Genv.find_funct_ptr (Genv.add_globals (Genv.empty_genv A B pub1) l) id =
+    Genv.find_funct_ptr (Genv.add_globals (Genv.empty_genv A B pub2) l) id.
+Proof.
+  intros.
+  eapply find_funct_ptr_add_globals_same; eauto.
+Qed.
+
+
+Lemma find_funct_ptr_head :
+  forall {A B} (l : list (ident * globdef A B)) ge b fd,
+    Genv.find_funct_ptr ge b = Some fd ->
+    Genv.find_funct_ptr (Genv.add_globals ge l) b = Some fd.
+Proof.
+  induction l; intros.
+  simpl. assumption.
+  simpl. eapply IHl; eauto.
+  unfold Genv.find_funct_ptr in *. unfold Genv.add_global.
+  simpl. destruct a. simpl.
+  break_match; eauto.
+  copy H.
+  eapply Genv.genv_funs_range in H.
+  eapply Plt_ne in H. rewrite PTree.gso by congruence.
+  assumption.
+Qed.
+
 Section LINKED.
 
   Variable oeuf_code shim_code link_code : Cminor.program.
@@ -542,11 +588,12 @@ Section LINKED.
     copy Heqr.
     eapply link_fundefs_head in Heqr.
     break_exists. subst l1.
-
+    
     unfold Genv.globalenv in *. simpl.
-    
-    
-  Admitted.
+    rewrite Genv.add_globals_app.
+    eapply find_funct_ptr_head; eauto.
+    erewrite find_funct_ptr_prog_public; eauto.
+  Qed.
 
   Definition internal_or_malloc (fd : fundef) : Prop :=
     match fd with
