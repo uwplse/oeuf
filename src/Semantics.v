@@ -596,7 +596,7 @@ Proof.
   intros. destruct H. eapply match_final_states; eauto.
   intros. destruct H0. subst i. exploit simulation; eauto. intros [s2' [A B]].
   exists s1'; exists s2'; intuition.
-Qed.
+Defined.
 
 End SIMULATION_STAR_WF.
 
@@ -624,7 +624,7 @@ Proof.
     try break_exists; repeat break_and.
       exists x; auto.
   exists s2; split. right; split. apply star_refl. auto. auto.
-Qed.
+Defined.
 
 End SIMULATION_STAR.
 
@@ -642,7 +642,7 @@ Lemma forward_simulation_plus: forward_simulation L1 L2.
 Proof.
   apply forward_simulation_star with (measure := fun _ => O).
   intros. exploit simulation; eauto.
-Qed.
+Defined.
 
 End SIMULATION_PLUS.
 
@@ -661,7 +661,7 @@ Proof.
   apply forward_simulation_plus.
   intros. exploit simulation; eauto. intros [s2' [A B]].
   exists s2'; split; auto. apply plus_one; auto.
-Qed.
+Defined.
 
 End SIMULATION_STEP.
 
@@ -688,7 +688,7 @@ Proof.
   intros [[s2' [A B]] | [A B]].
   left; exists s2'; split; auto. apply plus_one; auto.
   right; auto.
-Qed.
+Defined.
 
 End SIMULATION_OPT.
 
@@ -820,6 +820,6 @@ Proof.
   exists s3; auto.
 (* symbols *)
   (*  intros. transitivity (Senv.public_symbol (symbolenv L2) id); apply fsim_public_preserved; auto. *)
-Qed.
+Defined.
 
 End COMPOSE_SIMULATIONS.
