@@ -545,6 +545,7 @@ Section LINKED.
 
     unfold Genv.globalenv in *. simpl.
     
+    
   Admitted.
 
   Definition internal_or_malloc (fd : fundef) : Prop :=
@@ -553,13 +554,34 @@ Section LINKED.
     | External ef => ef = EF_malloc
     end.
 
+  Lemma only_malloc_ext_sound :
+    forall l,
+      only_malloc_ext l = true ->
+      forall id fd,
+        In (id, Gfun fd) l ->
+        internal_or_malloc fd.
+  Proof.
+    induction l; intros; simpl in *.
+    invp False.
+    destruct a. repeat (break_match_hyp; try congruence); subst;
+                  break_or; try solve [inv H0; simpl; eauto];
+                    eapply IHl; eauto.
+  Qed.
+  
   (* Prove from translation val *)
   Lemma oeuf_funs_internal :
     forall b fd,
       Genv.find_funct_ptr oeuf_ge b = Some fd ->
       internal_or_malloc fd.
   Proof.
-  Admitted.
+    intros. unfold oeuf_ge in *.
+    unfold shim_link in *.
+    repeat (break_match_hyp; try congruence).
+    invc TRANSF.
+    eapply Genv.find_funct_ptr_inversion in H.
+    break_exists.
+    eapply only_malloc_ext_sound; eauto.
+  Qed.
 
   (* Prove from translation val *)
   Lemma oeuf_no_builtin :
@@ -570,50 +592,15 @@ Section LINKED.
       | External _ => True
       end.
   Proof.
-  Admitted.
-
-  
-  
-
-(*  
-  Lemma oeuf_ident_transf_weak :
-    forall id fd,
-      (exists b, Genv.find_symbol oeuf_ge id = Some b /\ Genv.find_funct_ptr oeuf_ge b = Some fd) ->
-      (exists b, Genv.find_symbol link_ge id = Some b /\ Genv.find_funct_ptr link_ge b = Some fd).
-  Proof.
-    intros.
-    break_exists. break_and.
-    app Genv.find_funct_ptr_symbol_inversion Genv.find_symbol.
-    eapply Genv.find_funct_ptr_exists; eauto.
-    eapply list_norepet_link; eauto.
-    eapply prog_def_transf_l; eauto.
+    intros. unfold oeuf_ge in *.
+    unfold shim_link in *.
+    repeat (break_match_hyp; try congruence).
+    invc TRANSF.
+    eapply Genv.find_funct_ptr_inversion in H.
+    break_exists.
+    rewrite Forall_forall in f.
+    eapply f in H. simpl in H. eapply H.
   Qed.
-
-  Lemma shim_ident_transf_weak :
-    forall id f,
-      (exists b, Genv.find_symbol shim_ge id = Some b /\ Genv.find_funct_ptr shim_ge b = Some (Internal f)) ->
-      (exists b, Genv.find_symbol link_ge id = Some b /\ Genv.find_funct_ptr link_ge b = Some (Internal f)).
-  Proof.
-    intros.
-    break_exists. break_and.
-    app Genv.find_funct_ptr_symbol_inversion Genv.find_symbol.
-    eapply Genv.find_funct_ptr_exists; eauto.
-    eapply list_norepet_link; eauto.
-    eapply prog_def_transf_r; eauto.
-  Qed.
-*)
-
-  (* We need a simple simulation *)
-  (* We'll use the fact that we linked up *)
-  (* to show that we simply never made any external calls *)
-
-  (* TODO: shim should have i64 definitions *)
-  (* no need to manually add them *)
-  (* Use the fact that Oeuf before only had malloc to show that steps are well behaved *)
-  (* and to create a simple simulation argument *)
-  (* that doesn't need Mem.inject or anything (same memory) *)
-
-  
   
   Definition env_lessdef (e e' : env) : Prop :=
     forall id v,
