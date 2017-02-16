@@ -1,11 +1,8 @@
 Require Import Common.
+Require Import HList.
+Require Import Utopia.
 
 Require Import FunctionalExtensionality.
-Require Import Program.
-
-Require Import HList.
-
-Require Import Utopia.
 
 Require Import SourceLifted.
 

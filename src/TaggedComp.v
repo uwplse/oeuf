@@ -16,6 +16,8 @@ Require Tagged.
 Module A := Untyped8.
 Module B := Tagged.
 
+Require MatchValues.
+
 
 Section compile.
 Open Scope option_monad.
@@ -155,17 +157,9 @@ Qed.
 
 
 
-Inductive I_value : HighestValues.value -> HigherValue.value -> Prop :=
-| IvConstr : forall ctor aargs tag bargs,
-        Utopia.constructor_index ctor = tag ->
-        Forall2 I_value aargs bargs ->
-        I_value (HighestValues.Constr ctor aargs)
-                (HigherValue.Constr tag bargs)
-| IvClose : forall fname aargs bargs,
-        Forall2 I_value aargs bargs ->
-        I_value (HighestValues.Close fname aargs)
-                (HigherValue.Close fname bargs)
-.
+Notation I_value := MatchValues.mv_higher.
+Notation IvConstr := MatchValues.HrConstr.
+Notation IvClose := MatchValues.HrClose.
 
 Inductive I_expr : A.expr -> B.expr -> Prop :=
 | IArg : I_expr A.Arg B.Arg
