@@ -7,12 +7,13 @@ Require Import StuartTact.
 Require Import StructTact.StructTactics.
 Require Import ListLemmas.
 
+Require Import Setoid.
+
 Require SHA256.
 
 
 Require Arith.
 Require Import ZArith.
-Locate "mod".
 
 Local Open Scope Z.
 
@@ -823,4 +824,185 @@ unfold rotr32 at 3 4. repeat rewrite rotr32'_rotr32.
 rewrite ma_shiftr.
 rewrite ma_xor with (a := rotr32 _ _), ma_xor.
 all: auto.
+Qed.
+
+Lemma sigma_0_mask : forall x,
+    mask 32 x = x ->
+    mask 32 (sigma_0 x) = sigma_0 x.
+intros.
+unfold sigma_0.
+
+assert (0 <= 32) by omega.
+assert (0 <= x < MODULUS).
+  { rewrite <- H. eapply mask_lt. auto. }
+
+rewrite <- 2 ma_xor', shiftr_mask by auto.
+rewrite 2 mask_rotr32. congruence.
+Qed.
+
+Lemma sigma_1_mask : forall x,
+    mask 32 x = x ->
+    mask 32 (sigma_1 x) = sigma_1 x.
+intros.
+unfold sigma_1.
+
+assert (0 <= 32) by omega.
+assert (0 <= x < MODULUS).
+  { rewrite <- H. eapply mask_lt. auto. }
+
+rewrite <- 2 ma_xor', shiftr_mask by auto.
+rewrite 2 mask_rotr32. congruence.
+Qed.
+
+(* word function *)
+Definition W (M : nat -> Z) (t : nat) : Z.
+revert t. fix go 1. intros.
+
+refine match t with O => trunc (M t) | S t_1 => _ end.
+refine match t_1 with O => trunc (M t) | S t_2 => _ end.
+refine match t_2 with O => trunc (M t) | S t_3 => _ end.
+refine match t_3 with O => trunc (M t) | S t_4 => _ end.
+refine match t_4 with O => trunc (M t) | S t_5 => _ end.
+refine match t_5 with O => trunc (M t) | S t_6 => _ end.
+refine match t_6 with O => trunc (M t) | S t_7 => _ end.
+refine match t_7 with O => trunc (M t) | S t_8 => _ end.
+refine match t_8 with O => trunc (M t) | S t_9 => _ end.
+refine match t_9 with O => trunc (M t) | S t_10 => _ end.
+refine match t_10 with O => trunc (M t) | S t_11 => _ end.
+refine match t_11 with O => trunc (M t) | S t_12 => _ end.
+refine match t_12 with O => trunc (M t) | S t_13 => _ end.
+refine match t_13 with O => trunc (M t) | S t_14 => _ end.
+refine match t_14 with O => trunc (M t) | S t_15 => _ end.
+refine match t_15 with O => trunc (M t) | S t_16 => _ end.
+
+exact (
+    trunc ((sigma_1 (go t_2) + go t_7) + (sigma_0 (go t_15) + go (t_16)))
+).
+Defined.
+
+Lemma W_unfold : forall M t_16,
+    W M (16 + t_16) =
+    trunc ((sigma_1 (W M (14 + t_16)) + W M (9 + t_16)) +
+      (sigma_0 (W M (1 + t_16)) + W M (0 + t_16))).
+intros. reflexivity.
+Qed.
+
+Lemma W_unfold_last : forall M t,
+    (t < 16)%nat ->
+    W M t = trunc (M t).
+intros.
+do 16 (try destruct t as [ | t ]).
+17: exfalso; omega.
+all: reflexivity.
+Qed.
+
+Lemma W_mask : forall M t,
+    mask 32 (W M t) = W M t.
+intros. destruct (lt_dec t 16).
+- rewrite W_unfold_last by auto.
+  rewrite mask_mask. auto.
+- replace t with (16 + (t - 16))%nat by omega.
+  rewrite W_unfold.
+  change trunc with (mask 32).
+  rewrite mask_mask. auto.
+Qed.
+
+Lemma W_eq : forall M M',
+    (forall t t',
+        Z.of_nat t = t' ->
+        trunc (M t) = Int.unsigned (M' t')) ->
+    forall t t',
+    Z.of_nat t = t' ->
+    trunc (W M t) = Int.unsigned (SHA256.W M' t').
+intros0 HM. fix go 1; intro t.
+
+1: refine match t with O => _ | S t_1 => _ end; cycle 1.
+1: refine match t_1 with O => _ | S t_2 => _ end; cycle 1.
+pose proof (go t_2) as go_t2. revert go_t2.
+1: refine match t_2 with O => _ | S t_3 => _ end; cycle 1.
+1: refine match t_3 with O => _ | S t_4 => _ end; cycle 1.
+1: refine match t_4 with O => _ | S t_5 => _ end; cycle 1.
+1: refine match t_5 with O => _ | S t_6 => _ end; cycle 1.
+1: refine match t_6 with O => _ | S t_7 => _ end; cycle 1.
+pose proof (go t_7) as go_t7. revert go_t7.
+1: refine match t_7 with O => _ | S t_8 => _ end; cycle 1.
+1: refine match t_8 with O => _ | S t_9 => _ end; cycle 1.
+1: refine match t_9 with O => _ | S t_10 => _ end; cycle 1.
+1: refine match t_10 with O => _ | S t_11 => _ end; cycle 1.
+1: refine match t_11 with O => _ | S t_12 => _ end; cycle 1.
+1: refine match t_12 with O => _ | S t_13 => _ end; cycle 1.
+1: refine match t_13 with O => _ | S t_14 => _ end; cycle 1.
+1: refine match t_14 with O => _ | S t_15 => _ end; cycle 1.
+pose proof (go t_15) as go_t15. revert go_t15.
+1: refine match t_15 with O => _ | S t_16 => _ end; cycle 1.
+pose proof (go t_16) as go_t16. revert go_t16.
+
+all: intros; subst t'.
+all: cycle 1.
+
+{ simpl. rewrite SHA256.W_equation. break_if; [ | exfalso; omega ].
+  change trunc with (mask 32). rewrite mask_mask. auto. }
+{ simpl. rewrite SHA256.W_equation. break_if; [ | exfalso; omega ].
+  change trunc with (mask 32). rewrite mask_mask. auto. }
+{ simpl. rewrite SHA256.W_equation. break_if; [ | exfalso; omega ].
+  change trunc with (mask 32). rewrite mask_mask. auto. }
+{ simpl. rewrite SHA256.W_equation. break_if; [ | exfalso; omega ].
+  change trunc with (mask 32). rewrite mask_mask. auto. }
+{ simpl. rewrite SHA256.W_equation. break_if; [ | exfalso; omega ].
+  change trunc with (mask 32). rewrite mask_mask. auto. }
+{ simpl. rewrite SHA256.W_equation. break_if; [ | exfalso; omega ].
+  change trunc with (mask 32). rewrite mask_mask. auto. }
+{ simpl. rewrite SHA256.W_equation. break_if; [ | exfalso; omega ].
+  change trunc with (mask 32). rewrite mask_mask. auto. }
+{ simpl. rewrite SHA256.W_equation. break_if; [ | exfalso; omega ].
+  change trunc with (mask 32). rewrite mask_mask. auto. }
+{ simpl. rewrite SHA256.W_equation. break_if; [ | exfalso; omega ].
+  change trunc with (mask 32). rewrite mask_mask. auto. }
+{ simpl. rewrite SHA256.W_equation. break_if; [ | exfalso; omega ].
+  change trunc with (mask 32). rewrite mask_mask. auto. }
+{ simpl. rewrite SHA256.W_equation. break_if; [ | exfalso; omega ].
+  change trunc with (mask 32). rewrite mask_mask. auto. }
+{ simpl. rewrite SHA256.W_equation. break_if; [ | exfalso; omega ].
+  change trunc with (mask 32). rewrite mask_mask. auto. }
+{ simpl. rewrite SHA256.W_equation. break_if; [ | exfalso; omega ].
+  change trunc with (mask 32). rewrite mask_mask. auto. }
+{ simpl. rewrite SHA256.W_equation. break_if; [ | exfalso; omega ].
+  change trunc with (mask 32). rewrite mask_mask. auto. }
+{ simpl. rewrite SHA256.W_equation. break_if; [ | exfalso; omega ].
+  change trunc with (mask 32). rewrite mask_mask. auto. }
+{ simpl. rewrite SHA256.W_equation. break_if; [ | exfalso; omega ].
+  change trunc with (mask 32). rewrite mask_mask. auto. }
+
+let foldup n :=
+    let x := constr:(n + t_16)%nat in
+    let y := eval simpl in x in
+    change y with x in * in
+foldup 16%nat;
+foldup 14%nat;
+foldup 9%nat;
+foldup 1%nat.
+
+rewrite W_unfold.  rewrite SHA256.W_equation.
+rewrite Nat2Z.inj_add. change (Z.of_nat 16) with 16.
+break_if; [ exfalso; omega | ].
+
+unfold Int.add.
+erewrite <- sigma_1_eq, <- sigma_0_eq.
+erewrite <- go_t7, <- go_t16.
+repeat rewrite unsigned_repr_mask.
+
+2: omega.
+2: rewrite Nat2Z.inj_add; change (Z.of_nat 9) with 9; omega.
+
+rewrite 2 W_mask.
+rewrite ma_add.
+change trunc with (mask 32). rewrite mask_mask.
+reflexivity.
+
+- omega.
+- rewrite <- go_t15. rewrite W_mask. auto.
+  rewrite Nat2Z.inj_add. change (Z.of_nat 1) with 1. omega.
+- rewrite <- go_t2. rewrite W_mask. auto.
+  rewrite Nat2Z.inj_add. change (Z.of_nat 14) with 14. omega.
+
 Qed.
