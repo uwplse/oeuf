@@ -18,66 +18,27 @@ Require Import ZArith.
 Local Open Scope Z.
 
 
-Definition MODULUS := 4294967296.
-Definition MASK := 4294967295.
-Definition trunc z := Z.land z MASK.
-
-Definition B_MODULUS := 256.
-Definition B_MASK := 255.
-Definition b_trunc z := Z.land z B_MASK.
-
-Lemma MODULUS_two_p : MODULUS = 2 ^ 32.
-reflexivity.
-Qed.
-
-Lemma MASK_ones : MASK = Z.ones 32.
-reflexivity.
-Qed.
-
-Lemma trunc_mod : forall z, trunc z = z mod MODULUS.
-intros. unfold trunc.
-rewrite MASK_ones, Z.land_ones, MODULUS_two_p by omega.
-reflexivity.
-Qed.
-
-Lemma B_MODULUS_two_p : B_MODULUS = 2 ^ 8.
-reflexivity.
-Qed.
-
-Lemma B_MASK_ones : B_MASK = Z.ones 8.
-reflexivity.
-Qed.
-
-Lemma b_trunc_mod : forall z, b_trunc z = z mod B_MODULUS.
-intros. unfold b_trunc.
-rewrite B_MASK_ones, Z.land_ones, B_MODULUS_two_p by omega.
-reflexivity.
-Qed.
-
-
-
 Definition mask w z := Z.land z (Z.ones w).
+Definition trunc z := mask 32 z.
+Definition b_trunc z := mask 8 z.
 
-Lemma ma_add' : forall a b a' b' w,
-    0 <= w ->
-    mask w a = mask w a' ->
-    mask w b = mask w b' ->
-    mask w (a + b) = mask w (a' + b').
-intros0 Hw Ha Hb.
-unfold mask in *.
-do 2 rewrite Z.land_ones in * by omega.
-rewrite Zplus_mod, Ha, Hb, <- Zplus_mod. reflexivity.
+
+Definition rel_int_Z i z := Int.unsigned i = z.
+Definition rel_int_Z_list is zs := map Int.unsigned is = zs.
+Definition rel_Z_nat z n := z = Z.of_nat n.
+
+
+Lemma unsigned_repr_trunc : forall z,
+    Int.unsigned (Int.repr z) = trunc z.
+intros. rewrite Int.unsigned_repr_eq.
+change Int.modulus with (2 ^ 32).
+rewrite <- Z.land_ones by omega.
+reflexivity.
 Qed.
 
-Lemma land_rotate_4 : forall a b c d,
-    Z.land (Z.land a b) (Z.land c d) =
-    Z.land (Z.land a c) (Z.land b d).
-intros.
-repeat rewrite Z.land_assoc.
-rewrite <- (Z.land_assoc a b c).
-rewrite (Z.land_comm b c).
-repeat rewrite Z.land_assoc.
-reflexivity.
+Lemma trunc_trunc : forall z,
+    trunc (trunc z) = trunc z.
+intros. unfold trunc, mask. rewrite <- Z.land_assoc, Z.land_diag. reflexivity.
 Qed.
 
 Lemma Z_bits_inj_nonneg : forall a b,
@@ -90,343 +51,143 @@ destruct (Z_le_dec 0 idx).
 - do 2 rewrite Z.testbit_neg_r by omega. reflexivity.
 Qed.
 
-Lemma mask_mask : forall a w,
-    mask w (mask w a) = mask w a.
-intros. unfold mask.
-rewrite <- Z.land_assoc, Z.land_diag.
-auto.
+
+
+Set Default Timeout 5.
+
+Definition Shr (b x : Z) := trunc (Z.shiftr x b).
+
+Lemma Shr_trunc : forall b x,
+    trunc (Shr b x) = Shr b x.
+intros. unfold Shr. rewrite trunc_trunc. reflexivity.
 Qed.
 
-Lemma mask_mask' : forall a w w',
-    0 <= w ->
-    0 <= w' ->
-    mask w (mask w' a) = mask (Z.min w w') a.
-intros. unfold mask.
-eapply Z_bits_inj_nonneg. intros.
-repeat rewrite Z.land_spec.
-
-destruct (Z_lt_dec idx (Z.min w w')); cycle 1.
-  { assert (Z.min w w' <= idx) by omega.
-    assert (0 <= Z.min w w') by eauto using Z.min_glb.
-    rewrite Z.ones_spec_high with (n := Z.min w w') by auto.
-
-    fwd eapply Z.min_le; try eassumption.
-    on (_ \/ _), invc.
-    - rewrite Z.ones_spec_high with (n := w) by auto.
-      repeat rewrite Bool.andb_false_r. auto.
-    - rewrite Z.ones_spec_high with (n := w') by auto.
-      repeat rewrite Bool.andb_false_r. auto.
-  }
-
-rewrite Z.ones_spec_low with (n := Z.min w w') by auto.
-rewrite Z.min_glb_lt_iff in *. break_and.
-repeat rewrite Z.ones_spec_low by auto.
-repeat rewrite Bool.andb_true_r. auto.
-Qed.
-
-Lemma ma_add : forall a b w,
-    0 <= w ->
-    mask w (mask w a + mask w b) = mask w (a + b).
-intros. unfold mask.
-repeat rewrite Z.land_ones in * by omega.
-rewrite <- Zplus_mod. auto.
-Qed.
-
-Lemma ma_and' : forall a b w,
-    0 <= w ->
-    Z.land (mask w a) (mask w b) = mask w (Z.land a b).
-intros. unfold mask.
-eapply Z_bits_inj_nonneg. intros.
-
-repeat rewrite Z.land_spec.
-destruct (Z_lt_dec idx w); cycle 1.
-  { rewrite Z.ones_spec_high by omega.
-    repeat rewrite Bool.andb_false_r. reflexivity. }
-
-rewrite Z.ones_spec_low by omega.
-repeat rewrite Bool.andb_true_r.
+Lemma Shr_rel : forall b x b' x',
+    0 <= b < 32 ->
+    b = b' ->
+    rel_int_Z x x' ->
+    rel_int_Z (SHA256.Shr b x) (Shr b' x').
+unfold rel_int_Z. intros0 Hb_r Hb Hx. simpl. subst.
+unfold SHA256.Shr, Int.shru. unfold Shr.
+rewrite unsigned_repr_trunc.
+rewrite Int.unsigned_repr; cycle 1.
+  { change Int.max_unsigned with 4294967295.  omega. }
 reflexivity.
 Qed.
 
-Lemma ma_and : forall a b w,
-    0 <= w ->
-    mask w (Z.land (mask w a) (mask w b)) = mask w (Z.land a b).
-intros. rewrite ma_and', mask_mask by auto. reflexivity.
+
+Definition t_add (x y : Z) := trunc (x + y).
+
+Lemma t_add_trunc : forall x y,
+    trunc (t_add x y) = t_add x y.
+intros. unfold t_add. rewrite trunc_trunc. reflexivity.
 Qed.
 
-Lemma ma_or' : forall a b w,
-    0 <= w ->
-    Z.lor (mask w a) (mask w b) = mask w (Z.lor a b).
-intros. unfold mask.
+Definition t_and (x y : Z) := trunc (Z.land x y).
+
+Lemma t_and_trunc : forall x y,
+    trunc (t_and x y) = t_and x y.
+intros. unfold t_and. rewrite trunc_trunc. reflexivity.
+Qed.
+
+Definition t_or (x y : Z) := trunc (Z.lor x y).
+
+Lemma t_or_trunc : forall x y,
+    trunc (t_or x y) = t_or x y.
+intros. unfold t_or. rewrite trunc_trunc. reflexivity.
+Qed.
+
+Definition t_xor (x y : Z) := trunc (Z.lxor x y).
+
+Lemma t_xor_trunc : forall x y,
+    trunc (t_xor x y) = t_xor x y.
+intros. unfold t_xor. rewrite trunc_trunc. reflexivity.
+Qed.
+
+Definition t_not (x : Z) := trunc (Z.lnot x).
+
+Lemma t_not_trunc : forall x,
+    trunc (t_not x) = t_not x.
+intros. unfold t_not. rewrite trunc_trunc. reflexivity.
+Qed.
+
+Definition t_shiftl (x b : Z) := trunc (Z.shiftl x b).
+
+Lemma t_shiftl_trunc : forall x b,
+    trunc (t_shiftl x b) = t_shiftl x b.
+intros. unfold t_shiftl. rewrite trunc_trunc. reflexivity.
+Qed.
+
+Lemma trunc_t_shiftl : forall x b,
+    0 <= b ->
+    t_shiftl (trunc x) b = t_shiftl x b.
+intros0 Hb_r.
+
+unfold t_shiftl, trunc, mask.
 eapply Z_bits_inj_nonneg. intros.
+rewrite 2 Z.land_spec, 2 Z.shiftl_spec, Z.land_spec by auto.
 
-repeat rewrite Z.land_spec.
-repeat rewrite Z.lor_spec.
-repeat rewrite Z.land_spec.
-destruct (Z_lt_dec idx w); cycle 1.
-  { rewrite Z.ones_spec_high by omega.
-    repeat rewrite Bool.andb_false_r. reflexivity. }
+destruct (Z_lt_dec idx 32); cycle 1.
+  { rewrite Z.ones_spec_high with (m := idx) by omega.
+    rewrite 2 Bool.andb_false_r. reflexivity. }
 
-rewrite Z.ones_spec_low by omega.
-repeat rewrite Bool.andb_true_r.
-reflexivity.
-Qed.
+destruct (Z_le_dec b idx); cycle 1.
+  { rewrite 2 Z.testbit_neg_r with (n := idx - b) by omega. reflexivity. }
 
-Lemma ma_or : forall a b w,
-    0 <= w ->
-    mask w (Z.lor (mask w a) (mask w b)) = mask w (Z.lor a b).
-intros. rewrite ma_or', mask_mask by auto. reflexivity.
-Qed.
-
-Lemma ma_xor' : forall a b w,
-    0 <= w ->
-    Z.lxor (mask w a) (mask w b) = mask w (Z.lxor a b).
-intros. unfold mask.
-eapply Z_bits_inj_nonneg. intros.
-
-repeat rewrite Z.land_spec.
-repeat rewrite Z.lxor_spec.
-repeat rewrite Z.land_spec.
-destruct (Z_lt_dec idx w); cycle 1.
-  { rewrite Z.ones_spec_high by omega.
-    repeat rewrite Bool.andb_false_r. reflexivity. }
-
-rewrite Z.ones_spec_low by omega.
-repeat rewrite Bool.andb_true_r.
-reflexivity.
-Qed.
-
-Lemma ma_xor : forall a b w,
-    0 <= w ->
-    mask w (Z.lxor (mask w a) (mask w b)) = mask w (Z.lxor a b).
-intros. rewrite ma_xor', mask_mask by auto. reflexivity.
-Qed.
-
-Lemma ma_not : forall a w,
-    0 <= w ->
-    mask w (Z.lnot (mask w a)) = mask w (Z.lnot a).
-intros. unfold mask.
-eapply Z_bits_inj_nonneg. intros.
-
-repeat rewrite Z.land_spec.
-repeat rewrite Z.lnot_spec by auto.
-repeat rewrite Z.land_spec.
-
-destruct (Z_lt_dec idx w); cycle 1.
-  { rewrite Z.ones_spec_high by omega.
-    do 2 rewrite Bool.andb_false_r. reflexivity. }
-
-rewrite Z.ones_spec_low by omega.
-repeat rewrite Bool.andb_true_r.
-reflexivity.
-Qed.
-
-Lemma ma_shiftl : forall a s w,
-    0 <= w ->
-    0 <= s ->
-    mask w (Z.shiftl (mask w a) s) = mask w (Z.shiftl a s).
-intros0 Hw Hs. symmetry.  unfold mask.
-eapply Z_bits_inj_nonneg. intros.
-
-repeat rewrite Z.land_spec.
-repeat rewrite Z.shiftl_spec by auto.
-repeat rewrite Z.land_spec.
-destruct (Z_lt_dec idx w); cycle 1.
-  { rewrite Z.ones_spec_high by omega.
-    do 2 rewrite Bool.andb_false_r. reflexivity. }
-
-rewrite Z.ones_spec_low by omega.
-destruct (Z_le_dec 0 (idx - s)).
-
-- assert (idx - s < w) by omega.
-  rewrite Z.ones_spec_low by omega.
-  repeat rewrite Bool.andb_true_r. auto.
-
-- do 2 rewrite Z.testbit_neg_r by omega.
-  simpl. reflexivity.
-Qed.
-
-Lemma mask_lt : forall a w,
-    0 <= w ->
-    0 <= mask w a < Z.shiftl 1 w.
-intros. unfold mask.
-rewrite Z.land_ones by auto.
-rewrite Z.shiftl_mul_pow2 by auto.
-rewrite Z.mul_1_l.
-eapply Z.mod_pos_bound.
-eapply Z.pow_pos_nonneg; omega.
-Qed.
-
-Lemma lt_mask : forall a w,
-    0 <= w ->
-    0 <= a < Z.shiftl 1 w ->
-    mask w a = a.
-intros. unfold mask.
-rewrite Z.land_ones by auto.
-rewrite Z.shiftl_mul_pow2, Z.mul_1_l in * by auto.
-eapply Z.mod_small. auto.
-Qed.
-
-Lemma trunc_unsigned_repr : forall z z',
-    mask 32 z = mask 32 z' ->
-    trunc z = Int.unsigned (Int.repr z').
-intros.  unfold trunc.
-rewrite Int.unsigned_repr_eq.
-change (Int.modulus) with (2 ^ 32).  rewrite <- Z.land_ones by omega.
-exact H.
-Qed.
-
-Lemma fold_mask : forall a w,
-    Z.land a (Z.ones w) = mask w a.
-intros. reflexivity.
-Qed.
-
-Lemma b_trunc_unsigned_repr : forall z z',
-    mask 8 z = mask 8 z' ->
-    b_trunc z = Int.unsigned (Int.and (Int.repr z') (Int.repr 255)).
-intros.
-unfold b_trunc. unfold Int.and.
-unfold mask in *. change B_MASK with (Z.ones 8).
-repeat rewrite Int.unsigned_repr_eq.
-change (Int.modulus) with (2 ^ 32).  repeat rewrite <- Z.land_ones by omega.
-repeat rewrite fold_mask.
-rewrite ma_and by omega.
-change 255 with (Z.ones 8). rewrite fold_mask.
-rewrite mask_mask' by omega. cbn. auto.
-Qed.
-
-
-Lemma int_unsigned_inv' : forall i
-        (Q : _ -> Prop),
-    (forall z,
-        0 <= z < Int.modulus ->
-        Q z) ->
-    Q (Int.unsigned i).
-intros.
-destruct i. simpl.
-eapply H. omega.
-Qed.
-
-Lemma int_unsigned_inv : forall i
-        (Q : _ -> Prop),
-    (forall z,
-        0 <= z < Int.modulus ->
-        0 <= z <= Int.max_unsigned ->
-        Q (Int.repr z)) ->
-    Q i.
-intros.
-fwd eapply H with (z := Int.unsigned i).
-  { eapply Int.unsigned_range. } 
-  { eapply Int.unsigned_range_2. } 
-rewrite Int.repr_unsigned in *. auto.
-Qed.
-
-Lemma shiftr_24_and_255 : forall z,
-    0 <= z < 2 ^ 32 ->
-    Z.shiftr z 24 = Z.land (Z.shiftr z 24) (Z.ones 8).
-intros.
-eapply Z_bits_inj_nonneg. intros.
-rewrite Z.land_spec.
-rewrite Z.shiftr_spec by auto.
-
-fwd eapply lt_mask with (a := z) (w := 32) as Hm.
-  { omega. }
-  { rewrite Z.shiftl_mul_pow2, Z.mul_1_l by omega. auto. }
-
-destruct (Z_lt_dec idx 8); cycle 1.
-  { rewrite <- Hm. unfold mask. rewrite Z.land_spec.
-    rewrite Z.ones_spec_high by omega.
-    rewrite Bool.andb_false_r. simpl. reflexivity. }
-
-rewrite Z.ones_spec_low by omega.
+rewrite Z.ones_spec_low with (m := idx - b) by omega.
 rewrite Bool.andb_true_r. auto.
 Qed.
-
-Lemma shiftr_24_b_trunc : forall z,
-    0 <= z < 2 ^ 32 ->
-    b_trunc (Z.shiftr z 24) = trunc (Z.shiftr z 24).
-intros. unfold trunc, b_trunc, B_MASK.
-rewrite shiftr_24_and_255 by auto.
-do 2 rewrite <- Z.land_assoc.
-change (Z.land (Z.ones _) _) with 255.
-reflexivity.
-Qed.
-
 
 
 Fixpoint wordlist_to_bytelist (l : list Z) : list Z :=
     match l with
     | [] => []
     | w :: l =>
-            b_trunc (Z.shiftr w 24) ::
-            b_trunc (Z.shiftr w 16) ::
-            b_trunc (Z.shiftr w 8) ::
-            b_trunc w ::
+            trunc (Shr 24 w) ::
+            trunc (t_and (Shr 16 w) 255) ::
+            trunc (t_and (Shr 8 w) 255) ::
+            trunc (t_and w 255) ::
             wordlist_to_bytelist l
     end.
 
-Lemma wordlist_to_bytelist_eq : forall l l',
-    l = map Int.unsigned l' ->
-    wordlist_to_bytelist l = SHA256.intlist_to_Zlist l'.
-induction l; intros0 Heq; destruct l'; try discriminate.
-  { reflexivity. }
+Lemma wordlist_to_bytelist_rel : forall l l',
+    rel_int_Z_list l l' ->
+    SHA256.intlist_to_Zlist l = wordlist_to_bytelist l'.
+unfold rel_int_Z_list.
+induction l; simpl; intros0 Hl; destruct l'; try discriminate.
+  { simpl. reflexivity. }
 
-cbn [map] in *. invc Heq. cbn [wordlist_to_bytelist SHA256.intlist_to_Zlist].
-
-eapply int_unsigned_inv with (i := i). intros.
-
-f_equal; [ | f_equal ]; [ | | f_equal ]; [ | | | f_equal ].
-- unfold SHA256.Shr. unfold Int.shru.
-  rewrite shiftr_24_b_trunc; cycle 1.  { eapply Int.unsigned_range. }
-  eapply trunc_unsigned_repr. f_equal.
-- eapply b_trunc_unsigned_repr. auto.
-- eapply b_trunc_unsigned_repr. auto.
-- eapply b_trunc_unsigned_repr.
-  rewrite Int.unsigned_repr by auto. auto.
+cbn [wordlist_to_bytelist]. unfold Int.and.
+invc Hl.
+rewrite 3 Shr_rel by (auto; try reflexivity; omega).
+repeat rewrite unsigned_repr_trunc.
+f_equal; [| f_equal; [| f_equal; [| f_equal ]]].
+- rewrite Shr_trunc. auto.
+- rewrite t_and_trunc. unfold t_and. auto.
+- rewrite t_and_trunc. unfold t_and. auto.
+- rewrite t_and_trunc. unfold t_and. auto.
 - eapply IHl. auto.
 Qed.
 
 
 Definition bytes_to_word (a b c d : Z) : Z :=
-    trunc (
-        Z.lor (Z.lor (Z.lor
-            (Z.shiftl a 24)
-            (Z.shiftl b 16))
-            (Z.shiftl c  8))
-            d).
+    t_or (t_or (t_or
+        (t_shiftl (trunc a) 24)
+        (t_shiftl (trunc b) 16))
+        (t_shiftl (trunc c) 8))
+        (trunc d).
 
-Lemma unsigned_repr_mask : forall z,
-    Int.unsigned (Int.repr z) = mask 32 z.
-intros. rewrite Int.unsigned_repr_eq.
-change Int.modulus with (2 ^ 32).
-rewrite <- Z.land_ones by omega.
-auto.
-Qed.
-
-Lemma unsigned_eq_mask : forall z i,
-    z = Int.unsigned i ->
-    Int.unsigned i = mask 32 z.
-intros0 Heq. rewrite <- Heq. symmetry. eapply lt_mask.
-- omega.
-- subst z. eapply Int.unsigned_range.
-Qed.
-
-Lemma bytes_to_word_eq : forall a b c d,
-    bytes_to_word a b c d = Int.unsigned (SHA256.Z_to_Int a b c d).
-intros.
-unfold bytes_to_word, SHA256.Z_to_Int. unfold Int.or, Int.shl.
-eapply trunc_unsigned_repr.
-repeat rewrite unsigned_repr_mask.
-
-change (mask 32 24) with 24.
-change (mask 32 16) with 16.
-change (mask 32 8) with 8.
-
-repeat rewrite ma_shiftl by omega.
-rewrite ma_or with (a := _ _ 24) (b := _ _ 16) by omega.
-rewrite ma_or with (b := _ _ 8) by omega.
-rewrite ma_or with (b := d) by omega.
-auto.
+Lemma bytes_to_word_rel : forall a b c d a' b' c' d',
+    a = a' ->
+    b = b' ->
+    c = c' ->
+    d = d' ->
+    rel_int_Z (SHA256.Z_to_Int a b c d) (bytes_to_word a' b' c' d').
+unfold rel_int_Z.
+intros. subst.
+unfold SHA256.Z_to_Int, Int.or, Int.shl. unfold bytes_to_word.
+repeat rewrite unsigned_repr_trunc.
+reflexivity.
 Qed.
 
 
@@ -437,17 +198,19 @@ Fixpoint bytelist_to_wordlist (l : list Z) : list Z :=
     | _ => []
     end.
 
-Lemma bytelist_to_wordlist_eq : forall l,
-    bytelist_to_wordlist l = map Int.unsigned (SHA256.Zlist_to_intlist l).
+Lemma bytelist_to_wordlist_rel : forall l l',
+    l = l' ->
+    rel_int_Z_list (SHA256.Zlist_to_intlist l) (bytelist_to_wordlist l').
+unfold rel_int_Z_list.
 fix go 1.
-destruct l as [| a [| b [| c [| d l ] ] ] ]; simpl; try reflexivity.
+intros. subst l'.
+destruct l as [| a [| b [| c [| d l ] ] ] ];
+simpl; try reflexivity.
 
 f_equal.
-- eapply bytes_to_word_eq.
-- apply go.
+- eapply bytes_to_word_rel; auto.
+- apply go. auto.
 Qed.
-
-
 
 
 
@@ -455,468 +218,243 @@ Definition generate_and_pad msg :=
     let n := Zlength msg in
     let pad_amount := -(n + 9) mod 64 in
     bytelist_to_wordlist (msg ++ [128] ++ List.repeat 0 (Z.to_nat pad_amount))
-        ++ [trunc (n * 8 / MODULUS); trunc (n * 8)].
+        ++ [trunc (n * 8 / 2 ^ 32); trunc (n * 8)].
 
 
 Lemma repeat_eq : forall {A} (a : A) n,
-    repeat a n = Coqlib.list_repeat n a.
+    Coqlib.list_repeat n a = repeat a n.
 induction n; simpl.
 - auto.
 - rewrite IHn. auto.
 Qed.
 
-Lemma generate_and_pad_eq : forall msg,
-    generate_and_pad msg = map Int.unsigned (SHA256.generate_and_pad msg).
-intros.
-unfold generate_and_pad, SHA256.generate_and_pad.
-repeat rewrite map_app. simpl.
+Lemma generate_and_pad_rel : forall msg msg',
+    msg = msg' ->
+    rel_int_Z_list (SHA256.generate_and_pad msg) (generate_and_pad msg').
+unfold rel_int_Z_list.
+intros. subst msg'.
+unfold SHA256.generate_and_pad. unfold generate_and_pad.
+rewrite map_app. simpl.
 f_equal.
-  { rewrite <- bytelist_to_wordlist_eq.
-    f_equal. f_equal. f_equal.
-    apply repeat_eq. }
+  { eapply bytelist_to_wordlist_rel.
+    f_equal. f_equal. eapply repeat_eq. }
+
 f_equal.
-  { eapply trunc_unsigned_repr. auto. }
+  { rewrite unsigned_repr_trunc. auto. }
 f_equal.
-  { eapply trunc_unsigned_repr. auto. }
+  { rewrite unsigned_repr_trunc. auto. }
 Qed.
 
 
-
-(*ROUND FUNCTION*)
-
-(*hardcoding the constants, first 32 bits of the fractional parts of the cube roots of the first 64 prime numbers*)
 Definition K256 :=
-  [1116352408 ; 1899447441; 3049323471; 3921009573;
-   961987163   ; 1508970993; 2453635748; 2870763221;
-   3624381080; 310598401  ; 607225278  ; 1426881987;
-   1925078388; 2162078206; 2614888103; 3248222580;
-   3835390401; 4022224774; 264347078  ; 604807628;
-   770255983  ; 1249150122; 1555081692; 1996064986;
-   2554220882; 2821834349; 2952996808; 3210313671;
-   3336571891; 3584528711; 113926993  ; 338241895;
-   666307205  ; 773529912  ; 1294757372; 1396182291;
-   1695183700; 1986661051; 2177026350; 2456956037;
-   2730485921; 2820302411; 3259730800; 3345764771;
-   3516065817; 3600352804; 4094571909; 275423344;
-   430227734  ; 506948616  ; 659060556  ; 883997877;
-   958139571  ; 1322822218; 1537002063; 1747873779;
-   1955562222; 2024104815; 2227730452; 2361852424;
-   2428436474; 2756734187; 3204031479; 3329325298].
+    [1116352408; 1899447441; 3049323471; 3921009573; 
+      961987163; 1508970993; 2453635748; 2870763221; 
+     3624381080;  310598401;  607225278; 1426881987; 
+     1925078388; 2162078206; 2614888103; 3248222580; 
+     3835390401; 4022224774;  264347078;  604807628; 
+      770255983; 1249150122; 1555081692; 1996064986; 
+     2554220882; 2821834349; 2952996808; 3210313671; 
+     3336571891; 3584528711;  113926993;  338241895; 
+      666307205;  773529912; 1294757372; 1396182291; 
+     1695183700; 1986661051; 2177026350; 2456956037; 
+     2730485921; 2820302411; 3259730800; 3345764771; 
+     3516065817; 3600352804; 4094571909;  275423344; 
+      430227734;  506948616;  659060556;  883997877; 
+      958139571; 1322822218; 1537002063; 1747873779; 
+     1955562222; 2024104815; 2227730452; 2361852424; 
+     2428436474; 2756734187; 3204031479; 3329325298].
 
-Lemma K256_map : SHA256.K256 = map Int.repr K256.
+Lemma K256_rel :
+    rel_int_Z_list SHA256.K256 K256.
+unfold rel_int_Z_list.
+unfold SHA256.K256. unfold K256.
 reflexivity.
 Qed.
 
-Lemma K256_range : Forall (fun z => 0 <= z < Int.modulus) K256.
-repeat constructor; discriminate.
-Qed.
 
-Lemma K256_eq : forall n k,
-    nth_error K256 n = Some (Int.unsigned k) <->
-    nth_error SHA256.K256 n = Some k.
-rewrite K256_map. intros. split; intro Hnth.
 
-- eapply map_nth_error with (f := Int.repr) in Hnth.
-  rewrite Hnth. rewrite Int.repr_unsigned. auto.
-
-- fwd eapply map_nth_error' as HH; eauto.  destruct HH as (k' & Hnth' & ?).
-  subst k. rewrite Hnth'.
-  rewrite Int.unsigned_repr; eauto.
-  assert (0 <= k' < Int.modulus).
-    { pattern k'. eapply Forall_nth_error; eauto using K256_range. }
-  unfold Int.max_unsigned. omega.
-Qed.
-
-(*functions used for round function*)
 Definition Ch (x y z : Z) : Z :=
-  Z.lxor (Z.land x y) (Z.land (Z.lnot x) z).
+    t_xor (t_and x y) (t_and (t_not x) z).
 
+Lemma Ch_rel : forall x y z x' y' z',
+    rel_int_Z x x' ->
+    rel_int_Z y y' ->
+    rel_int_Z z z' ->
+    rel_int_Z (SHA256.Ch x y z) (Ch x' y' z').
+unfold rel_int_Z.  intros; subst.
+unfold SHA256.Ch, Int.xor, Int.and. (* don't unfold Int.not yet *) unfold Ch.
+repeat rewrite unsigned_repr_trunc.
+unfold t_xor, t_and, t_not.
+repeat f_equal.
 
-Lemma z_unsigned_repr : forall z z',
-    mask 32 z = z ->
-    mask 32 z = mask 32 z' ->
-    z = Int.unsigned (Int.repr z').
-intros0 Hz Hm. rewrite <- Hz. eauto using trunc_unsigned_repr.
-Qed.
-
-
-
-Lemma ma_and_not_l' : forall a b w,
-    0 <= w ->
-    Z.land (mask w (Z.lnot a)) (mask w b) =
-    Z.land (Z.lnot (mask w a)) (mask w b).
-intros. unfold mask.
+unfold Int.not, Int.xor.
+rewrite unsigned_repr_trunc.
 eapply Z_bits_inj_nonneg. intros.
+unfold trunc, mask.
+rewrite 2 Z.land_spec, Z.lxor_spec, Z.lnot_spec by auto.
 
-repeat rewrite Z.land_spec.
-repeat rewrite Z.lnot_spec by auto.
-repeat rewrite Z.land_spec.
-destruct (Z_lt_dec idx w); cycle 1.
+destruct (Z_lt_dec idx 32); cycle 1.
   { rewrite Z.ones_spec_high by omega.
-    repeat rewrite Bool.andb_false_r. reflexivity. }
+    rewrite 2 Bool.andb_false_r. reflexivity. }
 
+change (Int.unsigned Int.mone) with (Z.ones 32).
 rewrite Z.ones_spec_low by omega.
-repeat rewrite Bool.andb_true_r.
 reflexivity.
-Qed.
-
-Lemma Ch_eq : forall x y z x' y' z',
-    x = Int.unsigned x' ->
-    y = Int.unsigned y' ->
-    z = Int.unsigned z' ->
-    Ch x y z = Int.unsigned (SHA256.Ch x' y' z').
-intros0 Hx Hy Hz.
-unfold Ch, SHA256.Ch. unfold Int.xor, Int.and, Int.not, Int.xor.
-eapply z_unsigned_repr.
-  {
-    assert (0 <= 32) by omega.
-    rewrite <- ma_xor', <- ma_and', <- ma_and', ma_and_not_l' by auto.
-    repeat f_equal.
-    all: eapply lt_mask; auto; subst; eapply Int.unsigned_range.
-  }
-
-unfold Int.mone.
-repeat rewrite unsigned_repr_mask. repeat erewrite unsigned_eq_mask by eassumption.
-
-assert (0 <= 32) by omega.
-rewrite ma_xor with (b := -1) by auto.
-rewrite ma_and with (b := z) by auto.
-rewrite ma_and with (b := y) by auto.
-rewrite ma_xor by auto.
-rewrite Z.lxor_m1_r.
-auto.
 Qed.
 
 
 Definition Maj (x y z : Z) : Z :=
-  Z.lxor (Z.lxor (Z.land x z) (Z.land y z) ) (Z.land x y).
+    t_xor (t_xor (t_and x z) (t_and y z)) (t_and x y).
 
-Lemma Maj_eq : forall x y z x' y' z',
-    x = Int.unsigned x' ->
-    y = Int.unsigned y' ->
-    z = Int.unsigned z' ->
-    Maj x y z = Int.unsigned (SHA256.Maj x' y' z').
-intros0 Hx Hy Hz.
-unfold Maj, SHA256.Maj. unfold Int.xor, Int.and.
-eapply z_unsigned_repr.
-  {
-    assert (0 <= 32) by omega.
-    rewrite <- 2 ma_xor', <- 3 ma_and' by auto.
-    repeat f_equal.
-    all: eapply lt_mask; auto; subst; eapply Int.unsigned_range.
-  }
-
-repeat rewrite unsigned_repr_mask. repeat erewrite unsigned_eq_mask by eassumption.
-
-assert (0 <= 32) by omega.
-rewrite 3 ma_and.
-rewrite ma_xor with (a := Z.land _ _), ma_xor.
-all: auto.
-Qed.
-
-Definition Rotr b x := Int.ror x (Int.repr b).
-
-
-(* define rotr32 in two parts, so we can unfold to see the `mask` without
-   unfolding all the way. *)
-Definition rotr32' x n :=
-    Z.lor (Z.shiftr x n)
-          (Z.shiftl x (32 - n)).
-
-Definition rotr32 x n := mask 32 (rotr32' x n).
-
-Lemma rotr32_eq : forall x n x',
-    x = Int.unsigned x' ->
-    0 <= n < 32 ->
-    rotr32 x n = Int.unsigned (SHA256.Rotr n x').
-intros0 Hx Hn.
-unfold rotr32, rotr32', SHA256.Rotr. unfold Int.ror.
-change Int.zwordsize with 32.
-
-eapply trunc_unsigned_repr.
-rewrite (Int.unsigned_repr n); cycle 1.
-  { assert (32 < Int.max_unsigned) by (compute; reflexivity). omega. }
-rewrite (Z.mod_small n) by auto.
-repeat rewrite unsigned_repr_mask. repeat erewrite unsigned_eq_mask by eassumption.
-
-fwd eapply lt_mask with (a := x) (w := 32).
-  { omega. }
-  { subst. eapply Int.unsigned_range. }
-congruence.
-Qed.
-
-Lemma rotr32'_rotr32 : forall x n,
-    mask 32 (rotr32' x n) = mask 32 (rotr32 x n).
-intros. unfold rotr32. rewrite mask_mask. reflexivity.
-Qed.
-
-Lemma mask_rotr32 : forall x n,
-    mask 32 (rotr32 x n) = rotr32 x n.
-intros. unfold rotr32. rewrite mask_mask. reflexivity.
-Qed.
-
-Definition Sigma_0 (x : Z) : Z := 
-          Z.lxor (Z.lxor (rotr32 x 2) (rotr32 x 13)) (rotr32 x 22).
-Definition Sigma_1 (x : Z) : Z := 
-          Z.lxor (Z.lxor (rotr32 x 6) (rotr32 x 11)) (rotr32 x 25).
-Definition sigma_0 (x : Z) : Z := 
-          Z.lxor (Z.lxor (rotr32 x 7) (rotr32 x 18)) (Z.shiftr x 3).
-Definition sigma_1 (x : Z) : Z := 
-          Z.lxor (Z.lxor (rotr32 x 17) (rotr32 x 19)) (Z.shiftr x 10).
-
-Lemma Sigma_0_eq : forall x x',
-    x = Int.unsigned x' ->
-    Sigma_0 x = Int.unsigned (SHA256.Sigma_0 x').
-intros0 Hx.
-unfold Sigma_0, SHA256.Sigma_0. unfold Int.xor.
-repeat erewrite <- rotr32_eq by (eauto || omega).
-
-eapply z_unsigned_repr.
-  {
-    assert (0 <= 32) by omega.
-    rewrite <- 2 ma_xor' by auto.
-    f_equal; [ f_equal | ].
-    all: unfold rotr32; rewrite mask_mask; reflexivity.
-  }
-
-repeat rewrite unsigned_repr_mask.
-
-assert (0 <= 32) by omega.
-unfold rotr32 at 4 5 6. repeat rewrite rotr32'_rotr32.
-rewrite ma_xor with (a := rotr32 _ _), ma_xor.
-all: auto.
-Qed.
-
-Lemma Sigma_1_eq : forall x x',
-    x = Int.unsigned x' ->
-    Sigma_1 x = Int.unsigned (SHA256.Sigma_1 x').
-intros0 Hx.
-unfold Sigma_1, SHA256.Sigma_1. unfold Int.xor.
-repeat erewrite <- rotr32_eq by (eauto || omega).
-
-eapply z_unsigned_repr.
-  {
-    assert (0 <= 32) by omega.
-    rewrite <- 2 ma_xor' by auto.
-    f_equal; [ f_equal | ].
-    all: unfold rotr32; rewrite mask_mask; reflexivity.
-  }
-
-repeat rewrite unsigned_repr_mask.
-
-assert (0 <= 32) by omega.
-unfold rotr32 at 4 5 6. repeat rewrite rotr32'_rotr32.
-rewrite ma_xor with (a := rotr32 _ _), ma_xor.
-all: auto.
+Lemma Maj_rel : forall x y z x' y' z',
+    rel_int_Z x x' ->
+    rel_int_Z y y' ->
+    rel_int_Z z z' ->
+    rel_int_Z (SHA256.Maj x y z) (Maj x' y' z').
+unfold rel_int_Z.  intros; subst.
+unfold SHA256.Maj, Int.xor, Int.and. unfold Maj.
+repeat rewrite unsigned_repr_trunc.
+reflexivity.
 Qed.
 
 
-Lemma div2_range : forall a b,
-    0 <= a < b ->
-    0 <= Z.div2 a < b.
-intros.
-rewrite Z.div2_nonneg. split; intuition.
-rewrite Z.div2_div.
-fwd eapply Z.div_le_compat_l with (p := a) (r := 2) (q := 1); try omega.
-rewrite Z.div_1_r in *.
-omega.
+Definition Rotr (b x : Z) :=
+    trunc (Z.lor
+        (Z.shiftr x b)
+        (Z.shiftl x (32 - b))).
+
+Lemma Rotr_trunc : forall b x,
+    trunc (Rotr b x) = Rotr b x.
+intros. unfold Rotr. rewrite trunc_trunc. reflexivity.
 Qed.
 
-Lemma div2_mask : forall a w,
-    0 <= w ->
-    0 <= a < Z.shiftl 1 w ->
-    mask w (Z.div2 a) = Z.div2 (mask w a).
-intros0 Hw Ha.
-rewrite lt_mask with (a := a) by auto.
-rewrite lt_mask; auto using div2_range.
-Qed.
+Lemma Rotr_rel : forall b x b' x',
+    0 <= b < 32 ->
+    b = b' ->
+    rel_int_Z x x' ->
+    rel_int_Z (SHA256.Rotr b x) (Rotr b' x').
+unfold rel_int_Z. intros0 Hb_r Hb Hx. simpl. subst.
+unfold SHA256.Rotr, Int.ror. unfold Rotr.
+rewrite unsigned_repr_trunc.
 
-Lemma shiftr_mask : forall a w s,
-    0 <= w ->
-    0 <= s ->
-    0 <= a < Z.shiftl 1 w ->
-    mask w (Z.shiftr a s) = Z.shiftr (mask w a) s.
-intros0 Hw Hs Ha.
+assert (32 < Int.max_unsigned) by constructor.
 
-unfold Z.shiftr, Z.shiftl.
-destruct s; simpl; cycle 2.
-  { (* neg *) compute in Hs. exfalso. auto. }
-  { (* zero *) reflexivity. }
+rewrite Z.mod_small; cycle 1.
+  { rewrite Int.unsigned_repr by omega. auto. }
 
-clear Hs.  induction p using Pos.peano_ind.
-- simpl. eauto using div2_mask.
-- repeat rewrite Pos.iter_succ.
-  rewrite <- IHp.
-  eapply div2_mask; auto.
-
-  clear IHp. induction p using Pos.peano_ind.
-  + simpl. eauto using div2_range.
-  + rewrite Pos.iter_succ. eauto using div2_range.
-Qed.
-
-Lemma ma_shiftr : forall a s w,
-    0 <= w ->
-    0 <= s ->
-    0 <= a < Z.shiftl 1 w ->
-    mask w (Z.shiftr (mask w a) s) = mask w (Z.shiftr a s).
-intros0 Hw Hs Ha.
-rewrite <- shiftr_mask by auto.
-rewrite mask_mask.
-auto.
+rewrite Int.unsigned_repr by omega.
+reflexivity.
 Qed.
 
 
-Lemma sigma_0_eq : forall x x',
-    x = Int.unsigned x' ->
-    sigma_0 x = Int.unsigned (SHA256.sigma_0 x').
-intros0 Hx.
-unfold sigma_0, SHA256.sigma_0. unfold Int.xor, SHA256.Shr, Int.shru.
-repeat erewrite <- rotr32_eq by (eauto || omega).
 
-assert (0 <= 3) by omega.
-assert (0 <= 32) by omega.
-assert (0 <= x < Z.shiftl 1 32).
-  { subst. eapply Int.unsigned_range. }
+Definition Sigma_0 (x : Z) : Z :=
+    t_xor (t_xor (Rotr 2 x) (Rotr 13 x)) (Rotr 22 x).
+Definition Sigma_1 (x : Z) : Z :=
+    t_xor (t_xor (Rotr 6 x) (Rotr 11 x)) (Rotr 25 x).
+Definition sigma_0 (x : Z) : Z :=
+    t_xor (t_xor (Rotr 7 x) (Rotr 18 x)) (Shr 3 x).
+Definition sigma_1 (x : Z) : Z :=
+    t_xor (t_xor (Rotr 17 x) (Rotr 19 x)) (Shr 10 x).
 
-eapply z_unsigned_repr.
-  {
-    rewrite <- 2 ma_xor', shiftr_mask by auto.
-    f_equal; [ f_equal | ].
-    - eapply mask_rotr32.
-    - eapply mask_rotr32.
-    - f_equal. eapply lt_mask; auto.
-  }
 
-repeat rewrite unsigned_repr_mask. repeat erewrite unsigned_eq_mask by eassumption.
-
-change (mask 32 3) with 3.
-unfold rotr32 at 3 4. repeat rewrite rotr32'_rotr32.
-rewrite ma_shiftr.
-rewrite ma_xor with (a := rotr32 _ _), ma_xor.
-all: auto.
+Lemma Sigma_0_rel : forall x x',
+    rel_int_Z x x' ->
+    rel_int_Z (SHA256.Sigma_0 x) (Sigma_0 x').
+unfold rel_int_Z. intros0 Hx. subst.
+unfold SHA256.Sigma_0, Int.xor. unfold Sigma_0.
+repeat rewrite unsigned_repr_trunc.
+repeat rewrite Rotr_rel by (reflexivity || omega).
+reflexivity.
 Qed.
 
-Lemma sigma_1_eq : forall x x',
-    x = Int.unsigned x' ->
-    sigma_1 x = Int.unsigned (SHA256.sigma_1 x').
-intros0 Hx.
-unfold sigma_1, SHA256.sigma_1. unfold Int.xor, SHA256.Shr, Int.shru.
-repeat erewrite <- rotr32_eq by (eauto || omega).
-
-assert (0 <= 3) by omega.
-assert (0 <= 32) by omega.
-assert (0 <= x < Z.shiftl 1 32).
-  { subst. eapply Int.unsigned_range. }
-
-eapply z_unsigned_repr.
-  {
-    rewrite <- 2 ma_xor', shiftr_mask by auto.
-    f_equal; [ f_equal | ].
-    - eapply mask_rotr32.
-    - eapply mask_rotr32.
-    - f_equal. eapply lt_mask; auto.
-  }
-
-repeat rewrite unsigned_repr_mask. repeat erewrite unsigned_eq_mask by eassumption.
-
-change (mask 32 10) with 10.
-unfold rotr32 at 3 4. repeat rewrite rotr32'_rotr32.
-rewrite ma_shiftr.
-rewrite ma_xor with (a := rotr32 _ _), ma_xor.
-all: auto.
+Lemma Sigma_1_rel : forall x x',
+    rel_int_Z x x' ->
+    rel_int_Z (SHA256.Sigma_1 x) (Sigma_1 x').
+unfold rel_int_Z. intros0 Hx. subst.
+unfold SHA256.Sigma_1, Int.xor. unfold Sigma_1.
+repeat rewrite unsigned_repr_trunc.
+repeat rewrite Rotr_rel by (reflexivity || omega).
+reflexivity.
 Qed.
 
-Lemma sigma_0_mask : forall x,
-    mask 32 x = x ->
-    mask 32 (sigma_0 x) = sigma_0 x.
-intros.
-unfold sigma_0.
-
-assert (0 <= 32) by omega.
-assert (0 <= x < MODULUS).
-  { rewrite <- H. eapply mask_lt. auto. }
-
-rewrite <- 2 ma_xor', shiftr_mask by auto.
-rewrite 2 mask_rotr32. congruence.
+Lemma sigma_0_rel : forall x x',
+    rel_int_Z x x' ->
+    rel_int_Z (SHA256.sigma_0 x) (sigma_0 x').
+unfold rel_int_Z. intros0 Hx. subst.
+unfold SHA256.sigma_0, Int.xor. unfold sigma_0.
+repeat rewrite unsigned_repr_trunc.
+repeat rewrite Rotr_rel by (reflexivity || omega).
+repeat rewrite Shr_rel by (reflexivity || omega).
+reflexivity.
 Qed.
 
-Lemma sigma_1_mask : forall x,
-    mask 32 x = x ->
-    mask 32 (sigma_1 x) = sigma_1 x.
-intros.
-unfold sigma_1.
-
-assert (0 <= 32) by omega.
-assert (0 <= x < MODULUS).
-  { rewrite <- H. eapply mask_lt. auto. }
-
-rewrite <- 2 ma_xor', shiftr_mask by auto.
-rewrite 2 mask_rotr32. congruence.
+Lemma sigma_1_rel : forall x x',
+    rel_int_Z x x' ->
+    rel_int_Z (SHA256.sigma_1 x) (sigma_1 x').
+unfold rel_int_Z. intros0 Hx. subst.
+unfold SHA256.sigma_1, Int.xor. unfold sigma_1.
+repeat rewrite unsigned_repr_trunc.
+repeat rewrite Rotr_rel by (reflexivity || omega).
+repeat rewrite Shr_rel by (reflexivity || omega).
+reflexivity.
 Qed.
 
-(* word function *)
+
+
 Definition W (M : nat -> Z) (t : nat) : Z.
 revert t. fix go 1. intros.
 
-refine match t with O => trunc (M t) | S t_1 => _ end.
-refine match t_1 with O => trunc (M t) | S t_2 => _ end.
-refine match t_2 with O => trunc (M t) | S t_3 => _ end.
-refine match t_3 with O => trunc (M t) | S t_4 => _ end.
-refine match t_4 with O => trunc (M t) | S t_5 => _ end.
-refine match t_5 with O => trunc (M t) | S t_6 => _ end.
-refine match t_6 with O => trunc (M t) | S t_7 => _ end.
-refine match t_7 with O => trunc (M t) | S t_8 => _ end.
-refine match t_8 with O => trunc (M t) | S t_9 => _ end.
-refine match t_9 with O => trunc (M t) | S t_10 => _ end.
-refine match t_10 with O => trunc (M t) | S t_11 => _ end.
-refine match t_11 with O => trunc (M t) | S t_12 => _ end.
-refine match t_12 with O => trunc (M t) | S t_13 => _ end.
-refine match t_13 with O => trunc (M t) | S t_14 => _ end.
-refine match t_14 with O => trunc (M t) | S t_15 => _ end.
-refine match t_15 with O => trunc (M t) | S t_16 => _ end.
+refine match t with O => M t | S t_1 => _ end.
+refine match t_1 with O => M t | S t_2 => _ end.
+refine match t_2 with O => M t | S t_3 => _ end.
+refine match t_3 with O => M t | S t_4 => _ end.
+refine match t_4 with O => M t | S t_5 => _ end.
+refine match t_5 with O => M t | S t_6 => _ end.
+refine match t_6 with O => M t | S t_7 => _ end.
+refine match t_7 with O => M t | S t_8 => _ end.
+refine match t_8 with O => M t | S t_9 => _ end.
+refine match t_9 with O => M t | S t_10 => _ end.
+refine match t_10 with O => M t | S t_11 => _ end.
+refine match t_11 with O => M t | S t_12 => _ end.
+refine match t_12 with O => M t | S t_13 => _ end.
+refine match t_13 with O => M t | S t_14 => _ end.
+refine match t_14 with O => M t | S t_15 => _ end.
+refine match t_15 with O => M t | S t_16 => _ end.
 
 exact (
-    trunc ((sigma_1 (go t_2) + go t_7) + (sigma_0 (go t_15) + go (t_16)))
+    t_add (t_add (sigma_1 (go t_2)) (go t_7))
+          (t_add (sigma_0 (go t_15)) (go (t_16)))
 ).
 Defined.
 
 Lemma W_unfold : forall M t_16,
     W M (16 + t_16) =
-    trunc ((sigma_1 (W M (14 + t_16)) + W M (9 + t_16)) +
-      (sigma_0 (W M (1 + t_16)) + W M (0 + t_16))).
+    t_add (t_add (sigma_1 (W M (14 + t_16))) (W M (9 + t_16)))
+          (t_add (sigma_0 (W M (1 + t_16))) (W M (0 + t_16))).
 intros. reflexivity.
 Qed.
 
 Lemma W_unfold_last : forall M t,
     (t < 16)%nat ->
-    W M t = trunc (M t).
+    W M t = M t.
 intros.
 do 16 (try destruct t as [ | t ]).
 17: exfalso; omega.
 all: reflexivity.
 Qed.
 
-Lemma W_mask : forall M t,
-    mask 32 (W M t) = W M t.
-intros. destruct (lt_dec t 16).
-- rewrite W_unfold_last by auto.
-  rewrite mask_mask. auto.
-- replace t with (16 + (t - 16))%nat by omega.
-  rewrite W_unfold.
-  change trunc with (mask 32).
-  rewrite mask_mask. auto.
-Qed.
-
-Lemma W_eq : forall M M',
+Lemma W_rel : forall M M',
     (forall t t',
-        Z.of_nat t = t' ->
-        trunc (M t) = Int.unsigned (M' t')) ->
-    forall t t',
-    Z.of_nat t = t' ->
-    trunc (W M t) = Int.unsigned (SHA256.W M' t').
-intros0 HM. fix go 1; intro t.
+        rel_Z_nat t t' ->
+        rel_int_Z (M t) (M' t')) ->
+    forall t' t,
+    rel_Z_nat t t' ->
+    rel_int_Z (SHA256.W M t) (W M' t').
+unfold rel_Z_nat, rel_int_Z.
+intros0 HM. fix go 1; intro t'.
 
-1: refine match t with O => _ | S t_1 => _ end; cycle 1.
+1: refine match t' with O => _ | S t_1 => _ end; cycle 1.
 1: refine match t_1 with O => _ | S t_2 => _ end; cycle 1.
 pose proof (go t_2) as go_t2. revert go_t2.
 1: refine match t_2 with O => _ | S t_3 => _ end; cycle 1.
@@ -937,41 +475,25 @@ pose proof (go t_15) as go_t15. revert go_t15.
 1: refine match t_15 with O => _ | S t_16 => _ end; cycle 1.
 pose proof (go t_16) as go_t16. revert go_t16.
 
-all: intros; subst t'.
+all: intros; subst t.
 all: cycle 1.
 
-{ simpl. rewrite SHA256.W_equation. break_if; [ | exfalso; omega ].
-  change trunc with (mask 32). rewrite mask_mask. auto. }
-{ simpl. rewrite SHA256.W_equation. break_if; [ | exfalso; omega ].
-  change trunc with (mask 32). rewrite mask_mask. auto. }
-{ simpl. rewrite SHA256.W_equation. break_if; [ | exfalso; omega ].
-  change trunc with (mask 32). rewrite mask_mask. auto. }
-{ simpl. rewrite SHA256.W_equation. break_if; [ | exfalso; omega ].
-  change trunc with (mask 32). rewrite mask_mask. auto. }
-{ simpl. rewrite SHA256.W_equation. break_if; [ | exfalso; omega ].
-  change trunc with (mask 32). rewrite mask_mask. auto. }
-{ simpl. rewrite SHA256.W_equation. break_if; [ | exfalso; omega ].
-  change trunc with (mask 32). rewrite mask_mask. auto. }
-{ simpl. rewrite SHA256.W_equation. break_if; [ | exfalso; omega ].
-  change trunc with (mask 32). rewrite mask_mask. auto. }
-{ simpl. rewrite SHA256.W_equation. break_if; [ | exfalso; omega ].
-  change trunc with (mask 32). rewrite mask_mask. auto. }
-{ simpl. rewrite SHA256.W_equation. break_if; [ | exfalso; omega ].
-  change trunc with (mask 32). rewrite mask_mask. auto. }
-{ simpl. rewrite SHA256.W_equation. break_if; [ | exfalso; omega ].
-  change trunc with (mask 32). rewrite mask_mask. auto. }
-{ simpl. rewrite SHA256.W_equation. break_if; [ | exfalso; omega ].
-  change trunc with (mask 32). rewrite mask_mask. auto. }
-{ simpl. rewrite SHA256.W_equation. break_if; [ | exfalso; omega ].
-  change trunc with (mask 32). rewrite mask_mask. auto. }
-{ simpl. rewrite SHA256.W_equation. break_if; [ | exfalso; omega ].
-  change trunc with (mask 32). rewrite mask_mask. auto. }
-{ simpl. rewrite SHA256.W_equation. break_if; [ | exfalso; omega ].
-  change trunc with (mask 32). rewrite mask_mask. auto. }
-{ simpl. rewrite SHA256.W_equation. break_if; [ | exfalso; omega ].
-  change trunc with (mask 32). rewrite mask_mask. auto. }
-{ simpl. rewrite SHA256.W_equation. break_if; [ | exfalso; omega ].
-  change trunc with (mask 32). rewrite mask_mask. auto. }
+{ simpl. rewrite SHA256.W_equation. break_if; [ | exfalso; omega ]. eauto using HM. }
+{ simpl. rewrite SHA256.W_equation. break_if; [ | exfalso; omega ]. eauto using HM. }
+{ simpl. rewrite SHA256.W_equation. break_if; [ | exfalso; omega ]. eauto using HM. }
+{ simpl. rewrite SHA256.W_equation. break_if; [ | exfalso; omega ]. eauto using HM. }
+{ simpl. rewrite SHA256.W_equation. break_if; [ | exfalso; omega ]. eauto using HM. }
+{ simpl. rewrite SHA256.W_equation. break_if; [ | exfalso; omega ]. eauto using HM. }
+{ simpl. rewrite SHA256.W_equation. break_if; [ | exfalso; omega ]. eauto using HM. }
+{ simpl. rewrite SHA256.W_equation. break_if; [ | exfalso; omega ]. eauto using HM. }
+{ simpl. rewrite SHA256.W_equation. break_if; [ | exfalso; omega ]. eauto using HM. }
+{ simpl. rewrite SHA256.W_equation. break_if; [ | exfalso; omega ]. eauto using HM. }
+{ simpl. rewrite SHA256.W_equation. break_if; [ | exfalso; omega ]. eauto using HM. }
+{ simpl. rewrite SHA256.W_equation. break_if; [ | exfalso; omega ]. eauto using HM. }
+{ simpl. rewrite SHA256.W_equation. break_if; [ | exfalso; omega ]. eauto using HM. }
+{ simpl. rewrite SHA256.W_equation. break_if; [ | exfalso; omega ]. eauto using HM. }
+{ simpl. rewrite SHA256.W_equation. break_if; [ | exfalso; omega ]. eauto using HM. }
+{ simpl. rewrite SHA256.W_equation. break_if; [ | exfalso; omega ]. eauto using HM. }
 
 let foldup n :=
     let x := constr:(n + t_16)%nat in
@@ -987,22 +509,333 @@ rewrite Nat2Z.inj_add. change (Z.of_nat 16) with 16.
 break_if; [ exfalso; omega | ].
 
 unfold Int.add.
-erewrite <- sigma_1_eq, <- sigma_0_eq.
-erewrite <- go_t7, <- go_t16.
-repeat rewrite unsigned_repr_mask.
+repeat rewrite unsigned_repr_trunc.
+erewrite sigma_0_rel, sigma_1_rel; cycle 1.
+  { unfold rel_int_Z. rewrite go_t2; auto.
+    rewrite Nat2Z.inj_add. change (Z.of_nat 14) with 14. omega. }
+  { unfold rel_int_Z. rewrite go_t15; auto.
+    rewrite Nat2Z.inj_add. change (Z.of_nat 1) with 1. omega. }
 
-2: omega.
-2: rewrite Nat2Z.inj_add; change (Z.of_nat 9) with 9; omega.
+replace (16 + Z.of_nat t_16 - 7) with (9 + Z.of_nat t_16) by omega.
+rewrite go_t7; cycle 1.
+  { rewrite Nat2Z.inj_add. change (Z.of_nat 9) with 9. omega. }
 
-rewrite 2 W_mask.
-rewrite ma_add.
-change trunc with (mask 32). rewrite mask_mask.
+replace (16 + Z.of_nat t_16 - 16) with (0 + Z.of_nat t_16) by omega.
+rewrite go_t16; cycle 1.
+  { omega. }
+
+unfold t_add. reflexivity.
+Qed.
+
+
+
+(*registers that represent intermediate and final hash values*)
+Definition registers := (Z * Z * Z * Z * Z * Z * Z * Z)%type.
+
+Definition rel_regs (r : SHA256.registers) (r' : registers) :=
+    match r with
+    | [a; b; c; d; e; f; g; h] =>
+            let '(a', b', c', d', e', f', g', h') := r' in
+            rel_int_Z a a' /\
+            rel_int_Z b b' /\
+            rel_int_Z c c' /\
+            rel_int_Z d d' /\
+            rel_int_Z e e' /\
+            rel_int_Z f f' /\
+            rel_int_Z g g' /\
+            rel_int_Z h h'
+    | _ => False
+    end.
+
+(*initializing the values of registers, first thirty-two bits of the fractional
+    parts of the square roots of the first eight prime numbers*)
+Definition init_registers : registers := 
+    (1779033703, 3144134277, 1013904242, 2773480762,
+     1359893119, 2600822924,  528734635, 1541459225).
+
+Lemma init_registers_rel :
+    rel_regs SHA256.init_registers init_registers.
+unfold rel_regs, rel_int_Z.
+simpl. intuition reflexivity.
+Qed.
+
+
+Definition nthi (l: list Z) (t: nat) := nth t l 0.
+
+Lemma nthi_rel : forall l t l' t',
+    rel_int_Z_list l l' ->
+    rel_Z_nat t t' ->
+    rel_int_Z (SHA256.nthi l t) (nthi l' t').
+unfold rel_int_Z_list, rel_Z_nat, rel_int_Z.
+intros0 Hl Ht. subst.
+unfold SHA256.nthi. unfold nthi.
+
+rewrite Nat2Z.id.
+rewrite <- map_nth with (f := Int.unsigned).
 reflexivity.
+Qed.
 
-- omega.
-- rewrite <- go_t15. rewrite W_mask. auto.
-  rewrite Nat2Z.inj_add. change (Z.of_nat 1) with 1. omega.
-- rewrite <- go_t2. rewrite W_mask. auto.
-  rewrite Nat2Z.inj_add. change (Z.of_nat 14) with 14. omega.
+Definition rnd_function (x : registers) (k : Z) (w : Z) : registers :=
+    let '(a, b, c, d, e, f, g, h) := x in
+    let T1 := t_add (t_add (t_add (t_add h (Sigma_1 e)) (Ch e f g)) k) w in
+    let T2 := t_add (Sigma_0 a) (Maj a b c) in
+    (t_add T1 T2, a, b, c, t_add d T1, e, f, g).
 
+Lemma rnd_function_rel : forall x k w x' k' w',
+    rel_regs x x' ->
+    rel_int_Z k k' ->
+    rel_int_Z w w' ->
+    rel_regs (SHA256.rnd_function x k w) (rnd_function x' k' w').
+unfold rel_int_Z.
+intros0 Hx Hk Hw.
+
+unfold rel_regs in Hx.
+destruct x as [| a [| b [| c [| d [| e [| f [| g [| h [| ? ? ]]]]]]]]];
+        try (exfalso; assumption).
+destruct x' as [[[[[[[a' b'] c'] d'] e'] f'] g'] h'].
+repeat break_and.
+unfold rel_int_Z in *. subst.
+
+unfold SHA256.rnd_function, Int.add. unfold rnd_function.
+unfold rel_regs, rel_int_Z.
+repeat split.  all: try assumption.
+
+- repeat rewrite unsigned_repr_trunc.
+  rewrite Ch_rel, Sigma_1_rel, Sigma_0_rel, Maj_rel by reflexivity.
+  unfold t_add. reflexivity.
+
+- repeat rewrite unsigned_repr_trunc.
+  rewrite Ch_rel, Sigma_1_rel by reflexivity.
+  unfold t_add. reflexivity.
+Qed.
+
+
+Fixpoint Round (regs : registers) (M : nat -> Z) (t : nat) : registers :=
+    match t with
+    | O => rnd_function regs (nthi K256 t) (W M t)
+    | S t_1 => rnd_function (Round regs M (t_1)) (nthi K256 t) (W M t)
+    end.
+
+Lemma Round_rel : forall regs M t regs' M' t',
+    rel_regs regs regs' ->
+    (forall t t',
+        rel_Z_nat t t' ->
+        rel_int_Z (M t) (M' t')) ->
+    rel_Z_nat t t' ->
+    rel_regs (SHA256.Round regs M t) (Round regs' M' t').
+first_induction t'; unfold rel_Z_nat, rel_int_Z; intros0 Hregs HM Ht.
+
+- subst t. change (Z.of_nat 0) with 0.
+
+  rewrite SHA256.Round_equation. break_if; [omega | ].
+  rewrite SHA256.Round_equation. break_if; [ | omega].
+  unfold Round.
+
+  assert (rel_Z_nat 0 0) by reflexivity.
+
+  eapply rnd_function_rel; eauto using nthi_rel, K256_rel, W_rel.
+
+- subst t.
+
+  rewrite SHA256.Round_equation. break_if; [omega | ].
+  cbn [Round].
+
+  assert (rel_Z_nat (Z.of_nat (S t')) (S t')) by reflexivity.
+
+  eapply rnd_function_rel; eauto using nthi_rel, K256_rel, W_rel.
+  eapply IHt'; eauto.
+  + unfold rel_Z_nat.
+    change (S t') with (1 + t')%nat. rewrite Nat2Z.inj_add.
+    change (Z.of_nat 1) with 1. omega.
+Qed.
+
+
+
+Definition hash_block (r : registers) (block : list Z) : registers :=
+    let '(a0, b0, c0, d0, e0, f0, g0, h0) := r in
+    let '(a1, b1, c1, d1, e1, f1, g1, h1) := Round r (nthi block) 63 in
+    (t_add a0 a1,
+     t_add b0 b1,
+     t_add c0 c1,
+     t_add d0 d1,
+     t_add e0 e1,
+     t_add f0 f1,
+     t_add g0 g1,
+     t_add h0 h1).
+
+Lemma hash_block_rel : forall r block r' block',
+    rel_regs r r' ->
+    rel_int_Z_list block block' ->
+    rel_regs (SHA256.hash_block r block) (hash_block r' block').
+unfold rel_int_Z_list.
+intros0 Hr Hblock. subst.
+
+fwd eapply Round_rel
+    with (regs := r) (M := SHA256.nthi block) (t := 63) (t' := 63%nat)
+    as Hr1.
+  { eassumption. }
+  { intros. eapply nthi_rel; eauto. reflexivity. }
+  { reflexivity. }
+
+unfold SHA256.hash_block. unfold hash_block.
+remember (SHA256.Round _ _ _) as r1.
+remember (Round _ _ _) as r1'.
+
+unfold rel_regs in Hr.
+destruct r as [| a0 [| b0 [| c0 [| d0 [| e0 [| f0 [| g0 [| h0 [| ? ? ]]]]]]]]];
+        try (exfalso; assumption).
+destruct r' as [[[[[[[a0' b0'] c0'] d0'] e0'] f0'] g0'] h0'].
+repeat break_and.
+
+unfold rel_regs in Hr1.
+destruct r1 as [| a1 [| b1 [| c1 [| d1 [| e1 [| f1 [| g1 [| h1 [| ? ? ]]]]]]]]];
+        try (exfalso; assumption).
+destruct r1' as [[[[[[[a1' b1'] c1'] d1'] e1'] f1'] g1'] h1'].
+repeat break_and.
+
+unfold rel_int_Z in *. subst.
+
+cbn [SHA256.map2].
+unfold rel_regs, rel_int_Z.
+
+unfold Int.add. repeat rewrite unsigned_repr_trunc.
+repeat constructor.
+Qed.
+
+
+
+
+Definition hash_blocks (r : registers) (msg : list Z) : registers.
+revert r msg. fix go 2. intros.
+
+set (all := msg).
+
+1: destruct msg as [ | ?m0 msg ]; cycle 1.
+1: destruct msg as [ | ?m0 msg ]; cycle 1.
+1: destruct msg as [ | ?m0 msg ]; cycle 1.
+1: destruct msg as [ | ?m0 msg ]; cycle 1.
+1: destruct msg as [ | ?m0 msg ]; cycle 1.
+1: destruct msg as [ | ?m0 msg ]; cycle 1.
+1: destruct msg as [ | ?m0 msg ]; cycle 1.
+1: destruct msg as [ | ?m0 msg ]; cycle 1.
+1: destruct msg as [ | ?m0 msg ]; cycle 1.
+1: destruct msg as [ | ?m0 msg ]; cycle 1.
+1: destruct msg as [ | ?m0 msg ]; cycle 1.
+1: destruct msg as [ | ?m0 msg ]; cycle 1.
+1: destruct msg as [ | ?m0 msg ]; cycle 1.
+1: destruct msg as [ | ?m0 msg ]; cycle 1.
+1: destruct msg as [ | ?m0 msg ]; cycle 1.
+1: destruct msg as [ | ?m0 msg ]; cycle 1.
+
+(* cases are in descending order, 16..0, due to use of `cycle` *)
+
+- (* 16 *)
+  exact (go (hash_block r
+        [ m0;  m1;  m2;  m3;
+          m4;  m5;  m6;  m7;
+          m8;  m9; m10; m11;
+         m12; m13; m14; m15]) msg).
+
+(* 15 .. 1 *)
+- exact (hash_block r all).
+- exact (hash_block r all).
+- exact (hash_block r all).
+- exact (hash_block r all).
+- exact (hash_block r all).
+- exact (hash_block r all).
+- exact (hash_block r all).
+- exact (hash_block r all).
+- exact (hash_block r all).
+- exact (hash_block r all).
+- exact (hash_block r all).
+- exact (hash_block r all).
+- exact (hash_block r all).
+- exact (hash_block r all).
+- exact (hash_block r all).
+
+(* 0 *)
+- exact r.
+Defined.
+
+Lemma hash_blocks_rel : forall r msg r' msg',
+    rel_regs r r' ->
+    rel_int_Z_list msg msg' ->
+    rel_regs (SHA256.hash_blocks r msg) (hash_blocks r' msg').
+fix go 2; intros0 Hr Hmsg.
+unfold rel_int_Z_list in *. subst.
+
+1: destruct msg as [ | ?m0 msg ]; cycle 1.
+1: destruct msg as [ | ?m0 msg ]; cycle 1.
+1: destruct msg as [ | ?m0 msg ]; cycle 1.
+1: destruct msg as [ | ?m0 msg ]; cycle 1.
+1: destruct msg as [ | ?m0 msg ]; cycle 1.
+1: destruct msg as [ | ?m0 msg ]; cycle 1.
+1: destruct msg as [ | ?m0 msg ]; cycle 1.
+1: destruct msg as [ | ?m0 msg ]; cycle 1.
+1: destruct msg as [ | ?m0 msg ]; cycle 1.
+1: destruct msg as [ | ?m0 msg ]; cycle 1.
+1: destruct msg as [ | ?m0 msg ]; cycle 1.
+1: destruct msg as [ | ?m0 msg ]; cycle 1.
+1: destruct msg as [ | ?m0 msg ]; cycle 1.
+1: destruct msg as [ | ?m0 msg ]; cycle 1.
+1: destruct msg as [ | ?m0 msg ]; cycle 1.
+1: destruct msg as [ | ?m0 msg ]; cycle 1.
+
+all: rewrite SHA256.hash_blocks_equation; cbn [hash_blocks]; simpl.
+
+(* 16 case *)
+- eapply go; auto.
+  eapply hash_block_rel; auto.
+  unfold rel_int_Z_list. simpl. reflexivity.
+
+(* 15 .. 1 cases *)
+- rewrite SHA256.hash_blocks_equation. eapply hash_block_rel; auto. reflexivity.
+- rewrite SHA256.hash_blocks_equation. eapply hash_block_rel; auto. reflexivity.
+- rewrite SHA256.hash_blocks_equation. eapply hash_block_rel; auto. reflexivity.
+- rewrite SHA256.hash_blocks_equation. eapply hash_block_rel; auto. reflexivity.
+- rewrite SHA256.hash_blocks_equation. eapply hash_block_rel; auto. reflexivity.
+- rewrite SHA256.hash_blocks_equation. eapply hash_block_rel; auto. reflexivity.
+- rewrite SHA256.hash_blocks_equation. eapply hash_block_rel; auto. reflexivity.
+- rewrite SHA256.hash_blocks_equation. eapply hash_block_rel; auto. reflexivity.
+- rewrite SHA256.hash_blocks_equation. eapply hash_block_rel; auto. reflexivity.
+- rewrite SHA256.hash_blocks_equation. eapply hash_block_rel; auto. reflexivity.
+- rewrite SHA256.hash_blocks_equation. eapply hash_block_rel; auto. reflexivity.
+- rewrite SHA256.hash_blocks_equation. eapply hash_block_rel; auto. reflexivity.
+- rewrite SHA256.hash_blocks_equation. eapply hash_block_rel; auto. reflexivity.
+- rewrite SHA256.hash_blocks_equation. eapply hash_block_rel; auto. reflexivity.
+- rewrite SHA256.hash_blocks_equation. eapply hash_block_rel; auto. reflexivity.
+
+(* 0 case *)
+- auto.
+Qed.
+
+
+
+
+Definition SHA_256 (str : list Z) : list Z :=
+    let '(a, b, c, d, e, f, g, h) := hash_blocks init_registers (generate_and_pad str) in
+    wordlist_to_bytelist [a; b; c; d; e; f; g; h].
+
+Lemma SHA_256_rel : forall str str',
+    str = str' ->
+    SHA256.SHA_256 str = SHA_256 str'.
+intros0 Hstr. subst.
+
+fwd eapply hash_blocks_rel with (r' := init_registers) (msg' := generate_and_pad str') as Hr.
+  { eapply init_registers_rel. }
+  { eapply generate_and_pad_rel. reflexivity. }
+
+unfold SHA256.SHA_256. unfold SHA_256.
+remember (SHA256.hash_blocks _ _) as r.
+remember (hash_blocks _ _) as r'.
+
+unfold rel_regs in Hr.
+destruct r as [| a0 [| b0 [| c0 [| d0 [| e0 [| f0 [| g0 [| h0 [| ? ? ]]]]]]]]];
+        try (exfalso; assumption).
+destruct r' as [[[[[[[a0' b0'] c0'] d0'] e0'] f0'] g0'] h0'].
+repeat break_and.
+unfold rel_int_Z in *. subst.
+
+eapply wordlist_to_bytelist_rel.
+unfold rel_int_Z_list. simpl. reflexivity.
 Qed.
