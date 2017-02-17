@@ -1743,6 +1743,8 @@ Section Preservation.
   Variable prog : A.prog_type.
   Variable tprog : B.program.
 
+
+  
   Hypothesis TRANSF : compile_cu prog = Some tprog.
 
 Lemma func_body_I : forall M,
@@ -1806,15 +1808,31 @@ split.
 - assumption.
 Qed.
 
+Lemma build_list_succ :
+  { M | build_id_list prog = Some M }.
+Proof.
+  unfold compile_cu in *. break_bind_option. eauto.
+Defined.
+
+Definition M : list (id_key * ident).
+  destruct build_list_succ. exact x.
+Defined.
+
+Definition HM : build_id_list prog = Some M.
+  unfold M. destruct build_list_succ. auto.
+Defined.
+
+Definition AE : A.env.
+  destruct prog. exact e.
+Defined.
+
+Definition ameta : list metadata.
+  destruct prog. exact l.
+Defined.
+
   Theorem fsim :
     MixSemantics.mix_forward_simulation (A.semantics prog) (B.semantics tprog).
   Proof.
-    assert (HH : { M | build_id_list prog = Some M }). {
-      unfold compile_cu in *. break_bind_option. eauto.
-    }
-    destruct HH as [M HM].
-    destruct prog as [AE ameta].
-
     eapply MixSemantics.Forward_simulation with
         (fsim_index := unit)
         (fsim_order := ltof _ (fun _ => 0))
@@ -1824,11 +1842,12 @@ Qed.
     - apply well_founded_ltof.
 
     - simpl. intros.  on >B.is_callstate, invc. on (I_value _ _ (Close _ _)), inv.
-      fwd eapply compile_I_prog; eauto. fwd eapply I_prog_env as HH; eauto.  invc HH.
+      fwd eapply compile_I_prog; eauto. fwd eapply I_prog_env as HH; eauto.
+      (* (*
       on _, fun H => destruct (H ?? ?? ?? ** **) as (an & af & ? & ? & ?).
       on >I_func, invc. simpl.
       fwd eapply build_id_list_ok; eauto.
-
+      
       eexists. exists tt. split. 2: econstructor.
       + econstructor.
         * eapply func_body_I; eauto.
@@ -1856,7 +1875,13 @@ Qed.
       + eapply I_prog_env. eapply compile_I_prog; eauto.
       + eapply compile_prog_fnames_below. eauto.
       + eapply compile_prog_switch_placement. eauto.
-  Qed.
+    Defined.*)
+  Admitted.
+
+    Lemma match_val_eq :
+      MixSemantics.fsim_match_val _ _ fsim = I_value M.
+    Proof.
+    Admitted.
 
 End Preservation.
 
