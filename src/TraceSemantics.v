@@ -642,7 +642,7 @@ Proof.
   intros. destruct H. eapply match_final_states; eauto.
   intros. destruct H0. subst i. exploit simulation; eauto. intros [s2' [A B]].
   exists s1'; exists s2'; intuition.
-Qed.
+Defined.
 
 End SIMULATION_STAR_WF.
 
@@ -667,7 +667,7 @@ Proof.
   intros. exploit simulation; eauto. intros [[s2' [A B]] | [A [B C]]].
   exists s2'; auto.
   exists s2; split. right; split. rewrite B. apply star_refl. auto. auto.
-Qed.
+Defined.
 
 End SIMULATION_STAR.
 
@@ -685,8 +685,8 @@ Lemma forward_simulation_plus: forward_simulation L1 L2.
 Proof.
   apply forward_simulation_star with (measure := fun _ => O).
   intros. exploit simulation; eauto.
-Qed.
-
+Defined.
+  
 End SIMULATION_PLUS.
 
 (** Lock-step simulation: each transition in the first semantics
@@ -704,7 +704,7 @@ Proof.
   apply forward_simulation_plus.
   intros. exploit simulation; eauto. intros [s2' [A B]].
   exists s2'; split; auto. apply plus_one; auto.
-Qed.
+Defined.
 
 End SIMULATION_STEP.
 
@@ -730,7 +730,7 @@ Proof.
   intros. exploit simulation; eauto. intros [[s2' [A B]] | [A [B C]]].
   left; exists s2'; split; auto. apply plus_one; auto.
   right; auto.
-Qed.
+Defined.
 
 End SIMULATION_OPT.
 

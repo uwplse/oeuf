@@ -523,19 +523,58 @@ Qed.
 
 End PRESERVATION.
 
-Theorem fsim :
-  forall prog tprog,
-    transf_prog prog = OK tprog ->
-    forward_simulation (Dflatmajor.semantics prog) (Cmajor.semantics tprog).
+Section FSIM.
+
+  Variable prog : Dmajor.program.
+  Variable tprog : Cmajor.program.
+
+  Hypothesis TRANSF : transf_prog prog = OK tprog.
+
+  Definition malloc_id_f :
+    { id | find_malloc_id (prog_defs prog) = Some id }.
+  Proof.
+    unfold transf_prog in *. repeat (break_match_hyp; try congruence); eauto.
+  Defined.
+
+  Definition malloc_id : ident.
+  Proof.
+    destruct malloc_id_f. exact x.
+  Defined.
+
+  Lemma malloc_id_found :
+    find_malloc_id (prog_defs prog) = Some malloc_id.
+  Proof.
+    unfold malloc_id. destruct malloc_id_f. assumption.
+  Qed.
+
+  Definition fsim : forward_simulation (Dflatmajor.semantics prog) (Cmajor.semantics tprog).
+    eapply forward_simulation_plus.
+    intros. eapply is_callstate_match; eauto.
+    eapply malloc_id_found.
+    instantiate (1 := eq) in H0. subst. apply H.
+    intros. exists v1; split; eauto. eapply match_final_states; eauto.
+    apply malloc_id_found.
+    eapply single_step_correct; eauto.
+    apply malloc_id_found.
+  Defined.
+  
+
+Lemma match_val_eq :
+  TraceSemantics.fsim_match_val fsim = eq.
 Proof.
-  intros. copy H. unfold transf_prog in H0.
-  repeat (break_match_hyp; try congruence).
-  eapply forward_simulation_plus.
-  intros. eapply is_callstate_match; eauto.
-  instantiate (1 := eq) in H2. subst. eauto.
-  intros. exists v1; split; eauto. eapply match_final_states; eauto.
-  eapply single_step_correct; eauto.
+  intros.
+  unfold fsim. simpl.
+  unfold TraceSemantics.fsim_match_val.
+  repeat break_match. repeat (break_match_hyp; try congruence).
+  
+  try unfold forward_simulation_step in *.
+  try unfold forward_simulation_plus in *.
+  try unfold forward_simulation_star in *.
+  try unfold forward_simulation_star_wf in *.
+  try inv Heqf. 
+  
+  reflexivity.
 Qed.
 
-
+End FSIM.
 

@@ -52,7 +52,6 @@ Require Import ListLemmas.
 
 
 
-
 Lemma transf_oeuf_to_untyped1_genv : forall prog tprog,
     transf_oeuf_to_untyped1 prog = OK tprog ->
     UntypedComp1.compile_genv (CompilationUnit.exprs prog) = fst tprog.
@@ -307,7 +306,9 @@ Section Simulation.
     eapply TraceSemantics.compose_forward_simulation.
     eapply Dflatmajortocmajor.fsim; try eassumption.
 
-
+    unfold Dmajortodflatmajor.transf_prog in *. repeat (break_match_hyp; try congruence). inv Heqr1.
+    eassumption.
+    
     (* Cmajor to Cminor *)
     eapply Cmajortominor.fsim; try eassumption.
     rewrite OeufCompcertCompiler.print_identity in *.

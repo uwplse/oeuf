@@ -505,7 +505,25 @@ Proof.
   congruence.
   intros. eapply match_final_state in H0; eauto.
   eapply single_step_correct; eauto.
+Defined.
+
+Lemma match_val_eq :
+  TraceSemantics.fsim_match_val fsim = eq.
+Proof.
+  intros.
+  unfold fsim. simpl.
+  unfold TraceSemantics.fsim_match_val.
+  repeat break_match. repeat (break_match_hyp; try congruence).
+  
+  try unfold forward_simulation_step in *.
+  try unfold forward_simulation_plus in *.
+  try unfold forward_simulation_star in *.
+  try unfold forward_simulation_star_wf in *.
+  try inv Heqf. 
+  
+  reflexivity.
 Qed.
+
 
 End PRESERVATION.
 

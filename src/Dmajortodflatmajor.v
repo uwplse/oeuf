@@ -25,14 +25,33 @@ Require Import StructTact.Util.
 Require Import EricTact.
 
 Definition transf_prog (p : Dmajor.program) : Errors.res Dmajor.program :=
-  if (list_norepet_dec ident_eq (prog_defs_names p)) then OK p else Error (MSG "repeats found in prog defs" :: nil).
+  if (list_norepet_dec ident_eq (prog_defs_names p)) then
+    if prog_defs p then
+      Error (MSG "Can't compile empty program" :: nil)
+    else
+      OK p
+  else Error (MSG "repeats found in prog defs" :: nil).
 
 Section PRESERVATION.
 
-Variable prog: Dmajor.program.
+Variable prog tprog: Dmajor.program.
 Let ge := Genv.globalenv prog.
-Hypothesis no_repet : list_norepet (prog_defs_names prog).
-Hypothesis nonempty : prog_defs prog <> nil.
+Hypothesis TRANSF : transf_prog prog = OK tprog.
+
+Lemma tprog_prog : prog = tprog.
+Proof.
+  unfold transf_prog in *. repeat break_match_hyp; try congruence.
+Qed.
+
+Lemma no_repet : list_norepet (prog_defs_names prog).
+Proof.
+  unfold transf_prog in *. repeat break_match_hyp; try congruence; assumption.
+Qed.
+
+Lemma non_empty : prog_defs prog <> nil.
+Proof.
+  unfold transf_prog in *. repeat break_match_hyp; try congruence.
+Qed.
 
 (* Well formedness of a stack frame in memory *)
 Definition stack_frame_wf (b : block) (stacksize : Z) (mi : meminj) (m : mem) : Prop :=
@@ -137,14 +156,16 @@ Proof.
   destruct g.
   app Genv.find_funct_ptr_exists Gfun.
   unfold ge in *. rewrite H1 in H3. inv H3.
-  eapply H0; eauto.
+  eapply H0; eauto. eapply no_repet.
   app Genv.find_var_exists Gvar.
   unfold ge in *. rewrite H1 in H3. inv H3.
   eapply H0; eauto.
-
+  eapply no_repet.
+  
   Unshelve.
   repeat (econstructor; eauto).
   repeat (econstructor; eauto).
+
 Qed.  
 
 (* evaluating expressions translates *)
@@ -1209,6 +1230,7 @@ Proof.
   simpl in *.  
   rewrite <- H.
   break_match; try econstructor; eauto.
+  eapply non_empty.
 Qed.
 
 Lemma alloc_wf_mem :
@@ -1421,7 +1443,7 @@ Proof.
       try solve [econstructor; eauto].
 Qed.
 
-Theorem fsim' :
+Theorem fsim :
   forward_simulation (Dmajor.semantics prog) (Dflatmajor.semantics prog).
 Proof.
   eapply forward_simulation_plus.
@@ -1431,10 +1453,29 @@ Proof.
   subst. eauto.
   intros. eapply match_final_states in H0; eauto.
   eapply single_step_correct.
+Defined.
+
+Lemma match_val_eq :
+  TraceSemantics.fsim_match_val fsim = eq.
+Proof.
+  intros.
+  unfold fsim. simpl.
+  unfold TraceSemantics.fsim_match_val.
+  repeat break_match. repeat (break_match_hyp; try congruence).
+  
+  try unfold forward_simulation_step in *.
+  try unfold forward_simulation_plus in *.
+  try unfold forward_simulation_star in *.
+  try unfold forward_simulation_star_wf in *.
+  try inv Heqf. 
+  
+  reflexivity.
 Qed.
+
 
 End PRESERVATION.
 
+(*
 Theorem fsim :
   forall prog tprog,
     transf_prog prog = OK tprog ->
@@ -1443,5 +1484,6 @@ Proof.
   intros.
   unfold transf_prog in *. break_match_hyp; try congruence. inv H.
   eapply fsim'; eauto.
-Qed.
+Defined.
+*)
 
