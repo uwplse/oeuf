@@ -1630,8 +1630,20 @@ Proof.
   eauto.
   intros. eapply match_final_states in H0; eauto.
   intros. eapply step_sim; eauto.
-Qed.
+Defined.
 
+Lemma match_val_eq :
+  TraceSemantics.fsim_match_val fsim = eq.
+Proof.
+  unfold fsim. simpl.
+  unfold TraceSemantics.fsim_match_val.
+  repeat break_match. repeat (break_match_hyp; try congruence).
+  try unfold forward_simulation_step in *.
+  try unfold forward_simulation_plus in *.
+  try unfold forward_simulation_star in *.
+  try unfold forward_simulation_star_wf in *.
+  try inv Heqf. reflexivity.
+Qed.
 
 End PRESERVATION.
 

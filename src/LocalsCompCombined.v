@@ -13,18 +13,209 @@ Require
     LocalsOnlyComp
 .
 
+
+
+Definition compile_switch (cu : StackFlatter2.prog_type) : res LocalsSwitch.prog_type :=
+  OK cu
+  @@@ LocalsDestsComp.compile_cu
+  @@ LocalsSwitchComp.compile_cu.
+
+Section FSIMswitch.
+
+  Variable a : StackFlatter2.prog_type.
+  Variable b : LocalsSwitch.prog_type.
+  Hypothesis TRANSF : compile_switch a = OK b.
+
+  Lemma compile_switch_succ :
+    { c | LocalsDestsComp.compile_cu a = Some c }.
+  Proof.
+    unfold compile_switch in TRANSF. break_result_chain. eauto.
+  Qed.
+  
+  Definition fsim_switch : Semantics.forward_simulation (StackFlatter2.semantics a) (LocalsSwitch.semantics b).
+    destruct compile_switch_succ.
+    eapply Semantics.compose_forward_simulation;
+      try eapply LocalsDestsComp.fsim; eauto;
+      try eapply LocalsSwitchComp.fsim; eauto.
+    unfold compile_switch in *; break_result_chain.
+    congruence.
+  Defined.
+
+  Lemma fsim_switch_match_val :
+    forall x y,
+      Semantics.fsim_match_val _ _ fsim_switch x y <-> eq x y.
+  Proof.
+    intros. unfold fsim_switch.
+    destruct compile_switch_succ.
+    erewrite Semantics.fsim_match_val_compose. repeat instantiate (1 := eq).
+    split; intros; repeat break_exists; repeat eexists; repeat break_and; eauto; try congruence.
+    erewrite LocalsDestsComp.match_val_eq.
+    intros; split; intros; congruence.
+    erewrite LocalsSwitchComp.match_val_eq.
+    intros; split; intros; congruence.
+  Qed.    
+
+End FSIMswitch.
+
+Definition compile_return (cu : StackFlatter2.prog_type) : res LocalsReturn.prog_type :=
+  OK cu
+  @@@ compile_switch
+  @@@ LocalsReturnComp.compile_cu.
+
+Section FSIMreturn.
+
+  Variable a : StackFlatter2.prog_type.
+  Variable b : LocalsReturn.prog_type.
+  Hypothesis TRANSF : compile_return a = OK b.
+
+  Lemma compile_return_succ :
+    { c | compile_switch a = Some c }.
+  Proof.
+    unfold compile_return in TRANSF. break_result_chain. eauto.
+  Qed.
+  
+  Definition fsim_return : Semantics.forward_simulation (StackFlatter2.semantics a) (LocalsReturn.semantics b).
+    destruct compile_return_succ.
+    eapply Semantics.compose_forward_simulation;
+      try eapply fsim_switch; eauto;
+      try eapply LocalsReturnComp.fsim; eauto.
+    unfold compile_return in *; break_result_chain.
+    unfold option_to_res in *. congruence.
+  Defined.
+
+  Lemma fsim_return_match_val :
+    forall x y,
+      Semantics.fsim_match_val _ _ fsim_return x y <-> eq x y.
+  Proof.
+    intros. unfold fsim_return.
+    destruct compile_return_succ.
+    erewrite Semantics.fsim_match_val_compose. repeat instantiate (1 := eq).
+    split; intros; repeat break_exists; repeat eexists; repeat break_and; eauto; try congruence.
+    intros. erewrite fsim_switch_match_val.
+    intros; split; intros; congruence.
+    erewrite LocalsReturnComp.match_val_eq.
+    intros; split; intros; congruence.
+  Qed.    
+
+End FSIMreturn.
+
+Definition compile_sources (cu : StackFlatter2.prog_type) : res LocalsSources.prog_type :=
+  OK cu
+  @@@ compile_return
+  @@@ LocalsSourcesComp.compile_cu.
+
+Section FSIMsources.
+
+  Variable a : StackFlatter2.prog_type.
+  Variable b : LocalsSources.prog_type.
+  Hypothesis TRANSF : compile_sources a = OK b.
+
+  Lemma compile_sources_succ :
+    { c | compile_return a = Some c }.
+  Proof.
+    unfold compile_sources in TRANSF. break_result_chain. eauto.
+  Qed.
+  
+  Definition fsim_sources : Semantics.forward_simulation (StackFlatter2.semantics a) (LocalsSources.semantics b).
+    destruct compile_sources_succ.
+    eapply Semantics.compose_forward_simulation;
+      try eapply fsim_return; eauto;
+      try eapply LocalsSourcesComp.fsim; eauto.
+    unfold compile_sources in *; break_result_chain.
+    unfold option_to_res in *. congruence.
+  Defined.
+
+  Lemma fsim_sources_match_val :
+    forall x y,
+      Semantics.fsim_match_val _ _ fsim_sources x y <-> eq x y.
+  Proof.
+    intros. unfold fsim_sources.
+    destruct compile_sources_succ.
+    erewrite Semantics.fsim_match_val_compose. repeat instantiate (1 := eq).
+    split; intros; repeat break_exists; repeat eexists; repeat break_and; eauto; try congruence.
+    intros. erewrite fsim_return_match_val.
+    intros; split; intros; congruence.
+    erewrite LocalsSourcesComp.match_val_eq.
+    intros; split; intros; congruence.
+  Qed.    
+
+End FSIMsources.
+
+
+Definition compile_only (cu : StackFlatter2.prog_type) : res LocalsOnly.prog_type :=
+  OK cu
+  @@@ compile_sources
+  @@ LocalsOnlyComp.compile_cu.
+
+Section FSIMonly.
+
+  Variable a : StackFlatter2.prog_type.
+  Variable b : LocalsOnly.prog_type.
+  Hypothesis TRANSF : compile_only a = OK b.
+
+  Lemma compile_only_succ :
+    { c | compile_sources a = Some c }.
+  Proof.
+    unfold compile_only in TRANSF. break_result_chain. eauto.
+  Qed.
+  
+  Definition fsim_only : Semantics.forward_simulation (StackFlatter2.semantics a) (LocalsOnly.semantics b).
+    destruct compile_only_succ.
+    eapply Semantics.compose_forward_simulation;
+      try eapply fsim_sources; eauto;
+      try eapply LocalsOnlyComp.fsim; eauto.
+    unfold compile_only in *; break_result_chain.
+    unfold option_to_res in *. congruence.
+  Defined.
+
+  Lemma fsim_only_match_val :
+    forall x y,
+      Semantics.fsim_match_val _ _ fsim_only x y <-> eq x y.
+  Proof.
+    intros. unfold fsim_only.
+    destruct compile_only_succ.
+    erewrite Semantics.fsim_match_val_compose. repeat instantiate (1 := eq).
+    split; intros; repeat break_exists; repeat eexists; repeat break_and; eauto; try congruence.
+    intros. erewrite fsim_sources_match_val.
+    intros; split; intros; congruence.
+    erewrite LocalsOnlyComp.match_val_eq.
+    intros; split; intros; congruence.
+  Qed.    
+
+End FSIMonly.
+
+
+
+
 Module A := StackFlatter2.
 Module B := LocalsOnly.
 
 
-Definition compile_cu (cu : A.env * list metadata) : res (B.env * list metadata) :=
-  OK cu
- @@@ LocalsDestsComp.compile_cu ~~ "LocalsDestsComp"
-  @@ LocalsSwitchComp.compile_cu
- @@@ LocalsReturnComp.compile_cu ~~ "LocalsReturnComp"
- @@@ LocalsSourcesComp.compile_cu ~~ "LocalsSourcesComp"
-  @@ LocalsOnlyComp.compile_cu
-.
+Definition compile_cu (cu : A.env * list metadata) : res (B.env * list metadata) := compile_only cu.
+
+
+Section Preservation.
+
+  Variable prog : A.prog_type.
+  Variable tprog : B.prog_type.
+
+  Hypothesis TRANSF : compile_cu prog = OK tprog.
+
+
+  Definition fsim : Semantics.forward_simulation (A.semantics prog) (B.semantics tprog).
+    eapply fsim_only. eassumption.
+  Defined.
+
+  Lemma match_val :
+    forall x y,
+      Semantics.fsim_match_val _ _ fsim x y <-> eq x y.
+  Proof.
+    unfold fsim.
+    eapply fsim_only_match_val.
+  Qed.
+  
+End Preservation.
+
 
 Inductive I : A.state -> B.state -> Prop :=
 | ICombined : forall s00 s01 s02 s03 s04 s05,
@@ -65,6 +256,11 @@ Theorem compile_I_func : forall a ameta b bmeta,
     Forall2 I_func a b.
 intros0 Hcomp. unfold compile_cu in *.
 
+unfold compile_only in *.
+unfold compile_sources in *.
+unfold compile_return in *.
+unfold compile_switch in *.
+
 remember (a, ameta) as aprog.
 break_result_chain.
 subst aprog.  repeat on (_ * _)%type, fun x => destruct x.
@@ -80,34 +276,4 @@ Qed.
 
 
 
-Require Semantics.
 
-Section Preservation.
-
-  Variable prog : A.prog_type.
-  Variable tprog : B.prog_type.
-
-  Hypothesis TRANSF : compile_cu prog = OK tprog.
-
-  Theorem fsim :
-    Semantics.forward_simulation (A.semantics prog) (B.semantics tprog).
-  Proof.
-    unfold compile_cu in TRANSF.
-    break_result_chain.
-
-    eapply Semantics.compose_forward_simulation.
-    eapply LocalsDestsComp.fsim; try eassumption.
-
-    eapply Semantics.compose_forward_simulation.
-    eapply LocalsSwitchComp.fsim; try eassumption.
-
-    eapply Semantics.compose_forward_simulation.
-    eapply LocalsReturnComp.fsim; try eassumption.
-
-    eapply Semantics.compose_forward_simulation.
-    eapply LocalsSourcesComp.fsim; try eassumption.
-
-    eapply LocalsOnlyComp.fsim; try eassumption.
-  Qed.
-
-End Preservation.
