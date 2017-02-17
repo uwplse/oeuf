@@ -53,8 +53,6 @@ Qed.
 
 
 
-Set Default Timeout 5.
-
 Definition Shr (b x : Z) := trunc (Z.shiftr x b).
 
 Lemma Shr_trunc : forall b x,
@@ -839,3 +837,4 @@ unfold rel_int_Z in *. subst.
 eapply wordlist_to_bytelist_rel.
 unfold rel_int_Z_list. simpl. reflexivity.
 Qed.
+
