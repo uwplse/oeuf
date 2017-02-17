@@ -1814,12 +1814,12 @@ Proof.
   unfold compile_cu in *. break_bind_option. eauto.
 Defined.
 
-Definition M : list (id_key * ident).
+Definition MM : list (id_key * ident).
   destruct build_list_succ. exact x.
 Defined.
 
-Definition HM : build_id_list prog = Some M.
-  unfold M. destruct build_list_succ. auto.
+Definition HM : build_id_list prog = Some MM.
+  unfold MM. destruct build_list_succ. auto.
 Defined.
 
 Definition AE : A.env.
@@ -1836,8 +1836,8 @@ Defined.
     eapply MixSemantics.Forward_simulation with
         (fsim_index := unit)
         (fsim_order := ltof _ (fun _ => 0))
-        (fsim_match_states := fun _ => I' M AE)
-        (fsim_match_val := I_value M).
+        (fsim_match_states := fun _ => I' MM AE)
+        (fsim_match_val := I_value MM).
 
     - apply well_founded_ltof.
 
@@ -1879,7 +1879,7 @@ Defined.
   Admitted.
 
     Lemma match_val_eq :
-      MixSemantics.fsim_match_val _ _ fsim = I_value M.
+      MixSemantics.fsim_match_val _ _ fsim = I_value MM.
     Proof.
     Admitted.
 
