@@ -1833,17 +1833,19 @@ Defined.
   Theorem fsim :
     MixSemantics.mix_forward_simulation (A.semantics prog) (B.semantics tprog).
   Proof.
+    destruct build_list_succ as [M HM].
+    destruct prog as [AE ameta].
+
     eapply MixSemantics.Forward_simulation with
         (fsim_index := unit)
         (fsim_order := ltof _ (fun _ => 0))
-        (fsim_match_states := fun _ => I' MM AE)
-        (fsim_match_val := I_value MM).
+        (fsim_match_states := fun _ => I' M AE)
+        (fsim_match_val := I_value M).
 
     - apply well_founded_ltof.
 
     - simpl. intros.  on >B.is_callstate, invc. on (I_value _ _ (Close _ _)), inv.
-      fwd eapply compile_I_prog; eauto. fwd eapply I_prog_env as HH; eauto.
-      (* (*
+      fwd eapply compile_I_prog; eauto. fwd eapply I_prog_env as HH; eauto.  invc HH.
       on _, fun H => destruct (H ?? ?? ?? ** **) as (an & af & ? & ? & ?).
       on >I_func, invc. simpl.
       fwd eapply build_id_list_ok; eauto.
@@ -1875,15 +1877,21 @@ Defined.
       + eapply I_prog_env. eapply compile_I_prog; eauto.
       + eapply compile_prog_fnames_below. eauto.
       + eapply compile_prog_switch_placement. eauto.
-    Defined.*)
-  Admitted.
-
-    Lemma match_val_eq :
-      MixSemantics.fsim_match_val _ _ fsim = I_value MM.
-    Proof.
-    Admitted.
+    Defined.
 
 End Preservation.
+
+Lemma match_val_eq :
+    forall prog tprog TRANSF,
+  MixSemantics.fsim_match_val _ _ (fsim prog tprog TRANSF) = I_value (MM prog tprog TRANSF).
+Proof.
+    intros.
+    unfold fsim.
+    destruct (build_list_succ _ _ _) eqn:?.
+    destruct prog. simpl.
+    unfold MM. rewrite Heqs.
+    reflexivity.
+Qed.
 
 
 Lemma intern_id_list'_is_map : forall xs,
