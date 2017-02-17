@@ -789,6 +789,19 @@ Section Preservation.
     - intros0 Astep. intros0 II.
       eapply I_sim; eauto.
       unfold compile_cu in *. simpl in *. break_if; try discriminate. congruence.
+    Defined.
+
+    Lemma match_val_eq :
+      Semantics.fsim_match_val _ _ fsim = eq.
+    Proof.
+      unfold fsim. simpl.
+      unfold Semantics.fsim_match_val.
+      break_match. repeat (break_match_hyp; try congruence).
+      try unfold forward_simulation_step in *.
+      try unfold forward_simulation_plus in *.
+      try unfold forward_simulation_star in *.
+      try unfold forward_simulation_star_wf in *.
+      inv Heqf. reflexivity.
   Qed.
 
 End Preservation.
