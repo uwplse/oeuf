@@ -193,7 +193,7 @@ Proof.
 (*  intros. transitivity (Senv.public_symbol (Semantics.symbolenv L2) id);
   try apply fsim_public_preserved; auto;
   try apply Semantics.fsim_public_preserved; auto. *)
-Qed.
+Defined.
 
 End COMPOSE_NOTRACE_MIX.
 
@@ -258,8 +258,36 @@ Proof.
   transitivity (Senv.public_symbol (symbolenv L2) id);
   try apply fsim_public_preserved; auto;
   try apply TraceSemantics.fsim_public_preserved; auto. *)
-Qed.
+Defined.
   
 End COMPOSE_MIX_TRACE.
 
 End COMPOSE_SIMULATIONS.
+
+Lemma mix_trace_fsim_match_val_compose :
+  forall sema semb semc fs1 fs2 R1 R2,
+    (forall x y, fsim_match_val sema semb fs1 x y <-> R1 x y) ->
+    (forall x y, TraceSemantics.fsim_match_val fs2 x y <-> R2 x y) ->
+    (forall x y, fsim_match_val sema semc (compose_mix_trace_forward_simulation sema semb semc fs1 fs2) x y <-> (exists z, R1 x z /\ R2 z y)).
+Proof.
+  intros. unfold compose_mix_trace_forward_simulation.
+  simpl. split; intros; repeat (break_exists; break_and);
+           repeat rewrite H in *; repeat rewrite H0 in *.
+  eauto.
+  exists x0. split.
+  eapply H; eauto. eapply H0; eauto.
+Qed.
+
+Lemma notrace_mix_fsim_match_val_compose :
+  forall sema semb semc fs1 fs2 R1 R2,
+    (forall x y, Semantics.fsim_match_val sema semb fs1 x y <-> R1 x y) ->
+    (forall x y, fsim_match_val semb semc fs2 x y <-> R2 x y) ->
+    (forall x y, fsim_match_val sema semc (compose_notrace_mix_forward_simulation sema semb semc fs1 fs2) x y <-> (exists z, R1 x z /\ R2 z y)).
+Proof.
+  intros. unfold compose_notrace_mix_forward_simulation.
+  simpl. split; intros; repeat (break_exists; break_and);
+           repeat rewrite H in *; repeat rewrite H0 in *.
+  eauto.
+  exists x0. split.
+  eapply H; eauto. eapply H0; eauto.
+Qed.
