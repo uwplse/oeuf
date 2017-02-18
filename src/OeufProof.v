@@ -51,7 +51,6 @@ Require Import StuartTact.
 Require Import ListLemmas.
 
 
-
 Lemma transf_oeuf_to_untyped1_genv : forall prog tprog,
     transf_oeuf_to_untyped1 prog = OK tprog ->
     UntypedComp1.compile_genv (CompilationUnit.exprs prog) = fst tprog.
@@ -215,6 +214,556 @@ Section ComposeSourceLifted.
 
 End ComposeSourceLifted.
 
+Section FSIMtagged.
+
+  Variable a : Untyped1.prog_type.
+  Variable b : Tagged.prog_type.
+  Hypothesis TRANSF : transf_untyped_to_tagged a = OK b.
+
+  Lemma compile_tagged_succ :
+    { c | UntypedCompCombined.compile_cu a = Some c }.
+  Proof.
+    unfold transf_untyped_to_tagged in TRANSF. break_result_chain. eauto.
+  Qed.
+  
+  Definition fsim_tagged : Semantics.forward_simulation (Untyped1.semantics a) (Tagged.semantics b).
+    destruct compile_tagged_succ.
+    eapply Semantics.compose_forward_simulation;
+      try eapply UntypedCompCombined.fsim; eauto;
+      try eapply TaggedComp.fsim; eauto.
+    unfold transf_untyped_to_tagged in *; break_result_chain.
+    try unfold option_to_res in *.
+    congruence.
+  Defined.
+
+  Lemma fsim_tagged_match_val :
+    forall x y,
+      Semantics.fsim_match_val _ _ fsim_tagged x y <-> TaggedComp.I_value x y.
+  Proof.
+    intros. unfold fsim_tagged.
+    destruct compile_tagged_succ.
+    erewrite Semantics.fsim_match_val_compose.
+    Focus 2. intros. erewrite UntypedCompCombined.fsim_match_val.
+    split; intros; congruence.
+    instantiate (1 := MatchValues.mv_higher).
+    split; intros; repeat break_exists; repeat break_and;
+      try erewrite UntypedCompCombined.fsim_match_val in *.
+    congruence. eexists; split. 
+    eapply UntypedCompCombined.fsim_match_val. reflexivity. assumption.
+    simpl.
+    intros.
+    erewrite TaggedComp.match_val_I. reflexivity.
+  Qed.
+
+End FSIMtagged.
+
+Section FSIMtaggednumbered.
+
+  Variable a : Untyped1.prog_type.
+  Variable b : TaggedNumbered.prog_type.
+  Hypothesis TRANSF : transf_untyped_to_tagged_numbered a = OK b.
+
+  Lemma compile_taggednumbered_succ :
+    { c | transf_untyped_to_tagged a = Some c }.
+  Proof.
+    unfold transf_untyped_to_tagged_numbered in TRANSF. break_result_chain. eauto.
+  Qed.
+  
+  Definition fsim_taggednumbered : Semantics.forward_simulation (Untyped1.semantics a) (TaggedNumbered.semantics b).
+    destruct compile_taggednumbered_succ.
+    eapply Semantics.compose_forward_simulation;
+    try eapply fsim_tagged; eauto;
+    try eapply TaggedNumberedComp.fsim; eauto.
+    unfold transf_untyped_to_tagged_numbered in *; break_result_chain.
+    try unfold option_to_res in *.
+    congruence.
+  Defined.
+
+  Lemma fsim_taggednumbered_match_val :
+    forall x y,
+      Semantics.fsim_match_val _ _ fsim_taggednumbered x y <-> TaggedComp.I_value x y.
+  Proof.
+    intros. unfold fsim_taggednumbered.
+    destruct compile_taggednumbered_succ.
+    erewrite Semantics.fsim_match_val_compose.
+    Focus 2. eapply fsim_tagged_match_val; eauto.
+    instantiate (1 := eq).
+    split; intros; repeat break_exists; repeat break_and; try eexists; try split; try eassumption; try congruence.
+    erewrite TaggedNumberedComp.match_val_eq.
+    split; intros; congruence.
+  Qed.
+
+End FSIMtaggednumbered.
+
+
+Section FSIMelimfunc.
+
+  Variable a : Untyped1.prog_type.
+  Variable b : ElimFunc.prog_type.
+  Hypothesis TRANSF : transf_untyped_to_elim_func a = OK b.
+
+  Lemma compile_elimfunc_succ :
+    { c | transf_untyped_to_tagged_numbered a = Some c }.
+  Proof.
+    unfold transf_untyped_to_elim_func in TRANSF. break_result_chain. eauto.
+  Qed.
+  
+  Definition fsim_elimfunc : Semantics.forward_simulation (Untyped1.semantics a) (ElimFunc.semantics b).
+    destruct compile_elimfunc_succ.
+    eapply Semantics.compose_forward_simulation;
+    try eapply fsim_taggednumbered; eauto;
+    try eapply ElimFuncComp.fsim; eauto.
+    unfold transf_untyped_to_elim_func in *; break_result_chain.
+    try unfold option_to_res in *.
+    congruence.
+    unfold transf_untyped_to_tagged_numbered in *.
+    break_result_chain. inv e.
+    eapply TaggedNumberedComp.compile_cu_elims_match'. 
+    reflexivity.
+  Defined.
+
+  Lemma fsim_elimfunc_match_val :
+    forall x y,
+      Semantics.fsim_match_val _ _ fsim_elimfunc x y <-> TaggedComp.I_value x y.
+  Proof.
+    intros. unfold fsim_elimfunc.
+    destruct compile_elimfunc_succ.
+    erewrite Semantics.fsim_match_val_compose.
+    Focus 2. eapply fsim_taggednumbered_match_val; eauto.
+    instantiate (1 := eq).
+    split; intros; repeat break_exists; repeat break_and; try eexists; try split; try eassumption; try congruence.
+    erewrite ElimFuncComp.match_val_eq.
+    split; intros; congruence.
+  Qed.
+
+End FSIMelimfunc.
+
+Definition match_val_highest_higher {A B l} (hstv : HighestValues.value) (hv : HigherValue.value) : Prop :=
+  exists hv',
+    TaggedComp.I_value hstv hv' /\
+    ElimFuncComp2.match_values A B l hv' hv.
+
+Section MATCH_VAL_INDICES.
+
+  Variable u1p : Untyped1.prog_type.
+  Variable efp : ElimFunc.prog_type.
+  Hypothesis EFTRANSF : transf_untyped_to_elim_func u1p = OK efp.
+  Variable ef2p : ElimFunc2.prog_type.
+  Hypothesis EF2TRANSF : ElimFuncComp2.compile_cu efp = Some ef2p.
+
+  Definition match_vals := @match_val_highest_higher (fst efp) (fst ef2p) (snd efp).
+  
+Section FSIMelimfunc2.
+
+  Definition fsim_elimfunc2 : Semantics.forward_simulation (Untyped1.semantics u1p) (ElimFunc2.semantics ef2p).
+    eapply Semantics.compose_forward_simulation;
+    try eapply fsim_elimfunc; eauto;
+      try eapply ElimFuncComp2.fsim; eauto.
+  Defined.
+
+  Lemma fsim_elimfunc2_match_val :
+    forall x y,
+      Semantics.fsim_match_val _ _ fsim_elimfunc2 x y <-> match_vals x y.
+  Proof.
+    intros. unfold fsim_elimfunc2.
+    erewrite Semantics.fsim_match_val_compose.
+    Focus 2. eapply fsim_elimfunc_match_val; eauto.
+    unfold match_vals.
+    unfold match_val_highest_higher.
+    split; intros; repeat break_exists; repeat break_and; try eexists; try split; try eassumption; try congruence.
+    erewrite ElimFuncComp2.match_val_eq.
+    reflexivity.
+  Qed.
+
+End FSIMelimfunc2.
+
+Section FSIMelimfunc3.
+
+  Variable b : ElimFunc3.prog_type.
+  Hypothesis TRANSF : transf_untyped_to_elim_func3 u1p = OK b.
+  
+  Lemma compile_elimfunc3_succ :
+    { c | transf_untyped_to_elim_func2 u1p = Some c }.
+  Proof.
+    unfold transf_untyped_to_elim_func3 in TRANSF. break_result_chain. eauto.
+  Qed.
+  
+  Definition fsim_elimfunc3 : Semantics.forward_simulation (Untyped1.semantics u1p) (ElimFunc3.semantics b).
+    destruct compile_elimfunc3_succ.
+    eapply Semantics.compose_forward_simulation;
+    try eapply fsim_elimfunc2; eauto;
+    try eapply ElimFuncComp3.fsim; eauto.
+    unfold transf_untyped_to_elim_func3 in *; break_result_chain.
+    try unfold option_to_res in *.
+    unfold transf_untyped_to_elim_func2 in e.
+    break_result_chain. 
+    rewrite EFTRANSF in Heqr0. invc Heqr0.
+    rewrite H0 in EF2TRANSF. invc EF2TRANSF.
+    unfold transf_untyped_to_elim_func2 in Heqr.
+    break_result_chain. congruence.
+  Defined.
+
+  Lemma fsim_elimfunc3_match_val :
+    forall x y,
+      Semantics.fsim_match_val _ _ fsim_elimfunc3 x y <-> match_vals x y.
+  Proof.
+    intros. unfold fsim_elimfunc3.
+    destruct compile_elimfunc3_succ.
+    erewrite Semantics.fsim_match_val_compose.
+    Focus 2. eapply fsim_elimfunc2_match_val; eauto.
+    instantiate (1 := eq).
+
+    split; intros; repeat break_exists; repeat break_and; try subst. assumption.
+    eexists; split. eassumption. reflexivity.
+    
+
+    erewrite ElimFuncComp3.match_val_eq.
+    split; intros; try congruence.
+  Qed.
+
+End FSIMelimfunc3.
+
+Section FSIMswitched.
+
+  Variable b : Switched.prog_type.
+  Hypothesis TRANSF : transf_untyped_to_switched u1p = OK b.
+  
+  Lemma compile_switched_succ :
+    { c | transf_untyped_to_elim_func3 u1p = Some c }.
+  Proof.
+    unfold transf_untyped_to_switched in TRANSF. break_result_chain. eauto.
+  Qed.
+  
+  Definition fsim_switched : Semantics.forward_simulation (Untyped1.semantics u1p) (Switched.semantics b).
+    destruct compile_switched_succ.
+    eapply Semantics.compose_forward_simulation;
+    try eapply fsim_elimfunc3; eauto;
+      try eapply SwitchedComp.fsim; eauto.
+    unfold transf_untyped_to_switched in TRANSF.
+    break_result_chain. rewrite e in Heqr. inv Heqr.
+    congruence.
+  Defined.
+
+  Lemma fsim_switched_match_val :
+    forall x y,
+      Semantics.fsim_match_val _ _ fsim_switched x y <-> match_vals x y.
+  Proof.
+    intros. unfold fsim_switched.
+    destruct compile_switched_succ.
+    erewrite Semantics.fsim_match_val_compose.
+    Focus 2. eapply fsim_elimfunc3_match_val; eauto.
+    instantiate (1 := eq).
+
+    split; intros; repeat break_exists; repeat break_and; try subst. assumption.
+    eexists; split. eassumption. reflexivity.
+    
+
+    erewrite SwitchedComp.match_val_eq.
+    split; intros; try congruence.
+  Qed.
+
+End FSIMswitched.
+
+Section FSIMself_close.
+
+  Variable b : SelfClose.prog_type.
+  Hypothesis TRANSF : transf_untyped_to_self_close u1p = OK b.
+  
+  Lemma compile_self_close_succ :
+    { c | transf_untyped_to_switched u1p = Some c }.
+  Proof.
+    unfold transf_untyped_to_self_close in TRANSF. break_result_chain. eauto.
+  Qed.
+  
+  Definition fsim_self_close : Semantics.forward_simulation (Untyped1.semantics u1p) (SelfClose.semantics b).
+    destruct compile_self_close_succ.
+    eapply Semantics.compose_forward_simulation;
+    try eapply fsim_switched; eauto;
+      try eapply SelfCloseComp.fsim; eauto.
+    unfold transf_untyped_to_self_close in TRANSF.
+    break_result_chain. rewrite e in Heqr. inv Heqr.
+    congruence.
+  Defined.
+
+  Lemma fsim_self_close_match_val :
+    forall x y,
+      Semantics.fsim_match_val _ _ fsim_self_close x y <-> match_vals x y.
+  Proof.
+    intros. unfold fsim_self_close.
+    destruct compile_self_close_succ.
+    erewrite Semantics.fsim_match_val_compose.
+    Focus 2. eapply fsim_switched_match_val; eauto.
+    instantiate (1 := eq).
+
+    split; intros; repeat break_exists; repeat break_and; try subst. assumption.
+    eexists; split. eassumption. reflexivity.
+    
+
+    erewrite SelfCloseComp.match_val_eq.
+    split; intros; try congruence.
+  Qed.
+
+End FSIMself_close.
+
+Section FSIMvalue_flag.
+
+  Variable b : ValueFlag.prog_type.
+  Hypothesis TRANSF : transf_untyped_to_value_flag u1p = OK b.
+  
+  Lemma compile_value_flag_succ :
+    { c | transf_untyped_to_self_close u1p = Some c }.
+  Proof.
+    unfold transf_untyped_to_value_flag in TRANSF. break_result_chain. eauto.
+  Qed.
+  
+  Definition fsim_value_flag : Semantics.forward_simulation (Untyped1.semantics u1p) (ValueFlag.semantics b).
+    destruct compile_value_flag_succ.
+    eapply Semantics.compose_forward_simulation;
+    try eapply fsim_self_close; eauto;
+      try eapply ValueFlagComp.fsim; eauto.
+    unfold transf_untyped_to_value_flag in TRANSF.
+    break_result_chain. rewrite e in Heqr. inv Heqr.
+    congruence.
+  Defined.
+
+  Lemma fsim_value_flag_match_val :
+    forall x y,
+      Semantics.fsim_match_val _ _ fsim_value_flag x y <-> match_vals x y.
+  Proof.
+    intros. unfold fsim_value_flag.
+    destruct compile_value_flag_succ.
+    erewrite Semantics.fsim_match_val_compose.
+    Focus 2. eapply fsim_self_close_match_val; eauto.
+    instantiate (1 := eq).
+
+    split; intros; repeat break_exists; repeat break_and; try subst. assumption.
+    eexists; split. eassumption. reflexivity.
+    
+
+    erewrite ValueFlagComp.match_val_eq.
+    split; intros; try congruence.
+  Qed.
+
+End FSIMvalue_flag.
+
+Section FSIMstack.
+
+  Variable b : StackFlatter2.prog_type.
+  Hypothesis TRANSF : transf_untyped_to_stack u1p = OK b.
+  
+  Lemma compile_stack_succ :
+    { c | transf_untyped_to_value_flag u1p = Some c }.
+  Proof.
+    unfold transf_untyped_to_stack in TRANSF. break_result_chain. eauto.
+  Qed.
+  
+  Definition fsim_stack : Semantics.forward_simulation (Untyped1.semantics u1p) (StackFlatter2.semantics b).
+    destruct compile_stack_succ.
+    eapply Semantics.compose_forward_simulation;
+    try eapply fsim_value_flag; eauto;
+      try eapply StackCompCombined.fsim; eauto.
+    unfold transf_untyped_to_stack in TRANSF.
+    break_result_chain. rewrite e in Heqr. inv Heqr.
+    congruence.
+  Defined.
+
+  Lemma fsim_stack_match_val :
+    forall x y,
+      Semantics.fsim_match_val _ _ fsim_stack x y <-> match_vals x y.
+  Proof.
+    intros. unfold fsim_stack.
+    destruct compile_stack_succ.
+    erewrite Semantics.fsim_match_val_compose.
+    Focus 2. eapply fsim_value_flag_match_val; eauto.
+    instantiate (1 := eq).
+
+    split; intros; repeat break_exists; repeat break_and; try subst. assumption.
+    eexists; split. eassumption. reflexivity.
+    
+    intros.
+    erewrite StackCompCombined.match_val_eq.
+    split; intros; try congruence.
+  Qed.
+
+End FSIMstack.
+
+Section FSIMlocals.
+
+  Variable b : LocalsOnly.prog_type.
+  Hypothesis TRANSF : transf_untyped_to_locals u1p = OK b.
+  
+  Lemma compile_locals_succ :
+    { c | transf_untyped_to_stack u1p = Some c }.
+  Proof.
+    unfold transf_untyped_to_locals in TRANSF. break_result_chain. eauto.
+  Qed.
+  
+  Definition fsim_locals : Semantics.forward_simulation (Untyped1.semantics u1p) (LocalsOnly.semantics b).
+    destruct compile_locals_succ.
+    eapply Semantics.compose_forward_simulation;
+    try eapply fsim_stack; eauto;
+      try eapply LocalsCompCombined.fsim; eauto.
+    unfold transf_untyped_to_locals in TRANSF.
+    break_result_chain. rewrite e in Heqr. inv Heqr.
+    congruence.
+  Defined.
+
+  Lemma fsim_locals_match_val :
+    forall x y,
+      Semantics.fsim_match_val _ _ fsim_locals x y <-> match_vals x y.
+  Proof.
+    intros. unfold fsim_locals.
+    destruct compile_locals_succ.
+    erewrite Semantics.fsim_match_val_compose.
+    Focus 2. eapply fsim_stack_match_val; eauto.
+    instantiate (1 := eq).
+
+    split; intros; repeat break_exists; repeat break_and; try subst. assumption.
+    eexists; split. eassumption. reflexivity.
+    
+    intros.
+    erewrite LocalsCompCombined.match_val.
+    split; intros; try congruence.
+  Qed.
+
+End FSIMlocals.
+
+Definition match_val_highest_high {A B l} (hstv : HighestValues.value) (hv : value) : Prop :=
+  exists hv' hv'',
+    TaggedComp.I_value hstv hv' /\
+    ElimFuncComp2.match_values A B l hv' hv'' /\
+    FlatIntTagComp.I_value hv'' hv.
+
+Definition match_vals2 := @match_val_highest_high (fst efp) (fst ef2p) (snd efp).
+
+(* TODO: move to top of file *)
+Require Import Monads.  
+
+Section MatchValIndices2.
+
+  Variable flat : FlatIntTag.prog_type.
+  Hypothesis FLATTRANSF : transf_untyped_to_flat u1p = OK flat.
+  Variable fm : Fmajor.program.
+  Hypothesis FMTRANSF : transf_untyped_to_fmajor u1p = OK fm.
+
+  Lemma build_list_succ :
+    { M | FmajorComp.build_id_list flat = Some M }.
+  Proof.
+    unfold transf_untyped_to_fmajor in *.
+    break_result_chain.
+    rewrite FLATTRANSF in Heqr. inv Heqr.
+    unfold FmajorComp.compile_cu in *.
+    break_bind_option. eauto.
+  Defined.
+
+  Definition MM : list (FmajorComp.id_key * ident).
+    destruct build_list_succ. exact x.
+  Defined.
+
+  
+Definition match_val_highest_high' {A B l M} (hstv : HighestValues.value) (hv : value) : Prop :=
+  exists hv' hv'' hv0,
+    TaggedComp.I_value hstv hv' /\
+    ElimFuncComp2.match_values A B l hv' hv'' /\
+    FlatIntTagComp.I_value hv'' hv0 /\
+    FmajorComp.I_value M hv0 hv.
+
+Definition match_vals3 := @match_val_highest_high' (fst efp) (fst ef2p) (snd efp) MM.
+  
+Section FSIMflat.
+
+  
+  Lemma compile_flat_succ :
+    { c | transf_untyped_to_locals u1p = Some c }.
+  Proof.
+    unfold transf_untyped_to_flat in FLATTRANSF. break_result_chain. eauto.
+  Qed.
+  
+  Definition fsim_flat : Semantics.forward_simulation (Untyped1.semantics u1p) (FlatIntTag.semantics flat).
+    destruct compile_flat_succ.
+    eapply Semantics.compose_forward_simulation;
+    try eapply fsim_locals; eauto;
+      try eapply FlatCompCombined.fsim; eauto.
+    unfold transf_untyped_to_flat in FLATTRANSF.
+    break_result_chain. rewrite e in Heqr. inv Heqr.
+    congruence.
+  Defined.
+
+  Lemma fsim_flat_match_val :
+    forall x y,
+      Semantics.fsim_match_val _ _ fsim_flat x y <-> match_vals2 x y.
+  Proof.
+    intros. unfold fsim_flat.
+    destruct compile_flat_succ.
+    erewrite Semantics.fsim_match_val_compose.
+    Focus 2. eapply fsim_locals_match_val; eauto.
+    unfold match_vals3. unfold match_vals2. unfold match_val_highest_high. unfold match_vals.
+    unfold match_val_highest_higher.
+    unfold match_val_highest_high'.
+    
+    split; intros; repeat progress (try break_exists; try break_and).
+    Focus 2.
+    eexists. split. eexists. split. eassumption.
+    eassumption. eassumption.
+    eexists; eexists; repeat split; eauto.
+
+    intros.
+    erewrite FlatCompCombined.match_val_I_value.
+    split; intros; try congruence.
+  Qed.
+
+End FSIMflat.
+
+  
+Section FSIMfmajor.
+
+  Lemma compile_fmajor_succ :
+    { c | transf_untyped_to_flat u1p = Some c }.
+  Proof.
+    unfold transf_untyped_to_fmajor in FMTRANSF. break_result_chain. eauto.
+  Qed.
+  
+  Definition fsim_fmajor : MixSemantics.mix_forward_simulation (Untyped1.semantics u1p) (Fmajor.semantics fm).
+    destruct compile_fmajor_succ.
+    eapply MixSemantics.compose_notrace_mix_forward_simulation;
+    try eapply fsim_flat; eauto;
+      try eapply FmajorComp.fsim; eauto.
+    unfold transf_untyped_to_fmajor in FMTRANSF.
+    unfold transf_untyped_to_flat in *.
+    break_result_chain. congruence.
+  Defined.
+
+  Lemma fsim_fmajor_match_val :
+    forall x y,
+      MixSemantics.fsim_match_val _ _ fsim_fmajor x y <-> match_vals3 x y.
+  Proof.
+    intros. unfold fsim_fmajor.
+    destruct compile_fmajor_succ.
+    erewrite MixSemantics.notrace_mix_fsim_match_val_compose.
+    Focus 2. eapply fsim_flat_match_val; eauto.
+
+    instantiate (1 := FmajorComp.I_value MM).
+    unfold match_vals2; unfold match_vals3;
+    unfold match_val_highest_high;
+      unfold match_val_highest_high'.
+    split; intros; repeat progress (try break_exists; try break_and);
+      repeat progress (try eexists; try split);
+      try eassumption; try congruence.
+
+    erewrite FmajorComp.match_val_eq.
+    unfold FmajorComp.MM.
+    destruct FmajorComp.build_list_succ.
+    unfold MM. destruct build_list_succ.
+    rewrite e0 in e1. inv e1.
+    reflexivity.
+  Qed.
+    
+End FSIMfmajor.
+
+
+End MatchValIndices2.
+
+End MATCH_VAL_INDICES.
 
 
 Section Simulation.
@@ -230,13 +779,31 @@ Section Simulation.
   Proof.
     (* SourceLifted to Untyped *)
     unfold transf_untyped_to_cminor in TRANSF.
-    break_result_chain.
+    unfold transf_untyped_to_cmajor in TRANSF.
+    unfold transf_untyped_to_dflatmajor in TRANSF.
+    unfold transf_untyped_to_dmajor in TRANSF.
+    unfold transf_untyped_to_emajor in TRANSF.
+    unfold transf_untyped_to_fflatmajor in TRANSF.
+    unfold transf_untyped_to_fmajor in TRANSF.
+    unfold transf_untyped_to_flat in TRANSF.
+    unfold transf_untyped_to_locals in TRANSF.
+    unfold transf_untyped_to_stack in TRANSF.
+    unfold transf_untyped_to_value_flag in TRANSF.
+    unfold transf_untyped_to_self_close in TRANSF.
+    unfold transf_untyped_to_switched in TRANSF.
+    unfold transf_untyped_to_elim_func3 in TRANSF.
+    unfold transf_untyped_to_elim_func2 in TRANSF.
+    unfold transf_untyped_to_elim_func in TRANSF.
+    unfold transf_untyped_to_tagged_numbered in TRANSF.
+    unfold transf_untyped_to_tagged in TRANSF.
 
+
+    break_result_chain.
 
     (* Untyped1 to Untyped8 *)
     eapply compose_notrace_mix_forward_simulation.
     eapply UntypedCompCombined.fsim; try eassumption.
-
+    
     (* Untyped8 to Tagged *)
     eapply compose_notrace_mix_forward_simulation.
     eapply TaggedComp.fsim; try eassumption.

@@ -863,9 +863,23 @@ Proof.
   exists (i2, i1'); exists s2; split.
   right; split. subst t; apply star_refl. red. right. auto.
   exists s3; auto.
-Qed.
+Defined.
 
 End COMPOSE_SIMULATIONS.
+
+Lemma fsim_match_val_compose :
+  forall sema semb semc fs1 fs2 R1 R2,
+    (forall x y, fsim_match_val fs1 x y <-> R1 x y) ->
+    (forall x y, fsim_match_val fs2 x y <-> R2 x y) ->
+    (forall x y, fsim_match_val (@compose_forward_simulation sema semb semc fs1 fs2) x y <-> (exists z, R1 x z /\ R2 z y)).
+Proof.
+  intros. unfold compose_forward_simulation.
+  simpl. split; intros; repeat (break_exists; break_and);
+           repeat rewrite H in *; repeat rewrite H0 in *.
+  eauto.
+  exists x0. split.
+  eapply H; eauto. eapply H0; eauto.
+Qed.
 
 (** * Receptiveness and determinacy *)
 
