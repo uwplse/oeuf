@@ -1443,23 +1443,24 @@ Proof.
       try solve [econstructor; eauto].
 Qed.
 
-Theorem fsim :
+Theorem fsim' :
   forward_simulation (Dmajor.semantics prog) (Dflatmajor.semantics prog).
 Proof.
   eapply forward_simulation_plus.
   instantiate (2 := eq).
   intros.
   eapply callstate_match; eauto.
+  rewrite <- tprog_prog.
   subst. eauto.
   intros. eapply match_final_states in H0; eauto.
   eapply single_step_correct.
 Defined.
 
-Lemma match_val_eq :
-  TraceSemantics.fsim_match_val fsim = eq.
+Lemma match_val_eq' :
+  TraceSemantics.fsim_match_val fsim' = eq.
 Proof.
   intros.
-  unfold fsim. simpl.
+  unfold fsim'. simpl.
   unfold TraceSemantics.fsim_match_val.
   repeat break_match. repeat (break_match_hyp; try congruence).
   
@@ -1472,6 +1473,19 @@ Proof.
   reflexivity.
 Qed.
 
+Theorem fsim :
+  forward_simulation (Dmajor.semantics prog) (Dflatmajor.semantics tprog).
+Proof.
+  rewrite <- tprog_prog. eapply fsim'.
+Defined.
+
+Lemma match_val_eq :
+  TraceSemantics.fsim_match_val fsim = eq.
+Proof.
+  unfold fsim.
+  rewrite <- tprog_prog. simpl.
+  reflexivity.
+Qed.
 
 End PRESERVATION.
 
