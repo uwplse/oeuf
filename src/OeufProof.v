@@ -760,11 +760,282 @@ Section FSIMfmajor.
     
 End FSIMfmajor.
 
+Section FSIMfflatmajor.
+
+  Variable ff : Fflatmajor.program.
+  Hypothesis TRANSF : transf_untyped_to_fflatmajor u1p = OK ff.
+  
+  Lemma compile_fflatmajor_succ :
+    { c | transf_untyped_to_fmajor u1p = Some c }.
+  Proof.
+    unfold transf_untyped_to_fflatmajor in TRANSF. break_result_chain. eauto.
+  Qed.
+  
+  Definition fsim_fflatmajor : MixSemantics.mix_forward_simulation (Untyped1.semantics u1p) (Fflatmajor.semantics ff).
+    destruct compile_fflatmajor_succ.
+    eapply MixSemantics.compose_mix_trace_forward_simulation;
+    try eapply fsim_fmajor; eauto;
+      try eapply Fmajortofflatmajor.fsim; eauto.
+    unfold transf_untyped_to_fflatmajor in TRANSF.
+    unfold transf_untyped_to_fmajor in *.
+    break_result_chain. congruence.
+  Defined.
+
+  Lemma fsim_fflatmajor_match_val :
+    forall x y,
+      MixSemantics.fsim_match_val _ _ fsim_fflatmajor x y <-> match_vals3 x y.
+  Proof.
+    intros. unfold fsim_fflatmajor.
+    destruct compile_fflatmajor_succ.
+    erewrite MixSemantics.mix_trace_fsim_match_val_compose.
+    Focus 2. eapply fsim_fmajor_match_val; eauto.
+
+    instantiate (1 := eq).
+    split; intros; try break_exists; try break_and.
+    congruence. eauto.
+
+    erewrite Fmajortofflatmajor.match_val_eq.
+    reflexivity.
+  Qed.
+    
+End FSIMfflatmajor.
+
+Section FSIMemajor.
+
+  Variable em : Emajor.program.
+  Hypothesis TRANSF : transf_untyped_to_emajor u1p = OK em.
+  
+  Lemma compile_emajor_succ :
+    { c | transf_untyped_to_fflatmajor u1p = Some c }.
+  Proof.
+    unfold transf_untyped_to_emajor in TRANSF. break_result_chain. eauto.
+  Qed.
+  
+  Definition fsim_emajor : MixSemantics.mix_forward_simulation (Untyped1.semantics u1p) (Emajor.semantics em).
+    destruct compile_emajor_succ.
+    eapply MixSemantics.compose_mix_trace_forward_simulation;
+    try eapply fsim_fflatmajor; eauto;
+      try eapply Fflatmajortoemajor.fsim; eauto.
+    unfold transf_untyped_to_emajor in *.
+    unfold transf_untyped_to_fflatmajor in *.
+    break_result_chain.
+    inv e. congruence.
+  Defined.
+
+  Lemma fsim_emajor_match_val :
+    forall x y,
+      MixSemantics.fsim_match_val _ _ fsim_emajor x y <-> match_vals3 x y.
+  Proof.
+    intros. unfold fsim_emajor.
+    destruct compile_emajor_succ.
+    erewrite MixSemantics.mix_trace_fsim_match_val_compose.
+    Focus 2. eapply fsim_fflatmajor_match_val; eauto.
+
+    instantiate (1 := eq).
+    split; intros; try break_exists; try break_and.
+    congruence. eauto.
+
+    erewrite Fflatmajortoemajor.match_val_eq.
+    reflexivity.
+  Qed.
+    
+End FSIMemajor.
+
+Section FSIMdmajor.
+
+  Variable dm : Dmajor.program.
+  Hypothesis TRANSF : transf_untyped_to_dmajor u1p = OK dm.
+  
+  Lemma compile_dmajor_succ :
+    { c | transf_untyped_to_emajor u1p = Some c }.
+  Proof.
+    unfold transf_untyped_to_dmajor in TRANSF. break_result_chain. eauto.
+  Qed.
+  
+  Definition fsim_dmajor : MixSemantics.mix_forward_simulation (Untyped1.semantics u1p) (Dmajor.semantics dm).
+    destruct compile_dmajor_succ.
+    eapply MixSemantics.compose_mix_trace_forward_simulation;
+    try eapply fsim_emajor; eauto;
+      try eapply Emajortodmajor.fsim; eauto.
+    unfold transf_untyped_to_dmajor in *.
+    unfold transf_untyped_to_emajor in *.
+    break_result_chain.
+    inv e. congruence.
+  Defined.
+
+  Lemma fsim_dmajor_match_val :
+    forall x y,
+      MixSemantics.fsim_match_val _ _ fsim_dmajor x y <-> match_vals3 x y.
+  Proof.
+    intros. unfold fsim_dmajor.
+    destruct compile_dmajor_succ.
+    erewrite MixSemantics.mix_trace_fsim_match_val_compose.
+    Focus 2. eapply fsim_emajor_match_val; eauto.
+
+    instantiate (1 := eq).
+    split; intros; try break_exists; try break_and.
+    congruence. eauto.
+
+    erewrite Emajortodmajor.match_val_eq.
+    reflexivity.
+  Qed.
+    
+End FSIMdmajor.
+
+Section FSIMdflatmajor.
+
+  Variable dfm : Dmajor.program.
+  Hypothesis TRANSF : transf_untyped_to_dflatmajor u1p = OK dfm.
+  
+  Lemma compile_dflatmajor_succ :
+    { c | transf_untyped_to_dmajor u1p = Some c }.
+  Proof.
+    unfold transf_untyped_to_dflatmajor in TRANSF. break_result_chain. eauto.
+  Qed.
+  
+  Definition fsim_dflatmajor : MixSemantics.mix_forward_simulation (Untyped1.semantics u1p) (Dflatmajor.semantics dfm).
+    destruct compile_dflatmajor_succ.
+    eapply MixSemantics.compose_mix_trace_forward_simulation;
+      try eapply fsim_dmajor; eauto;
+        try eapply Dmajortodflatmajor.fsim; eauto.
+    unfold transf_untyped_to_dflatmajor in *;
+      unfold transf_untyped_to_dmajor in *;
+      break_result_chain;
+      try inv e;
+      congruence.
+  Defined.
+
+  Lemma fsim_dflatmajor_match_val :
+    forall x y,
+      MixSemantics.fsim_match_val _ _ fsim_dflatmajor x y <-> match_vals3 x y.
+  Proof.
+    intros. unfold fsim_dflatmajor.
+    destruct compile_dflatmajor_succ.
+    erewrite MixSemantics.mix_trace_fsim_match_val_compose.
+    Focus 2. eapply fsim_dmajor_match_val; eauto.
+
+    instantiate (1 := eq).
+    split; intros; try break_exists; try break_and.
+    congruence. eauto.
+
+    erewrite Dmajortodflatmajor.match_val_eq.
+    reflexivity.
+  Qed.
+    
+End FSIMdflatmajor.
+
+Section FSIMcmajor.
+
+  Variable Cm : Cmajor.program.
+  Hypothesis TRANSF : transf_untyped_to_cmajor u1p = OK Cm.
+  
+  Lemma compile_cmajor_succ :
+    { c | transf_untyped_to_dflatmajor u1p = Some c }.
+  Proof.
+    unfold transf_untyped_to_cmajor in TRANSF. break_result_chain. eauto.
+  Qed.
+  
+  Definition fsim_cmajor : MixSemantics.mix_forward_simulation (Untyped1.semantics u1p) (Cmajor.semantics Cm).
+    destruct compile_cmajor_succ.
+    eapply MixSemantics.compose_mix_trace_forward_simulation;
+      try eapply fsim_dflatmajor; eauto;
+        try eapply Dflatmajortocmajor.fsim; eauto.
+    unfold transf_untyped_to_cmajor in *;
+      unfold transf_untyped_to_dflatmajor in *;
+      break_result_chain;
+      try inv e;
+      congruence.
+  Defined.
+
+  Lemma fsim_cmajor_match_val :
+    forall x y,
+      MixSemantics.fsim_match_val _ _ fsim_cmajor x y <-> match_vals3 x y.
+  Proof.
+    intros. unfold fsim_cmajor.
+    destruct compile_cmajor_succ.
+    erewrite MixSemantics.mix_trace_fsim_match_val_compose.
+    Focus 2. eapply fsim_dflatmajor_match_val; eauto.
+
+    instantiate (1 := eq).
+    split; intros; try break_exists; try break_and.
+    congruence. eauto.
+
+    erewrite Dflatmajortocmajor.match_val_eq.
+    reflexivity.
+  Qed.
+    
+End FSIMcmajor.
+
+
+Section FSIMcminor.
+
+  Variable cm : Cminor.program.
+  Hypothesis TRANSF : transf_untyped_to_cminor u1p = OK cm.
+  
+  Lemma compile_cminor_succ :
+    { c | transf_untyped_to_cmajor u1p = Some c }.
+  Proof.
+    unfold transf_untyped_to_cminor in TRANSF. break_result_chain. eauto.
+  Qed.
+  
+  Definition fsim_cminor : MixSemantics.mix_forward_simulation (Untyped1.semantics u1p) (Cminor_semantics cm).
+    destruct compile_cminor_succ.
+    eapply MixSemantics.compose_mix_trace_forward_simulation;
+      try eapply fsim_cmajor; eauto;
+        try eapply Cmajortominor.fsim; eauto.
+    unfold transf_untyped_to_cminor in *;
+      unfold transf_untyped_to_cmajor in *;
+      break_result_chain;
+      try inv e.
+    rewrite OeufCompcertCompiler.print_identity in *.
+      congruence.
+  Defined.
+
+  Lemma fsim_cminor_match_val :
+    forall x y,
+      MixSemantics.fsim_match_val _ _ fsim_cminor x y <-> match_vals3 x y.
+  Proof.
+    intros. unfold fsim_cminor.
+    destruct compile_cminor_succ.
+    erewrite MixSemantics.mix_trace_fsim_match_val_compose.
+    Focus 2. eapply fsim_cmajor_match_val; eauto.
+
+    instantiate (1 := eq).
+    split; intros; try break_exists; try break_and.
+    congruence. eauto.
+
+    erewrite Cmajortominor.match_val_eq.
+    reflexivity.
+  Qed.
+    
+End FSIMcminor.
+
 
 End MatchValIndices2.
 
 End MATCH_VAL_INDICES.
 
+
+Ltac unfold_all_transf H :=
+    unfold transf_untyped_to_cminor in H;
+    unfold transf_untyped_to_cmajor in H;
+    unfold transf_untyped_to_dflatmajor in H;
+    unfold transf_untyped_to_dmajor in H;
+    unfold transf_untyped_to_emajor in H;
+    unfold transf_untyped_to_fflatmajor in H;
+    unfold transf_untyped_to_fmajor in H;
+    unfold transf_untyped_to_flat in H;
+    unfold transf_untyped_to_locals in H;
+    unfold transf_untyped_to_stack in H;
+    unfold transf_untyped_to_value_flag in H;
+    unfold transf_untyped_to_self_close in H;
+    unfold transf_untyped_to_switched in H;
+    unfold transf_untyped_to_elim_func3 in H;
+    unfold transf_untyped_to_elim_func2 in H;
+    unfold transf_untyped_to_elim_func in H;
+    unfold transf_untyped_to_tagged_numbered in H;
+    unfold transf_untyped_to_tagged in H.
+  
 
 Section Simulation.
 
@@ -773,116 +1044,102 @@ Section Simulation.
   Variable tprog : Cminor.program.
   Hypothesis TRANSF : transf_untyped_to_cminor prog = OK tprog.
 
+
+  Lemma to_elim_func :
+    { pair | transf_untyped_to_elim_func prog = OK (fst pair) /\ ElimFuncComp2.compile_cu (fst pair) = Some (snd pair)}.
+  Proof.
+    unfold transf_untyped_to_cminor in TRANSF;
+    unfold transf_untyped_to_cmajor in TRANSF;
+    unfold transf_untyped_to_dflatmajor in TRANSF;
+    unfold transf_untyped_to_dmajor in TRANSF;
+    unfold transf_untyped_to_emajor in TRANSF;
+    unfold transf_untyped_to_fflatmajor in TRANSF;
+    unfold transf_untyped_to_fmajor in TRANSF;
+    unfold transf_untyped_to_flat in TRANSF;
+    unfold transf_untyped_to_locals in TRANSF;
+    unfold transf_untyped_to_stack in TRANSF;
+    unfold transf_untyped_to_value_flag in TRANSF;
+    unfold transf_untyped_to_self_close in TRANSF;
+    unfold transf_untyped_to_switched in TRANSF;
+    unfold transf_untyped_to_elim_func3 in TRANSF;
+    unfold transf_untyped_to_elim_func2 in TRANSF.
+    break_result_chain.
+    exists (p14, p13).
+    eauto.
+  Defined.
+
+  Definition efp : ElimFunc.prog_type.
+    destruct to_elim_func. exact (fst x).
+  Defined.
+
+  Definition efp2 : ElimFunc2.prog_type.
+    destruct to_elim_func. exact (snd x).
+  Defined.
+
+  Lemma to_flat :
+    { f | transf_untyped_to_flat prog = OK f }.
+  Proof.
+    unfold transf_untyped_to_cminor in TRANSF;
+    unfold transf_untyped_to_cmajor in TRANSF;
+    unfold transf_untyped_to_dflatmajor in TRANSF;
+    unfold transf_untyped_to_dmajor in TRANSF;
+    unfold transf_untyped_to_emajor in TRANSF;
+    unfold transf_untyped_to_fflatmajor in TRANSF;
+    unfold transf_untyped_to_fmajor in TRANSF.
+    break_result_chain.
+    eauto.
+  Defined.
+
+  Definition flat : FlatIntTag.prog_type.
+    destruct to_flat. exact x.
+  Defined.
+  
+  Lemma to_fmajor :
+    { f | transf_untyped_to_fmajor prog = OK f }.
+  Proof.
+    unfold transf_untyped_to_cminor in TRANSF;
+    unfold transf_untyped_to_cmajor in TRANSF;
+    unfold transf_untyped_to_dflatmajor in TRANSF;
+    unfold transf_untyped_to_dmajor in TRANSF;
+    unfold transf_untyped_to_emajor in TRANSF;
+    unfold transf_untyped_to_fflatmajor in TRANSF.
+    break_result_chain.
+    eauto.
+  Defined.
+  
+  Definition fmajor : Fmajor.program.
+    destruct to_fmajor. exact x.
+  Defined.
+  
   (* In this theorem we grab all of the things we need from all of the passes *)
   Theorem Oeuf_forward_simulation :
       mix_forward_simulation (@Untyped1.semantics prog) (Cminor_semantics tprog).
   Proof.
-    (* SourceLifted to Untyped *)
-    unfold transf_untyped_to_cminor in TRANSF.
-    unfold transf_untyped_to_cmajor in TRANSF.
-    unfold transf_untyped_to_dflatmajor in TRANSF.
-    unfold transf_untyped_to_dmajor in TRANSF.
-    unfold transf_untyped_to_emajor in TRANSF.
-    unfold transf_untyped_to_fflatmajor in TRANSF.
-    unfold transf_untyped_to_fmajor in TRANSF.
-    unfold transf_untyped_to_flat in TRANSF.
-    unfold transf_untyped_to_locals in TRANSF.
-    unfold transf_untyped_to_stack in TRANSF.
-    unfold transf_untyped_to_value_flag in TRANSF.
-    unfold transf_untyped_to_self_close in TRANSF.
-    unfold transf_untyped_to_switched in TRANSF.
-    unfold transf_untyped_to_elim_func3 in TRANSF.
-    unfold transf_untyped_to_elim_func2 in TRANSF.
-    unfold transf_untyped_to_elim_func in TRANSF.
-    unfold transf_untyped_to_tagged_numbered in TRANSF.
-    unfold transf_untyped_to_tagged in TRANSF.
-
-
-    break_result_chain.
-
-    (* Untyped1 to Untyped8 *)
-    eapply compose_notrace_mix_forward_simulation.
-    eapply UntypedCompCombined.fsim; try eassumption.
-    
-    (* Untyped8 to Tagged *)
-    eapply compose_notrace_mix_forward_simulation.
-    eapply TaggedComp.fsim; try eassumption.
-
-    (* Tagged to TaggedNumbered *)
-    eapply compose_notrace_mix_forward_simulation.
-    eapply TaggedNumberedComp.fsim; try eassumption.
-
-    (* TaggedNumbered to ElimFunc *)
-    eapply compose_notrace_mix_forward_simulation.
-    eapply ElimFuncComp.fsim; try eassumption.
-      { eapply TaggedNumberedComp.compile_cu_elims_match'. eassumption. }
-
-    (* ElimFunc to ElimFunc2 *)
-    eapply compose_notrace_mix_forward_simulation.
-    eapply ElimFuncComp2.fsim; try eassumption.
-
-    (* ElimFunc2 to ElimFunc3 *)
-    eapply compose_notrace_mix_forward_simulation.
-    eapply ElimFuncComp3.fsim; try eassumption.
-
-    (* ElimFunc3 to Switched *)
-    eapply compose_notrace_mix_forward_simulation.
-    eapply SwitchedComp.fsim; try eassumption.
-
-    (* Switched to SelfClose *)
-    eapply compose_notrace_mix_forward_simulation.
-    eapply SelfCloseComp.fsim; try eassumption.
-
-    (* SelfClose to ValueFlag *)
-    eapply compose_notrace_mix_forward_simulation.
-    eapply ValueFlagComp.fsim; try eassumption.
-
-    (* ValueFlag to StackFlatter2 *)
-    eapply compose_notrace_mix_forward_simulation.
-    eapply StackCompCombined.fsim; try eassumption.
-
-    (* StackFlatter2 to LocalsOnly *)
-    eapply compose_notrace_mix_forward_simulation.
-    eapply LocalsCompCombined.fsim; try eassumption.
-
-    (* LocalsOnly to FlatIntTag *)
-    eapply compose_notrace_mix_forward_simulation.
-    eapply FlatCompCombined.fsim; try eassumption.
-
-    (* FlatIntTag to Fmajor *)
-    eapply compose_mix_trace_forward_simulation.
-    eapply FmajorComp.fsim; try eassumption.
-
-    (* Fmajor to Fflatmajor *)
-    eapply TraceSemantics.compose_forward_simulation.
-    eapply Fmajortofflatmajor.fsim; try eassumption.
-
-    (* Fflatmajor to Emajor *)
-    eapply TraceSemantics.compose_forward_simulation.
-    eapply Fflatmajortoemajor.fsim; try eassumption.
-
-    (* Emajor to Dmajor *)
-    eapply TraceSemantics.compose_forward_simulation.
-    eapply Emajortodmajor.fsim; try eassumption.
-
-    (* Dmajor to Dflatmajor *)
-    eapply TraceSemantics.compose_forward_simulation.
-    eapply Dmajortodflatmajor.fsim; try eassumption.
-
-    (* Dflatmajor to Cmajor *)
-    eapply TraceSemantics.compose_forward_simulation.
-    eapply Dflatmajortocmajor.fsim; try eassumption.
-
-    unfold Dmajortodflatmajor.transf_prog in *. repeat (break_match_hyp; try congruence). inv Heqr1.
-    eassumption.
-    
-    (* Cmajor to Cminor *)
-    eapply Cmajortominor.fsim; try eassumption.
-    rewrite OeufCompcertCompiler.print_identity in *.
-    congruence.
-
+    destruct to_elim_func. destruct to_fmajor. destruct to_flat.
+    destruct x. simpl in *. break_and.
+    eapply fsim_cminor; eauto.
+  Defined.    
+  
+  Definition oeuf_match_vals (hv : HighestValues.value) (v : value) : Prop.
+    destruct to_flat.
+    destruct to_fmajor.
+    eapply match_vals3; try assumption.
+    exact efp. exact efp2.
+    eassumption. eassumption.
   Defined.
+    
+  Lemma Oeuf_fsim_match_val :
+    forall x y,
+      MixSemantics.fsim_match_val _ _ Oeuf_forward_simulation x y <-> oeuf_match_vals x y.
+  Proof.
+    intros. unfold Oeuf_forward_simulation.
+    repeat break_let.
+    erewrite fsim_cminor_match_val.
+    unfold oeuf_match_vals. rewrite Heqs0. rewrite Heqs1.
+    subst x0. unfold efp. unfold efp2. rewrite Heqs. simpl. reflexivity.
+  Qed.
 End Simulation.
+
 
 Section OeufSimulation.
     Variable P1 : CompilationUnit.compilation_unit.
@@ -916,7 +1173,7 @@ Section OeufSimulation.
     Definition oeuf_match_values {ty} :=
         @sl_match_values P1 P2 L3 (Oeuf_forward_simulation P2 P3 P2_comp') ty.
 
-    
+    (*
     Inductive match_values {ty : type} : SourceLifted.value (types P1) ty -> valtype L3 -> Prop :=
     | match_all_the_way :
         forall slval hstval hrval hrval2 hval e1 e2 l,
@@ -930,21 +1187,9 @@ Section OeufSimulation.
       forall {ty : type} sv hv,
         @oeuf_match_values ty sv hv <-> @match_values ty sv hv.
     Proof.
-      split.
-      admit.
+     *)
 
-      intros. inv H.
-      unfold oeuf_match_values.
-      econstructor; eauto. split. reflexivity.
-      unfold Oeuf_forward_simulation.
-      unfold apply_partial.
-      unfold apply_total.
-      unfold MixSemantics.fsim_match_val.
-      
-      (* I have no idea how to prove either direction of this *)
-      (* Both directions are necessary, however *)
-    Admitted.
-      
+    
     Theorem oeuf_match_callstate :
         forall tyA tyR
             (fv1 : SourceLifted.value G (SourceLifted.Arrow tyA tyR))
