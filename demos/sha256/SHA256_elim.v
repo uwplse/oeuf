@@ -823,10 +823,389 @@ induction l; intros; try rewrite <- Nlength0_eq; try reflexivity.
 Qed.
 
 
+Definition Pos_to_nat (x : positive) : nat :=
+    Pos_iter S 0%nat x.
+
+Lemma Pos_to_nat_eq : forall x,
+    Pos_to_nat x = Pos.to_nat x.
+induction x using Pos.peano_ind; simpl; try reflexivity.
+- unfold Pos_to_nat in *. rewrite Pos_iter_eq. rewrite Pos_iter_eq in IHx.
+  rewrite Pos.iter_succ.  rewrite Pos2Nat.inj_succ. congruence.
+Qed.
+
+Definition N_to_nat (x : N) : nat :=
+    N_rect _
+        (0%nat)
+        (fun xp => Pos_to_nat xp)
+        x.
+
+Lemma N_to_nat_eq : forall x,
+    N_to_nat x = N.to_nat x.
+destruct x; simpl; try rewrite Pos_to_nat_eq; reflexivity.
+Qed.
 
 
-(*
+Definition List_repeat {A} (x : A) (n : nat) : list A :=
+    nat_rect _
+        ([])
+        (fun n' IHn => x :: IHn)
+        n.
+
+Lemma List_repeat_eq : forall {A} (x : A) n,
+    List_repeat x n = List.repeat x n.
+induction n; simpl; congruence.
+Qed.
+
+
+Definition List_app {A} (xs ys : list A) : list A :=
+    list_rect _
+        (ys)
+        (fun x xs IHxs => x :: IHxs)
+        xs.
+
+Lemma List_app_eq : forall {A} (xs ys : list A),
+    List_app xs ys = List.app xs ys.
+induction xs; simpl; congruence.
+Qed.
+
+
 Definition generate_and_pad msg :=
     let n := Nlength msg in
-    let pad_amount := N_land (64
-        *)
+    let pad_amount := N_land (N_add 1 (N_lnot (N_land (N_add n 9) 63) 6)) 63 in
+    (List_app
+        (bytelist_to_wordlist
+            (List_app msg
+            (List_app [128%N]
+                (List_repeat 0%N (N_to_nat pad_amount)))))
+        ([trunc (N_shiftr (N_shiftl n 3) 32);
+          trunc (N_shiftl n 3)])).
+
+Lemma generate_and_pad_eq : forall msg,
+    generate_and_pad msg = SHA256_N.generate_and_pad msg.
+intros. unfold generate_and_pad.
+rewrite bytelist_to_wordlist_eq, 3 List_app_eq.
+rewrite List_repeat_eq, N_to_nat_eq, 2 N_land_eq, 2 N_add_eq, N_lnot_eq, Nlength_eq.
+rewrite 2 trunc_eq, N_shiftl_eq, N_shiftr_eq.
+rewrite N.shiftl_mul_pow2, N.shiftr_div_pow2.
+reflexivity.
+Qed.
+
+
+Definition nthi_test n :=
+    (nat_rect _ (fun dummy => 10)
+    (fun n _ dummy => nat_rect _ (fun dummy => 20)
+    (fun n _ dummy => nat_rect _ (fun dummy => 30)
+    (fun n _ dummy => nat_rect _ (fun dummy => 40)
+
+    (fun n _ dummy => 0) n dummy) n dummy) n dummy) n tt)%Z.
+
+
+Definition nthi_K256 n :=
+    (nat_rect _ (fun dummy => 1116352408)
+    (fun n _ dummy => nat_rect _ (fun dummy => 1899447441)
+    (fun n _ dummy => nat_rect _ (fun dummy => 3049323471)
+    (fun n _ dummy => nat_rect _ (fun dummy => 3921009573)
+
+    (fun n _ dummy => nat_rect _ (fun dummy => 961987163)
+    (fun n _ dummy => nat_rect _ (fun dummy => 1508970993)
+    (fun n _ dummy => nat_rect _ (fun dummy => 2453635748)
+    (fun n _ dummy => nat_rect _ (fun dummy => 2870763221)
+
+    (fun n _ dummy => nat_rect _ (fun dummy => 3624381080)
+    (fun n _ dummy => nat_rect _ (fun dummy => 310598401)
+    (fun n _ dummy => nat_rect _ (fun dummy => 607225278)
+    (fun n _ dummy => nat_rect _ (fun dummy => 1426881987)
+
+    (fun n _ dummy => nat_rect _ (fun dummy => 1925078388)
+    (fun n _ dummy => nat_rect _ (fun dummy => 2162078206)
+    (fun n _ dummy => nat_rect _ (fun dummy => 2614888103)
+    (fun n _ dummy => nat_rect _ (fun dummy => 3248222580)
+
+    (fun n _ dummy => nat_rect _ (fun dummy => 3835390401)
+    (fun n _ dummy => nat_rect _ (fun dummy => 4022224774)
+    (fun n _ dummy => nat_rect _ (fun dummy => 264347078)
+    (fun n _ dummy => nat_rect _ (fun dummy => 604807628)
+
+    (fun n _ dummy => nat_rect _ (fun dummy => 770255983)
+    (fun n _ dummy => nat_rect _ (fun dummy => 1249150122)
+    (fun n _ dummy => nat_rect _ (fun dummy => 1555081692)
+    (fun n _ dummy => nat_rect _ (fun dummy => 1996064986)
+
+    (fun n _ dummy => nat_rect _ (fun dummy => 2554220882)
+    (fun n _ dummy => nat_rect _ (fun dummy => 2821834349)
+    (fun n _ dummy => nat_rect _ (fun dummy => 2952996808)
+    (fun n _ dummy => nat_rect _ (fun dummy => 3210313671)
+
+    (fun n _ dummy => nat_rect _ (fun dummy => 3336571891)
+    (fun n _ dummy => nat_rect _ (fun dummy => 3584528711)
+    (fun n _ dummy => nat_rect _ (fun dummy => 113926993)
+    (fun n _ dummy => nat_rect _ (fun dummy => 338241895)
+
+    (fun n _ dummy => nat_rect _ (fun dummy => 666307205)
+    (fun n _ dummy => nat_rect _ (fun dummy => 773529912)
+    (fun n _ dummy => nat_rect _ (fun dummy => 1294757372)
+    (fun n _ dummy => nat_rect _ (fun dummy => 1396182291)
+
+    (fun n _ dummy => nat_rect _ (fun dummy => 1695183700)
+    (fun n _ dummy => nat_rect _ (fun dummy => 1986661051)
+    (fun n _ dummy => nat_rect _ (fun dummy => 2177026350)
+    (fun n _ dummy => nat_rect _ (fun dummy => 2456956037)
+
+    (fun n _ dummy => nat_rect _ (fun dummy => 2730485921)
+    (fun n _ dummy => nat_rect _ (fun dummy => 2820302411)
+    (fun n _ dummy => nat_rect _ (fun dummy => 3259730800)
+    (fun n _ dummy => nat_rect _ (fun dummy => 3345764771)
+
+    (fun n _ dummy => nat_rect _ (fun dummy => 3516065817)
+    (fun n _ dummy => nat_rect _ (fun dummy => 3600352804)
+    (fun n _ dummy => nat_rect _ (fun dummy => 4094571909)
+    (fun n _ dummy => nat_rect _ (fun dummy => 275423344)
+
+    (fun n _ dummy => nat_rect _ (fun dummy => 430227734)
+    (fun n _ dummy => nat_rect _ (fun dummy => 506948616)
+    (fun n _ dummy => nat_rect _ (fun dummy => 659060556)
+    (fun n _ dummy => nat_rect _ (fun dummy => 883997877)
+
+    (fun n _ dummy => nat_rect _ (fun dummy => 958139571)
+    (fun n _ dummy => nat_rect _ (fun dummy => 1322822218)
+    (fun n _ dummy => nat_rect _ (fun dummy => 1537002063)
+    (fun n _ dummy => nat_rect _ (fun dummy => 1747873779)
+
+    (fun n _ dummy => nat_rect _ (fun dummy => 1955562222)
+    (fun n _ dummy => nat_rect _ (fun dummy => 2024104815)
+    (fun n _ dummy => nat_rect _ (fun dummy => 2227730452)
+    (fun n _ dummy => nat_rect _ (fun dummy => 2361852424)
+
+    (fun n _ dummy => nat_rect _ (fun dummy => 2428436474)
+    (fun n _ dummy => nat_rect _ (fun dummy => 2756734187)
+    (fun n _ dummy => nat_rect _ (fun dummy => 3204031479)
+    (fun n _ dummy => nat_rect _ (fun dummy => 3329325298)
+
+    (fun n _ dummy => 0)
+    n dummy) n dummy) n dummy) n dummy)  n dummy) n dummy) n dummy) n dummy)
+    n dummy) n dummy) n dummy) n dummy)  n dummy) n dummy) n dummy) n dummy)
+    n dummy) n dummy) n dummy) n dummy)  n dummy) n dummy) n dummy) n dummy)
+    n dummy) n dummy) n dummy) n dummy)  n dummy) n dummy) n dummy) n dummy)
+    n dummy) n dummy) n dummy) n dummy)  n dummy) n dummy) n dummy) n dummy)
+    n dummy) n dummy) n dummy) n dummy)  n dummy) n dummy) n dummy) n dummy)
+    n dummy) n dummy) n dummy) n dummy)  n dummy) n dummy) n dummy) n dummy)
+    n dummy) n dummy) n dummy) n dummy)  n dummy) n dummy) n dummy) n tt)%N.
+
+Lemma nthi_K256_eq : forall n,
+    nthi_K256 n = SHA256_N.nthi SHA256_N.K256 n.
+repeat (destruct n; try reflexivity).
+Qed.
+
+
+Definition Ch (x y z : N) : N :=
+    t_xor (t_and x y) (t_and (t_not x) z).
+
+Lemma Ch_eq : forall x y z,
+    Ch x y z = SHA256_N.Ch x y z.
+intros. unfold Ch.
+rewrite t_xor_eq, 2 t_and_eq, t_not_eq.
+reflexivity.
+Qed.
+
+
+Definition Maj (x y z : N) : N :=
+    t_xor (t_xor (t_and x z) (t_and y z)) (t_and x y).
+
+Lemma Maj_eq : forall x y z,
+    Maj x y z = SHA256_N.Maj x y z.
+intros. unfold Maj.
+rewrite 2 t_xor_eq, 3 t_and_eq.
+reflexivity.
+Qed.
+
+
+Definition Rotr (b x : N) :=
+    trunc (N_lor
+        (N_shiftr x b)
+        (N_shiftl x (N_add 1 (N_lnot b 5)))).
+
+Lemma Rotr_eq : forall b x,
+    (b < 32)%N ->
+    Rotr b x = SHA256_N.Rotr b x.
+intros. unfold Rotr.
+rewrite trunc_eq, N_lor_eq, N_shiftr_eq, N_shiftl_eq, N_add_eq, N_lnot_eq.
+unfold SHA256_N.Rotr.
+f_equal. f_equal. f_equal.
+
+destruct b; try reflexivity.
+do 5 try destruct p; try reflexivity.
+all: destruct p; compute in H; try discriminate H.
+Qed.
+
+
+Definition Sigma_0 (x : N) : N :=
+    t_xor (t_xor (Rotr 2 x) (Rotr 13 x)) (Rotr 22 x).
+Definition Sigma_1 (x : N) : N :=
+    t_xor (t_xor (Rotr 6 x) (Rotr 11 x)) (Rotr 25 x).
+Definition sigma_0 (x : N) : N :=
+    t_xor (t_xor (Rotr 7 x) (Rotr 18 x)) (Shr 3 x).
+Definition sigma_1 (x : N) : N :=
+    t_xor (t_xor (Rotr 17 x) (Rotr 19 x)) (Shr 10 x).
+
+Lemma Sigma_0_eq : forall x,
+    Sigma_0 x = SHA256_N.Sigma_0 x.
+intros. unfold Sigma_0.
+rewrite 2 t_xor_eq, 3 Rotr_eq by reflexivity.
+reflexivity.
+Qed.
+
+Lemma Sigma_1_eq : forall x,
+    Sigma_1 x = SHA256_N.Sigma_1 x.
+intros. unfold Sigma_1.
+rewrite 2 t_xor_eq, 3 Rotr_eq by reflexivity.
+reflexivity.
+Qed.
+
+Lemma sigma_0_eq : forall x,
+    sigma_0 x = SHA256_N.sigma_0 x.
+intros. unfold sigma_0.
+rewrite 2 t_xor_eq, 2 Rotr_eq, Shr_eq by reflexivity.
+reflexivity.
+Qed.
+
+Lemma sigma_1_eq : forall x,
+    sigma_1 x = SHA256_N.sigma_1 x.
+intros. unfold sigma_1.
+rewrite 2 t_xor_eq, 2 Rotr_eq, Shr_eq by reflexivity.
+reflexivity.
+Qed.
+
+
+Definition nthi (l: list N) (t: nat) :=
+    list_rect (fun _ => nat -> unit -> N)
+        (fun t dummy => 0%N)
+        (fun x l IHl => fun t => nat_rect (fun _ => unit -> N)
+            (fun dummy => x)
+            (fun x' IHx => fun dummy => IHl x' dummy)
+            t)
+        l t tt.
+
+Lemma nthi_eq : forall l t,
+    nthi l t = SHA256_N.nthi l t.
+induction l; destruct t; simpl; try reflexivity.
+- unfold nthi. simpl. fold (nthi l t).
+  unfold SHA256_N.nthi. simpl. fold (SHA256_N.nthi l t).
+  apply IHl.
+Qed.
+
+
+Definition lt_16 (n : nat) : bool :=
+    nat_rect (fun _ => bool) true (fun n _ =>
+    nat_rect (fun _ => bool) true (fun n _ =>
+    nat_rect (fun _ => bool) true (fun n _ =>
+    nat_rect (fun _ => bool) true (fun n _ =>
+    nat_rect (fun _ => bool) true (fun n _ =>
+    nat_rect (fun _ => bool) true (fun n _ =>
+    nat_rect (fun _ => bool) true (fun n _ =>
+    nat_rect (fun _ => bool) true (fun n _ =>
+    nat_rect (fun _ => bool) true (fun n _ =>
+    nat_rect (fun _ => bool) true (fun n _ =>
+    nat_rect (fun _ => bool) true (fun n _ =>
+    nat_rect (fun _ => bool) true (fun n _ =>
+    nat_rect (fun _ => bool) true (fun n _ =>
+    nat_rect (fun _ => bool) true (fun n _ =>
+    nat_rect (fun _ => bool) true (fun n _ =>
+    nat_rect (fun _ => bool) true (fun n _ =>
+    false)
+    n) n) n) n)  n) n) n) n)
+    n) n) n) n)  n) n) n) n.
+
+Lemma lt_16_correct : forall n,
+    lt_16 n = true <-> (n < 16)%nat.
+do 16 try destruct n as [| n]; simpl; split; intro;
+        solve [eauto | omega | discriminate].
+Qed.
+
+
+Definition List_length {A} (l : list A) : nat :=
+    list_rect _
+        0%nat
+        (fun _ _ IHl => S IHl)
+        l.
+
+Lemma List_length_eq : forall {A} (l : list A),
+    List_length l = List.length l.
+induction l; simpl; try congruence.
+Qed.
+
+
+Definition W' (M : nat -> N) (t : nat) : list N :=
+    nat_rect _
+        ([M 0])%nat
+        (fun t' IHt =>
+            bool_rect (fun _ => list N)
+                (M (S t') :: IHt)
+                (t_add (t_add (sigma_1 (nthi IHt 1)) (nthi IHt 6))
+                       (t_add (sigma_0 (nthi IHt 14)) (nthi IHt 15))
+                    :: IHt)
+                (lt_16 (List_length IHt)))
+        t.
+
+Lemma W'_length : forall M t,
+    length (W' M t) = S t.
+induction t; simpl; try reflexivity.
+destruct (lt_16 _); simpl; congruence.
+Qed.
+
+Lemma W'_nthi_S : forall M t i,
+    nthi (W' M (S t)) (S i) = nthi (W' M t) i.
+intros.
+simpl. destruct (lt_16 _); simpl.
+all: cbn [nthi list_rect nat_rect].
+all: fold (nthi (W' M t) i).
+all: reflexivity.
+Qed.
+
+Lemma W'_eq : forall M t i,
+    (i <= t)%nat ->
+    nthi (W' M t) i = SHA256_N.W M (t - i).
+induction t; induction i; intros0 Hi.
+
+- reflexivity.
+
+- exfalso. omega.
+
+- rewrite Nat.sub_0_r.
+  destruct (lt_dec (S t) 16) as [Hlt | Hge].
+
+  + rewrite SHA256_N.W_unfold_last by omega.
+    rewrite <- lt_16_correct in Hlt.
+    simpl. rewrite W'_length, Hlt. simpl. cbn [nthi list_rect nat_rect].
+    reflexivity.
+
+  + replace (S t) with (16 + (S t - 16))%nat at 2 by omega.
+    rewrite SHA256_N.W_unfold.
+    remember (SHA256_N.t_add _ _) as rhs.
+
+    pose proof Hge as Hge'.
+    rewrite <- lt_16_correct in Hge'. destruct (lt_16 _) eqn:Hlt_16; try congruence.
+    simpl. rewrite W'_length, Hlt_16. simpl.
+    cbn [nthi list_rect nat_rect].
+
+    rewrite 4 IHt; try omega.
+    subst rhs.
+    rewrite 3 t_add_eq, sigma_1_eq, sigma_0_eq.
+    f_equal; f_equal; [ f_equal | | f_equal ]; f_equal; omega.
+
+- rewrite W'_nthi_S. replace (S t - S i)%nat with (t - i)%nat by omega.
+  eapply IHt. omega.
+Qed.
+
+Definition W (M : nat -> N) (t : nat) : N :=
+    list_rect (fun _ => N)
+        0%N
+        (fun x _ _ => x)
+        (W' M t).
+
+Lemma W_eq : forall M t,
+    W M t = SHA256_N.W M t.
+intros.
+replace t with (t - 0)%nat at 2 by omega.
+rewrite <- W'_eq with (i := 0%nat) by omega.
+unfold W. destruct (W' M t); simpl; reflexivity.
+Qed.
