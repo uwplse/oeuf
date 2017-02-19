@@ -1151,43 +1151,219 @@ Section OeufSimulation.
 
     Hypothesis TRANSF : transf_oeuf_to_cminor P1 = OK P3.
 
-    Definition P2_sig :
-        { P2 : Untyped1.prog_type | 
-                transf_oeuf_to_untyped1 P1 = OK P2 /\
-                transf_untyped_to_cminor P2 = OK P3 }.
-    unfold transf_oeuf_to_cminor in *. break_result_chain.
-    eauto.
+    Definition UTTRANSF :
+      { ut | transf_oeuf_to_untyped1 P1 = OK ut }.
+    Proof.
+      unfold transf_oeuf_to_cminor in *. break_result_chain.
+      eauto.
     Defined.
 
-    Let P2 := proj1_sig P2_sig.
+    Definition ut : Untyped1.prog_type := proj1_sig UTTRANSF.
+    Definition ut_trans := proj2_sig UTTRANSF.
 
-    Definition P2_comp := proj1 (proj2_sig P2_sig).
-    Definition P2_comp' := proj2 (proj2_sig P2_sig).
+    Lemma trans_ut :
+      transf_untyped_to_cminor ut = OK P3.
+    Proof.
+      copy TRANSF.
+      unfold transf_oeuf_to_cminor in H.
+      rewrite ut_trans in H.
+      break_result_chain. fold ut in H. assumption.
+    Qed.
+    
+    Definition EFTRANSF :
+      { pair | transf_untyped_to_elim_func ut = OK (fst pair) /\ ElimFuncComp2.compile_cu (fst pair) = Some (snd pair)}.
+    Proof.
+      copy TRANSF.
+      unfold transf_oeuf_to_cminor in H.
+      rewrite ut_trans in H.
+      unfold transf_untyped_to_cminor in H;
+        unfold transf_untyped_to_cmajor in H;
+        unfold transf_untyped_to_dflatmajor in H;
+        unfold transf_untyped_to_dmajor in H;
+        unfold transf_untyped_to_emajor in H;
+        unfold transf_untyped_to_fflatmajor in H;
+        unfold transf_untyped_to_fmajor in H;
+        unfold transf_untyped_to_flat in H;
+        unfold transf_untyped_to_locals in H;
+        unfold transf_untyped_to_stack in H;
+        unfold transf_untyped_to_value_flag in H;
+        unfold transf_untyped_to_self_close in H;
+        unfold transf_untyped_to_switched in H;
+        unfold transf_untyped_to_elim_func3 in H;
+        unfold transf_untyped_to_elim_func2 in H.
+      break_result_chain.
+      fold ut in Heqr14.
+      exists (p14, p13).
+      eauto.
+    Defined.
+    
+    Definition EFP : ElimFunc.prog_type := fst (proj1_sig EFTRANSF).
+    Definition EFP2 : ElimFunc2.prog_type := snd (proj1_sig EFTRANSF).
+    
+    Definition FLATTRANSF :
+      { flat | transf_untyped_to_flat ut = OK flat }.
+    Proof.
+      copy TRANSF. unfold transf_oeuf_to_cminor in H.
+      rewrite ut_trans in H. fold ut in H.
+      unfold transf_untyped_to_cminor in H;
+        unfold transf_untyped_to_cmajor in H;
+        unfold transf_untyped_to_dflatmajor in H;
+        unfold transf_untyped_to_dmajor in H;
+        unfold transf_untyped_to_emajor in H;
+        unfold transf_untyped_to_fflatmajor in H;
+        unfold transf_untyped_to_fmajor in H.
+      break_result_chain.
+      eauto.
+    Defined.
+
+    Definition FLAT : FlatIntTag.prog_type := proj1_sig FLATTRANSF.
+    Definition flat_transf := proj2_sig FLATTRANSF.
+
+    Definition BLS: 
+      { M | FmajorComp.build_id_list FLAT = Some M }.
+    Proof.
+      copy TRANSF. unfold transf_oeuf_to_cminor in H.
+      rewrite ut_trans in H. fold ut in H.
+      unfold transf_untyped_to_cminor in H;
+        unfold transf_untyped_to_cmajor in H;
+        unfold transf_untyped_to_dflatmajor in H;
+        unfold transf_untyped_to_dmajor in H;
+        unfold transf_untyped_to_emajor in H;
+        unfold transf_untyped_to_fflatmajor in H;
+        unfold transf_untyped_to_fmajor in H.
+      break_result_chain.
+      unfold FmajorComp.compile_cu in *.
+      repeat break_bind_option. rewrite flat_transf in Heqr6. fold FLAT in Heqr6.
+      invc Heqr6.
+      eauto.
+    Defined.
+
+    Definition MMM := proj1_sig BLS.
+    
 
     Definition oeuf_index :=
-        sl_index P2 L3 (Oeuf_forward_simulation P2 P3 P2_comp').
+        sl_index ut L3 (Oeuf_forward_simulation ut P3 trans_ut).
     Definition oeuf_order :=
-        sl_order P2 L3 (Oeuf_forward_simulation P2 P3 P2_comp').
+        sl_order ut L3 (Oeuf_forward_simulation ut P3 trans_ut).
     Definition oeuf_match_states {rty} :=
-        @sl_match_states P1 P2 L3 (Oeuf_forward_simulation P2 P3 P2_comp') rty.
+        @sl_match_states P1 ut L3 (Oeuf_forward_simulation ut P3 trans_ut) rty.
     Definition oeuf_match_values {ty} :=
-        @sl_match_values P1 P2 L3 (Oeuf_forward_simulation P2 P3 P2_comp') ty.
+        @sl_match_values P1 ut L3 (Oeuf_forward_simulation ut P3 trans_ut) ty.
 
-    (*
-    Inductive match_values {ty : type} : SourceLifted.value (types P1) ty -> valtype L3 -> Prop :=
-    | match_all_the_way :
-        forall slval hstval hrval hrval2 hval e1 e2 l,
-          UntypedComp1.compile_value slval = hstval ->
-          TaggedComp.I_value hstval hrval ->
-          ElimFuncComp2.match_values e1 e2 l hrval hrval2 ->
-          FlatIntTagComp.I_value hrval2 hval ->
-          match_values slval hval.
-          
-    Lemma same_match_values :
-      forall {ty : type} sv hv,
-        @oeuf_match_values ty sv hv <-> @match_values ty sv hv.
+    Definition match_values {ty A B l M} (slv : SourceLifted.value (types P1) ty) (hv : value) : Prop :=
+      exists hstv hrv hrv' hv0,
+        MatchValues.compile_highest slv = hstv /\
+        TaggedComp.I_value hstv hrv /\
+        ElimFuncComp2.match_values A B l hrv hrv' /\
+        FlatIntTagComp.I_value hrv' hv0 /\
+        FmajorComp.I_value M hv0 hv.
+    
+    Lemma match_val_eq :
+      forall {ty} x y,
+        @oeuf_match_values ty x y <-> @match_values ty (fst EFP) (fst EFP2) (snd EFP)MMM x y.
     Proof.
-     *)
+      unfold oeuf_match_values. unfold sl_match_values.
+      unfold L3 in *.
+      intros.
+      split; intros.
+      break_exists.
+      break_and.
+      rewrite Oeuf_fsim_match_val in H0.
+      unfold match_values. unfold oeuf_match_vals in *.
+      destruct to_flat. destruct to_fmajor.
+      inversion H0. repeat break_exists. repeat break_and.
+      exists x0. exists x3. exists x4.
+      exists x5. split. eauto.
+      split. eauto. split; [ | split]; eauto.
+
+      
+      clear -H2.
+
+      (* FML *)
+      
+      unfold efp in *. unfold EFP in *.
+      destruct to_elim_func. break_and.
+      destruct x. destruct p. destruct p0. simpl in H.
+      unfold fst in H0. unfold snd in H0.
+      destruct EFTRANSF.
+      break_and.
+
+      destruct x. destruct p. destruct p0.
+      unfold fst in e. rewrite e in H. inversion H. subst l3 l4. clear H.
+      unfold fst in e0. unfold snd in e0.
+      rewrite e0 in H0. inversion H0.
+      subst l5 l6. clear H0.
+      unfold fst in H2. unfold snd in H2.
+      unfold fst. unfold proj1_sig. unfold snd.
+      unfold efp2 in H2. unfold EFP2.
+      destruct to_elim_func. break_and.
+      destruct x. destruct p. destruct p0.
+      unfold fst in H. unfold fst in H0.
+      unfold snd in H0. unfold snd in H2.
+      rewrite e in H. invc H.
+      rewrite e0 in H0. invc H0.
+      destruct EFTRANSF.
+      break_and. destruct x.
+      destruct p. destruct p0.
+      unfold fst in e1. unfold fst in e2.
+      unfold snd in e2.
+      rewrite e1 in e. invc e.
+      rewrite e2 in e0. invc e0.
+      unfold snd. unfold proj1_sig. assumption.
+
+
+      (* END FML *)
+
+
+      clear -H4. unfold MM in *.
+      unfold MMM. destruct BLS. destruct build_list_succ.
+      unfold proj1_sig.
+      rewrite flat_transf in e. fold FLAT in e. invc e.
+      congruence.
+
+
+      inv H. repeat break_exists.
+      repeat break_and.
+
+
+      exists x0. split; auto.
+      rewrite Oeuf_fsim_match_val.
+      unfold oeuf_match_vals.
+      destruct to_flat. destruct to_fmajor.
+      unfold match_vals3.
+      unfold match_val_highest_high'.
+      eexists; eexists; eexists.
+      split. eassumption.
+      split; [|split]; try eassumption.
+      unfold efp. destruct to_elim_func.
+      break_and.
+
+      
+      clear -H2 H5 H6.
+      destruct (proj2_sig EFTRANSF). rewrite H in H5.
+      remember (fst x6) as X.
+      remember (fst (proj1_sig EFTRANSF)) as Y.
+      inversion H5.
+      rewrite <- H3 in *. clear H3. clear H5.
+      fold EFP in HeqY. rewrite HeqY in *.
+      unfold efp2. fold EFP2 in H0.
+      rewrite H6 in H0. invc H0.
+      destruct to_elim_func. break_and.
+      rewrite H in H0.
+      replace (fst x) with EFP in *.
+      rewrite H1 in H6.
+      inversion H6. rewrite H5. rewrite H3. assumption.
+      congruence.
+
+      unfold MM. unfold MMM in *.
+      destruct build_list_succ.
+      rewrite flat_transf in e.
+      fold FLAT in e. 
+      replace x4 with FLAT in * by congruence. clear e.
+      
+      rewrite (proj2_sig BLS) in e1.
+      congruence.
+    Qed.
 
     
     Theorem oeuf_match_callstate :
@@ -1197,13 +1373,33 @@ Section OeufSimulation.
             (fv3 av3 : HighValues.value)
             (s3 : Cminor.state),
         cminor_is_callstate P3 fv3 av3 s3 ->
-        oeuf_match_values fv1 fv3 ->
-        oeuf_match_values av1 av3 ->
+        @match_values _ (fst EFP) (fst EFP2) (snd EFP) MMM fv1 fv3 ->
+        @match_values _ (fst EFP) (fst EFP2) (snd EFP) MMM av1 av3 ->
         exists s1 i,
             oeuf_match_states i s1 s3 /\
             SourceLifted.is_callstate g fv1 av1 s1.
-    intros. eapply sl_match_callstate; try eassumption.
-    eapply P2_comp.
+      intros.
+      rewrite <- match_val_eq in H0.
+      rewrite <- match_val_eq in H1.
+      eapply sl_match_callstate; try eassumption.
+      
+      eapply ut_trans.
+    Qed.
+
+    Theorem oeuf_match_final_states' :
+        forall ty i
+            (s1 : SourceLifted.state G ty)
+            (s3 : Cminor.state)
+            (v1 : SourceLifted.value G ty),
+        oeuf_match_states i s1 s3 ->
+        SourceLifted.final_state s1 v1 ->
+        exists v3,
+            cminor_final_state P3 s3 v3 /\
+            oeuf_match_values v1 v3.
+      intros.
+      
+      fwd eapply sl_match_final_states; try eassumption;
+        try eapply ut_trans.
     Qed.
 
     Theorem oeuf_match_final_states :
@@ -1215,10 +1411,12 @@ Section OeufSimulation.
         SourceLifted.final_state s1 v1 ->
         exists v3,
             cminor_final_state P3 s3 v3 /\
-            oeuf_match_values v1 v3.
-    intros.
-    fwd eapply sl_match_final_states; try eassumption.
-    eapply P2_comp.
+            @match_values _ (fst EFP) (fst EFP2) (snd EFP) MMM v1 v3.
+    Proof.
+      intros.
+      edestruct oeuf_match_final_states'; try eassumption.
+      break_and. eexists. split. eassumption.
+      eapply match_val_eq. apply H2.
     Qed.
 
     Theorem oeuf_simulation :
@@ -1235,7 +1433,7 @@ Section OeufSimulation.
             oeuf_match_states i' s1' s3'.
     intros.
     eapply sl_simulation; try eassumption.
-    eapply P2_comp.
+    eapply ut_trans.
     Qed.
     
     Theorem oeuf_star_simulation :
