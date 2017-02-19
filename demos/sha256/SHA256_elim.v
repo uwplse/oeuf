@@ -1161,12 +1161,13 @@ all: fold (nthi (W' M t) i).
 all: reflexivity.
 Qed.
 
-Lemma W'_eq : forall M t i,
+Lemma W'_eq : forall M M' t i,
     (i <= t)%nat ->
-    nthi (W' M t) i = SHA256_N.W M (t - i).
-induction t; induction i; intros0 Hi.
+    (forall t, M t = M' t) ->
+    nthi (W' M t) i = SHA256_N.W M' (t - i).
+induction t; induction i; intros0 Hi HM.
 
-- reflexivity.
+- simpl. rewrite <- HM. reflexivity.
 
 - exfalso. omega.
 
@@ -1176,7 +1177,7 @@ induction t; induction i; intros0 Hi.
   + rewrite SHA256_N.W_unfold_last by omega.
     rewrite <- lt_16_correct in Hlt.
     simpl. rewrite W'_length, Hlt. simpl. cbn [nthi list_rect nat_rect].
-    reflexivity.
+    eapply HM.
 
   + replace (S t) with (16 + (S t - 16))%nat at 2 by omega.
     rewrite SHA256_N.W_unfold.
@@ -1187,13 +1188,13 @@ induction t; induction i; intros0 Hi.
     simpl. rewrite W'_length, Hlt_16. simpl.
     cbn [nthi list_rect nat_rect].
 
-    rewrite 4 IHt; try omega.
+    rewrite 4 IHt; auto; try omega.
     subst rhs.
     rewrite 3 t_add_eq, sigma_1_eq, sigma_0_eq.
     f_equal; f_equal; [ f_equal | | f_equal ]; f_equal; omega.
 
 - rewrite W'_nthi_S. replace (S t - S i)%nat with (t - i)%nat by omega.
-  eapply IHt. omega.
+  eapply IHt. omega. auto.
 Qed.
 
 Definition W (M : nat -> N) (t : nat) : N :=
@@ -1202,10 +1203,168 @@ Definition W (M : nat -> N) (t : nat) : N :=
         (fun x _ _ => x)
         (W' M t).
 
-Lemma W_eq : forall M t,
-    W M t = SHA256_N.W M t.
+Lemma W_eq : forall M M' t,
+    (forall t, M t = M' t) ->
+    W M t = SHA256_N.W M' t.
 intros.
 replace t with (t - 0)%nat at 2 by omega.
-rewrite <- W'_eq with (i := 0%nat) by omega.
+erewrite <- W'_eq with (i := 0%nat); cycle 1.
+  { omega. }
+  { auto. }
 unfold W. destruct (W' M t); simpl; reflexivity.
 Qed.
+
+
+Definition registers := (N * N * N * N * N * N * N * N)%type.
+
+
+Definition rnd_function (x : registers) (k : N) (w : N) : registers :=
+    prod_rect (fun _ => registers) (fun abcdefg h =>
+    prod_rect (fun _ => registers) (fun abcdef g =>
+    prod_rect (fun _ => registers) (fun abcde f =>
+    prod_rect (fun _ => registers) (fun abcd e =>
+    prod_rect (fun _ => registers) (fun abc d =>
+    prod_rect (fun _ => registers) (fun ab c =>
+    prod_rect (fun _ => registers) (fun a b =>
+        (t_add (t_add (t_add (t_add (t_add h (Sigma_1 e)) (Ch e f g)) k) w)
+               (t_add (Sigma_0 a) (Maj a b c)),
+         a, b, c,
+         t_add d (t_add (t_add (t_add (t_add h (Sigma_1 e)) (Ch e f g)) k) w),
+         e, f, g)
+    ) ab) abc) abcd) abcde) abcdef) abcdefg) x.
+
+Lemma rnd_function_eq : forall x k w,
+    rnd_function x k w = SHA256_N.rnd_function x k w.
+intros.
+destruct x as [[[[[[[a b] c] d] e] f] g] h].
+simpl.
+repeat rewrite t_add_eq.
+rewrite Sigma_1_eq, Ch_eq, Sigma_0_eq, Maj_eq.
+reflexivity.
+Qed.
+
+
+Definition Round (regs : registers) (M : nat -> N) (t : nat) : registers :=
+    nat_rect _
+        (rnd_function regs (nthi_K256 0) (W M 0))
+        (fun t' IHt => rnd_function IHt (nthi_K256 (S t')) (W M (S t')))
+        t.
+
+Lemma Round_eq : forall regs M M' t,
+    (forall t, M t = M' t) ->
+    Round regs M t = SHA256_N.Round regs M' t.
+induction t; intros0 HM; unfold Round; cbn [nat_rect].
+
+- rewrite rnd_function_eq. unfold W; simpl.
+  rewrite <- HM. reflexivity.
+
+- fold (Round regs M t). rewrite rnd_function_eq.
+  rewrite IHt by auto. rewrite nthi_K256_eq. erewrite W_eq by auto.
+  reflexivity.
+Qed.
+
+
+Definition hash_block_inner (block : list N)
+        a0 b0 c0 d0 e0 f0 g0 h0 :=
+    prod_rect (fun _ => registers) (fun abcdefg1 h1 =>
+    prod_rect (fun _ => registers) (fun abcdef1 g1 =>
+    prod_rect (fun _ => registers) (fun abcde1 f1 =>
+    prod_rect (fun _ => registers) (fun abcd1 e1 =>
+    prod_rect (fun _ => registers) (fun abc1 d1 =>
+    prod_rect (fun _ => registers) (fun ab1 c1 =>
+    prod_rect (fun _ => registers) (fun a1 b1 =>
+        (t_add a0 a1,
+         t_add b0 b1,
+         t_add c0 c1,
+         t_add d0 d1,
+         t_add e0 e1,
+         t_add f0 f1,
+         t_add g0 g1,
+         t_add h0 h1)
+    ) ab1) abc1) abcd1) abcde1) abcdef1) abcdefg1)
+        (Round (a0, b0, c0, d0, e0, f0, g0, h0) (nthi block) 63).
+
+Definition hash_block (r : registers) (block : list N) : registers :=
+    prod_rect (fun _ => registers) (fun abcdefg0 h0 =>
+    prod_rect (fun _ => registers) (fun abcdef0 g0 =>
+    prod_rect (fun _ => registers) (fun abcde0 f0 =>
+    prod_rect (fun _ => registers) (fun abcd0 e0 =>
+    prod_rect (fun _ => registers) (fun abc0 d0 =>
+    prod_rect (fun _ => registers) (fun ab0 c0 =>
+    prod_rect (fun _ => registers) (fun a0 b0 =>
+    prod_rect (fun _ => registers) (fun abcdefg1 h1 =>
+    prod_rect (fun _ => registers) (fun abcdef1 g1 =>
+    prod_rect (fun _ => registers) (fun abcde1 f1 =>
+    prod_rect (fun _ => registers) (fun abcd1 e1 =>
+    prod_rect (fun _ => registers) (fun abc1 d1 =>
+    prod_rect (fun _ => registers) (fun ab1 c1 =>
+    prod_rect (fun _ => registers) (fun a1 b1 =>
+        (t_add a0 a1,
+         t_add b0 b1,
+         t_add c0 c1,
+         t_add d0 d1,
+         t_add e0 e1,
+         t_add f0 f1,
+         t_add g0 g1,
+         t_add h0 h1)
+    ) ab1) abc1) abcd1) abcde1) abcdef1) abcdefg1) (Round r (nthi block) 63)
+    ) ab0) abc0) abcd0) abcde0) abcdef0) abcdefg0) r.
+
+Lemma add_8_eq : forall
+        a0 b0 c0 d0 e0 f0 g0 h0
+        a1 b1 c1 d1 e1 f1 g1 h1,
+    (t_add a0 a1,
+     t_add b0 b1,
+     t_add c0 c1,
+     t_add d0 d1,
+     t_add e0 e1,
+     t_add f0 f1,
+     t_add g0 g1,
+     t_add h0 h1) =
+    (SHA256_N.t_add a0 a1,
+     SHA256_N.t_add b0 b1,
+     SHA256_N.t_add c0 c1,
+     SHA256_N.t_add d0 d1,
+     SHA256_N.t_add e0 e1,
+     SHA256_N.t_add f0 f1,
+     SHA256_N.t_add g0 g1,
+     SHA256_N.t_add h0 h1).
+intros.
+rewrite 8 t_add_eq.
+reflexivity.
+Qed.
+
+Lemma hash_block_inner_eq : forall block 
+        a0 b0 c0 d0 e0 f0 g0 h0,
+    hash_block_inner block a0 b0 c0 d0 e0 f0 g0 h0 =
+    let '(a1, b1, c1, d1, e1, f1, g1, h1) :=
+        SHA256_N.Round (a0, b0, c0, d0, e0, f0, g0, h0) (SHA256_N.nthi block) 63 in
+    (SHA256_N.t_add a0 a1,
+     SHA256_N.t_add b0 b1,
+     SHA256_N.t_add c0 c1,
+     SHA256_N.t_add d0 d1,
+     SHA256_N.t_add e0 e1,
+     SHA256_N.t_add f0 f1,
+     SHA256_N.t_add g0 g1,
+     SHA256_N.t_add h0 h1).
+intros.
+unfold hash_block_inner.
+erewrite Round_eq by eapply nthi_eq.
+destruct (SHA256_N.Round _ _ _) as [[[[[[[a1 b1] c1] d1] e1] f1] g1] h1].
+cbn [prod_rect].
+apply add_8_eq.
+Qed.
+
+Opaque Round t_add nthi.
+Opaque SHA256_N.Round SHA256_N.t_add SHA256_N.nthi.
+Lemma hash_block_eq : forall r block,
+    hash_block r block = SHA256_N.hash_block r block.
+intros.
+destruct r as [[[[[[[a0 b0] c0] d0] e0] f0] g0] h0].
+compute.
+erewrite Round_eq by eapply nthi_eq.
+destruct (SHA256_N.Round _ _ _) as [[[[[[[a1 b1] c1] d1] e1] f1] g1] h1].
+rewrite 8 t_add_eq. reflexivity.
+Qed.
+Transparent Round t_add nthi.
+Transparent SHA256_N.Round SHA256_N.t_add SHA256_N.nthi.
