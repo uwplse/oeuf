@@ -10,7 +10,9 @@ int main() {
   id_closure->f = id;
 
     
-  void* result = call(id_closure,zero_value);
-  printf("Result: %d\n", result->tag);
+  union nat* result = call(id_closure,zero_value);
+  if (result->tag == 0) {
+    printf("Yes\n");
+  }
   return 0;
 }

@@ -165,12 +165,9 @@ Definition v___stringlit_1 := {|
 
 Definition v___stringlit_3 := {|
   gvar_info := tt;
-  gvar_init := (Init_int8 (Int.repr 82) :: Init_int8 (Int.repr 101) ::
-                Init_int8 (Int.repr 115) :: Init_int8 (Int.repr 117) ::
-                Init_int8 (Int.repr 108) :: Init_int8 (Int.repr 116) ::
-                Init_int8 (Int.repr 58) :: Init_int8 (Int.repr 32) ::
-                Init_int8 (Int.repr 37) :: Init_int8 (Int.repr 100) ::
-                Init_int8 (Int.repr 10) :: Init_int8 (Int.repr 0) :: nil);
+  gvar_init := (Init_int8 (Int.repr 89) :: Init_int8 (Int.repr 101) ::
+                Init_int8 (Int.repr 115) :: Init_int8 (Int.repr 10) ::
+                Init_int8 (Int.repr 0) :: nil);
   gvar_readonly := true;
   gvar_volatile := false
 |}.
@@ -491,12 +488,14 @@ Definition f_main := {|
                 ((Evar _id_closure) :: (Evar _zero_value) :: nil))
               (Sassign _result (Evar 129%positive)))
             (Sseq
-              (Scall None
-                (mksignature (AST.Tint :: AST.Tint :: nil) (Some AST.Tint)
-                  {|cc_vararg:=true; cc_unproto:=false; cc_structret:=false|})
-                (Econst (Oaddrsymbol _printf (Int.repr 0)))
-                ((Econst (Oaddrsymbol ___stringlit_3 (Int.repr 0))) ::
-                 (Eload Mint32 (Evar _result)) :: nil))
+              (Sifthenelse (Ebinop (Ocmp Ceq) (Eload Mint32 (Evar _result))
+                             (Econst (Ointconst (Int.repr 0))))
+                (Scall None
+                  (mksignature (AST.Tint :: nil) (Some AST.Tint)
+                    {|cc_vararg:=true; cc_unproto:=false; cc_structret:=false|})
+                  (Econst (Oaddrsymbol _printf (Int.repr 0)))
+                  ((Econst (Oaddrsymbol ___stringlit_3 (Int.repr 0))) :: nil))
+                Sskip)
               (Sreturn (Some (Econst (Ointconst (Int.repr 0)))))))))))
   (Sreturn (Some (Econst (Ointconst (Int.repr 0))))))
 |}.
