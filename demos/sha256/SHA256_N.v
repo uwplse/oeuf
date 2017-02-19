@@ -297,7 +297,7 @@ Qed.
 
 Definition generate_and_pad msg :=
     let n := Z.to_N (Zlength msg) in
-    let pad_amount := N.land (64 - (N.land (n + 9) 63)) 63 in
+    let pad_amount := N.land (1 + N.lnot (N.land (n + 9) 63) 6) 63 in
     bytelist_to_wordlist (msg ++ [128] ++ List.repeat 0 (N.to_nat pad_amount))
         ++ [trunc (n * 8 / 2 ^ 32); trunc (n * 8)].
 
@@ -306,8 +306,9 @@ Lemma map_repeat : forall {A B} (f : A -> B) a n,
 induction n; simpl; congruence.
 Qed.
 
-Lemma pad_amount_eq_Z : forall n,
-    (-(n + 9) mod 64 = Z.land (64 - (Z.land (n + 9) 63)) 63)%Z.
+Lemma pad_amount_eq_Z1 : forall n,
+    (-(n + 9) mod 64 =
+     Z.land (64 - (Z.land (n + 9) 63)) 63)%Z.
 intros.
 change 63%Z with (Z.ones 6).
 rewrite Z.land_ones, Z.land_ones by omega.
@@ -331,32 +332,78 @@ rewrite Z.mod_mod by omega.
 reflexivity.
 Qed.
 
+Lemma pad_amount_eq_Z2 : forall n,
+    (Z.land (64 - (Z.land (n + 9) 63)) 63 =
+     Z.land (1 + Z.lnot (Z.land (n + 9) 63)) 63)%Z.
+intros.
+unfold Z.sub.
+replace (- (Z.land (n + 9) 63))%Z with (Z.succ (Z.pred (- (Z.land (n + 9) 63)))) by omega.
+fold (Z.lnot (Z.land (n + 9) 63)).
+unfold Z.succ. rewrite Z.add_comm with (m := 1%Z).
+
+change 63%Z with (Z.ones 6).  repeat rewrite Z.land_ones by omega.
+change (2 ^ 6)%Z with 64%Z.
+rewrite Z.add_comm at 1. change 64%Z with (1 * 64)%Z  at 2.
+eapply Z.mod_add. discriminate.
+Qed.
+
+
 Lemma pos_N_land : forall a b,
     Pos.land a b = N.land (N.pos a) (N.pos b).
 reflexivity.
 Qed.
 
+Lemma Z_N_bits_inj_nonneg : forall a b,
+    (forall idx, Z.testbit a (Z.of_N idx) = N.testbit b idx) ->
+    a = Z.of_N b.
+intros0 Hbit.
+eapply SHA256_Z.Z_bits_inj_nonneg. intros.
+specialize (Hbit (Z.to_N idx)).
+rewrite <- Z2N.id with (n := idx) by auto.
+rewrite Hbit. rewrite N2Z.inj_testbit. auto.
+Qed.
+
+Lemma pad_amount_rel' : forall n,
+    rel_Z_N (Z.land (Z.lnot (Z.land (Z.of_N n) 63)) 63)
+            (N.land (N.lnot (N.land (n) 63) 6) 63).
+intros. unfold rel_Z_N.
+apply Z_N_bits_inj_nonneg. intros.
+
+assert (0 <= Z.of_N idx)%Z by eapply N2Z.is_nonneg.
+
+rewrite Z.land_spec, N.land_spec.
+rewrite Z.lnot_spec by auto.
+unfold N.lnot. rewrite N.lxor_spec.
+rewrite Z.land_spec, N.land_spec.
+
+change 63%Z with (Z.of_N 63).
+rewrite 2 N2Z.inj_testbit.
+change 63 with (N.ones 6).
+
+destruct (N_le_dec 6 idx).
+  { rewrite N.ones_spec_high by auto.
+    repeat rewrite Bool.andb_false_r. reflexivity. }
+rewrite N.nle_gt in *. 
+rewrite N.ones_spec_low by auto.
+repeat rewrite Bool.andb_true_r. reflexivity.
+Qed.
+
 Lemma pad_amount_rel : forall len,
-    rel_Z_N (Z.land (64 - Z.land (Z.pos len + 9) 63) 63)
-            (N.land (64 - N.land (N.pos len + 9) 63) 63).
+    rel_Z_N (Z.land (1 + Z.lnot (Z.land (Z.pos len + 9) 63)) 63)
+            (N.land (1 + N.lnot (N.land (N.pos len + 9) 63) 6) 63).
 intros.
 unfold rel_Z_N.
 
-unfold Z.add, N.add.
-unfold Z.land at 2, N.land at 2.
-change 64%Z with (Z.of_N 64) at 1. rewrite <- N2Z.inj_sub; cycle 1.
-  { rewrite pos_N_land.  change 63 with (N.ones 6).
-    rewrite N.land_ones. change (2 ^ 6) with 64.
-    assert (N.pos (len + 9) mod 64 < 64).
-      { eapply N.mod_lt. discriminate. }
-    unfold "<", "<=" in *. congruence. }
+change 63%Z with (Z.ones 6). rewrite Z.land_ones by omega.
+change 63 with (N.ones 6). rewrite N.land_ones.
+rewrite N.add_mod, Z.add_mod by discriminate.
 
-eapply SHA256_Z.Z_bits_inj_nonneg. intros.
-rewrite Z.land_spec, 2 Z.testbit_of_N' by auto.
-rewrite N.land_spec.
-f_equal.
-rewrite <- Z.testbit_of_N' by auto.
-reflexivity.
+rewrite N2Z.inj_mod, N2Z.inj_add by discriminate.
+change (Z.of_N (2 ^ 6)) with (2 ^ 6)%Z.
+f_equal. f_equal.
+rewrite <- Z.land_ones, <- N.land_ones by omega.
+rewrite <- pad_amount_rel'.
+repeat f_equal.
 Qed.
 
 Lemma nat_Z_N : forall n,
@@ -380,7 +427,8 @@ f_equal.
     unfold rel_Z_N_list. rewrite 2 map_app.
     f_equal. f_equal.
     rewrite map_repeat. f_equal.
-    rewrite pad_amount_eq_Z.
+    rewrite pad_amount_eq_Z1.
+    rewrite pad_amount_eq_Z2.
 
     rewrite 2 Zlength_correct, map_length.
     destruct (length msg').
