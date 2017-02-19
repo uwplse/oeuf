@@ -28,8 +28,7 @@ Require Cmajor.
 
 Require Import CminorLib.
 
-
-
+Require Import Monads.
 
 Section SIM.
 
@@ -211,26 +210,53 @@ Section SIM.
     (* establish matching callstates *)
     copy H5.
     eapply (OeufProof.oeuf_match_callstate Dumb.oeuf_prog _ dumb_axioms.TRANSF) in H5.
-
+    
     Focus 2. instantiate (1 := SID).
-    rewrite OeufProof.same_match_values.
-    admit. (* TODO: need help here *)
-    (* This is the match values case for a closure *)
+    unfold match_values.
+    do 4 eexists.
+    split. subst SID. simpl. reflexivity.
+    split. econstructor; eauto.
+    split. econstructor; eauto.
+    unfold EFP2. destruct EFTRANSF. simpl.
+    break_and.
+    unfold dumb_oeuf.prog in H7.
+    unfold oeuf_prog in H7.
+    unfold ut in H7.
+    simpl in H7.
+    unfold Oeuf.transf_untyped_to_elim_func in H7.
+    simpl in H7.
+    inversion H7.
+    inversion H10.
+    destruct x3. simpl in H11. subst p.
+    simpl in H8. inversion H8.
+    simpl. reflexivity.
+    simpl. omega.
+    econstructor; eauto.
+    split. econstructor; eauto.
+    econstructor; eauto.
+    unfold MatchValues.I_id.
+    unfold Init.Nat.pred. unfold Pos.to_nat. unfold Pos.of_succ_nat.
+    unfold Pos.iter_op. unfold MatchValues.id_key_assoc.
+
+    admit. (* Is this one of those things about the interning table? *)
 
     
     Focus 2.
     instantiate (1 := SZero).
-    rewrite OeufProof.same_match_values.
-    repeat (econstructor; eauto).
+    unfold match_values.
+    do 4 eexists.
+    split. subst SZero. simpl. reflexivity.
+    split. econstructor; eauto.
+    split. econstructor; eauto.
+    split. econstructor; eauto.
+    instantiate (1 := Integers.Int.zero).
     instantiate (1 := O).
-    subst SZero. simpl. econstructor; eauto.
-    simpl. unfold Integers.Int.zero. store_auto.
+    simpl. rewrite Integers.Int.unsigned_zero.
+    reflexivity.
 
-    (* END establish matching *)
-
-    repeat progress (try break_exists; try break_and).
-
-
+    econstructor; eauto.
+    
+    repeat break_exists. repeat break_and.
     
     (* use matching states to step *)
     eapply OeufProof.oeuf_star_simulation in H5.
@@ -320,13 +346,90 @@ Section SIM.
     inversion H8.
     eapply existT_eq in H18. subst v.
     clear H17. subst ty.
-    rewrite same_match_values in H10.
+
     inversion H10.
+    repeat break_exists.
+    repeat break_and.
+
+    rewrite HeqSZero in H15.
+    simpl in H15. subst x10.
+    inversion H16. subst x11. subst aargs. subst ctor. subst tag.
+    inversion H23. subst bargs.
+    inversion H17. subst x12. subst tag. subst aargs.
+    inversion H22. subst bargs.
+    inversion H18. subst atag. subst aargs. subst x13.
+    inversion H25. subst bargs.    
+    inversion H19. subst x7.
+    subst aargs.
+    subst tag.
+    clear H22. clear H23.
+    clear H25.
+    inversion H26. subst bargs. clear H26.
+    inversion H9. subst x6. subst v.
+    inversion H12. subst v. subst orig.
+    subst m5. subst x9.
+    inversion H14. subst v.
+    subst k.
+    subst m5.
+    subst x8.
+    inversion H26. subst new.
+    clear H26.
+
+    clear -H HeqK H25 H29 H15 H28.
+    
+    rewrite HeqK in H28. clear HeqK.
+    inversion H28. subst k'.
+    clear H28.
+    inversion H6. subst k'0. clear H6.
+    subst f v k. subst oid.
+    subst s k0.
+    take_step.
+    take_step.
+    clear H13.
+    inversion H11. subst k k'. clear H11.
+    subst f v e0 oid.
+    inversion H12. subst v v'2.
+    clear H12. simpl in H14. clear H14.
+
+    inversion H7. subst v. subst v'1. clear H7.
+
+    assert (exists mX,  Mem.free m' b2 0 (fn_stackspace f_call) = Some mX). {
+      admit.     (* We need to be able to free across Mem.extends *)
+    } idtac.
+
+    break_exists.
+
+    take_step. unfold set_optvar. rewrite Maps.PTree.gss. reflexivity.
+    take_step.
+    inversion H10. subst k'0.
+    clear H10. subst s k. clear H6.
+    take_step.
+    take_step.
+    unfold set_optvar. rewrite Maps.PTree.gss. reflexivity.
+    assert ( exists mX, Mem.free x b 0 (fn_stackspace f_main) = Some mX). {
+      admit.
+    } idtac.
+    break_exists.
+    inversion H4. subst k'. subst k. clear H4.
+    subst s.
+    clear H10.
+    inversion H6. subst k. subst k'0.
+    subst s. inversion H5. subst k'.
+    clear H5 H6 H10.
+    take_step.
+    take_step.
+    take_step.
+    take_step.
+    rewrite Maps.PTree.gss. reflexivity.
 
 
-    (* TODO: pick apart definitions until we get something concrete for x6 *)
-    (* Then we can step to the print call *)
-        
+    (* TODO: change this to printing the tag *)
+    destruct (Mem.alloc x 0 (fn_stackspace f_read_nat)) eqn:?.
+    take_step.
+    take_step.
+    
+    
+    
 
   Admitted.
 

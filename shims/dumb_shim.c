@@ -11,6 +11,6 @@ int main() {
 
     
   void* result = call(id_closure,zero_value);
-  printf("Result: %d\n", read_nat(result));
+  printf("Result: %d\n", result->tag);
   return 0;
 }
