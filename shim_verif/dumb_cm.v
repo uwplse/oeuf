@@ -457,8 +457,8 @@ Definition f_vcall := {|
 Definition f_main := {|
   fn_sig := (mksignature nil (Some AST.Tint) cc_default);
   fn_params := nil;
-  fn_vars := (_zero_value :: _id_closure :: _result :: 130%positive ::
-              129%positive :: 128%positive :: 127%positive :: nil);
+  fn_vars := (_zero_value :: _id_closure :: _result :: 129%positive ::
+              128%positive :: 127%positive :: nil);
   fn_stackspace := 0;
   fn_body :=
 (Sseq
@@ -491,17 +491,12 @@ Definition f_main := {|
                 ((Evar _id_closure) :: (Evar _zero_value) :: nil))
               (Sassign _result (Evar 129%positive)))
             (Sseq
-              (Sseq
-                (Scall (Some 130%positive)
-                  (mksignature (AST.Tint :: nil) (Some AST.Tint) cc_default)
-                  (Econst (Oaddrsymbol _read_nat (Int.repr 0)))
-                  ((Evar _result) :: nil))
-                (Scall None
-                  (mksignature (AST.Tint :: AST.Tint :: nil) (Some AST.Tint)
-                    {|cc_vararg:=true; cc_unproto:=false; cc_structret:=false|})
-                  (Econst (Oaddrsymbol _printf (Int.repr 0)))
-                  ((Econst (Oaddrsymbol ___stringlit_3 (Int.repr 0))) ::
-                   (Evar 130%positive) :: nil)))
+              (Scall None
+                (mksignature (AST.Tint :: AST.Tint :: nil) (Some AST.Tint)
+                  {|cc_vararg:=true; cc_unproto:=false; cc_structret:=false|})
+                (Econst (Oaddrsymbol _printf (Int.repr 0)))
+                ((Econst (Oaddrsymbol ___stringlit_3 (Int.repr 0))) ::
+                 (Eload Mint32 (Evar _result)) :: nil))
               (Sreturn (Some (Econst (Ointconst (Int.repr 0)))))))))))
   (Sreturn (Some (Econst (Ointconst (Int.repr 0))))))
 |}.
