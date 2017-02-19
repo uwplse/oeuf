@@ -108,55 +108,14 @@ Section SIM.
     (* end load_step stuff *)
 
     (* HERE is where we call into Oeuf *)
-    
+
     (* This is the complicated continuation we've built up *)
     (* We'll need this later, after we're back from oeuf *)
-    remember (Kcall (Some 123%positive) f_call (Vptr b2 (Integers.Int.repr 0))
-            (set_locals (fn_vars f_call)
-               (set_params
-                  (Vptr b1 (Integers.Int.repr 0)
-                   :: Vptr b0 (Integers.Int.repr 0) :: nil) 
-                  (fn_params f_call)))
-            (Kseq (Sreturn (Some (Evar 123%positive)))
-               (Kcall (Some 129%positive) f_main (Vptr b (Integers.Int.repr 0))
-                  (Maps.PTree.set _id_closure (Vptr b1 (Integers.Int.repr 0))
-                     (set_optvar (Some 128%positive) (Vptr b1 (Integers.Int.repr 0))
-                        (Maps.PTree.set _zero_value (Vptr b0 (Integers.Int.repr 0))
-                           (set_optvar (Some 127%positive)
-                              (Vptr b0 (Integers.Int.repr 0))
-                              (set_locals (fn_vars f_main)
-                                 (set_params nil (fn_params f_main)))))))
-                  (Kseq (Sassign _result (Evar 129%positive))
-                     (Kseq
-                        (Sseq
-                           (Sseq
-                              (Scall (Some 130%positive)
-                                 {|
-                                 AST.sig_args := AST.Tint :: nil;
-                                 AST.sig_res := Some AST.Tint;
-                                 AST.sig_cc := AST.cc_default |}
-                                 (Econst
-                                    (Oaddrsymbol _read_nat (Integers.Int.repr 0)))
-                                 (Evar _result :: nil))
-                              (Scall None
-                                 {|
-                                 AST.sig_args := AST.Tint :: AST.Tint :: nil;
-                                 AST.sig_res := Some AST.Tint;
-                                 AST.sig_cc := {|
-                                               AST.cc_vararg := true;
-                                               AST.cc_unproto := false;
-                                               AST.cc_structret := false |} |}
-                                 (Econst (Oaddrsymbol _printf (Integers.Int.repr 0)))
-                                 (Econst
-                                    (Oaddrsymbol ___stringlit_3
-                                       (Integers.Int.repr 0))
-                                  :: Evar 130%positive :: nil)))
-                           (Sreturn
-                              (Some (Econst (Ointconst (Integers.Int.repr 0))))))
-                        (Kseq
-                           (Sreturn
-                              (Some (Econst (Ointconst (Integers.Int.repr 0)))))
-                           Kstop)))))) as K.
+    match goal with
+    | [ |- exists _, Smallstep.star _ _ (Callstate _ _ ?K _) _ _ ] =>
+      let KK := fresh "K" in
+      remember K as KK
+    end.
 
     (* give nice names to the oeuf and linked states *)
     remember (Callstate (AST.Internal f_id) (Vptr b1 (Integers.Int.repr 0) :: Vptr b0 (Integers.Int.repr 0) :: nil) K m3) as LST.
@@ -340,7 +299,6 @@ Section SIM.
     break_exists. break_and.
     eapply estar_left_app; nil_trace. split. eassumption.
 
-
     (* Now we have to pick apart all of these final_state and matching state definitions *)
 
     inversion H8.
@@ -419,15 +377,30 @@ Section SIM.
     take_step.
     take_step.
     take_step.
-    take_step.
-    rewrite Maps.PTree.gss. reflexivity.
-
-
-    (* TODO: change this to printing the tag *)
-    destruct (Mem.alloc x 0 (fn_stackspace f_read_nat)) eqn:?.
-    take_step.
-    take_step.
     
+    rewrite Maps.PTree.gss. reflexivity.
+    instantiate (1 := Vzero).
+    admit.
+    unfold Val.cmp.
+    simpl. rewrite Integers.Int.eq_true.
+    econstructor.
+    unfold negb.
+    rewrite Integers.Int.eq_false.
+
+    take_step.
+    take_step.
+    instantiate (1 := x0).
+    instantiate (1 := Vundef).
+    admit. (* external calls *)
+
+    take_step.
+    take_step.
+    assert (exists mX,
+               Mem.free x0 b 0 (fn_stackspace f_main) = Some mX) by admit.
+    break_exists.
+    take_step.
+    simpl.
+    eexists. eapply Smallstep.star_refl.
     
     
 
