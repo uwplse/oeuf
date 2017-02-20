@@ -243,6 +243,59 @@ f_equal.
   { rewrite unsigned_repr_trunc. auto. }
 Qed.
 
+Lemma pad_amount_mod_16 : forall n,
+    (((n + 1 + (-(n + 9) mod 64)) / 4 + 2) mod 16 = 0)%Z.
+intros.
+
+assert (((n + 9) + (-(n + 9) mod 64)) mod 64 = 0)%Z.
+  { rewrite Z.add_mod_idemp_r by discriminate.
+    replace (_ + _)%Z with 0%Z by omega. reflexivity. }
+
+assert (H16_64 : (forall x, x mod 64 = 0 -> (x / 4) mod 16 = 0)%Z).
+  { clear. intros.
+
+    rewrite Z.mod_eq in * by discriminate.
+    rewrite Z.div_div by omega.
+    replace x with (64 * (x / 64))%Z at 1 by omega.
+    replace (64 * (x / 64))%Z with ((16 * (x / 64)) * 4)%Z by omega.
+    rewrite Z.div_mul by discriminate.
+    change (4 * 16)%Z with 64%Z. omega. }
+
+rewrite <- Z.div_add by discriminate.  simpl.
+apply H16_64.
+replace (n + 1 + (- (n + 9) mod 64) + 8)%Z
+   with ((n + 9) + (- (n + 9) mod 64))%Z by omega.
+assumption.
+Qed.
+
+Lemma bytelist_to_wordlist_length : forall l,
+    (length (bytelist_to_wordlist l) = length l / 4)%nat.
+fix go 1. intros.
+destruct l as [| a [| b [| c [| d l ] ] ] ]; try reflexivity.
+cbn [bytelist_to_wordlist].
+cbn [length].
+fold (4 + length l)%nat.
+change 4%nat with (1 * 4)%nat at 1.  rewrite Nat.div_add_l by discriminate.
+rewrite go. reflexivity.
+Qed.
+
+Lemma generate_and_pad_length : forall msg,
+    Zlength (generate_and_pad msg) mod 16 = 0.
+intros. unfold generate_and_pad.
+rewrite Zlength_correct.
+rewrite app_length. rewrite bytelist_to_wordlist_length.
+repeat rewrite app_length. rewrite repeat_length.
+cbn [length].
+
+rewrite Nat2Z.inj_add, div_Zdiv, 2 Nat2Z.inj_add by discriminate.
+rewrite Z2Nat.id; cycle 1.
+  { eapply Z.mod_pos_bound. omega. }
+cbn [Z.of_nat Pos.of_succ_nat Pos.succ].
+rewrite Z.add_assoc.
+rewrite <- Zlength_correct.
+apply pad_amount_mod_16.
+Qed.
+
 
 Definition K256 :=
     [1116352408; 1899447441; 3049323471; 3921009573; 

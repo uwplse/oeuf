@@ -347,7 +347,6 @@ rewrite Z.add_comm at 1. change 64%Z with (1 * 64)%Z  at 2.
 eapply Z.mod_add. discriminate.
 Qed.
 
-
 Lemma pos_N_land : forall a b,
     Pos.land a b = N.land (N.pos a) (N.pos b).
 reflexivity.
@@ -455,6 +454,58 @@ f_equal.
     rewrite map_length. rewrite Zlength_correct. rewrite nat_Z_N. auto. }
 
 Qed.
+
+Lemma bytelist_to_wordlist_length' : forall l l',
+    length l = length l' ->
+    length (SHA256_Z.bytelist_to_wordlist l) =
+    length (bytelist_to_wordlist l').
+fix go 1.
+intros0 Hlen.
+do 4 (try destruct l as [| ?x0 l]; try destruct l' as [| ?x'0 l']; try
+        discriminate Hlen); try reflexivity.
+simpl in *. erewrite go; try reflexivity. 
+congruence.
+Qed.
+
+Lemma generate_and_pad_length' : forall msg msg',
+    length msg = length msg' ->
+    length (SHA256_Z.generate_and_pad msg) =
+    length (generate_and_pad msg').
+intros.
+unfold SHA256_Z.generate_and_pad, generate_and_pad.
+rewrite 2 app_length. f_equal.
+apply bytelist_to_wordlist_length'.
+repeat rewrite app_length. rewrite 2 repeat_length.
+f_equal. { auto. }
+f_equal.
+
+destruct msg, msg'; try discriminate.
+  { simpl. reflexivity. }
+
+rewrite pad_amount_eq_Z1.
+rewrite pad_amount_eq_Z2.
+rewrite 2 Zlength_correct.
+cbn [length Z.of_nat Z.to_N].
+rewrite pad_amount_rel.
+rewrite <- Z_N_nat, N2Z.id.
+
+simpl in * |-.
+replace (length msg) with (length msg') by congruence.
+reflexivity.
+Qed.
+
+Lemma generate_and_pad_length : forall msg,
+    (length (generate_and_pad msg) mod 16 = 0)%nat.
+intros.
+rewrite <- generate_and_pad_length' with (msg := map Z.of_N msg); cycle 1.
+  { eapply map_length. }
+
+eapply Nat2Z.inj.
+rewrite mod_Zmod by discriminate.
+rewrite <- Zlength_correct.
+apply SHA256_Z.generate_and_pad_length.
+Qed.
+
 
 
 Definition K256 :=
