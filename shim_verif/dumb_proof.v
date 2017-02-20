@@ -38,7 +38,39 @@ Section SIM.
   Variable st : Cminor.state.
   Hypothesis init_state : initial_state prog st.
 
+(*
+  Lemma genv_next_oprog :
+    Ple (Genv.genv_next (Genv.globalenv oprog)) (Genv.genv_next ge).
+  Proof.
+    copy LINKED.
+    unfold oprog.
+    unfold ge. unfold prog.
+    eapply Linker.genv_next_Ple; eauto.
+  Qed.
+ *)
 
+  Lemma Plt_Ple_succ :
+    forall x y,
+      Ple x y ->
+      Plt x (Pos.succ y).
+  Proof.
+    intros.
+    unfold Ple in *.
+    unfold Plt in *.
+    unfold Pos.le in *.
+    unfold Pos.lt.
+    destruct ((x ?= y)%positive) eqn:?; try congruence.
+    eapply Pos.compare_eq in Heqc.
+    subst x.
+    replace ((y ?= Pos.succ y)%positive = Lt) with (Plt y (Pos.succ y)) by (unfold Plt; unfold Pos.lt; reflexivity).
+    eapply Plt_succ.
+    replace ((x ?= Pos.succ y)%positive = Lt) with (Plt x (Pos.succ y)) by (unfold Plt; unfold Pos.lt; reflexivity).
+
+    replace ((x ?= y)%positive = Lt) with (Plt x (y)) in * by (unfold Plt; unfold Pos.lt; reflexivity).
+    assert (Plt y (Pos.succ y)) by (eapply Plt_succ; eauto).
+    eapply Plt_trans; eauto.
+  Qed.
+  
   Lemma steps :
     exists st1,
       Smallstep.star step ge st E0 st1.
@@ -154,7 +186,35 @@ Section SIM.
       unfold Genv.find_symbol. simpl. reflexivity.
       simpl. reflexivity.
 
-      admit. (* global_blocks_valid *)
+      eapply init_mem_global_blocks_almost_valid in H.
+      eapply Mem.nextblock_alloc in Heqp.
+      eapply Mem.nextblock_alloc in Heqp0.
+      eapply Mem.nextblock_store in e.
+      eapply Mem.nextblock_store in e0.
+      eapply Mem.nextblock_alloc in Heqp1.
+      eapply Mem.nextblock_store in e1.
+      eapply Mem.nextblock_store in e2.
+      eapply Mem.nextblock_alloc in Heqp2.
+      unfold HighValues.global_blocks_valid.
+
+      assert (Ple (Genv.genv_next (Genv.globalenv oprog)) (Genv.genv_next ge)). {
+        copy LINKED.
+        unfold oprog.
+        unfold ge. unfold prog.
+        eapply Linker.genv_next_Ple; eauto.
+        
+      } idtac.
+
+      unfold ge in H6. rewrite H in H6.
+      rewrite Heqp2.
+      rewrite e2. rewrite e1.
+      rewrite Heqp1.
+      rewrite e0. rewrite e.
+      rewrite Heqp0. rewrite Heqp.
+      do 3 (eapply Plt_trans_succ; eauto).
+      eapply Plt_Ple_succ; eauto.
+
+      
       admit. (* no_future_pointers *)
 
       econstructor; eauto. simpl. left. reflexivity.
@@ -197,6 +257,7 @@ Section SIM.
     unfold Init.Nat.pred. unfold Pos.to_nat. unfold Pos.of_succ_nat.
     unfold Pos.iter_op. unfold MatchValues.id_key_assoc.
 
+    
     admit. (* Is this one of those things about the interning table? *)
 
     
@@ -292,7 +353,7 @@ Section SIM.
       simpl. split; exact I.
     } idtac.
     
-    eapply Linker.star_step_sim in H11; try eapply H13.
+    eapply Linker.star_step_sim in H11; try eapply H13; try eapply dumb_axioms.LINKED.
 
     instantiate (1 := prog) in H11. unfold Linker.link_ge in H11. unfold ge.
 
@@ -424,6 +485,7 @@ Section SIM.
     
     take_step.
     take_step.
+    
     instantiate (1 := x3).
     instantiate (1 := Vundef).
     admit. (* external calls *)
@@ -438,6 +500,7 @@ Section SIM.
     take_step.
     simpl.
     eexists. eapply Smallstep.star_refl.
+
     
 
   Admitted.

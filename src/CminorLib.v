@@ -15,6 +15,46 @@ Require Import OeufProof.
 
 Require Cmajor.
 
+Require Import HighValues.
+
+Lemma init_mem_global_blocks_almost_valid :
+  forall {A B} (prog : AST.program A B) m,
+    Genv.init_mem prog = Some m ->
+    Genv.genv_next (Genv.globalenv prog) = Mem.nextblock m.
+Proof.
+  intros. destruct prog. unfold Genv.init_mem in H.
+  unfold Genv.globalenv in *. simpl in *.
+  copy H.
+  eapply Genv.alloc_globals_nextblock in H.
+  rewrite H.
+  erewrite Genv.genv_next_add_globals. simpl.
+  reflexivity.
+Qed.
+  
+(* useful? *)
+Inductive mem_chain (m : mem) : mem -> Prop :=
+| chain_refl :
+    mem_chain m m
+| chain_alloc :
+    forall m0,
+      mem_chain m m0 ->
+      forall lo hi m' b,
+        Mem.alloc m0 lo hi = (m',b) ->
+        mem_chain m m'
+| chain_free :
+    forall m0,
+      mem_chain m m0 ->
+      forall lo hi m' b,
+        Mem.free m0 b lo hi = Some m' ->
+        mem_chain m m'
+| chain_store :
+    forall m0,
+      mem_chain m m0 ->
+      forall c b ofs v m',
+        Mem.store c m0 b ofs v = Some m' ->
+        mem_chain m m'.
+
+
 (* Other case: init_load *)
 Inductive loadable (v : val) (b : block) (ofs : Z) (c : AST.memory_chunk) : mem -> Prop :=
 | init_store :

@@ -546,8 +546,25 @@ Section LINKED.
   Definition shim_ge := Genv.globalenv shim_code.
   Definition link_ge := Genv.globalenv link_code.
 
-
-  
+  Lemma genv_next_Ple :
+    Ple (Genv.genv_next oeuf_ge) (Genv.genv_next link_ge).
+  Proof.
+    unfold oeuf_ge.
+    unfold link_ge.
+    unfold Genv.globalenv.
+    unfold shim_link in *.
+    repeat (break_match_hyp; try congruence).
+    invc TRANSF.
+    copy Heqr.
+    eapply link_fundefs_head in H.
+    break_exists.
+    subst l1.
+    simpl.
+    rewrite Genv.add_globals_app.
+    repeat rewrite Genv.genv_next_add_globals.
+    eapply Genv.advance_next_le.
+  Qed.
+    
   Lemma oeuf_symbol_transf :
     forall id b,
       Genv.find_symbol oeuf_ge id = Some b ->
