@@ -15,6 +15,7 @@ Require Import OeufProof.
 
 Require Cmajor.
 
+(* Other case: init_load *)
 Inductive loadable (v : val) (b : block) (ofs : Z) (c : AST.memory_chunk) : mem -> Prop :=
 | init_store :
     forall m m',

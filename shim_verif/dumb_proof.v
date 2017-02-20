@@ -38,7 +38,7 @@ Section SIM.
   Variable st : Cminor.state.
   Hypothesis init_state : initial_state prog st.
 
-  
+
   Lemma steps :
     exists st1,
       Smallstep.star step ge st E0 st1.
@@ -302,7 +302,11 @@ Section SIM.
     (* Now we have to pick apart all of these final_state and matching state definitions *)
 
     inversion H8.
-    eapply existT_eq in H18. subst v.
+    eapply existT_eq in H18.
+    Focus 2.     eapply SourceLifted.type_eq_dec.
+
+    
+    subst v.
     clear H17. subst ty.
 
     inversion H10.
@@ -333,24 +337,63 @@ Section SIM.
     inversion H26. subst new.
     clear H26.
 
-    clear -H HeqK H25 H29 H15 H28.
+    clear -H HeqK H25 H29 H15 H28 H Heqp Heqp0 e e0 Heqp1 e1 e2 Heqp2 H21.
     
     rewrite HeqK in H28. clear HeqK.
+    remember (Maps.PTree.set _id_closure (Vptr b1 (Integers.Int.repr 0))
+                      (set_optvar (Some 128%positive)
+                         (Vptr b1 (Integers.Int.repr 0))
+                         (Maps.PTree.set _zero_value
+                            (Vptr b0 (Integers.Int.repr 0))
+                            (set_optvar (Some 127%positive)
+                               (Vptr b0 (Integers.Int.repr 0))
+                               (set_locals (fn_vars f_main)
+                                  (set_params nil (fn_params f_main))))))) as e_main.
+
+    remember (set_locals (fn_vars f_call)
+                (set_params
+                   (Vptr b1 (Integers.Int.repr 0)
+                    :: Vptr b0 (Integers.Int.repr 0) :: nil) 
+                   (fn_params f_call))) as e_call.
+    
     inversion H28. subst k'.
     clear H28.
-    inversion H6. subst k'0. clear H6.
-    subst f v k. subst oid.
-    subst s k0.
+    subst oid f v e3 k.
+    clear H9.
+    
+    inversion H6.
+    subst k s k'0.
+    clear H4. clear H6.
+
+    inversion H2. subst f v e3 k k' oid.
+    clear H2. clear H12.
+
+    inversion H9. subst s k k'0. clear H4. clear H9.
+    inversion H2.
+    subst s k k'. clear H2.
+    clear H5.
+
+    inversion H3. subst k'0 k s. clear H3. clear H5.
+    inversion H2. subst k'. clear H2.
+
+    inversion H7. inversion H10.
+    subst v v'1 v0 v'2. clear H7 H10.
+
+    inversion H15.
+    subst v' n values.
+    simpl in H3. inversion H3.
+    subst l'.
+    clear H3. clear H5.
+    inversion H25. subst v'0 v. clear H25.
+
+    eapply HighValues.value_inject_mem_extends in H15; eauto.
+    simpl in H2.
+    eapply Mem.load_extends in H2; eauto. break_exists. break_and.
+    inversion H1. clear H1. subst x3 v.
+    
     take_step.
     take_step.
-    clear H13.
-    inversion H11. subst k k'. clear H11.
-    subst f v e0 oid.
-    inversion H12. subst v v'2.
-    clear H12. simpl in H14. clear H14.
-
-    inversion H7. subst v. subst v'1. clear H7.
-
+    
     assert (exists mX,  Mem.free m' b2 0 (fn_stackspace f_call) = Some mX). {
       admit.     (* We need to be able to free across Mem.extends *)
     } idtac.
@@ -359,49 +402,42 @@ Section SIM.
 
     take_step. unfold set_optvar. rewrite Maps.PTree.gss. reflexivity.
     take_step.
-    inversion H10. subst k'0.
-    clear H10. subst s k. clear H6.
     take_step.
     take_step.
     unfold set_optvar. rewrite Maps.PTree.gss. reflexivity.
-    assert ( exists mX, Mem.free x b 0 (fn_stackspace f_main) = Some mX). {
-      admit.
-    } idtac.
-    break_exists.
-    inversion H4. subst k'. subst k. clear H4.
-    subst s.
-    clear H10.
-    inversion H6. subst k. subst k'0.
-    subst s. inversion H5. subst k'.
-    clear H5 H6 H10.
     take_step.
     take_step.
     take_step.
-    
+
     rewrite Maps.PTree.gss. reflexivity.
     instantiate (1 := Vzero).
-    admit.
+    admit. (* load across free *)
+
+    
     unfold Val.cmp.
     simpl. rewrite Integers.Int.eq_true.
     econstructor.
     unfold negb.
     rewrite Integers.Int.eq_false.
-
+    Focus 2.
+    admit. (* 1 <> 0 *)
+    
     take_step.
     take_step.
-    instantiate (1 := x0).
+    instantiate (1 := x3).
     instantiate (1 := Vundef).
     admit. (* external calls *)
 
     take_step.
     take_step.
     assert (exists mX,
-               Mem.free x0 b 0 (fn_stackspace f_main) = Some mX) by admit.
+               Mem.free x3 b 0 (fn_stackspace f_main) = Some mX).
+    admit. (* can free *)
+
     break_exists.
     take_step.
     simpl.
     eexists. eapply Smallstep.star_refl.
-    
     
 
   Admitted.
