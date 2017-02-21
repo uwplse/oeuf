@@ -484,7 +484,10 @@ Definition f_main := {|
             (Sseq
               (Scall (Some 129%positive)
                 (mksignature (AST.Tint :: AST.Tint :: nil) (Some AST.Tint)
-                  cc_default) (Econst (Oaddrsymbol _call (Int.repr 0)))
+                  cc_default)
+                (Eload Mint32
+                  (Ebinop Oadd (Evar _id_closure)
+                    (Econst (Ointconst (Int.repr 0)))))
                 ((Evar _id_closure) :: (Evar _zero_value) :: nil))
               (Sassign _result (Evar 129%positive)))
             (Sseq
