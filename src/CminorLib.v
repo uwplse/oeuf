@@ -6,6 +6,7 @@ Require Import compcert.common.Events.
 Require Import compcert.common.Smallstep.
 Require Import compcert.backend.Cminor.
 (* prog is the whole program *)
+Require Import compcert.lib.Maps.
 
 Require Import StructTact.StructTactics.
 Require Import StructTact.Util.
@@ -16,7 +17,18 @@ Require Import OeufProof.
 Require Cmajor.
 
 Require Import HighValues.
-Require Import compcert.lib.Maps.
+
+Lemma mem_contents_alloc :
+  forall m lo hi m' b,
+    Mem.alloc m lo hi = (m',b) ->
+    Mem.mem_contents m' = PMap.set (Mem.nextblock m) (ZMap.init Undef)
+                                   (Mem.mem_contents m).
+Proof.
+  intros.
+  eapply Mem.contents_alloc in H.
+  congruence.
+Qed.
+
 
 Lemma init_mem_global_blocks_almost_valid :
   forall {A B} (prog : AST.program A B) m,
@@ -41,15 +53,6 @@ Definition only_ge_pointers {A B} (ge : Genv.t A B) (m : mem) : Prop :=
       exists id,
         Genv.find_symbol ge id = Some b'.
 
-
-Lemma mem_contents_alloc :
-  forall m lo hi m' b,
-    Mem.alloc m lo hi = (m',b) ->
-    Mem.mem_contents m' = PMap.set (Mem.nextblock m) (ZMap.init Undef)
-                                   (Mem.mem_contents m).
-Proof.
-  (* needs memory internals *)
-Admitted.
 
 Lemma only_ge_pointers_alloc :
   forall {A B} (ge : Genv.t A B) m lo hi m' b,
@@ -249,7 +252,21 @@ Lemma no_future_pointers_alloc :
       Mem.alloc m lo hi = (m',b) ->
       no_future_pointers m'.
 Proof.
-Admitted.
+  intros.
+  remember H0 as Hmalloc. clear HeqHmalloc.
+  eapply mem_contents_alloc in H0.
+  unfold no_future_pointers in *.
+  intros.
+  eapply Mem.nextblock_alloc in Hmalloc. rewrite Hmalloc in *.  
+  rewrite H0 in H2.
+  destruct (peq b0 (Mem.nextblock m)). subst. rewrite PMap.gss in H2.
+  rewrite ZMap.gi in H2. congruence.
+  rewrite PMap.gso in H2 by congruence.
+  eapply H in H2; eauto.
+  eapply Plt_trans_succ; eauto.
+  eapply Plt_succ_inv in H1.
+  break_or; congruence.
+Qed.
 
 Lemma no_future_pointers_store :
   forall m,
@@ -263,7 +280,44 @@ Lemma no_future_pointers_store :
         Mem.store c m b ofs v = Some m' ->
         no_future_pointers m'.
 Proof.
-Admitted.
+  intros.
+  unfold no_future_pointers in *.
+  intros.
+  copy H1.
+  eapply Mem.nextblock_store in H4.
+  eapply Mem.store_mem_contents in H1.
+  rewrite H1 in H3. clear H1.
+  destruct (peq b b0).
+  Focus 2. rewrite PMap.gso in H3 by congruence.
+  rewrite H4 in *.
+  eapply H; eauto.
+
+  subst. rewrite PMap.gss in H3.
+
+  assert (ofs <= ofs0 < ofs + Z.of_nat (length (encode_val c v)) \/ (ofs0 < ofs \/ ofs0 >= ofs + Z.of_nat (length (encode_val c v)))) by omega.
+
+  break_or.
+  Focus 2.
+  rewrite Mem.setN_outside in H3; try omega.
+  rewrite H4 in *.
+  eapply H; eauto. 
+  
+  eapply Mem.setN_in in H1; eauto.
+  rewrite H3 in H1.
+  rewrite H4 in *.
+  destruct v; destruct c; simpl in H1;
+    try unfold inj_bytes in *; try unfold encode_int in *;
+      try unfold rev_if_be in *; try unfold bytes_of_int in *;
+        match goal with
+        | [ H : context[Archi.big_endian] |- _ ] => destruct Archi.big_endian; simpl in H
+        | [ |- _ ] => idtac
+        end;
+  repeat match goal with
+         | [ H : False |- _ ] => inversion H
+         | [ H : _ = _ \/ _ |- _ ] => destruct H; try congruence
+         end;
+  try solve [break_exists; inv H1; eauto].
+Qed.  
     
 
 
