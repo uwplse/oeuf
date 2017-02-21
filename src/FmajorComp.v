@@ -58,6 +58,7 @@ Notation IkMalloc := MatchValues.IkMalloc.
 
 Notation id_key_eq_dec := MatchValues.id_key_eq_dec.
 
+Notation id_map := MatchValues.id_map.
 Notation id_key_assoc := MatchValues.id_key_assoc.
 
 
@@ -156,10 +157,19 @@ Definition build_id_list (cu : list (A.stmt * A.expr) * list metadata) :
         then intern_id_list (build_id_list' cu)
         else None.
 
+Definition check_id_list (cu : list (A.stmt * A.expr) * list metadata) (M : id_map) :
+        option (list (id_key * ident)) :=
+    let pre_intern_list := build_id_list' cu in
+    if eq_nat_dec (length (fst cu)) (length (snd cu))
+        then if list_eq_dec id_key_eq_dec (map fst pre_intern_list) (map fst M)
+            then if list_norepet_dec Pos.eq_dec (map snd M)
+                then Some M
+                else None
+            else None
+        else None.
+
 
 (* main compilation *)
-
-Notation id_map := MatchValues.id_map.
 
 Section compile.
 Open Scope option_monad.
@@ -265,14 +275,18 @@ End compile.
 Section compile_cu.
 Open Scope option_monad.
 
-Definition compile_cu (cu : list (A.stmt * A.expr) * list metadata) : option B.program :=
-    build_id_list cu >>= fun M =>
+Definition compile_cu (cu : list (A.stmt * A.expr) * list metadata) (M : id_map) : option B.program :=
+    check_id_list cu M >>= fun M =>
     let '(funcs, metas) := cu in
     compile_gdefs M (length funcs) (numbered funcs) >>= fun gdefs =>
     extra_defs M >>= fun gdefs' =>
     let pub_fnames := map fst (filter (fun n_m => m_is_public (snd n_m)) (numbered metas)) in
     map_partial (fun fn => id_key_assoc M (IkFunc fn)) pub_fnames >>= fun pub_idents =>
     Some (AST.mkprogram (gdefs ++ gdefs') pub_idents 1%positive).
+
+Definition compile_cu_intern (cu : list (A.stmt * A.expr) * list metadata) : option B.program :=
+    build_id_list cu >>= fun M =>
+    compile_cu cu M.
 
 End compile_cu.
 
@@ -791,16 +805,17 @@ induction xs.
 - destruct a. simpl. rewrite IHxs. reflexivity.
 Qed.
 
-Lemma build_id_list_ok : forall a metas M,
-    build_id_list (a, metas) = Some M ->
+Lemma check_id_list_ok : forall a metas M,
+    check_id_list (a, metas) M = Some M ->
     id_map_ok M.
 intros0 Hbuild.
-unfold build_id_list, intern_id_list in *.
-do 2 (break_if; try discriminate).
+unfold check_id_list in *.
+do 3 (break_if; try discriminate).
 constructor.
-- inject_some. 
+- on _, fun H => rewrite <- H.
+  unfold build_id_list'.
   change (?a :: ?b :: ?c :: ?d) with ([a; b; c] ++ d).
-  rewrite map_app.  rewrite intern_id_list'_map_fst.  do 2 rewrite map_app.
+  repeat rewrite map_app.
 
   (* norepet proofs *)
   eapply list_norepet_append.
@@ -837,7 +852,7 @@ constructor.
       eapply extra_keys_IkRuntime_IkMalloc in Hy.
       destruct Hx as [ | [ | [ | [] ] ] ]; firstorder congruence. }
 
-- inject_some. assumption.
+- assumption.
 Qed.
 
 
@@ -1027,14 +1042,24 @@ split; intro; solve [subst; eauto using I_id_inj, I_id_sur].
 Qed.
 
 
-Lemma prog_defs_norepet : forall A metas B,
-    compile_cu (A, metas) = Some B ->
+Lemma check_id_list_eq : forall cu M M',
+    check_id_list cu M = Some M' ->
+    M = M'.
+intros0 Hcomp. unfold check_id_list in Hcomp.
+repeat (break_if; try discriminate).
+congruence.
+Qed.
+
+
+Lemma prog_defs_norepet : forall A metas B M,
+    compile_cu (A, metas) M = Some B ->
     list_norepet (map fst (prog_defs B)).
 intros0 Hcomp.
 unfold compile_cu in *. break_bind_option. inject_some.
 rename l0 into bdefs. rename l1 into xdefs. rename l2 into bpublic.
 on (_ = Some bpublic), fun H => clear H.
-rename l into M. fwd eapply build_id_list_ok as Mok; eauto.
+replace l with M in * by (eauto using check_id_list_eq). clear l.
+fwd eapply check_id_list_ok as Mok; eauto.
 simpl.
 
 rewrite map_app.
@@ -1086,8 +1111,7 @@ eapply compile_I_func. eassumption.
 Qed.
 
 Lemma compile_I_env_fwd : forall A metas BP B M an af,
-    compile_cu (A, metas) = Some BP ->
-    build_id_list (A, metas) = Some M ->
+    compile_cu (A, metas) M = Some BP ->
     Genv.globalenv BP = B ->
     nth_error A an = Some af ->
     exists bid bsym bf,
@@ -1095,9 +1119,10 @@ Lemma compile_I_env_fwd : forall A metas BP B M an af,
         Genv.find_funct_ptr B bsym = Some (Internal bf) /\
         I_id M (IkFunc an) bid /\
         I_func M af bf.
-intros0 Hcomp Hbuild HBP Hnth.
+intros0 Hcomp HBP Hnth.
 pose proof Hcomp.
 unfold compile_cu in Hcomp. break_bind_option. inject_some.
+replace l with M in * by (eauto using check_id_list_eq). clear l.
 remember (AST.mkprogram _ _ _) as BP.
 
 eapply numbered_nth_error in Hnth. eapply nth_error_in in Hnth.
@@ -1157,8 +1182,7 @@ intuition eauto.
 Qed.
 
 Lemma compile_I_env_rev : forall A metas BP B M bid bsym bf,
-    compile_cu (A, metas) = Some BP ->
-    build_id_list (A, metas) = Some M ->
+    compile_cu (A, metas) M = Some BP ->
     Genv.globalenv BP = B ->
     Genv.find_symbol B bid = Some bsym ->
     Genv.find_funct_ptr B bsym = Some (Internal bf) ->
@@ -1166,9 +1190,10 @@ Lemma compile_I_env_rev : forall A metas BP B M bid bsym bf,
         nth_error A an = Some af /\
         I_id M (IkFunc an) bid /\
         I_func M af bf.
-intros0 Hcomp Hbuild HBP Hsym Hfunc.
+intros0 Hcomp HBP Hsym Hfunc.
 pose proof Hcomp.
 unfold compile_cu in Hcomp. break_bind_option. inject_some.
+replace l with M in * by (eauto using check_id_list_eq). clear l.
 remember (AST.mkprogram _ _ _) as BP.
 
 fwd eapply Genv.find_funct_ptr_symbol_inversion as Hin; eauto.
@@ -1187,10 +1212,9 @@ Qed.
 
 
 Lemma compile_I_prog : forall M A metas B,
-    compile_cu (A, metas) = Some B ->
-    build_id_list (A, metas) = Some M ->
+    compile_cu (A, metas) M = Some B ->
     I_prog M A B.
-intros0 Hcomp Hbuild.
+intros0 Hcomp.
 constructor. constructor.
 - intros. eapply compile_I_env_fwd; eauto.
 - intros. eapply compile_I_env_rev; eauto.
@@ -1231,8 +1255,8 @@ list_magic_on (a, (b, tt)).
 destruct a_i, b_i. eauto using compile_gdef_fnames_below.
 Qed.
 
-Theorem compile_prog_fnames_below : forall a metas b,
-    compile_cu (a, metas) = Some b ->
+Theorem compile_prog_fnames_below : forall a metas b M,
+    compile_cu (a, metas) M = Some b ->
     Forall (fun f => A.fnames_below (length a) (fst f)) a.
 intros0 Hcomp.
 unfold compile_cu in Hcomp; simpl in Hcomp; break_bind_option.
@@ -1272,8 +1296,8 @@ list_magic_on (a, (b, tt)).
 destruct a_i, b_i. eauto using compile_gdef_switch_placement.
 Qed.
 
-Theorem compile_prog_switch_placement : forall a metas b,
-    compile_cu (a, metas) = Some b ->
+Theorem compile_prog_switch_placement : forall a metas b M,
+    compile_cu (a, metas) M = Some b ->
     Forall (fun f => A.switch_placement (fst f)) a.
 intros0 Hcomp.
 unfold compile_cu in Hcomp; simpl in Hcomp; break_bind_option.
@@ -1588,15 +1612,14 @@ Qed.
 
 
 Lemma compile_cu_public : forall A Ameta B M fname meta id,
-    compile_cu (A, Ameta) = Some B ->
-    build_id_list (A, Ameta) = Some M ->
+    compile_cu (A, Ameta) M = Some B ->
     nth_error Ameta fname = Some meta ->
     I_id M (IkFunc fname) id ->
     m_access meta = Public <-> In id (prog_public B).
-intros0 Hcomp HM Hmeta II. split; intro Hpub.
+intros0 Hcomp Hmeta II. split; intro Hpub.
 
 - unfold compile_cu in Hcomp. break_bind_option.
-  assert (l = M) by congruence. subst l.
+  replace l with M in * by (eauto using check_id_list_eq). clear l.
   inject_some. simpl.
   on _, eapply_lem map_partial_Forall2.
   unfold I_id in II.
@@ -1614,7 +1637,7 @@ intros0 Hcomp HM Hmeta II. split; intro Hpub.
   eapply nth_error_In. eauto.
 
 - unfold compile_cu in Hcomp. break_bind_option.
-  assert (l = M) by congruence. subst l.
+  replace l with M in * by (eauto using check_id_list_eq). clear l.
   inject_some. simpl in *.
   on _, eapply_lem map_partial_Forall2.
   unfold I_id in II.
@@ -1622,7 +1645,7 @@ intros0 Hcomp HM Hmeta II. split; intro Hpub.
   eapply In_nth_error in Hpub. destruct Hpub as (? & ?).
   fwd eapply Forall2_nth_error_ex' as HH; eauto. break_exists. break_and.
   assert (IkFunc fname = IkFunc x0).
-    { eapply I_id_sur; eauto using build_id_list_ok. }
+    { eapply I_id_sur; eauto using check_id_list_ok. }
   assert (x0 = fname) by congruence. subst x0.
   fwd eapply map_nth_error'; eauto. break_exists. break_and.
   fwd eapply nth_error_in as HH; eauto.
@@ -1639,16 +1662,14 @@ intros0 Hcomp HM Hmeta II. split; intro Hpub.
 Qed.
 
 Lemma IkFunc_metas_length : forall A Ameta M fname id,
-    build_id_list (A, Ameta) = Some M ->
+    check_id_list (A, Ameta) M = Some M ->
     I_id M (IkFunc fname) id ->
     fname < length Ameta.
 intros0 HM II.
 eapply id_key_assoc_nth_error in II. destruct II as [? Hfname].
 eapply map_nth_error with (f := fst) in Hfname. simpl in Hfname.
-unfold build_id_list in HM. break_if; try discriminate.
-unfold intern_id_list in *. break_if; try discriminate.
-assert (intern_id_list' (build_id_list' (A, Ameta)) = M) by congruence.  subst M.
-rewrite intern_id_list'_map_fst in Hfname.
+unfold check_id_list in HM. repeat (break_if; try discriminate).
+on (_ = map fst M), fun H => rewrite <- H in Hfname.
 unfold build_id_list' in Hfname. repeat rewrite map_app in Hfname.
 eapply nth_error_In in Hfname.
 
@@ -1680,17 +1701,26 @@ let rec go :=
   + discriminate.
 Qed.
 
+Lemma compile_cu_check_id_list : forall A Ameta M B,
+    compile_cu (A, Ameta) M = Some B ->
+    check_id_list (A, Ameta) M = Some M.
+intros.
+unfold compile_cu in *. break_bind_option.
+replace l with M in * by (eauto using check_id_list_eq). clear l.
+reflexivity.
+Qed.
+
 Lemma compile_cu_public' : forall A Ameta B M fname id,
-    compile_cu (A, Ameta) = Some B ->
-    build_id_list (A, Ameta) = Some M ->
+    compile_cu (A, Ameta) M = Some B ->
     I_id M (IkFunc fname) id ->
     public_fname Ameta fname <-> In id (prog_public B).
 intros. split; intro.
 
 - unfold public_fname in *. break_exists. break_and.
   rewrite <- compile_cu_public; eauto.
-  
+
 - unfold I_id in *.
+  fwd eapply compile_cu_check_id_list; eauto.
   fwd eapply IkFunc_metas_length as HH; eauto.
   rewrite <- nth_error_Some in HH.
   destruct (nth_error _ _) eqn:?; try congruence.
@@ -1699,8 +1729,7 @@ intros. split; intro.
 Qed.
 
 Lemma I_value_public : forall A Ameta B M,
-    compile_cu (A, Ameta) = Some B ->
-    build_id_list (A, Ameta) = Some M ->
+    compile_cu (A, Ameta) M = Some B ->
     forall av bv,
     I_value M av bv ->
     A.fit_public_value Ameta av ->
@@ -1718,8 +1747,7 @@ intros0 II Apub; invc II; invc Apub; i_ctor.
 Qed.
 
 Lemma I_value_public' : forall A Ameta B M,
-    compile_cu (A, Ameta) = Some B ->
-    build_id_list (A, Ameta) = Some M ->
+    compile_cu (A, Ameta) M = Some B ->
     forall bv av,
     I_value M av bv ->
     public_value B bv ->
@@ -1741,11 +1769,12 @@ Require MixSemantics.
 Section Preservation.
 
   Variable prog : A.prog_type.
+  Variable M : id_map.
   Variable tprog : B.program.
 
 
   
-  Hypothesis TRANSF : compile_cu prog = Some tprog.
+  Hypothesis TRANSF : compile_cu prog M = Some tprog.
 
 Lemma func_body_I : forall M,
     forall abody aret aarg afname afree,
@@ -1808,32 +1837,9 @@ split.
 - assumption.
 Qed.
 
-Lemma build_list_succ :
-  { M | build_id_list prog = Some M }.
-Proof.
-  unfold compile_cu in *. break_bind_option. eauto.
-Defined.
-
-Definition MM : list (id_key * ident).
-  destruct build_list_succ. exact x.
-Defined.
-
-Definition HM : build_id_list prog = Some MM.
-  unfold MM. destruct build_list_succ. auto.
-Defined.
-
-Definition AE : A.env.
-  destruct prog. exact e.
-Defined.
-
-Definition ameta : list metadata.
-  destruct prog. exact l.
-Defined.
-
   Theorem fsim :
     MixSemantics.mix_forward_simulation (A.semantics prog) (B.semantics tprog).
   Proof.
-    destruct build_list_succ as [M HM].
     destruct prog as [AE ameta].
 
     eapply MixSemantics.Forward_simulation with
@@ -1848,7 +1854,8 @@ Defined.
       fwd eapply compile_I_prog; eauto. fwd eapply I_prog_env as HH; eauto.  invc HH.
       on _, fun H => destruct (H ?? ?? ?? ** **) as (an & af & ? & ? & ?).
       on >I_func, invc. simpl.
-      fwd eapply build_id_list_ok; eauto.
+      fwd eapply compile_cu_check_id_list; eauto.
+      fwd eapply check_id_list_ok; eauto.
       
       eexists. exists tt. split. 2: econstructor.
       + econstructor.
@@ -1873,7 +1880,7 @@ Defined.
     - intros0 Astep. intros0 II.
       eapply raw_sim_lockstep; eauto. simpl.
       eapply I'_sim; try eassumption.
-      + eauto using build_id_list_ok.
+      + eauto using check_id_list_ok, compile_cu_check_id_list.
       + eapply I_prog_env. eapply compile_I_prog; eauto.
       + eapply compile_prog_fnames_below. eauto.
       + eapply compile_prog_switch_placement. eauto.
@@ -1881,85 +1888,50 @@ Defined.
 
 End Preservation.
 
+Section Preservation_intern.
+
+  Variable prog : A.prog_type.
+  Variable tprog : B.program.
+
+  Hypothesis TRANSF : compile_cu_intern prog = Some tprog.
+
+Lemma build_list_succ :
+  { M | build_id_list prog = Some M }.
+Proof.
+  unfold compile_cu_intern in *. break_bind_option. eauto.
+Defined.
+
+Definition MM : list (id_key * ident).
+  destruct build_list_succ. exact x.
+Defined.
+
+  Theorem fsim_intern :
+    MixSemantics.mix_forward_simulation (A.semantics prog) (B.semantics tprog).
+  Proof.
+    eapply fsim with (M := MM).
+    unfold MM. destruct build_list_succ as [M HM].
+    unfold compile_cu_intern in TRANSF.
+    rewrite HM in TRANSF. simpl in TRANSF.
+    assumption.
+  Defined.
+
+End Preservation_intern.
+
 Lemma match_val_eq :
-    forall prog tprog TRANSF,
-  MixSemantics.fsim_match_val _ _ (fsim prog tprog TRANSF) = I_value (MM prog tprog TRANSF).
+    forall prog M tprog TRANSF,
+  MixSemantics.fsim_match_val _ _ (fsim prog M tprog TRANSF) = I_value M.
 Proof.
     intros.
     unfold fsim.
-    destruct (build_list_succ _ _ _) eqn:?.
     destruct prog. simpl.
-    unfold MM. rewrite Heqs.
     reflexivity.
 Qed.
 
-
-Lemma intern_id_list'_is_map : forall xs,
-    intern_id_list' xs = map (fun ks => let '(k, s) := ks in (k, intern_string s)) xs.
-induction xs; intros; simpl.
-- reflexivity.
-- destruct a. rewrite IHxs. reflexivity.
-Qed.
-
-Lemma intern_id_list'_app : forall xs ys,
-    intern_id_list' (xs ++ ys) = intern_id_list' xs ++ intern_id_list' ys.
-induction xs; intros; simpl.
-- reflexivity.
-- destruct a. simpl. rewrite IHxs. reflexivity.
-Qed.
-
-Lemma intern_id_list'_fst : forall xs,
-    map fst (intern_id_list' xs) = map fst xs.
-induction xs; intros; simpl.
-- reflexivity.
-- destruct a. simpl. rewrite IHxs. reflexivity.
-Qed.
-
-(* This provides the difficult piece of IClose, for building I_value proofs *)
-Theorem build_id_list_fname_map : forall A Ameta M fname,
-    build_id_list (A, Ameta) = Some M ->
-    fname < length A ->
-    exists id, I_id M (IkFunc fname) id.
-intros0 Hmap Hfname.
-fwd eapply build_id_list_ok as Mok; eauto.
-unfold build_id_list in *. break_if; try discriminate. simpl in *.
-unfold intern_id_list in *. break_if; try discriminate.
-
-assert (Hnth : exists n, nth_error (map fst M) n = Some (IkFunc fname)). {
-  eapply In_nth_error.
-
-  unfold build_id_list' in Hmap. repeat rewrite intern_id_list'_app in Hmap.
-  match type of Hmap with
-  | Some ?x = Some ?y => assert (Hmap' : x = y) by (injection Hmap; auto)
-  end.
-  clear Hmap.
-
-  rewrite <- Hmap'. repeat rewrite map_app. repeat rewrite intern_id_list'_fst.
-  eapply in_or_app, or_intror, in_or_app, or_intror, in_or_app, or_introl.
-
-  destruct (nth_error (map fst (build_funcs_id_list Ameta)) fname) eqn:Hnth; cycle 1.
-    { rewrite nth_error_None in Hnth. unfold build_funcs_id_list in Hnth.
-      rewrite map_length, map_length, numbered_length in Hnth. omega. }
-  fwd eapply funcs_keys_IkFunc as HH; eauto using nth_error_in.
-    destruct HH as [fname' ?]. subst.
-  assert (fname' = fname).
-    { eapply map_nth_error' in Hnth. destruct Hnth as ([? ?] & Hnth & ?).
-      unfold build_funcs_id_list in Hnth.
-      eapply map_nth_error' in Hnth. destruct Hnth as ([? ?] & Hnth & ?).
-      eapply map_nth_error with (f := fst) in Hnth.
-      rewrite numbered_count_up_eq in Hnth.
-      rewrite count_up_nth_error in Hnth by omega.
-      on >list_norepet, fun H => clear H. unfold func_id_entry in *. simpl in *.
-      congruence. }
-  subst fname'.
-
-  eauto using nth_error_in.
-}
-
-destruct Hnth as [n Hnth].
-eapply map_nth_error' in Hnth. destruct Hnth as ([k id] & ? & ?).
-compute [fst] in *. subst k.
-
-exists id.
-eapply nth_error_id_key_assoc; eauto.
+Lemma match_val_eq_intern :
+    forall prog tprog TRANSF,
+  MixSemantics.fsim_match_val _ _ (fsim_intern prog tprog TRANSF) = I_value (MM prog tprog TRANSF).
+Proof.
+    intros.
+    unfold fsim_intern.
+    eapply match_val_eq.
 Qed.

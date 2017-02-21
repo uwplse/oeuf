@@ -72,7 +72,7 @@ Definition transf_untyped_to_flat (l : list Untyped1.expr * list Metadata.metada
 Definition transf_untyped_to_fmajor (l : list Untyped1.expr * list Metadata.metadata)  :=
   OK l
   @@@ transf_untyped_to_flat
-  @@@ FmajorComp.compile_cu ~~ "FmajorComp".
+  @@@ FmajorComp.compile_cu_intern ~~ "FmajorComp".
 
 Definition transf_untyped_to_fflatmajor (l : list Untyped1.expr * list Metadata.metadata)  :=
   OK l
