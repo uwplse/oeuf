@@ -336,11 +336,11 @@ let compile_oeuf cu shim_ast sourcename asmname linked_cmname oeuf_cmname =
   set_dest PrintMach.destination option_dmach ".mach";
 
   (* Convert to Asm *)
-  let ocm,lcm,asm =
-  match Oeuf.transf_whole_program cu shim_ast with
-    | Errors.OK ((ocm,lcm),asm) -> 
+  let ocm,scm,lcm,asm =
+  match OeufIntern.transf_whole_program IdProg.idM cu shim_ast with
+    | Errors.OK (((ocm,scm),lcm),asm) -> 
       (match Asmexpand.expand_program asm with
-      | Errors.OK asm' -> ocm,lcm,asm'
+      | Errors.OK asm' -> ocm,scm,lcm,asm'
       | Errors.Error msg ->
         eprintf "it's busted\n";
         eprintf "%s: %a" sourcename print_error msg;

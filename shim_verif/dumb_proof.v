@@ -265,7 +265,6 @@ Section SIM.
     unfold Init.Nat.pred. unfold Pos.to_nat. unfold Pos.of_succ_nat.
     unfold Pos.iter_op. unfold MatchValues.id_key_assoc.
 
-
     
     admit. (* Is this one of those things about the interning table? *)
 

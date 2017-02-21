@@ -123,7 +123,7 @@ Definition transf_c_to_cminor (p : Csyntax.program) : res Cminor.program :=
   @@@ Cshmgen.transl_program
   @@@ Cminorgen.transl_program.
 
-Definition transf_whole_program (M : MatchValues.id_map) (oeuf_code : CompilationUnit.compilation_unit) (shim_code : Csyntax.program) : res (Cminor.program * Cminor.program * Asm.program) :=
+Definition transf_whole_program (M : MatchValues.id_map) (oeuf_code : CompilationUnit.compilation_unit) (shim_code : Csyntax.program) : res (Cminor.program * Cminor.program * Cminor.program * Asm.program) :=
   match transf_oeuf_to_cminor M oeuf_code with
   | OK oeuf_cm =>
     match transf_c_to_cminor shim_code with
@@ -132,7 +132,7 @@ Definition transf_whole_program (M : MatchValues.id_map) (oeuf_code : Compilatio
       | OK all_cm =>
         match transf_cminor_program all_cm with
         | OK all_asm =>
-          OK (oeuf_cm, all_cm, all_asm)
+          OK (oeuf_cm, shim_cm, all_cm, all_asm)
         | Error m => Error m
         end
       | Error m => Error m

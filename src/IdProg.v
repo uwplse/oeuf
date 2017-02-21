@@ -1,3 +1,4 @@
+Require Import compcert.lib.Coqlib.
 Require Pretty CompilationUnit.
 Require Import SourceLifted.
 Require OeufPlugin.OeufPlugin.
@@ -6,6 +7,7 @@ Import List.ListNotations.
 Import HList.
 Require Import String.
 Require Import Utopia.
+Require Import MatchValues.
 
 Definition N := ADT Tnat.
 Definition id_ty : type := Arrow N N.
@@ -38,3 +40,6 @@ Qed.
 
 
 Definition oeuf_prog : CompilationUnit.compilation_unit := CompilationUnit.singleton id_id "id".
+
+Definition idM : list (MatchValues.id_key * AST.ident) :=
+  ((MatchValues.IkFunc 0), (106%positive)) :: nil.
