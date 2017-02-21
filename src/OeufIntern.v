@@ -69,40 +69,40 @@ Definition transf_untyped_to_flat (l : list Untyped1.expr * list Metadata.metada
   @@@ transf_untyped_to_locals
   @@@ FlatCompCombined.compile_cu.
 
-Definition transf_untyped_to_fmajor (l : list Untyped1.expr * list Metadata.metadata)  :=
+Definition transf_untyped_to_fmajor (M : MatchValues.id_map) (l : list Untyped1.expr * list Metadata.metadata)  :=
   OK l
   @@@ transf_untyped_to_flat
-  @@@ FmajorComp.compile_cu_intern ~~ "FmajorComp".
+  @@@ (fun p => FmajorComp.compile_cu p M) ~~ "FmajorComp".
 
-Definition transf_untyped_to_fflatmajor (l : list Untyped1.expr * list Metadata.metadata)  :=
+Definition transf_untyped_to_fflatmajor (M : MatchValues.id_map) (l : list Untyped1.expr * list Metadata.metadata)  :=
   OK l
-  @@@ transf_untyped_to_fmajor
+  @@@ transf_untyped_to_fmajor M
   @@ Fmajortofflatmajor.transf_program.
 
-Definition transf_untyped_to_emajor (l : list Untyped1.expr * list Metadata.metadata)  :=
+Definition transf_untyped_to_emajor (M : MatchValues.id_map) (l : list Untyped1.expr * list Metadata.metadata)  :=
   OK l
-  @@@ transf_untyped_to_fflatmajor
+  @@@ transf_untyped_to_fflatmajor M
   @@ Fflatmajortoemajor.transf_program.
 
-Definition transf_untyped_to_dmajor (l : list Untyped1.expr * list Metadata.metadata)  :=
+Definition transf_untyped_to_dmajor (M : MatchValues.id_map) (l : list Untyped1.expr * list Metadata.metadata)  :=
   OK l
-  @@@ transf_untyped_to_emajor
+  @@@ transf_untyped_to_emajor M
   @@@ Emajortodmajor.transf_prog.
 
-Definition transf_untyped_to_dflatmajor (l : list Untyped1.expr * list Metadata.metadata)  :=
+Definition transf_untyped_to_dflatmajor (M : MatchValues.id_map) (l : list Untyped1.expr * list Metadata.metadata)  :=
   OK l
-  @@@ transf_untyped_to_dmajor
+  @@@ transf_untyped_to_dmajor M
   @@@ Dmajortodflatmajor.transf_prog.
 
-Definition transf_untyped_to_cmajor (l : list Untyped1.expr * list Metadata.metadata)  :=
+Definition transf_untyped_to_cmajor (M : MatchValues.id_map) (l : list Untyped1.expr * list Metadata.metadata)  :=
   OK l
-  @@@ transf_untyped_to_dflatmajor
+  @@@ transf_untyped_to_dflatmajor M
   @@@ Dflatmajortocmajor.transf_prog.
 
 
-Definition transf_untyped_to_cminor (l : list Untyped1.expr * list Metadata.metadata) : res Cminor.program :=
+Definition transf_untyped_to_cminor (M : MatchValues.id_map) (l : list Untyped1.expr * list Metadata.metadata) : res Cminor.program :=
   OK l
-  @@@ transf_untyped_to_cmajor
+  @@@ transf_untyped_to_cmajor M
   @@ Cmajortominor.transf_prog
   @@ print print_Cminor.
 
@@ -112,9 +112,9 @@ Definition transf_oeuf_to_untyped1 (j : CompilationUnit.compilation_unit) : res 
   @@ UntypedComp1.compile_cu
  @@@ Metadata.check_length.
 
-Definition transf_oeuf_to_cminor (j : CompilationUnit.compilation_unit) : res Cminor.program :=
+Definition transf_oeuf_to_cminor (M : MatchValues.id_map) (j : CompilationUnit.compilation_unit) : res Cminor.program :=
      transf_oeuf_to_untyped1 j
- @@@ transf_untyped_to_cminor.
+ @@@ transf_untyped_to_cminor M.
 
 Definition transf_c_to_cminor (p : Csyntax.program) : res Cminor.program :=
   OK p
@@ -123,8 +123,8 @@ Definition transf_c_to_cminor (p : Csyntax.program) : res Cminor.program :=
   @@@ Cshmgen.transl_program
   @@@ Cminorgen.transl_program.
 
-Definition transf_whole_program (oeuf_code : CompilationUnit.compilation_unit) (shim_code : Csyntax.program) : res (Cminor.program * Cminor.program * Asm.program) :=
-  match transf_oeuf_to_cminor oeuf_code with
+Definition transf_whole_program (M : MatchValues.id_map) (oeuf_code : CompilationUnit.compilation_unit) (shim_code : Csyntax.program) : res (Cminor.program * Cminor.program * Asm.program) :=
+  match transf_oeuf_to_cminor M oeuf_code with
   | OK oeuf_cm =>
     match transf_c_to_cminor shim_code with
     | OK shim_cm =>

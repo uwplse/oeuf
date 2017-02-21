@@ -38,17 +38,7 @@ Section SIM.
   Variable st : Cminor.state.
   Hypothesis init_state : initial_state prog st.
 
-(*
-  Lemma genv_next_oprog :
-    Ple (Genv.genv_next (Genv.globalenv oprog)) (Genv.genv_next ge).
-  Proof.
-    copy LINKED.
-    unfold oprog.
-    unfold ge. unfold prog.
-    eapply Linker.genv_next_Ple; eauto.
-  Qed.
- *)
-
+  
   Lemma Plt_one_succ :
     forall x,
       Plt 1 (Pos.succ x).
@@ -274,6 +264,7 @@ Section SIM.
     unfold MatchValues.I_id.
     unfold Init.Nat.pred. unfold Pos.to_nat. unfold Pos.of_succ_nat.
     unfold Pos.iter_op. unfold MatchValues.id_key_assoc.
+
 
     
     admit. (* Is this one of those things about the interning table? *)
