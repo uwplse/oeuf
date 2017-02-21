@@ -9,8 +9,7 @@ int main() {
   struct closure* id_closure = malloc(4);
   id_closure->f = id;
 
-    
-  union nat* result = call(id_closure,zero_value);
+  union nat* result = (((struct closure*)id_closure)->f)(id_closure, zero_value);
   if (result->tag == 0) {
     printf("Yes\n");
   }
