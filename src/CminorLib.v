@@ -16,6 +16,7 @@ Require Import OeufProof.
 Require Cmajor.
 
 Require Import HighValues.
+Require Import compcert.lib.Maps.
 
 Lemma init_mem_global_blocks_almost_valid :
   forall {A B} (prog : AST.program A B) m,
@@ -30,6 +31,242 @@ Proof.
   erewrite Genv.genv_next_add_globals. simpl.
   reflexivity.
 Qed.
+
+
+Definition only_ge_pointers {A B} (ge : Genv.t A B) (m : mem) : Prop :=
+  forall b,
+    Plt b (Mem.nextblock m) ->
+    forall ofs b' q n ofs',
+      ZMap.get ofs (Mem.mem_contents m) !! b = Fragment (Vptr b' ofs') q n ->
+      exists id,
+        Genv.find_symbol ge id = Some b'.
+
+
+Lemma mem_contents_alloc :
+  forall m lo hi m' b,
+    Mem.alloc m lo hi = (m',b) ->
+    Mem.mem_contents m' = PMap.set (Mem.nextblock m) (ZMap.init Undef)
+                                   (Mem.mem_contents m).
+Proof.
+  (* needs memory internals *)
+Admitted.
+
+Lemma only_ge_pointers_alloc :
+  forall {A B} (ge : Genv.t A B) m lo hi m' b,
+    only_ge_pointers ge m ->
+    Mem.alloc m lo hi = (m',b) ->
+    only_ge_pointers ge m'.
+Proof.
+  intros.
+  copy H0. eapply Mem.nextblock_alloc in H1.
+  eapply mem_contents_alloc in H0.
+  unfold only_ge_pointers in *.
+  rewrite H0.
+  intros.
+  rewrite H1 in *.
+  eapply Plt_succ_inv in H2.
+  break_or.
+  copy H2.
+  eapply Plt_ne in H2.
+  rewrite PMap.gso in H3 by congruence.
+  eapply H; eauto.
+
+  subst b0.
+  rewrite PMap.gss in H3.
+  rewrite ZMap.gi in H3.
+  congruence.
+Qed.
+
+
+Lemma only_ge_pointers_drop_perm :
+  forall {A B} (ge : Genv.t A B) m b lo hi p m',
+    only_ge_pointers ge m ->
+    Mem.drop_perm m b lo hi p = Some m' ->
+    only_ge_pointers ge m'.
+Proof.
+  intros.
+  unfold Mem.drop_perm in *.
+  break_match_hyp; try congruence.
+  unfold only_ge_pointers in *.
+  intros. inv H0. simpl in *. clear H0.
+  eapply H; eauto.
+Qed.
+
+Lemma only_ge_pointers_store :
+  forall {A B} (ge : Genv.t A B) m,
+    only_ge_pointers ge m ->
+    forall v,
+      match v with
+      | Vptr b _ => exists id, Genv.find_symbol ge id = Some b
+      | _ => True
+      end ->
+      forall b ofs c m',
+        Mem.store c m b ofs v = Some m' ->
+        only_ge_pointers ge m'.
+Proof.
+  intros.
+  unfold only_ge_pointers in *.
+  intros.
+  copy H1.
+  eapply Mem.nextblock_store in H4.
+  eapply Mem.store_mem_contents in H1.
+  rewrite H1 in H3. clear H1.
+  destruct (peq b b0).
+  Focus 2. rewrite PMap.gso in H3 by congruence.
+  eapply H; eauto.
+  congruence.
+
+  subst. rewrite PMap.gss in H3.
+
+  assert (ofs <= ofs0 < ofs + Z.of_nat (length (encode_val c v)) \/ (ofs0 < ofs \/ ofs0 >= ofs + Z.of_nat (length (encode_val c v)))) by omega.
+
+  break_or.
+  Focus 2.
+  rewrite Mem.setN_outside in H3; try omega.
+  eapply H; eauto. congruence.
+  
+  eapply Mem.setN_in in H1; eauto.
+  rewrite H3 in H1.
+  destruct v; destruct c; simpl in H1;
+    try unfold inj_bytes in *; try unfold encode_int in *;
+      try unfold rev_if_be in *; try unfold bytes_of_int in *;
+        match goal with
+        | [ H : context[Archi.big_endian] |- _ ] => destruct Archi.big_endian; simpl in H
+        | [ |- _ ] => idtac
+        end;
+  repeat match goal with
+         | [ H : False |- _ ] => inversion H
+         | [ H : _ = _ \/ _ |- _ ] => destruct H; try congruence
+         end;
+  try solve [break_exists; inv H1; eauto].
+Qed.
+
+Lemma only_ge_pointers_store_init_data_list :
+  forall {A B} (ge : Genv.t A B) l m b ofs m',
+    only_ge_pointers ge m ->
+    Genv.store_init_data_list ge m b ofs l = Some m' ->
+    only_ge_pointers ge m'.
+Proof.
+  induction l; intros.
+  simpl in H0. inv H0. assumption.
+  simpl in H0. break_match_hyp; try congruence.
+  unfold Genv.store_init_data in Heqo.
+  cut (only_ge_pointers ge m0); eauto.
+  clear H0.
+  repeat (break_match_hyp; try congruence); subst;
+    try solve [eapply only_ge_pointers_store; eauto;
+               simpl; eauto].
+  inv Heqo.
+  assumption.
+Qed.
+
+Lemma only_ge_pointers_store_zeros :
+  forall {A B} (ge : Genv.t A B) m,
+    only_ge_pointers ge m ->
+    forall b lo hi m',
+      store_zeros m b lo hi = Some m' ->
+      only_ge_pointers ge m'.
+Proof.
+  intros until m'.
+  functional induction (store_zeros m b lo hi); intros.
+  inv H0. assumption.
+  eapply IHo; eauto.
+  eapply only_ge_pointers_store; eauto.
+  simpl. exact I.
+  congruence.
+Qed.
+
+Lemma alloc_global_only_ge_pointers :
+  forall {A B} a (ge : Genv.t A B) m,
+    only_ge_pointers ge m ->
+    forall m',
+      Genv.alloc_global ge m a = Some m' ->
+      only_ge_pointers ge m'.
+Proof.
+  intros.
+  unfold Genv.alloc_global in *.
+  repeat (break_match_hyp; try congruence); subst;
+    intros.
+  eapply only_ge_pointers_drop_perm; try eapply H0.
+  eapply only_ge_pointers_alloc; eauto.
+  eapply only_ge_pointers_drop_perm; try eapply H0.
+  eapply only_ge_pointers_store_init_data_list; try eapply Heqo0.
+  eapply only_ge_pointers_store_zeros; try eapply Heqo.
+  eapply only_ge_pointers_alloc; eauto.
+Qed.
+
+
+Lemma alloc_globals_only_ge_pointers :
+  forall {A B} l (ge : Genv.t A B) m,
+    only_ge_pointers ge m ->
+    forall m',
+      Genv.alloc_globals ge m l = Some m' ->
+      only_ge_pointers ge m'.
+Proof.
+  induction l; intros.
+  simpl in H0. inv H0. assumption.
+  simpl in H0. break_match_hyp; try congruence.
+  eapply IHl in H0; eauto.
+  eapply alloc_global_only_ge_pointers; eauto.
+Qed.
+
+
+Lemma init_mem_no_future_pointers :
+  forall {A B} (prog : AST.program A B) m,
+    Genv.init_mem prog = Some m ->
+    HighValues.no_future_pointers m.
+Proof.
+  intros.
+  copy H.
+  unfold Genv.init_mem in H.
+  eapply alloc_globals_only_ge_pointers in H; eauto.
+  
+
+  unfold no_future_pointers.
+  unfold only_ge_pointers in H.
+  intros. eapply H in H1; eauto.
+  break_exists. clear H.
+  eapply init_mem_global_blocks_almost_valid in H0.
+  rewrite <- H0 in *.
+  unfold Genv.find_symbol in H1.
+  eapply Genv.genv_symb_range in H1.
+  assumption.
+
+
+  unfold only_ge_pointers.
+  clear H0.
+  intros. unfold Mem.empty in H1. simpl in H1.
+  rewrite PMap.gi in H1.
+  rewrite ZMap.gi in H1. congruence.
+  
+Qed.
+
+
+Lemma no_future_pointers_alloc :
+  forall m,
+    no_future_pointers m ->
+    forall lo hi m' b,
+      Mem.alloc m lo hi = (m',b) ->
+      no_future_pointers m'.
+Proof.
+Admitted.
+
+Lemma no_future_pointers_store :
+  forall m,
+    no_future_pointers m ->
+    forall v,
+      match v with
+      | Vptr b _ => Plt b (Mem.nextblock m)
+      | _ => True
+      end ->
+      forall c b ofs m',
+        Mem.store c m b ofs v = Some m' ->
+        no_future_pointers m'.
+Proof.
+Admitted.
+    
+
+
   
 (* useful? *)
 Inductive mem_chain (m : mem) : mem -> Prop :=

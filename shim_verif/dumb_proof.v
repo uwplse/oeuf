@@ -49,6 +49,17 @@ Section SIM.
   Qed.
  *)
 
+  Lemma Plt_one_succ :
+    forall x,
+      Plt 1 (Pos.succ x).
+  Proof.
+    induction x; intros.
+    simpl. econstructor; eauto.
+    simpl. econstructor; eauto.
+    eapply Plt_succ.
+  Qed.
+
+  
   Lemma Plt_Ple_succ :
     forall x y,
       Ple x y ->
@@ -214,8 +225,22 @@ Section SIM.
       do 3 (eapply Plt_trans_succ; eauto).
       eapply Plt_Ple_succ; eauto.
 
-      
-      admit. (* no_future_pointers *)
+
+      eapply no_future_pointers_alloc; try eapply Heqp2.
+      eapply no_future_pointers_store; try eapply e2.
+      eapply no_future_pointers_store; try eapply e1.
+      eapply no_future_pointers_alloc; try eapply Heqp1.
+      eapply no_future_pointers_store; try eapply e0.
+      eapply no_future_pointers_store; try eapply e.
+      eapply no_future_pointers_alloc; try eapply Heqp0.
+      eapply no_future_pointers_alloc; try eapply Heqp.
+      eapply init_mem_no_future_pointers; eauto.
+      simpl. eauto. simpl. eauto. simpl. eauto.
+      simpl.
+      eapply Mem.nextblock_alloc in Heqp1.
+      eapply Mem.nextblock_store in e1. rewrite e1. rewrite Heqp1.
+
+      eapply Plt_one_succ.
 
       econstructor; eauto. simpl. left. reflexivity.
       econstructor. eauto.
@@ -355,7 +380,7 @@ Section SIM.
     
     eapply Linker.star_step_sim in H11; try eapply H13; try eapply dumb_axioms.LINKED.
 
-    instantiate (1 := prog) in H11. unfold Linker.link_ge in H11. unfold ge.
+    unfold Linker.link_ge in H11. unfold ge.
 
     break_exists. break_and.
     eapply estar_left_app; nil_trace. split. eassumption.
