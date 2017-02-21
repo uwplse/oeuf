@@ -137,11 +137,8 @@ Section SIM.
     take_step.
     take_step.
     take_step.
-    take_step.
-    alloc.
-    take_step.
-    take_step.
     load_step.
+
     (* TODO: wrap following stuff in load_step *)
     unfold Genv.find_funct.
     unfold Genv.find_funct_ptr.
@@ -161,8 +158,8 @@ Section SIM.
     end.
 
     (* give nice names to the oeuf and linked states *)
-    remember (Callstate (AST.Internal f_id) (Vptr b1 (Integers.Int.repr 0) :: Vptr b0 (Integers.Int.repr 0) :: nil) K m3) as LST.
-    remember (Callstate (AST.Internal f_id) (Vptr b1 (Integers.Int.repr 0) :: Vptr b0 (Integers.Int.repr 0) :: nil) Kstop m3) as OST.
+    remember (Callstate (AST.Internal f_id) (Vptr b1 (Integers.Int.repr 0) :: Vptr b0 (Integers.Int.repr 0) :: nil) K x2) as LST.
+    remember (Callstate (AST.Internal f_id) (Vptr b1 (Integers.Int.repr 0) :: Vptr b0 (Integers.Int.repr 0) :: nil) Kstop x2) as OST.
     
 
     (* make sure it's a callstate *)
@@ -204,8 +201,7 @@ Section SIM.
       eapply Mem.nextblock_store in e0.
       eapply Mem.nextblock_alloc in Heqp1.
       eapply Mem.nextblock_store in e1.
-      eapply Mem.nextblock_store in e2.
-      eapply Mem.nextblock_alloc in Heqp2.
+      eapply Mem.nextblock_store in e2. 
       unfold HighValues.global_blocks_valid.
 
       assert (Ple (Genv.genv_next (Genv.globalenv oprog)) (Genv.genv_next ge)). {
@@ -217,16 +213,13 @@ Section SIM.
       } idtac.
 
       unfold ge in H6. rewrite H in H6.
-      rewrite Heqp2.
       rewrite e2. rewrite e1.
       rewrite Heqp1.
       rewrite e0. rewrite e.
       rewrite Heqp0. rewrite Heqp.
-      do 3 (eapply Plt_trans_succ; eauto).
+      do 2 (eapply Plt_trans_succ; eauto).
       eapply Plt_Ple_succ; eauto.
 
-
-      eapply no_future_pointers_alloc; try eapply Heqp2.
       eapply no_future_pointers_store; try eapply e2.
       eapply no_future_pointers_store; try eapply e1.
       eapply no_future_pointers_alloc; try eapply Heqp1.
@@ -359,8 +352,6 @@ Section SIM.
       econstructor.
       econstructor.
       econstructor.
-      econstructor.
-      econstructor.
       simpl. exact I.
       simpl. split; try split; exact I.
       simpl. exact I.
@@ -368,11 +359,6 @@ Section SIM.
       unfold Linker.env_lessdef. intros. eexists; split.
       eassumption. econstructor.
       simpl. repeat (try split; try exact I).
-      simpl. repeat (try split; try exact I).
-      econstructor.
-      unfold Linker.env_lessdef. intros. eexists; split.
-      eassumption. econstructor.
-      simpl. split; exact I.
       eapply Mem.extends_refl.
       simpl. exact I.
       simpl. split; exact I.
@@ -415,15 +401,15 @@ Section SIM.
     inversion H26. subst bargs. clear H26.
     inversion H9. subst x6. subst v.
     inversion H12. subst v. subst orig.
-    subst m5. subst x9.
+    subst m4. subst x9.
     inversion H14. subst v.
     subst k.
-    subst m5.
+    subst m4.
     subst x8.
     inversion H26. subst new.
     clear H26.
 
-    clear -H HeqK H25 H29 H15 H28 H Heqp Heqp0 e e0 Heqp1 e1 e2 Heqp2 H21.
+    clear -H HeqK H25 H29 H15 H28 H Heqp Heqp0 e e0 Heqp1 e1 e2 H21.
     
     rewrite HeqK in H28. clear HeqK.
     remember (Maps.PTree.set _id_closure (Vptr b1 (Integers.Int.repr 0))
@@ -436,11 +422,6 @@ Section SIM.
                                (set_locals (fn_vars f_main)
                                   (set_params nil (fn_params f_main))))))) as e_main.
 
-    remember (set_locals (fn_vars f_call)
-                (set_params
-                   (Vptr b1 (Integers.Int.repr 0)
-                    :: Vptr b0 (Integers.Int.repr 0) :: nil) 
-                   (fn_params f_call))) as e_call.
     
     inversion H28. subst k'.
     clear H28.
@@ -451,19 +432,14 @@ Section SIM.
     subst k s k'0.
     clear H4. clear H6.
 
-    inversion H2. subst f v e3 k k' oid.
-    clear H2. clear H12.
-
-    inversion H9. subst s k k'0. clear H4. clear H9.
-    inversion H2.
-    subst s k k'. clear H2.
-    clear H5.
+    inversion H2. subst k k' s.
+    clear H2. clear H5.
 
     inversion H3. subst k'0 k s. clear H3. clear H5.
     inversion H2. subst k'. clear H2.
 
-    inversion H7. inversion H10.
-    subst v v'1 v0 v'2. clear H7 H10.
+    inversion H7. 
+    subst v v'1. clear H7.
 
     inversion H15.
     subst v' n values.
@@ -480,52 +456,30 @@ Section SIM.
     take_step.
     take_step.
     
-    assert (exists mX,  Mem.free m' b2 0 (fn_stackspace f_call) = Some mX). {
-      admit.     (* We need to be able to free across Mem.extends *)
-    } idtac.
-
-    break_exists.
-
     take_step. unfold set_optvar. rewrite Maps.PTree.gss. reflexivity.
     take_step.
     take_step.
     take_step.
     unfold set_optvar. rewrite Maps.PTree.gss. reflexivity.
-    take_step.
-    take_step.
-    take_step.
-
-    rewrite Maps.PTree.gss. reflexivity.
-    instantiate (1 := Vzero).
-    admit. (* load across free *)
-
-    
-    unfold Val.cmp.
-    simpl. rewrite Integers.Int.eq_true.
-    econstructor.
-    unfold negb.
+    simpl. eassumption.
+    unfold Val.cmp. unfold Val.cmp_bool.
+    unfold Integers.Int.cmp.
+    unfold Val.of_optbool.
+    unfold Integers.Int.eq.
+    rewrite <- H21. unfold Z.of_nat.
+    replace (Integers.Int.repr 0) with (Integers.Int.zero) by auto.
+    rewrite Integers.Int.unsigned_zero.
+    rewrite zeq_true. unfold Vtrue.
+    econstructor; eauto.
     rewrite Integers.Int.eq_false.
     Focus 2.
-    admit. (* 1 <> 0 *)
-    
+    eapply Integers.Int.one_not_zero.
+    unfold negb.    
     take_step.
-    take_step.
-    
-    instantiate (1 := x3).
-    instantiate (1 := Vundef).
-    admit. (* external calls *)
 
-    take_step.
-    take_step.
-    assert (exists mX,
-               Mem.free x3 b 0 (fn_stackspace f_main) = Some mX).
-    admit. (* can free *)
 
-    break_exists.
-    take_step.
-    simpl.
+
     eexists. eapply Smallstep.star_refl.
-
     
 
   Admitted.
