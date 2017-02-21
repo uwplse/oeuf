@@ -182,6 +182,7 @@ Separate Extraction
    AST.transform_partial_ident_program
    Parser.translation_unit_file
    Oeuf.transf_whole_program
+   OeufIntern.transf_whole_program
    Pretty.compilation_unit.parse
    IdProg.oeuf_prog
 .
