@@ -117,100 +117,104 @@ Definition pos_add_with_carry (x y : positive) (c : bool) : positive :=
     positive_rect _
         (fun x IHx => fun y => positive_rect _
             (fun y IHy => fun c => bool_rect _
-                (IHx y true)~1
-                (IHx y true)~0
+                (fun dummy => (IHx y true dummy)~1)
+                (fun dummy => (IHx y true dummy)~0)
                 c)
             (fun y IHy => fun c => bool_rect _
-                (IHx y true)~0
-                (IHx y false)~1
+                (fun dummy => (IHx y true dummy)~0)
+                (fun dummy => (IHx y false dummy)~1)
                 c)
             (fun c => bool_rect _
-                (pos_succ x)~1
-                (pos_succ x)~0
+                (fun dummy => (pos_succ x)~1)
+                (fun dummy => (pos_succ x)~0)
                 c)
             y)
         (fun x IHx => fun y => positive_rect _
             (fun y IHy => fun c => bool_rect _
-                (IHx y true)~0
-                (IHx y false)~1
+                (fun dummy => (IHx y true dummy)~0)
+                (fun dummy => (IHx y false dummy)~1)
                 c)
             (fun y IHy => fun c => bool_rect _
-                (IHx y false)~1
-                (IHx y false)~0
+                (fun dummy => (IHx y false dummy)~1)
+                (fun dummy => (IHx y false dummy)~0)
                 c)
             (fun c => bool_rect _
-                (pos_succ x)~0
-                x~1
+                (fun dummy => (pos_succ x)~0)
+                (fun dummy => x~1)
                 c)
             y)
         (fun y => positive_rect _
             (fun y IHy => fun c => bool_rect _
-                (pos_succ y)~1
-                (pos_succ y)~0
+                (fun dummy => (pos_succ y)~1)
+                (fun dummy => (pos_succ y)~0)
                 c)
             (fun y IHy => fun c => bool_rect _
-                (pos_succ y)~0
-                y~1
+                (fun dummy => (pos_succ y)~0)
+                (fun dummy => y~1)
                 c)
             (fun c => bool_rect _
-                3
-                2
+                (fun dummy => 3)
+                (fun dummy => 2)
                 c)
             y)
-        x y c.
+        x y c tt.
 
 Lemma pos_add_with_carry_eq : forall x y c,
     pos_add_with_carry x y c = pos_add_with_carry0 x y c.
 induction x; destruct y; destruct c; simpl.
+all: unfold pos_add_with_carry; simpl;
+  try fold (pos_add_with_carry x y true);
+  try fold (pos_add_with_carry x y false).
+
 all: try rewrite IHx.
 all: reflexivity.
 Qed.
 
 Definition pos_add (x y : positive) : positive :=
-    positive_rect _
+    positive_rect (fun _ => positive -> bool -> unit -> positive)
         (fun x IHx => fun y => positive_rect _
             (fun y IHy => fun c => bool_rect _
-                (IHx y true)~1
-                (IHx y true)~0
+                (fun dummy => (IHx y true dummy)~1)
+                (fun dummy => (IHx y true dummy)~0)
                 c)
             (fun y IHy => fun c => bool_rect _
-                (IHx y true)~0
-                (IHx y false)~1
+                (fun dummy => (IHx y true dummy)~0)
+                (fun dummy => (IHx y false dummy)~1)
                 c)
             (fun c => bool_rect _
-                (pos_succ x)~1
-                (pos_succ x)~0
+                (fun dummy => (pos_succ x)~1)
+                (fun dummy => (pos_succ x)~0)
                 c)
             y)
         (fun x IHx => fun y => positive_rect _
             (fun y IHy => fun c => bool_rect _
-                (IHx y true)~0
-                (IHx y false)~1
+                (fun dummy => (IHx y true dummy)~0)
+                (fun dummy => (IHx y false dummy)~1)
                 c)
             (fun y IHy => fun c => bool_rect _
-                (IHx y false)~1
-                (IHx y false)~0
+                (fun dummy => (IHx y false dummy)~1)
+                (fun dummy => (IHx y false dummy)~0)
                 c)
             (fun c => bool_rect _
-                (pos_succ x)~0
-                x~1
+                (fun dummy => (pos_succ x)~0)
+                (fun dummy => x~1)
                 c)
             y)
         (fun y => positive_rect _
             (fun y IHy => fun c => bool_rect _
-                (pos_succ y)~1
-                (pos_succ y)~0
+                (fun dummy => (pos_succ y)~1)
+                (fun dummy => (pos_succ y)~0)
                 c)
             (fun y IHy => fun c => bool_rect _
-                (pos_succ y)~0
-                y~1
+                (fun dummy => (pos_succ y)~0)
+                (fun dummy => y~1)
                 c)
             (fun c => bool_rect _
-                3
-                2
+                (fun dummy => 3)
+                (fun dummy => 2)
                 c)
             y)
-        x y false.
+        x y false tt.
 
 Lemma pos_add_eq' : forall x y,
     pos_add x y = pos_add_with_carry x y false.
@@ -698,31 +702,33 @@ reflexivity.
 Qed.
 
 Definition pair_up' {A} (l : list A) (first : option A) : list (A * A) :=
-    list_rect (fun _ => option A -> list (A * A))
-        (fun first => [])
+    list_rect (fun _ => option A -> unit -> list (A * A))
+        (fun first => fun dummy => [])
         (fun y l' IHl => fun first =>
-            option_rect (fun _ => list (A * A))
-                (fun x => (x, y) :: IHl None)
-                (IHl (Some y))
+            option_rect (fun _ => unit -> list (A * A))
+                (fun x => fun dummy => (x, y) :: IHl None dummy)
+                (fun dummy => IHl (Some y) dummy)
                 first)
-        l first.
+        l first tt.
 
 Lemma pair_up'_eq : forall {A} (l : list A) first,
     pair_up' l first = pair_up'0 l first.
 induction l; destruct first; simpl; try reflexivity.
-- rewrite IHl. reflexivity.
-- rewrite IHl. reflexivity.
+- unfold pair_up'. simpl. fold (pair_up' l None).
+  rewrite IHl. reflexivity.
+- unfold pair_up'. simpl. fold (pair_up' l (Some a)).
+  rewrite IHl. reflexivity.
 Qed.
 
 Definition pair_up {A} (l : list A) : list (A * A) :=
-    list_rect (fun _ => option A -> list (A * A))
-        (fun first => [])
+    list_rect (fun _ => option A -> unit -> list (A * A))
+        (fun first dummy => [])
         (fun y l' IHl => fun first =>
-            option_rect (fun _ => list (A * A))
-                (fun x => (x, y) :: IHl None)
-                (IHl (Some y))
+            option_rect (fun _ => unit -> list (A * A))
+                (fun x dummy => (x, y) :: IHl None dummy)
+                (fun dummy => IHl (Some y) dummy)
                 first)
-        l None.
+        l None tt.
 
 Lemma pair_up_eq : forall {A} (l : list A),
     pair_up l = pair_up0 l.
@@ -1102,25 +1108,25 @@ Qed.
 
 
 Definition lt_16 (n : nat) : bool :=
-    nat_rect (fun _ => bool) true (fun n _ =>
-    nat_rect (fun _ => bool) true (fun n _ =>
-    nat_rect (fun _ => bool) true (fun n _ =>
-    nat_rect (fun _ => bool) true (fun n _ =>
-    nat_rect (fun _ => bool) true (fun n _ =>
-    nat_rect (fun _ => bool) true (fun n _ =>
-    nat_rect (fun _ => bool) true (fun n _ =>
-    nat_rect (fun _ => bool) true (fun n _ =>
-    nat_rect (fun _ => bool) true (fun n _ =>
-    nat_rect (fun _ => bool) true (fun n _ =>
-    nat_rect (fun _ => bool) true (fun n _ =>
-    nat_rect (fun _ => bool) true (fun n _ =>
-    nat_rect (fun _ => bool) true (fun n _ =>
-    nat_rect (fun _ => bool) true (fun n _ =>
-    nat_rect (fun _ => bool) true (fun n _ =>
-    nat_rect (fun _ => bool) true (fun n _ =>
+    nat_rect (fun _ => unit -> bool) (fun dummy => true) (fun n _ dummy =>
+    nat_rect (fun _ => unit -> bool) (fun dummy => true) (fun n _ dummy =>
+    nat_rect (fun _ => unit -> bool) (fun dummy => true) (fun n _ dummy =>
+    nat_rect (fun _ => unit -> bool) (fun dummy => true) (fun n _ dummy =>
+    nat_rect (fun _ => unit -> bool) (fun dummy => true) (fun n _ dummy =>
+    nat_rect (fun _ => unit -> bool) (fun dummy => true) (fun n _ dummy =>
+    nat_rect (fun _ => unit -> bool) (fun dummy => true) (fun n _ dummy =>
+    nat_rect (fun _ => unit -> bool) (fun dummy => true) (fun n _ dummy =>
+    nat_rect (fun _ => unit -> bool) (fun dummy => true) (fun n _ dummy =>
+    nat_rect (fun _ => unit -> bool) (fun dummy => true) (fun n _ dummy =>
+    nat_rect (fun _ => unit -> bool) (fun dummy => true) (fun n _ dummy =>
+    nat_rect (fun _ => unit -> bool) (fun dummy => true) (fun n _ dummy =>
+    nat_rect (fun _ => unit -> bool) (fun dummy => true) (fun n _ dummy =>
+    nat_rect (fun _ => unit -> bool) (fun dummy => true) (fun n _ dummy =>
+    nat_rect (fun _ => unit -> bool) (fun dummy => true) (fun n _ dummy =>
+    nat_rect (fun _ => unit -> bool) (fun dummy => true) (fun n _ dummy =>
     false)
-    n) n) n) n)  n) n) n) n)
-    n) n) n) n)  n) n) n) n.
+    n dummy) n dummy) n dummy) n dummy)  n dummy) n dummy) n dummy) n dummy)
+    n dummy) n dummy) n dummy) n dummy)  n dummy) n dummy) n dummy) n tt.
 
 Lemma lt_16_correct : forall n,
     lt_16 n = true <-> (n < 16)%nat.
