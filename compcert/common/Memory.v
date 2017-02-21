@@ -26,6 +26,8 @@
 - [free]: invalidate a memory block.
 *)
 
+
+
 Require Import Zwf.
 Require Import Axioms.
 Require Import Coqlib.
@@ -1657,6 +1659,18 @@ Variables lo hi: Z.
 Variable m2: mem.
 Variable b: block.
 Hypothesis ALLOC: alloc m1 lo hi = (m2, b).
+
+Theorem contents_alloc :
+    mem_contents m2 = PMap.set (nextblock m1) (ZMap.init Undef)
+                               (mem_contents m1).
+Proof.
+  unfold alloc in ALLOC.
+  simpl in ALLOC.
+  inversion ALLOC.
+  simpl.
+  reflexivity.
+Qed.
+
 
 Theorem nextblock_alloc:
   nextblock m2 = Psucc (nextblock m1).
