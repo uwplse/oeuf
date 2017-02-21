@@ -652,7 +652,7 @@ Section MatchValIndices2.
     unfold transf_untyped_to_fmajor in *.
     break_result_chain.
     rewrite FLATTRANSF in Heqr. inv Heqr.
-    unfold FmajorComp.compile_cu in *.
+    unfold FmajorComp.compile_cu_intern in *.
     break_bind_option. eauto.
   Defined.
 
@@ -678,7 +678,7 @@ Section FSIMflat.
   Proof.
     unfold transf_untyped_to_flat in FLATTRANSF. break_result_chain. eauto.
   Qed.
-  
+
   Definition fsim_flat : Semantics.forward_simulation (Untyped1.semantics u1p) (FlatIntTag.semantics flat).
     destruct compile_flat_succ.
     eapply Semantics.compose_forward_simulation;
@@ -727,7 +727,7 @@ Section FSIMfmajor.
     destruct compile_fmajor_succ.
     eapply MixSemantics.compose_notrace_mix_forward_simulation;
     try eapply fsim_flat; eauto;
-      try eapply FmajorComp.fsim; eauto.
+      try eapply FmajorComp.fsim_intern; eauto.
     unfold transf_untyped_to_fmajor in FMTRANSF.
     unfold transf_untyped_to_flat in *.
     break_result_chain. congruence.
@@ -750,7 +750,7 @@ Section FSIMfmajor.
       repeat progress (try eexists; try split);
       try eassumption; try congruence.
 
-    erewrite FmajorComp.match_val_eq.
+    erewrite FmajorComp.match_val_eq_intern.
     unfold FmajorComp.MM.
     destruct FmajorComp.build_list_succ.
     unfold MM. destruct build_list_succ.
@@ -1232,7 +1232,7 @@ Section OeufSimulation.
         unfold transf_untyped_to_fflatmajor in H;
         unfold transf_untyped_to_fmajor in H.
       break_result_chain.
-      unfold FmajorComp.compile_cu in *.
+      unfold FmajorComp.compile_cu_intern in *.
       repeat break_bind_option. rewrite flat_transf in Heqr6. fold FLAT in Heqr6.
       invc Heqr6.
       eauto.
