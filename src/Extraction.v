@@ -186,6 +186,7 @@ Separate Extraction
    OeufIntern.transf_whole_program
    Pretty.compilation_unit.parse
    IdProg.oeuf_prog
+   IdProg.idM
 .
 
 Cd "..".
