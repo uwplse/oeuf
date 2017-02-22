@@ -223,6 +223,135 @@ Ltac reflect_genv x :=
   (*fail 10 "reflect_genv" foo.*)
   exact foo.
 
+Ltac reflect_def_genv x :=
+  let x' := eval cbv delta [x] in x in
+  reflect_genv x'.
+
+
+
+
+Ltac wrap_lambdas basename x :=
+    lazymatch x with
+    (* Don't recurse into hhead/htail.  These are introduced only by the lifting
+       process itself, and they should never contain any lambdas. *)
+    | fun (h : hlist type_denote ?tys) (a : ?T) => hhead _ => x
+    | fun (h : hlist type_denote ?tys) (a : ?T) => htail _ => x
+
+    | fun (h : hlist type_denote ?tys) (a : ?T) => fun (b : ?U) => @?body h a b =>
+            let f_name := fresh basename "_lam0" in
+            let T_ty := reflect_type' T in
+            let f := constr:(fun (h : hlist type_denote (T_ty :: tys)) (b : U) =>
+                body (htail h) (hhead h) b) in
+            let f := eval cbv beta in f in
+            let f := wrap_lambdas f_name f in
+            constr:(fun (h : hlist type_denote tys) (a : type_denote T_ty) =>
+                let f_name := f in
+                f_name (hcons a h))
+
+    | fun (h : hlist type_denote ?tys) (a : ?T) => ?func ?arg =>
+            let func' := wrap_lambdas basename
+                (fun (h : hlist type_denote tys) (a : T) => func) in
+            let arg' := wrap_lambdas basename
+                (fun (h : hlist type_denote tys) (a : T) => arg) in
+            constr:(fun (h : hlist type_denote tys) (a : T) => (func' h a) (arg' h a))
+
+    | _ => x
+    end.
+
+(* Raise `let`s above one level of expression.  This can lift arbitrarily many
+   `let`s, but won't (usually) traverse more than one non-let expression. *)
+Ltac raise_lets1 x :=
+    lazymatch x with
+    | fun (ctx : ?CTX) => fun (a : ?A) => let y := @?y_val ctx in @?rest ctx a y =>
+            raise_lets1 (fun (ctx : CTX) => let y := y_val ctx in fun (a : A) => rest ctx a y)
+
+    | fun (ctx : ?CTX) => (let y := @?y_val ctx in @?rest ctx y) ?arg =>
+            raise_lets1 (fun (ctx : CTX) => let y := y_val ctx in (rest ctx y) arg)
+    | fun (ctx : ?CTX) => ?func (let y := @?y_val ctx in @?rest ctx y) =>
+            raise_lets1 (fun (ctx : CTX) => let y := y_val ctx in func (rest ctx y))
+
+    | fun (ctx : ?CTX) => let y := let z := @?z_val ctx in @?y_val ctx z in @?rest ctx y =>
+            raise_lets1 (fun (ctx : CTX) =>
+                let z := z_val ctx in
+                let y := y_val ctx z in
+                rest ctx y)
+
+    | fun (ctx : ?CTX) => let y := @?y_val ctx in @?rest ctx y =>
+            let Y := match type of y_val with CTX -> ?Y => Y end in
+            let rest' := constr:(fun (ctx : (Y * CTX)) => rest (snd ctx) (fst ctx)) in
+            let rest' := eval cbv beta in rest' in
+            let rest' := raise_lets1 rest' in
+            let x' := constr:(fun (ctx : CTX) => let y := y_val ctx in rest' (y, ctx)) in
+            let x' := eval cbv beta iota delta [fst snd] in x' in
+            x'
+
+    | _ => x
+    end.
+
+Ltac raise_lets x :=
+    lazymatch x with
+    | fun (ctx : ?CTX) => fst _ => x
+    | fun (ctx : ?CTX) => snd _ => x
+    | fun (ctx : ?CTX) => hhead _ => x
+    | fun (ctx : ?CTX) => htail _ => x
+    | fun (ctx : ?CTX) => hcons _ _ => x
+
+    | fun (ctx : ?CTX) => fun (a : ?A) => @?body ctx a =>
+            let body' := constr:(fun (ctx : (A * CTX)) => body (snd ctx) (fst ctx)) in
+            let body' := eval cbv beta in body' in
+            let body' := raise_lets body' in
+            let x' := constr:(fun (ctx : CTX) (a : A) => body' (a, ctx)) in
+            let x' := eval cbv beta iota delta [fst snd] in x' in
+            raise_lets1 x'
+
+    | fun (ctx : ?CTX) => ?f ?a =>
+            let f := constr:(fun (ctx : CTX) => f) in
+            let f := raise_lets f in
+            let a := constr:(fun (ctx : CTX) => a) in
+            let a := raise_lets a in
+
+            let x' := constr:(fun (ctx : CTX) => (f ctx) (a ctx)) in
+            let x' := eval cbv beta in x' in
+            raise_lets1 x'
+
+    | fun (ctx : ?CTX) => let y := @?y_val ctx in @?rest ctx y =>
+            let y_val' := raise_lets y_val in
+
+            let Y := match type of y_val with CTX -> ?Y => Y end in
+            let rest' := constr:(fun (ctx : (Y * CTX)) => rest (snd ctx) (fst ctx)) in
+            let rest' := eval cbv beta in rest' in
+            let rest' := raise_lets rest' in
+
+            let x' := constr:(fun (ctx : CTX) => let y := y_val' ctx in rest' (y, ctx)) in
+            let x' := eval cbv beta iota delta [fst snd] in x' in
+            raise_lets1 x'
+
+    | fun (ctx : ?CTX) => @?y ctx => x
+    end.
+
+Ltac lift_lambdas' name a :=
+    let a := constr:(fun (h : hlist type_denote []) => a) in
+
+    (* wrap lambdas in lets *)
+    let b := wrap_lambdas name a in
+    let b := eval cbv beta in b in
+    let b := constr:(let name := b in name) in
+
+    (* raise lets to top level *)
+    let c := constr:(fun (ctx : unit) => b) in
+    let c := raise_lets c in
+    let c := eval cbv beta iota delta [fst snd] in c in
+
+    (* claenup *)
+    let d := eval cbv beta in (c tt) in
+    d.
+
+Ltac lift_lambdas name x := let x := lift_lambdas' name x in exact x.
+
+Ltac lift_def_lambdas name x :=
+    let x := eval cbv delta [x] in x in
+    lift_lambdas name x.
+
 
 
 
@@ -234,6 +363,14 @@ Definition church_bool_true :=
 Definition church_bool_false :=
   fun (a b : nat) => b.
 
+Definition church_bool_true_lifted' := ltac:(lift_def_lambdas church_bool_true_ church_bool_true).
+Print church_bool_true_lifted'.
+
+Lemma church_bool_true_lifted'_eq :
+    church_bool_true_lifted' hnil = church_bool_true.
+reflexivity.
+Qed.
+
 
 Local Notation "t1 '~>' t2" := (Arrow t1 t2) (right associativity, at level 100, only parsing).
 Local Notation "'N'" := (ADT Tnat) (only parsing).
@@ -244,16 +381,15 @@ Definition church_bool_true_lifted :=
   let outer := fun (h : hlist type_denote []) a => inner (hcons a hnil) in
   outer.
 
-Definition church_bool_true_inner : body_expr [] (N, [N], N) :=
-  Var (There Here).
+Definition church_bool_true_genv := ltac:(reflect_def_genv church_bool_true_lifted).
+Print church_bool_true_genv.
 
-Definition church_bool_true_outer : body_expr [(N, [N], N)] (N, [], N ~> N) :=
-  Close Here (hcons (Var Here) hnil).
+Lemma church_bool_true_genv_eq :
+    hget (genv_denote church_bool_true_genv) Here =
+    church_bool_true_lifted.
+reflexivity.
+Qed.
 
-Definition church_bool_true_genv :=
-  GenvCons church_bool_true_outer (
-  GenvCons church_bool_true_inner
-  GenvNil).
 
 (*
 Eval compute in hhead (genv_denote church_bool_true_genv) hnil.
