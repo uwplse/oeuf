@@ -57,9 +57,12 @@ Qed.
 Definition oeuf_prog : CompilationUnit.compilation_unit := CompilationUnit.singleton id_id "id".
 
 (* Hand rolled for now *)
-Definition idM : list (MatchValues.id_key * AST.ident) :=
-  ((MatchValues.IkFunc 0), (106%positive)) :: nil.
-
+Definition idM :=  ((MatchValues.IkArg, 114%positive)
+     :: (MatchValues.IkSelf, 113%positive)
+     :: (MatchValues.IkSwitchTarget, 112%positive)
+     :: (MatchValues.IkVar 0, 111%positive)
+     :: (MatchValues.IkFunc 0, 106%positive)
+     :: (MatchValues.IkMalloc, 81%positive) :: nil)%list.
 
 (*
 Oeuf Eval lazy Then Write To File "dumb.oeuf"
