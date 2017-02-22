@@ -21,7 +21,7 @@ Require Import NewCont.
 Require Import EricTact.
 Require Import StuartTact.
 
-Require Import OeufProof.
+Require Import OeufProofIntern.
 
 
 Require Cmajor.
@@ -236,7 +236,7 @@ Section SIM.
     
     (* establish matching callstates *)
     copy H5.
-    eapply (OeufProof.oeuf_match_callstate Dumb.oeuf_prog _ dumb_axioms.TRANSF) in H5.
+    eapply (OeufProofIntern.oeuf_match_callstate Dumb.oeuf_prog _ Dumb.idM dumb_axioms.TRANSF) in H5.
     
     Focus 2. instantiate (1 := SID).
     unfold match_values.
@@ -261,12 +261,6 @@ Section SIM.
     econstructor; eauto.
     split. econstructor; eauto.
     econstructor; eauto.
-    unfold MatchValues.I_id.
-    unfold Init.Nat.pred. unfold Pos.to_nat. unfold Pos.of_succ_nat.
-    unfold Pos.iter_op. unfold MatchValues.id_key_assoc.
-
-    
-    admit. (* Is this one of those things about the interning table? *)
 
     
     Focus 2.
@@ -287,7 +281,7 @@ Section SIM.
     repeat break_exists. repeat break_and.
     
     (* use matching states to step *)
-    eapply OeufProof.oeuf_star_simulation in H5.
+    eapply OeufProofIntern.oeuf_star_simulation in H5.
     Focus 2. subst SID. subst SZero.
 
     clear -H7. inversion H7.
@@ -315,7 +309,7 @@ Section SIM.
     } idtac.
 
     repeat progress (try break_exists; try break_and).
-    eapply OeufProof.oeuf_match_final_states in H9; try eassumption.
+    eapply OeufProofIntern.oeuf_match_final_states in H9; try eassumption.
     break_exists; break_and.
     
 
@@ -470,8 +464,6 @@ Section SIM.
 
 
     eexists. eapply Smallstep.star_refl.
-    
-
-  Admitted.
+  Qed.    
 
 End SIM.
