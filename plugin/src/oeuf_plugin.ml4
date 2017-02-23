@@ -291,6 +291,16 @@ let rec split_at n xs =
                 let (l, r) = split_at (n - 1) xs in
                 (x :: l, r)
 
+let rec split_while p xs =
+    match xs with
+    | [] -> ([], [])
+    | x :: xs ->
+            if p x then
+                let (l, r) = split_while p xs in
+                (x :: l, r)
+            else
+                ([], x :: xs)
+
 
 let arrow_arg ty =
     match ty with
@@ -303,7 +313,26 @@ let arrow_ret ty =
     | _ -> raise (Reflect_error "not enough arrows in function type")
 
 
+let is_type evars env e =
+    let (_, ty) = Typing.type_of env evars e in
+    match Constr.kind ty with
+    | Constr.Sort _ -> true
+    | _ -> false
+
+
 module StrSet = Set.Make(String)
+
+let unfold_constr env c : Term.constr =
+    match Constr.kind c with
+    | Constr.Const (const, univ) ->
+            let const_body = Environ.lookup_constant const env in
+            let subst_body = match const_body.const_body with
+                | Declarations.Def subst_body -> subst_body
+                | _ -> raise (Reflect_error
+                    (Format.sprintf "can't get body for Const %s" (string_of_constr c)))
+            in
+            Mod_subst.force_constr subst_body
+    | _ -> c
 
 let reflect_expr evars env c : func list * expr =
     let env0 = env in
@@ -382,7 +411,26 @@ let reflect_expr evars env c : func list * expr =
              * special handling.  then apply the result to any leftover args. *)
             let (func, args) = match what_is_this func with
                 | NormalFunc ->
-                        (go' func, args)
+                        let (ty_params, args) = split_while (is_type evars env) args in
+
+                        if List.length ty_params == 0 then (go' func, args)
+                        else
+                            (* this is the application of a polymorphic
+                             * function to some type parameters.  unfold the
+                             * definition of the function, then normalize away
+                             * the type variables. *)
+                            let func' = unfold_constr env func in
+                            let mono = Constr.mkApp (func', Array.of_list ty_params) in
+                            let mono = Reduction.nf_betaiota env mono in
+                            if Constr.equal mono c then
+                                raise (Reflect_error (Format.sprintf
+                                    "failed to monomorphize application: %s"
+                                    (string_of_constr c)))
+                            else
+                                Format.eprintf "monomorphized: %s ==> %s\n"
+                                    (string_of_constr c)
+                                    (string_of_constr mono);
+                                (go' mono, args)
 
                 | DataConstr (ctor, ct, num_params, num_fields) ->
                         (* `args` are the arguments to the Constr.
