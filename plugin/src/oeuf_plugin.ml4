@@ -19,6 +19,8 @@ let rec app_full trm acc =
 
 let pp_constr fmt x = Pp.pp_with fmt (Printer.pr_constr x)
 
+let string_of_constr c = Format.asprintf "%a" pp_constr c
+
 let bad_arg msg trm =
   let msg = Format.asprintf "%s: %a" msg pp_constr trm in
   raise (Invalid_argument msg)
@@ -196,22 +198,29 @@ let pkg_sourcelifted = ["SourceLifted"]
 let pkg_compilation_unit = ["CompilationUnit"]
 
 
-let type_names : (string list * string * string option * int) list = [
-    (pkg_datatypes, "nat", None, 0);
-    (pkg_datatypes, "bool", None, 0);
-    (pkg_datatypes, "list", None, 1);
-    (pkg_datatypes, "unit", None, 0);
-    (pkg_datatypes, "prod", Some "Tpair", 2)
+let type_defns : (string list * string * string option * int * (string * int) list) list = [
+    (* module, type name, reflected type name, number of params, (constructor, num fields) list *)
+    (pkg_datatypes, "nat", None, 0, 
+        [("O", 0); ("S", 1)]);
+    (pkg_datatypes, "bool", None, 0,
+        [("true", 0); ("false", 0)]);
+    (pkg_datatypes, "list", None, 1,
+        [("nil", 0); ("cons", 2)]);
+    (pkg_datatypes, "unit", None, 0,
+        [("tt", 0)]);
+    (pkg_datatypes, "prod", Some "pair", 2,
+        [("pair", 2)])
 ]
+
 
 let tyn_map = init_once (fun () ->
     List.map
-        (fun (pkg, name, rname, params) ->
+        (fun (pkg, name, rname, params, _ctor_names) ->
             let denotation = resolve_symbol pkg name in
-            let refl_name = Option.default (String.concat "" ["T"; name]) rname in
+            let refl_name = String.concat "" ["T"; Option.default name rname] in
             let reflection = resolve_symbol pkg_utopia refl_name in
             (denotation, (reflection, params)))
-    type_names)
+    type_defns)
 
 let lookup_tyn c = constr_assoc c (tyn_map ())
 
@@ -222,53 +231,33 @@ let get_tyn c =
     | Some x -> x
 
 
-let ctor_names : (string list * string * string option * int) list = [
-    (pkg_datatypes, "O", None, 0);
-    (pkg_datatypes, "S", None, 0);
-    (pkg_datatypes, "true", None, 0);
-    (pkg_datatypes, "false", None, 0);
-    (pkg_datatypes, "nil", None, 1);
-    (pkg_datatypes, "cons", None, 1);
-    (pkg_datatypes, "tt", None, 0);
-    (pkg_datatypes, "pair", None, 2)
-]
+type what =
+      NormalFunc
+    (* ctor, ct, num_params, num_fields *)
+    | DataConstr of Term.constr * Term.constr * int * int
+    (* base_ty, elim, num_params, num_cases *)
+    | Eliminator of Term.constr * Term.constr * int * int
 
-let ctor_map = init_once (fun () ->
-    List.map
-        (fun (pkg, name, rname, params) ->
-            let denotation = resolve_symbol pkg name in
-            let refl_name = Option.default (String.concat "" ["C"; name]) rname in
-            let reflection = resolve_symbol pkg_utopia refl_name in
-            (denotation, (reflection, params)))
-    ctor_names)
+let what_map = init_once (fun () ->
+    List.flatten (List.map (fun (pkg, name, rname, params, ctors) ->
+        (List.map (fun (ctor_name, fields) ->
+            let func = resolve_symbol pkg ctor_name in
+            let ctor = resolve_symbol pkg_utopia ("C" ^ ctor_name) in
+            let ct = resolve_symbol pkg_sourcevalues ("CT" ^ ctor_name) in
+            (func, DataConstr (ctor, ct, params, fields))) ctors))
+    type_defns)
+    @
+    List.map (fun (pkg, name, rname, params, ctors) ->
+        let rname = Option.default name rname in
+        let func = resolve_symbol pkg (name ^ "_rect") in
+        let ty = resolve_symbol pkg name in
+        let elim = resolve_symbol pkg_sourcelifted ("E" ^ String.capitalize rname) in
+        (func, Eliminator (ty, elim, params, List.length ctors)))
+    type_defns
+)
 
-let lookup_ctor c = constr_assoc c (ctor_map ())
-
-let get_ctor c =
-    match lookup_ctor c with
-    | None -> raise (Reflect_error
-        (Format.asprintf "no matching constr_name for %a" pp_constr c))
-    | Some x -> x
-
-let ct_map = init_once (fun () ->
-    List.map
-        (fun (pkg, name, rname, _params) ->
-            let denotation = resolve_symbol pkg name in
-            let refl_name = Option.default (String.concat "" ["CT"; name]) rname in
-            let reflection = resolve_symbol pkg_sourcevalues refl_name in
-            (denotation, reflection))
-    ctor_names)
-
-let lookup_ct c = constr_assoc c (ct_map ())
-
-let get_ct c =
-    match lookup_ct c with
-    | None -> raise (Reflect_error
-        (Format.asprintf "no matching constr_name for %a" pp_constr c))
-    | Some x -> x
-
-
-
+let what_is_this c =
+    Option.default NormalFunc (constr_assoc c (what_map ()))
 
 
 
@@ -279,12 +268,28 @@ let free_list free =
         | ty :: tys -> Var (ty, n) :: go (n + 1) tys
     in go 0 free
 
+let rec firstn n xs =
+    if n == 0 then []
+    else
+        match xs with
+        | [] -> []
+        | x :: xs -> x :: firstn (n - 1) xs
+
 let rec skipn n xs =
     if n == 0 then xs
     else
         match xs with
         | [] -> []
         | _ :: xs -> skipn (n - 1) xs
+
+let rec split_at n xs =
+    if n == 0 then ([], xs)
+    else
+        match xs with
+        | [] -> ([], [])
+        | x :: xs ->
+                let (l, r) = split_at (n - 1) xs in
+                (x :: l, r)
 
 
 let arrow_arg ty =
@@ -296,6 +301,7 @@ let arrow_ret ty =
     match ty with
     | Arrow (_, ret) -> ret
     | _ -> raise (Reflect_error "not enough arrows in function type")
+
 
 let reflect_expr evars env c : func list * expr =
     (*constr_map ();*)
@@ -340,25 +346,55 @@ let reflect_expr evars env c : func list * expr =
 
         | Constr.App (func, args) -> begin
             let args = Array.to_list args in
-            match lookup_ctor func with
-            | None ->
-                    let rec build_app (func : expr) (args : Term.constr list) : expr =
-                        match args with
-                        | [] -> func
-                        | arg :: args ->
-                                let func_ty = expr_ty func in
-                                let func' = App (arrow_arg func_ty, arrow_ret func_ty,
-                                    func, go' arg) in
-                                build_app func' args
-                    in
-                    build_app (go' func) args
-            | Some (ctor, params) ->
-                    let args = skipn params args in
-                    let arg_tys = List.map (fun arg ->
-                        let (_, ty_c) = Typing.type_of env evars arg in
-                        reflect_type ty_c) args in
-                    let ct = get_ct func in
-                    Constr (ty_c, ctor, arg_tys, ct, List.map go' args)
+            (* look at the head of the application, and consume some args for
+             * special handling.  then apply the result to any leftover args. *)
+            let (func, args) = match what_is_this func with
+                | NormalFunc ->
+                        (go' func, args)
+
+                | DataConstr (ctor, ct, num_params, num_fields) ->
+                        (* `args` are the arguments to the Constr.
+                         * `args'` are the leftovers. *)
+                        let (params, args') = split_at num_params args in
+                        let (args, args') = split_at num_fields args in
+
+                        let arg_tys = List.map (fun arg ->
+                            let (_, ty_c) = Typing.type_of env evars arg in
+                            reflect_type ty_c) args in
+                        (Constr (ty_c, ctor, arg_tys, ct, List.map go' args),
+                         args')
+
+                | Eliminator (base_tyn, elim, num_params, num_ctors) ->
+                        let (params, args) = split_at num_params args in
+                        let ([motive], args) = split_at 1 args in
+                        let (cases, args) = split_at num_ctors args in
+                        let ([target], args) = split_at 1 args in
+
+                        let case_tys = List.map (fun case ->
+                            let (_, ty_c) = Typing.type_of env evars case in
+                            reflect_type ty_c) cases in
+                        let target_tyn = Constr.mkApp (base_tyn, Array.of_list params) in
+                        let env' = Environ.push_rel (Name.Anonymous, None, target_tyn) env in
+                        (* compute the return type by applying the motive to...
+                         * nothing. hope it doesn't actually use its argument! *)
+                        let ret_ty_c = Reduction.whd_betaiotazeta env'
+                            (Constr.mkApp (motive, Array.of_list [Constr.mkRel 1])) in
+                        let ret_ty = reflect_type ret_ty_c in
+
+                        (Elim (case_tys, target_tyn, ret_ty, elim, List.map go' cases, go' target),
+                         args)
+            in
+            Format.eprintf "apply %s to %d args\n" (string_of_expr func) (List.length args);
+            let rec build_app (func : expr) (args : Term.constr list) : expr =
+                match args with
+                | [] -> func
+                | arg :: args ->
+                        let func_ty = expr_ty func in
+                        let func' = App (arrow_arg func_ty, arrow_ret func_ty,
+                            func, go' arg) in
+                        build_app func' args
+            in
+            build_app func args
         end
 
         | _ ->
@@ -373,6 +409,11 @@ let reflect_expr evars env c : func list * expr =
 
 let c_adt = init_once (fun () -> resolve_symbol pkg_sourcevalues "ADT")
 let c_arrow = init_once (fun () -> resolve_symbol pkg_sourcevalues "Arrow")
+
+let tyn_params c : Term.constr list =
+    match Constr.kind c with
+    | Constr.App (_, params) -> Array.to_list params
+    | _ -> []
 
 let rec emit_tyn c : Term.constr =
     match Constr.kind c with
@@ -390,9 +431,6 @@ let rec emit_ty ty : Term.constr =
     | ADT tyn_c -> mk c_adt [emit_tyn tyn_c]
     | Arrow (ty1, ty2) ->
             mk c_arrow [emit_ty ty1; emit_ty ty2]
-
-
-let string_of_constr c = Format.asprintf "%a" pp_constr c
 
 
 let c_tt = init_once (fun () -> resolve_symbol pkg_datatypes "tt")
@@ -431,6 +469,7 @@ let c_var = init_once (fun () -> resolve_symbol pkg_sourcelifted "Var")
 let c_app = init_once (fun () -> resolve_symbol pkg_sourcelifted "App")
 let c_constr = init_once (fun () -> resolve_symbol pkg_sourcelifted "Constr")
 let c_close = init_once (fun () -> resolve_symbol pkg_sourcelifted "Close")
+let c_elim = init_once (fun () -> resolve_symbol pkg_sourcelifted "Elim")
 
 let c_compilation_unit = init_once (fun () ->
     resolve_symbol pkg_compilation_unit "CompilationUnit")
@@ -527,6 +566,21 @@ let emit_expr (g_tys : Term.constr list) (l_tys : Term.constr list) e : Term.con
                     arg_ty_c; free_tys_c; ret_ty_c;
                     emit_member (t_sig ()) sig_c g_tys db_idx;
                     snd (go_hlist free)
+                ]
+
+        | Elim (case_tys, target_tyn, ret_ty, elim, cases, target) ->
+                let params = tyn_params target_tyn in
+                let ret_ty_c = emit_ty ret_ty in
+                let elim' = Constr.mkApp (elim, Array.of_list (params @ [ret_ty_c])) in
+
+                mk c_elim [
+                    g_tys_c; l_tys_c;
+                    emit_map (t_type ()) emit_ty case_tys;
+                    emit_tyn target_tyn;
+                    ret_ty_c;
+                    elim';
+                    snd (go_hlist cases);
+                    go target
                 ]
 
         | _ -> raise (Reflect_error "unimplemented expr variant")
