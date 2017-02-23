@@ -168,12 +168,123 @@ let rec string_of_func_list es =
                 (string_of_func_list es)
 
 
+
+let init_once f =
+    let storage = ref None in
+    fun () ->
+        match !storage with
+        | None ->
+                let x = f () in
+                storage := Some x;
+                x
+        | Some x -> x
+
+let rec constr_assoc c xs =
+    match xs with
+    | [] -> None
+    | (c', x) :: xs ->
+            if Constr.equal c c' then Some x
+            else constr_assoc c xs
+
+let mk ctor cs : Term.constr = Constr.mkApp (ctor (), Array.of_list cs)
+
+
+let pkg_utopia = ["Utopia"]
+let pkg_hlist = ["HList"]
+let pkg_sourcevalues = ["SourceValues"]
+let pkg_sourcelifted = ["SourceLifted"]
+let pkg_compilation_unit = ["CompilationUnit"]
+
+
+let type_names : (string list * string * string option * int) list = [
+    (pkg_datatypes, "nat", None, 0);
+    (pkg_datatypes, "bool", None, 0);
+    (pkg_datatypes, "list", None, 1);
+    (pkg_datatypes, "unit", None, 0);
+    (pkg_datatypes, "prod", Some "Tpair", 2)
+]
+
+let tyn_map = init_once (fun () ->
+    List.map
+        (fun (pkg, name, rname, params) ->
+            let denotation = resolve_symbol pkg name in
+            let refl_name = Option.default (String.concat "" ["T"; name]) rname in
+            let reflection = resolve_symbol pkg_utopia refl_name in
+            (denotation, (reflection, params)))
+    type_names)
+
+let lookup_tyn c = constr_assoc c (tyn_map ())
+
+let get_tyn c =
+    match lookup_tyn c with
+    | None -> raise (Reflect_error
+        (Format.asprintf "no matching type_name for %a" pp_constr c))
+    | Some x -> x
+
+
+let ctor_names : (string list * string * string option * int) list = [
+    (pkg_datatypes, "O", None, 0);
+    (pkg_datatypes, "S", None, 0);
+    (pkg_datatypes, "true", None, 0);
+    (pkg_datatypes, "false", None, 0);
+    (pkg_datatypes, "nil", None, 1);
+    (pkg_datatypes, "cons", None, 1);
+    (pkg_datatypes, "tt", None, 0);
+    (pkg_datatypes, "pair", None, 2)
+]
+
+let ctor_map = init_once (fun () ->
+    List.map
+        (fun (pkg, name, rname, params) ->
+            let denotation = resolve_symbol pkg name in
+            let refl_name = Option.default (String.concat "" ["C"; name]) rname in
+            let reflection = resolve_symbol pkg_utopia refl_name in
+            (denotation, (reflection, params)))
+    ctor_names)
+
+let lookup_ctor c = constr_assoc c (ctor_map ())
+
+let get_ctor c =
+    match lookup_ctor c with
+    | None -> raise (Reflect_error
+        (Format.asprintf "no matching constr_name for %a" pp_constr c))
+    | Some x -> x
+
+let ct_map = init_once (fun () ->
+    List.map
+        (fun (pkg, name, rname, _params) ->
+            let denotation = resolve_symbol pkg name in
+            let refl_name = Option.default (String.concat "" ["CT"; name]) rname in
+            let reflection = resolve_symbol pkg_sourcevalues refl_name in
+            (denotation, reflection))
+    ctor_names)
+
+let lookup_ct c = constr_assoc c (ct_map ())
+
+let get_ct c =
+    match lookup_ct c with
+    | None -> raise (Reflect_error
+        (Format.asprintf "no matching constr_name for %a" pp_constr c))
+    | Some x -> x
+
+
+
+
+
+
 let free_list free =
     let rec go n tys =
         match tys with
         | [] -> []
         | ty :: tys -> Var (ty, n) :: go (n + 1) tys
     in go 0 free
+
+let rec skipn n xs =
+    if n == 0 then xs
+    else
+        match xs with
+        | [] -> []
+        | _ :: xs -> skipn (n - 1) xs
 
 
 let arrow_arg ty =
@@ -229,28 +340,25 @@ let reflect_expr evars env c : func list * expr =
 
         | Constr.App (func, args) -> begin
             let args = Array.to_list args in
-            let rec build_app (func : expr) (args : Term.constr list) : expr =
-                match args with
-                | [] -> func
-                | arg :: args ->
-                        let func_ty = expr_ty func in
-                        let func' = App (arrow_arg func_ty, arrow_ret func_ty, func, go' arg) in
-                        build_app func' args
-            in
-            build_app (go' func) args
-
-            (*
-            match constr_map_lookup func with
+            match lookup_ctor func with
             | None ->
                     let rec build_app (func : expr) (args : Term.constr list) : expr =
                         match args with
                         | [] -> func
-                        | arg :: args -> build_app (App (func, (go' arg))) args
+                        | arg :: args ->
+                                let func_ty = expr_ty func in
+                                let func' = App (arrow_arg func_ty, arrow_ret func_ty,
+                                    func, go' arg) in
+                                build_app func' args
                     in
                     build_app (go' func) args
             | Some (ctor, params) ->
-                    Constr (ctor, List.map go' (skipn args params))
-                    *)
+                    let args = skipn params args in
+                    let arg_tys = List.map (fun arg ->
+                        let (_, ty_c) = Typing.type_of env evars arg in
+                        reflect_type ty_c) args in
+                    let ct = get_ct func in
+                    Constr (ty_c, ctor, arg_tys, ct, List.map go' args)
         end
 
         | _ ->
@@ -261,59 +369,6 @@ let reflect_expr evars env c : func list * expr =
     let top = go env [] "oeuf_entry" true c in
     (!funcs, top)
 
-
-
-let init_once f =
-    let storage = ref None in
-    fun () ->
-        match !storage with
-        | None ->
-                let x = f () in
-                storage := Some x;
-                x
-        | Some x -> x
-
-let rec constr_assoc c xs =
-    match xs with
-    | [] -> None
-    | (c', x) :: xs ->
-            if Constr.equal c c' then Some x
-            else constr_assoc c xs
-
-let mk ctor cs : Term.constr = Constr.mkApp (ctor (), Array.of_list cs)
-
-
-let pkg_utopia = ["Utopia"]
-let pkg_hlist = ["HList"]
-let pkg_sourcevalues = ["SourceValues"]
-let pkg_sourcelifted = ["SourceLifted"]
-let pkg_compilation_unit = ["CompilationUnit"]
-
-
-let type_names : (string list * string * string option * int) list = [
-    (pkg_datatypes, "nat", None, 0);
-    (pkg_datatypes, "bool", None, 0);
-    (pkg_datatypes, "list", None, 1);
-    (pkg_datatypes, "unit", None, 0);
-    (pkg_datatypes, "prod", Some "Tpair", 2)
-]
-
-let tyn_map = init_once (fun () ->
-    List.map
-        (fun (pkg, name, rname, params) ->
-            let denotation = resolve_symbol pkg name in
-            let refl_name = Option.default (String.concat "" ["T"; name]) rname in
-            let reflection = resolve_symbol pkg_utopia refl_name in
-            (denotation, (reflection, params)))
-    type_names)
-
-let lookup_tyn c = constr_assoc c (tyn_map ())
-
-let get_tyn c =
-    match lookup_tyn c with
-    | None -> raise (Reflect_error
-        (Format.asprintf "no matching type_name for %a" pp_constr c))
-    | Some x -> x
 
 
 let c_adt = init_once (fun () -> resolve_symbol pkg_sourcevalues "ADT")
@@ -374,6 +429,7 @@ let t_sig = init_once (fun () ->
 let t_expr = init_once (fun () -> resolve_symbol pkg_sourcelifted "expr")
 let c_var = init_once (fun () -> resolve_symbol pkg_sourcelifted "Var")
 let c_app = init_once (fun () -> resolve_symbol pkg_sourcelifted "App")
+let c_constr = init_once (fun () -> resolve_symbol pkg_sourcelifted "Constr")
 let c_close = init_once (fun () -> resolve_symbol pkg_sourcelifted "Close")
 
 let c_compilation_unit = init_once (fun () ->
@@ -450,6 +506,13 @@ let emit_expr (g_tys : Term.constr list) (l_tys : Term.constr list) e : Term.con
                     g_tys_c; l_tys_c;
                     emit_ty ty1; emit_ty ty2;
                     go func; go arg
+                ]
+
+        | Constr (tyn, ctor, arg_tys, ct, args) ->
+                mk c_constr [
+                    g_tys_c; l_tys_c;
+                    emit_tyn tyn; ctor; emit_map (t_type ()) emit_ty arg_tys;
+                    ct; snd (go_hlist args)
                 ]
 
         | Close (arg_ty, free_tys, ret_ty, idx, free) ->
