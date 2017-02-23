@@ -303,23 +303,51 @@ let arrow_ret ty =
     | _ -> raise (Reflect_error "not enough arrows in function type")
 
 
+module StrSet = Set.Make(String)
+
 let reflect_expr evars env c : func list * expr =
-    (*constr_map ();*)
+    let env0 = env in
+
     let funcs : func list ref = ref [] in
-    let func_cache : (string, int) Hashtbl.t = Hashtbl.create 10 in
+    let pub_names : StrSet.t ref = ref StrSet.empty in
+    let func_cache : expr Names.Cmap.t ref = ref Names.Cmap.empty in
     let counter : int ref = ref 0 in
 
+    let get_counter () =
+        let x = !counter in
+        counter := x + 1;
+        x
+    in
+
     let next_lambda base =
-        let s = Format.sprintf "%s_lam%d" base !counter in
-        counter := !counter + 1;
-        s in
+        Format.sprintf "%s_lam%d" base (get_counter ())
+    in
+
+    let fresh_public' base =
+        if not (StrSet.mem base !pub_names) then base
+        else
+            let rec go () =
+                let name = base ^ string_of_int (get_counter ()) in
+                if not (StrSet.mem name !pub_names) then name
+                else go ()
+            in go ()
+    in
+
+    let fresh_public base =
+        let name = fresh_public' base in
+        pub_names := StrSet.add name !pub_names;
+        name
+    in
+
 
     let lift func =
         let idx = List.length !funcs in
         funcs := !funcs @ [func];
-        idx in
+        idx
+    in
 
     let rec go env locals name pub c : expr =
+        (* Format.eprintf " ----- %s\n" (string_of_constr c); *)
         let go' = go env locals name pub in
 
         let (_, ty_c) = Typing.type_of env evars c in
@@ -333,12 +361,16 @@ let reflect_expr evars env c : func list * expr =
 
                 let arg_ty = reflect_type arg_ty_c in
 
-                let (_, ret_ty_c) = Typing.type_of env' evars body in
-                let ret_ty = reflect_type ret_ty_c in
-
                 (* lift the lambda to a top-level function, and get its index *)
                 let lam_name = next_lambda name in
                 let body' : expr = go env' (arg_ty :: locals) lam_name false body in
+
+                (* take the type of the pre-lifted body.  this solves the
+                 * problem of un-normalized eliminator motives showing up in
+                 * bad places.  instead of trying to normalize here (which
+                 * doesn't work for some reason), we let the elim cases
+                 * normalize, then take the result from them. *)
+                let ret_ty = expr_ty body' in
                 let idx = lift (arg_ty, locals, ret_ty, body', name, pub) in
 
                 (* build a closure using the entire current environment *)
@@ -355,8 +387,16 @@ let reflect_expr evars env c : func list * expr =
                 | DataConstr (ctor, ct, num_params, num_fields) ->
                         (* `args` are the arguments to the Constr.
                          * `args'` are the leftovers. *)
-                        let (params, args') = split_at num_params args in
-                        let (args, args') = split_at num_fields args in
+                        let args' = args in
+                        let (params, args') = split_at num_params args' in
+                        let (args, args') = split_at num_fields args' in
+                        (*
+                        Format.eprintf "took %s: %d params, %d args, %d left\n"
+                            (string_of_constr ctor)
+                            (List.length params)
+                            (List.length args)
+                            (List.length args');
+                            *)
 
                         let arg_tys = List.map (fun arg ->
                             let (_, ty_c) = Typing.type_of env evars arg in
@@ -381,10 +421,22 @@ let reflect_expr evars env c : func list * expr =
                             (Constr.mkApp (motive, Array.of_list [Constr.mkRel 1])) in
                         let ret_ty = reflect_type ret_ty_c in
 
+                        (*
+                        Format.eprintf "tried to reduce motive: %s ==> %s\n"
+                            (string_of_constr motive)
+                            (string_of_constr ret_ty_c);
+                        Format.eprintf "cases = [%s]; target = %s\n"
+                            (String.concat "; " (List.map string_of_constr cases))
+                            (string_of_constr target);
+                            *)
+
                         (Elim (case_tys, target_tyn, ret_ty, elim, List.map go' cases, go' target),
                          args)
             in
+            (*
             Format.eprintf "apply %s to %d args\n" (string_of_expr func) (List.length args);
+            Format.eprintf " type of function = %s\n" (string_of_ty (expr_ty func));
+            *)
             let rec build_app (func : expr) (args : Term.constr list) : expr =
                 match args with
                 | [] -> func
@@ -397,11 +449,35 @@ let reflect_expr evars env c : func list * expr =
             build_app func args
         end
 
+        | Constr.Const (const, univ) ->
+                if not (Names.Cmap.mem const !func_cache) then
+                    let const_body = Environ.lookup_constant const env0 in
+                    let subst_body = match const_body.const_body with
+                        | Declarations.Def subst_body -> subst_body
+                        | _ -> raise (Reflect_error
+                            (Format.sprintf "can't get body for Const %s" (string_of_constr c)))
+                    in
+                    let body = Mod_subst.force_constr subst_body in
+                    let body = Reduction.nf_betaiota env0 body in
+                    let name = fresh_public (Label.to_string (Constant.label const)) in
+
+                    Format.eprintf "retrieved body: %s = %s\n" (string_of_constr c) (string_of_constr body);
+                    let closure = go env0 [] name true body in
+
+                    func_cache := Names.Cmap.add const closure !func_cache;
+
+                else ();
+
+                Names.Cmap.find const !func_cache
+
         | _ ->
                 raise (Success
                     (Format.asprintf "unsupported constr: %a" pp_constr c))
     in
 
+    (* simplify away some annoying stuff, like applications of the motive
+     * within eliminator calls. *)
+    let c = Reduction.nf_betaiota env c in
     let top = go env [] "oeuf_entry" true c in
     (!funcs, top)
 
@@ -548,10 +624,13 @@ let emit_expr (g_tys : Term.constr list) (l_tys : Term.constr list) e : Term.con
                 ]
 
         | Constr (tyn, ctor, arg_tys, ct, args) ->
+                let params = List.map emit_tyn (tyn_params tyn) in
+                let ct' = Constr.mkApp (ct, Array.of_list params) in
+
                 mk c_constr [
                     g_tys_c; l_tys_c;
                     emit_tyn tyn; ctor; emit_map (t_type ()) emit_ty arg_tys;
-                    ct; snd (go_hlist args)
+                    ct'; snd (go_hlist args)
                 ]
 
         | Close (arg_ty, free_tys, ret_ty, idx, free) ->
@@ -569,7 +648,7 @@ let emit_expr (g_tys : Term.constr list) (l_tys : Term.constr list) e : Term.con
                 ]
 
         | Elim (case_tys, target_tyn, ret_ty, elim, cases, target) ->
-                let params = tyn_params target_tyn in
+                let params = List.map emit_tyn (tyn_params target_tyn) in
                 let ret_ty_c = emit_ty ret_ty in
                 let elim' = Constr.mkApp (elim, Array.of_list (params @ [ret_ty_c])) in
 
