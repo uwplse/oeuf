@@ -176,6 +176,16 @@ let free_list free =
     in go 0 free
 
 
+let arrow_arg ty =
+    match ty with
+    | Arrow (arg, _) -> arg
+    | _ -> raise (Reflect_error "not enough arrows in function type")
+
+let arrow_ret ty =
+    match ty with
+    | Arrow (_, ret) -> ret
+    | _ -> raise (Reflect_error "not enough arrows in function type")
+
 let reflect_expr evars env c : func list * expr =
     (*constr_map ();*)
     let funcs : func list ref = ref [] in
@@ -217,9 +227,19 @@ let reflect_expr evars env c : func list * expr =
                 (* build a closure using the entire current environment *)
                 Close (arg_ty, locals, ret_ty, idx, free_list locals)
 
-                (*
         | Constr.App (func, args) -> begin
             let args = Array.to_list args in
+            let rec build_app (func : expr) (args : Term.constr list) : expr =
+                match args with
+                | [] -> func
+                | arg :: args ->
+                        let func_ty = expr_ty func in
+                        let func' = App (arrow_arg func_ty, arrow_ret func_ty, func, go' arg) in
+                        build_app func' args
+            in
+            build_app (go' func) args
+
+            (*
             match constr_map_lookup func with
             | None ->
                     let rec build_app (func : expr) (args : Term.constr list) : expr =
@@ -230,8 +250,8 @@ let reflect_expr evars env c : func list * expr =
                     build_app (go' func) args
             | Some (ctor, params) ->
                     Constr (ctor, List.map go' (skipn args params))
+                    *)
         end
-*)
 
         | _ ->
                 raise (Success
@@ -353,6 +373,7 @@ let t_sig = init_once (fun () ->
 
 let t_expr = init_once (fun () -> resolve_symbol pkg_sourcelifted "expr")
 let c_var = init_once (fun () -> resolve_symbol pkg_sourcelifted "Var")
+let c_app = init_once (fun () -> resolve_symbol pkg_sourcelifted "App")
 let c_close = init_once (fun () -> resolve_symbol pkg_sourcelifted "Close")
 
 let c_compilation_unit = init_once (fun () ->
@@ -424,15 +445,24 @@ let emit_expr (g_tys : Term.constr list) (l_tys : Term.constr list) e : Term.con
                     emit_member (t_type ()) (emit_ty ty) l_tys idx
                 ]
 
+        | App (ty1, ty2, func, arg) ->
+                mk c_app [
+                    g_tys_c; l_tys_c;
+                    emit_ty ty1; emit_ty ty2;
+                    go func; go arg
+                ]
+
         | Close (arg_ty, free_tys, ret_ty, idx, free) ->
                 let arg_ty_c = emit_ty arg_ty in
                 let free_tys_c = emit_map (t_type ()) emit_ty free_tys in
                 let ret_ty_c = emit_ty ret_ty in
                 let sig_c = mk_sig arg_ty_c free_tys_c ret_ty_c in
+                (* convert 0-based function index to de Bruijn *)
+                let db_idx = List.length g_tys - 1 - idx in
                 mk c_close [
                     g_tys_c; l_tys_c;
                     arg_ty_c; free_tys_c; ret_ty_c;
-                    emit_member (t_sig ()) sig_c g_tys idx;
+                    emit_member (t_sig ()) sig_c g_tys db_idx;
                     snd (go_hlist free)
                 ]
 
@@ -507,6 +537,7 @@ let tac c : unit Proofview.tactic =
         let env = Proofview.Goal.env gl in
         let evars = Proofview.Goal.sigma gl in
         let (funcs, top) = reflect_expr evars env c in
+        Format.eprintf "funcs:\n%s\n" (string_of_func_list funcs);
         let result = emit_compilation_unit funcs in
         Tactics.New.refine (fun evars -> (evars, result))
     )
@@ -523,8 +554,6 @@ VERNAC COMMAND EXTEND Write_to_file
     output_string oc data;
     close_out oc; 
     Format.eprintf "%a -> %s\nsuccessfully written to file\n" pp_constr c data
-
-
   ]
 END
 
