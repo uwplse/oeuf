@@ -238,15 +238,20 @@ Ltac wrap_lambdas basename x :=
     | fun (h : hlist type_denote ?tys) (a : ?T) => htail _ => x
 
     | fun (h : hlist type_denote ?tys) (a : ?T) => fun (b : ?U) => @?body h a b =>
-            let f_name := fresh basename "_lam0" in
-            let T_ty := reflect_type' T in
-            let f := constr:(fun (h : hlist type_denote (T_ty :: tys)) (b : U) =>
-                body (htail h) (hhead h) b) in
-            let f := eval cbv beta in f in
-            let f := wrap_lambdas f_name f in
-            constr:(fun (h : hlist type_denote tys) (a : type_denote T_ty) =>
-                let f_name := f in
-                f_name (hcons a h))
+            match type of body with
+            | _ -> _ -> _ -> Set => x
+            | _ -> _ -> _ -> Type => x
+            | _ =>
+                let f_name := fresh basename "_lam0" in
+                let T_ty := reflect_type' T in
+                let f := constr:(fun (h : hlist type_denote (T_ty :: tys)) (b : U) =>
+                    body (htail h) (hhead h) b) in
+                let f := eval cbv beta in f in
+                let f := wrap_lambdas basename f in
+                constr:(fun (h : hlist type_denote tys) (a : type_denote T_ty) =>
+                    let f_name := f in
+                    f_name (hcons a h))
+            end
 
     | fun (h : hlist type_denote ?tys) (a : ?T) => ?func ?arg =>
             let func' := wrap_lambdas basename
@@ -257,6 +262,7 @@ Ltac wrap_lambdas basename x :=
 
     | _ => x
     end.
+
 
 (* Raise `let`s above one level of expression.  This can lift arbitrarily many
    `let`s, but won't (usually) traverse more than one non-let expression. *)
@@ -417,7 +423,16 @@ Eval compute in hhead (genv_denote church_bool_false_genv) hnil.
 
 
 
-Definition add_lifted :=
+Definition add a b :=
+    @nat_rect (fun _ => nat -> nat)     (* this is `add` *)
+              (fun b => b)
+              (fun a IHa b => IHa (S b))
+              a b.
+
+Time Definition add_lifted := ltac:(lift_def_lambdas add_ add).
+Print add_lifted.
+
+Definition add_lifted' :=
     let Hzero := fun (h : hlist type_denote []) b => b in
     let Hsucc_2 := fun (h : hlist type_denote [N ~> N; N]) b => (hget h Here) (S b) in
     let Hsucc_1 := fun (h : hlist type_denote [N]) IHa => Hsucc_2 (hcons IHa (hcons (hget h Here) hnil)) in

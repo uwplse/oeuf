@@ -2,4 +2,5 @@
 -Q theories OeufPlugin
 
 src/oeuf_plugin.ml4
+src/oeuf_plugin.mllib
 theories/OeufPlugin.v
