@@ -122,20 +122,6 @@ let rec iter_tys f stk e =
 type func = ty * ty list * ty * expr * string * bool
 
 
-let rec reflect_type c =
-    match Constr.kind c with
-    | Constr.Prod (_bnd, arg_ty, ret_ty) ->
-            Arrow (reflect_type arg_ty, reflect_type ret_ty)
-    | Constr.Ind (_ind, _univ) ->
-            ADT c
-    | Constr.App (_func, _args) ->
-            (* could be something like `list nat`.  If it's not, we'll discover
-             * the problem during `emit_tyn`. *)
-            ADT c
-    | _ ->
-            raise (Success
-                (Format.asprintf "unsupported constr in type: %a" pp_constr c))
-
 let rec string_of_ty t =
     match t with
     | ADT tyn -> Format.asprintf "%a" pp_constr tyn
@@ -274,11 +260,11 @@ let type_defns : type_defn list = [
     ]};
 
     simple_type_defn pkg_binnums "positive" 0
-        [("xI", 1); ("xO", 1); ("xH", 0)]
-    (*
-    (pkg_binnums, "N", None, 0,
-        [("N0", 0), ("Npos", 1)])
-        *)
+        [("xI", 1); ("xO", 1); ("xH", 0)];
+    simple_type_defn pkg_binnums "N" 0
+        [("N0", 0); ("Npos", 1)];
+    simple_type_defn pkg_binnums "Z" 0
+        [("Z0", 0); ("Zpos", 1); ("Zneg", 1)]
 ]
 
 
@@ -389,6 +375,8 @@ let is_type evars env e =
 
 module StrSet = Set.Make(String)
 
+
+
 let unfold_constr env c : Term.constr =
     match Constr.kind c with
     | Constr.Const (const, univ) ->
@@ -400,6 +388,24 @@ let unfold_constr env c : Term.constr =
             in
             Mod_subst.force_constr subst_body
     | _ -> c
+
+let rec reflect_type env c =
+    match Constr.kind c with
+    | Constr.Prod (_bnd, arg_ty, ret_ty) ->
+            Arrow (reflect_type env arg_ty, reflect_type env ret_ty)
+    | Constr.Ind (_ind, _univ) ->
+            ADT c
+    | Constr.App (_func, _args) ->
+            (* could be something like `list nat`.  If it's not, we'll discover
+             * the problem during `emit_tyn`. *)
+            ADT c
+    | Constr.Const (const, _univ) ->
+            reflect_type env (unfold_constr env c)
+    | _ ->
+            raise (Reflect_error (Format.sprintf
+                "unsupported constr in type: %s" (string_of_constr c)))
+
+
 
 let reflect_expr evars env c : func list * expr =
     let env0 = env in
@@ -441,7 +447,6 @@ let reflect_expr evars env c : func list * expr =
     (* `name` is a proposed name to use for the next lambda we see.  if the
      * exact name is in use, we'll choose a fresh identifier instead. *)
     let rec go env locals name pub c : expr =
-        (* Format.eprintf " ----- %s\n" (string_of_constr c); *)
         let go' = go env locals name pub in
 
         let (_, ty_c) = Typing.type_of env evars c in
@@ -449,12 +454,12 @@ let reflect_expr evars env c : func list * expr =
         match Constr.kind c with
 
         | Constr.Rel idx ->
-                Var (reflect_type ty_c, idx - 1)
+                Var (reflect_type env ty_c, idx - 1)
 
         | Constr.Lambda (arg_name, arg_ty_c, body) ->
                 let env' = Environ.push_rel (arg_name, None, arg_ty_c) env in
 
-                let arg_ty = reflect_type arg_ty_c in
+                let arg_ty = reflect_type env arg_ty_c in
 
                 (* lift the lambda to a top-level function, and get its index *)
                 let name = fresh name in
@@ -509,7 +514,7 @@ let reflect_expr evars env c : func list * expr =
 
                         let arg_tys = List.map (fun arg ->
                             let (_, ty_c) = Typing.type_of env evars arg in
-                            reflect_type ty_c) args in
+                            reflect_type env ty_c) args in
                         (Constr (ty_c, ctor, arg_tys, ct, List.map go' args),
                          args')
 
@@ -522,14 +527,14 @@ let reflect_expr evars env c : func list * expr =
                         let case_tys = List.map (fun case ->
                             let (_, ty_c) = Typing.type_of env evars case in
                             let ty_c = Reductionops.nf_beta evars ty_c in
-                            reflect_type ty_c) cases in
+                            reflect_type env ty_c) cases in
                         let target_tyn = Constr.mkApp (base_tyn, Array.of_list params) in
                         let env' = Environ.push_rel (Name.Anonymous, None, target_tyn) env in
                         (* compute the return type by applying the motive to...
                          * nothing. hope it doesn't actually use its argument! *)
                         let ret_ty_c = Reduction.whd_betaiotazeta env'
                             (Constr.mkApp (motive, Array.of_list [Constr.mkRel 1])) in
-                        let ret_ty = reflect_type ret_ty_c in
+                        let ret_ty = reflect_type env ret_ty_c in
 
                         (Elim (case_tys, target_tyn, ret_ty, elim, List.map go' cases, go' target),
                          args)
@@ -601,7 +606,6 @@ let tyn_params c : Term.constr list =
 let rec emit_tyn c : Term.constr =
     match Constr.kind c with
     | Constr.App (base, params) ->
-            Format.eprintf "emitting app tyn: %s\n" (string_of_constr c);
             let (base_tyn, num_params) = get_tyn base in
             assert (Array.length params = num_params);
             let param_tyns = Array.map emit_tyn params in
@@ -799,13 +803,15 @@ let emit_funcs funcs : Term.constr * Term.constr =
     let rec go (g_tys : Term.constr list) (g : Term.constr) funcs : Term.constr * Term.constr =
         match funcs with
         | [] -> (emit_list (t_sig ()) g_tys, g)
-        | (arg_ty, free_tys, ret_ty, body, _, _) :: funcs ->
+        | (arg_ty, free_tys, ret_ty, body, name, _) :: funcs ->
                 let arg_ty_c = emit_ty arg_ty in
                 let free_ty_cs = List.map emit_ty free_tys in
                 let ret_ty_c = emit_ty ret_ty in
                 let sig_c = mk_sig arg_ty_c (emit_list (t_type ()) free_ty_cs) ret_ty_c in
 
                 let l_tys = arg_ty_c :: free_ty_cs in
+                Format.eprintf "emitting %s = %s\n" name (string_of_expr body);
+                Format.pp_print_flush Format.err_formatter ();
                 let body' = emit_expr g_tys l_tys body in
 
                 go
@@ -865,11 +871,12 @@ let tac c : unit Proofview.tactic =
         let t_start = Sys.time () in
         let (funcs, top) = reflect_expr evars env c in
         let t_mid = Sys.time () in
-        Format.eprintf "funcs:\n%s\n" (string_of_func_list funcs);
+        Format.eprintf "reflected %d funcs\n" (List.length funcs);
         let result = emit_compilation_unit funcs in
         let t_end = Sys.time () in
-        Format.eprintf "Done - %fs reflect, %fs emit\n"
-            (t_mid -. t_start) (t_end -. t_mid);
+        Format.eprintf "Lifted %d functions - %fs reflect, %fs emit\n"
+            (List.length funcs) (t_mid -. t_start) (t_end -. t_mid);
+        Format.pp_print_flush Format.err_formatter ();
         Tactics.New.refine (fun evars -> (evars, result))
     )
 

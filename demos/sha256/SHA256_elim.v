@@ -464,7 +464,7 @@ Qed.
 Definition Pos_shiftl (x : positive) (n : N) : positive :=
     N_rect _
         x
-        (fun n' => Pos_iter xO x n')
+        (fun n' => Pos_iter (fun y => xO y) x n')
         n.
 
 Lemma Pos_shiftl_eq : forall n x,
@@ -830,7 +830,7 @@ Qed.
 
 
 Definition Pos_to_nat (x : positive) : nat :=
-    Pos_iter S 0%nat x.
+    Pos_iter (fun n => S n) 0%nat x.
 
 Lemma Pos_to_nat_eq : forall x,
     Pos_to_nat x = Pos.to_nat x.
@@ -876,15 +876,17 @@ Qed.
 
 
 Definition generate_and_pad msg :=
-    let n := Nlength msg in
-    let pad_amount := N_land (N_add 1 (N_lnot (N_land (N_add n 9) 63) 6)) 63 in
+    (fun n =>
+    (fun pad_amount =>
     (List_app
         (bytelist_to_wordlist
             (List_app msg
             (List_app [128%N]
                 (List_repeat 0%N (N_to_nat pad_amount)))))
         ([trunc (N_shiftr (N_shiftl n 3) 32);
-          trunc (N_shiftl n 3)])).
+          trunc (N_shiftl n 3)]))
+    ) (* pad-amount *) (N_land (N_add 1 (N_lnot (N_land (N_add n 9) 63) 6)) 63)
+    ) (* N *) (Nlength msg).
 
 Lemma generate_and_pad_eq : forall msg,
     generate_and_pad msg = SHA256_N.generate_and_pad msg.
@@ -913,6 +915,7 @@ Definition nthi_test n :=
     (fun n _ dummy => 0) n dummy) n dummy) n dummy) n tt)%Z.
 
 
+(*
 Definition nthi_K256 n :=
     (nat_rect _ (fun dummy => 1116352408)
     (fun n _ dummy => nat_rect _ (fun dummy => 1899447441)
@@ -1008,6 +1011,50 @@ Lemma nthi_K256_eq : forall n,
     nthi_K256 n = SHA256_N.nthi SHA256_N.K256 n.
 repeat (destruct n; try reflexivity).
 Qed.
+*)
+
+Definition nthi (l: list N) (t: nat) :=
+    list_rect (fun _ => nat -> unit -> N)
+        (fun t dummy => 0%N)
+        (fun x l IHl => fun t => nat_rect (fun _ => unit -> N)
+            (fun dummy => x)
+            (fun x' IHx => fun dummy => IHl x' dummy)
+            t)
+        l t tt.
+
+Lemma nthi_eq : forall l t,
+    nthi l t = SHA256_N.nthi l t.
+induction l; destruct t; simpl; try reflexivity.
+- unfold nthi. simpl. fold (nthi l t).
+  unfold SHA256_N.nthi. simpl. fold (SHA256_N.nthi l t).
+  apply IHl.
+Qed.
+
+
+Definition nthi_K256 t :=
+    nthi
+        [1116352408; 1899447441; 3049323471; 3921009573; 
+          961987163; 1508970993; 2453635748; 2870763221; 
+         3624381080;  310598401;  607225278; 1426881987; 
+         1925078388; 2162078206; 2614888103; 3248222580; 
+         3835390401; 4022224774;  264347078;  604807628; 
+          770255983; 1249150122; 1555081692; 1996064986; 
+         2554220882; 2821834349; 2952996808; 3210313671; 
+         3336571891; 3584528711;  113926993;  338241895; 
+          666307205;  773529912; 1294757372; 1396182291; 
+         1695183700; 1986661051; 2177026350; 2456956037; 
+         2730485921; 2820302411; 3259730800; 3345764771; 
+         3516065817; 3600352804; 4094571909;  275423344; 
+          430227734;  506948616;  659060556;  883997877; 
+          958139571; 1322822218; 1537002063; 1747873779; 
+         1955562222; 2024104815; 2227730452; 2361852424; 
+         2428436474; 2756734187; 3204031479; 3329325298]%N
+    t.
+
+Lemma nthi_K256_eq : forall n,
+    nthi_K256 n = SHA256_N.nthi SHA256_N.K256 n.
+repeat (destruct n; try reflexivity).
+Qed.
 
 
 Definition Ch (x y z : N) : N :=
@@ -1086,24 +1133,6 @@ Lemma sigma_1_eq : forall x,
 intros. unfold sigma_1.
 rewrite 2 t_xor_eq, 2 Rotr_eq, Shr_eq by reflexivity.
 reflexivity.
-Qed.
-
-
-Definition nthi (l: list N) (t: nat) :=
-    list_rect (fun _ => nat -> unit -> N)
-        (fun t dummy => 0%N)
-        (fun x l IHl => fun t => nat_rect (fun _ => unit -> N)
-            (fun dummy => x)
-            (fun x' IHx => fun dummy => IHl x' dummy)
-            t)
-        l t tt.
-
-Lemma nthi_eq : forall l t,
-    nthi l t = SHA256_N.nthi l t.
-induction l; destruct t; simpl; try reflexivity.
-- unfold nthi. simpl. fold (nthi l t).
-  unfold SHA256_N.nthi. simpl. fold (SHA256_N.nthi l t).
-  apply IHl.
 Qed.
 
 
