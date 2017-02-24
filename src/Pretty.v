@@ -22,6 +22,8 @@ Module type_name.
     | Tpair tyn1 tyn2 => node [atom (symbol.of_string_unsafe "pair"); to_tree tyn1; to_tree tyn2]
     | Toption tyn     => node [atom (symbol.of_string_unsafe "option"); to_tree tyn]
     | Tpositive       => atom (symbol.of_string_unsafe "positive")
+    | TN              => atom (symbol.of_string_unsafe "N")
+    | TZ              => atom (symbol.of_string_unsafe "Z")
     end.
 
   Fixpoint from_tree (t : tree symbol.t) : option type_name :=
@@ -31,6 +33,8 @@ Module type_name.
       else if symbol.eq_dec s (symbol.of_string_unsafe "bool") then Some Tbool
       else if symbol.eq_dec s (symbol.of_string_unsafe "unit") then Some Tunit
       else if symbol.eq_dec s (symbol.of_string_unsafe "positive") then Some Tpositive
+      else if symbol.eq_dec s (symbol.of_string_unsafe "N") then Some TN
+      else if symbol.eq_dec s (symbol.of_string_unsafe "Z") then Some TZ
       else None
     | node (atom s :: l) =>
       if symbol.eq_dec s (symbol.of_string_unsafe "list")
@@ -130,6 +134,11 @@ Module constr_name.
     | CxI    => symbol.of_string_unsafe "CxI"
     | CxO    => symbol.of_string_unsafe "CxO"
     | CxH    => symbol.of_string_unsafe "CxH"
+    | CN0    => symbol.of_string_unsafe "CN0"
+    | CNpos  => symbol.of_string_unsafe "CNpos"
+    | CZ0    => symbol.of_string_unsafe "CZ0"
+    | CZpos  => symbol.of_string_unsafe "CZpos"
+    | CZneg  => symbol.of_string_unsafe "CZneg"
     end.
   Definition from_symbol (s : symbol.t) : option constr_name :=
     if      symbol.eq_dec s (symbol.of_string_unsafe "CS")     then Some CS
@@ -145,6 +154,11 @@ Module constr_name.
     else if symbol.eq_dec s (symbol.of_string_unsafe "CxI")    then Some CxI
     else if symbol.eq_dec s (symbol.of_string_unsafe "CxO")    then Some CxO
     else if symbol.eq_dec s (symbol.of_string_unsafe "CxH")    then Some CxH
+    else if symbol.eq_dec s (symbol.of_string_unsafe "CN0")    then Some CN0
+    else if symbol.eq_dec s (symbol.of_string_unsafe "CNpos")  then Some CNpos
+    else if symbol.eq_dec s (symbol.of_string_unsafe "CZ0")    then Some CZ0
+    else if symbol.eq_dec s (symbol.of_string_unsafe "CZpos")  then Some CZpos
+    else if symbol.eq_dec s (symbol.of_string_unsafe "CZneg")  then Some CZneg
     else None.
 
   Lemma to_from_symbol_id : forall cn, from_symbol (to_symbol cn) = Some cn.
@@ -214,6 +228,19 @@ Module constr_type.
         | CxI, [ADT Tpositive] => Some CTxI
         | CxO, [ADT Tpositive] => Some CTxO
         | CxH, [] => Some CTxH
+        | _, _ => None
+        end
+      | TN     =>
+        match c, arg_tys with
+        | CN0, [] => Some CTN0
+        | CNpos, [ADT Tpositive] => Some CTNpos
+        | _, _ => None
+        end
+      | TZ     =>
+        match c, arg_tys with
+        | CZ0, [] => Some CTZ0
+        | CZpos, [ADT Tpositive] => Some CTZpos
+        | CZneg, [ADT Tpositive] => Some CTZneg
         | _, _ => None
         end
       end.
@@ -316,6 +343,29 @@ Module elim.
                           end end end end end end end end end end
                         | _ => None
                         end
+      | TN            => match case_tys with
+                        | [ty1;
+                           Arrow (ADT Tpositive) ty2] =>
+                          match type_eq_dec ty ty1 with right _ => None
+                          | left pf => match pf with | eq_refl =>
+                          match type_eq_dec ty ty2 with right _ => None
+                          | left pf => match pf with | eq_refl => Some (EN _)
+                          end end end end
+                        | _ => None
+                        end
+      | TZ            => match case_tys with
+                        | [ty1;
+                           Arrow (ADT Tpositive) ty2;
+                           Arrow (ADT Tpositive) ty3] =>
+                          match type_eq_dec ty ty1 with right _ => None
+                          | left pf => match pf with | eq_refl =>
+                          match type_eq_dec ty ty2 with right _ => None
+                          | left pf => match pf with | eq_refl =>
+                          match type_eq_dec ty ty3 with right _ => None
+                          | left pf => match pf with | eq_refl => Some (EZ _)
+                          end end end end end end
+                        | _ => None
+                        end
       end.
 
   Lemma check_elim_correct :
@@ -332,6 +382,8 @@ Module elim.
              | EPair _ _ t => _
              | EOption _ t => _
              | EPositive t => _
+             | EN t        => _
+             | EZ t        => _
            end;
       repeat (break_match; try congruence;
       dependent destruction e0; auto).

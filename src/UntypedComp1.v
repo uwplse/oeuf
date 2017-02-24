@@ -336,24 +336,17 @@ Lemma compile_run_elim : forall G L case_tys target_tyn ret_ty
         Some (compile_expr (A.run_elim e cases target)).
 intros.
 
-pattern target_tyn, target, e.
-refine (
-    match target as target_ in A.value _ (A.ADT target_tyn_)
-        return forall
-            (e_ : A.elim case_tys (A.ADT target_tyn_) ret_ty),
-            _ target_tyn_ target_ e_ with
-    | @A.VConstr _  target_tyn ctor arg_tys  ct args => fun e => _
-    | A.VClose _ _ => idProp
-    end e).
-clear e0 target target_tyn0.
+revert e. pattern target_tyn, target.
+let f := match goal with [ |- ?f target_tyn target ] => f end in
+refine match target as target_ in A.value _ (A.ADT target_tyn_)
+        return f target_tyn_ target_ with
+    | @A.VConstr _  target_tyn ctor arg_tys  ct args => _
+    end; intros.  clear target target_tyn0.
 
-pattern target_tyn, e, cases, ct.
-refine (
-    match e as e_ in A.elim case_tys_ (A.ADT target_tyn_) ret_ty_
-        return forall
-            (cases_ : hlist (A.expr G L) case_tys_)
-            (ct_ : A.constr_type ctor arg_tys target_tyn_),
-            _ target_tyn_ e_ cases_ ct_ with
+revert cases ct. pattern case_tys, target_tyn, ret_ty, e.
+let f := match goal with [ |- ?f _ _ _ _ ] => f end in
+refine match e as e_ in A.elim case_tys_ (A.ADT target_tyn_) ret_ty_
+        return f case_tys_ target_tyn_ ret_ty_ e_ with
     | A.ENat ret_ty => _
     | A.EBool ret_ty => _
     | A.EList item_ty ret_ty => _
@@ -361,113 +354,89 @@ refine (
     | A.EPair ty1 ty2 ret_ty => _
     | A.EOption item_ty ret_ty => _
     | A.EPositive ret_ty => _
-    end cases ct);
-clear e ct target_tyn cases ret_ty0 case_tys; intros cases ct.
+    | A.EN ret_ty => _
+    | A.EZ ret_ty => _
+    end; intros.
+clear e target_tyn ret_ty0 case_tys.
 
-- pattern ct, args, cases.
-  refine (
-    match ct as ct_ in A.constr_type ctor_ arg_tys_ Tnat
-        return forall
-            (args_ : hlist _ arg_tys_)
-            (cases_ : _),
-            _ ct_ args_ cases_ with
-    | A.CTS => _
-    | A.CTO => _
-    | _ => idProp
-    end args cases);
-  clear ct cases args arg_tys ctor; intros args cases.
+- revert args cases. pattern ctor, arg_tys, ct.
+  refine match ct as ct_ in A.constr_type ctor_ arg_tys_ (Tnat)
+          return _ ctor_ arg_tys_ ct_ with
+      | A.CTS => _
+      | A.CTO => _
+      end; intros; clear ct arg_tys ctor.
   all: unpack_hlist cases case0; unpack_hlist args arg0.
   all: reflexivity.
 
-- pattern ct, args, cases.
-  refine (
-    match ct as ct_ in A.constr_type ctor_ arg_tys_ Tbool
-        return forall
-            (args_ : hlist _ arg_tys_)
-            (cases_ : _),
-            _ ct_ args_ cases_ with
-    | A.CTtrue => _
-    | A.CTfalse => _
-    | _ => idProp
-    end args cases);
-  clear ct cases args arg_tys ctor; intros args cases.
+- revert args cases. pattern ctor, arg_tys, ct.
+  refine match ct as ct_ in A.constr_type ctor_ arg_tys_ (Tbool)
+          return _ ctor_ arg_tys_ ct_ with
+      | A.CTtrue => _
+      | A.CTfalse => _
+      end; intros; clear ct arg_tys ctor.
   all: unpack_hlist cases case0; unpack_hlist args arg0.
   all: reflexivity.
 
-- pattern item_ty in cases.
-  pattern item_ty, ct, args, cases.
-  refine (
-    match ct as ct_ in A.constr_type ctor_ arg_tys_ (Tlist item_ty_)
-        return forall
-            (args_ : hlist _ arg_tys_)
-            (cases_ : _ item_ty_),
-            _ item_ty_ ct_ args_ cases_ with
-    | A.CTnil item_ty => _
-    | A.CTcons item_ty => _
-    | _ => idProp
-    end args cases);
-  clear ct cases args arg_tys ctor  item_ty0; intros args cases.
+- revert args cases. pattern ctor, arg_tys, item_ty, ct.
+  refine match ct as ct_ in A.constr_type ctor_ arg_tys_ (Tlist item_ty_)
+          return _ ctor_ arg_tys_ item_ty_ ct_ with
+      | A.CTnil item_ty => _
+      | A.CTcons item_ty => _
+      end; intros; clear ct arg_tys ctor  item_ty0.
   all: unpack_hlist cases case0; unpack_hlist args arg0.
   all: reflexivity.
 
-- pattern ct, args, cases.
-  refine (
-    match ct as ct_ in A.constr_type ctor_ arg_tys_ (Tunit)
-        return forall
-            (args_ : hlist _ arg_tys_)
-            (cases_ : _),
-            _ ct_ args_ cases_ with
-    | A.CTtt => _
-    | _ => idProp
-    end args cases);
-  clear ct cases args arg_tys ctor; intros args cases.
+- revert args cases. pattern ctor, arg_tys, ct.
+  refine match ct as ct_ in A.constr_type ctor_ arg_tys_ (Tunit)
+          return _ ctor_ arg_tys_ ct_ with
+      | A.CTtt => _
+      end; intros; clear ct arg_tys ctor.
   all: unpack_hlist cases case0; unpack_hlist args arg0.
   all: reflexivity.
 
-- pattern ty1, ty2 in cases.
-  pattern ty1, ty2, ct, args, cases.
-  refine (
-    match ct as ct_ in A.constr_type ctor_ arg_tys_ (Tpair ty1_ ty2_)
-        return forall
-            (args_ : hlist _ arg_tys_)
-            (cases_ : _ ty1_ ty2_),
-            _ ty1_ ty2_ ct_ args_ cases_ with
-    | A.CTpair ty1 ty2 => _
-    | _ => idProp
-    end args cases);
-  clear ct cases args arg_tys ctor  ty0 ty3; intros args cases.
+- revert args cases. pattern ctor, arg_tys, ty1, ty2, ct.
+  refine match ct as ct_ in A.constr_type ctor_ arg_tys_ (Tpair ty1_ ty2_)
+          return _ ctor_ arg_tys_ ty1_ ty2_ ct_ with
+      | A.CTpair ty1 ty2 => _
+      end; intros; clear ct arg_tys ctor  ty0 ty3.
   all: unpack_hlist cases case0; unpack_hlist args arg0.
   all: reflexivity.
 
-- pattern item_ty in cases.
-  pattern item_ty, ct, args, cases.
-  refine (
-    match ct as ct_ in A.constr_type ctor_ arg_tys_ (Toption item_ty_)
-        return forall
-            (args_ : hlist _ arg_tys_)
-            (cases_ : _ item_ty_),
-            _ item_ty_ ct_ args_ cases_ with
-    | A.CTsome item_ty => _
-    | A.CTnone item_ty => _
-    | _ => idProp
-    end args cases);
-  clear ct cases args arg_tys ctor  item_ty0; intros args cases.
+- revert args cases. pattern ctor, arg_tys, item_ty, ct.
+  refine match ct as ct_ in A.constr_type ctor_ arg_tys_ (Toption item_ty_)
+          return _ ctor_ arg_tys_ item_ty_ ct_ with
+      | A.CTsome item_ty => _
+      | A.CTnone item_ty => _
+      end; intros; clear ct arg_tys ctor  item_ty0.
   all: unpack_hlist cases case0; unpack_hlist args arg0.
   all: reflexivity.
 
-- pattern ct, args, cases.
-  refine (
-    match ct as ct_ in A.constr_type ctor_ arg_tys_ (Tpositive)
-        return forall
-            (args_ : hlist _ arg_tys_)
-            (cases_ : _),
-            _ ct_ args_ cases_ with
-    | A.CTxI => _
-    | A.CTxO => _
-    | A.CTxH => _
-    | _ => idProp
-    end args cases);
-  clear ct cases args arg_tys ctor; intros args cases.
+- revert args cases. pattern ctor, arg_tys, ct.
+  refine match ct as ct_ in A.constr_type ctor_ arg_tys_ (Tpositive)
+          return _ ctor_ arg_tys_ ct_ with
+      | A.CTxI => _
+      | A.CTxO => _
+      | A.CTxH => _
+      end; intros; clear ct arg_tys ctor.
+  all: unpack_hlist cases case0; unpack_hlist args arg0.
+  all: reflexivity.
+
+- revert args cases. pattern ctor, arg_tys, ct.
+  refine match ct as ct_ in A.constr_type ctor_ arg_tys_ (TN)
+          return _ ctor_ arg_tys_ ct_ with
+      | A.CTN0 => _
+      | A.CTNpos => _
+      end; intros; clear ct arg_tys ctor.
+  all: unpack_hlist cases case0; unpack_hlist args arg0.
+  all: reflexivity.
+
+- revert args cases. pattern ctor, arg_tys, ct.
+  refine match ct as ct_ in A.constr_type ctor_ arg_tys_ (TZ)
+          return _ ctor_ arg_tys_ ct_ with
+      | A.CTZ0 => _
+      | A.CTZpos => _
+      | A.CTZneg => _
+      end; intros; clear ct arg_tys ctor.
   all: unpack_hlist cases case0; unpack_hlist args arg0.
   all: reflexivity.
 
