@@ -13,5 +13,4 @@ Require Import OeufPlugin.OeufPlugin.
 
 Require Import String.
 
-Time Definition test : compilation_unit := ltac:(oeuf_reflect pos_succ).
-Print test.
+Time Definition test : compilation_unit := ltac:(oeuf_reflect pos_add).

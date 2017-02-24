@@ -105,6 +105,19 @@ let expr_ty e =
 
 
 
+let rec iter_tys f stk e =
+    let go = iter_tys f (e :: stk) in
+    let f = f (e :: stk) in
+    match e with
+    | Var (ty, _) -> f ty
+    | App (ty1, ty2, _, _) -> f ty1; f ty2
+    | Constr (_, _, arg_tys, _, _) -> List.iter f arg_tys
+    | Close (arg_ty, free_tys, ret_ty, _, _) ->
+            f arg_ty; List.iter f free_tys; f ret_ty
+    | Elim (case_tys, _, ret_ty, _, _, _) ->
+            List.iter f case_tys; f ret_ty
+
+
 (* arg_ty, free_tys, ret_ty, body, name, pub *)
 type func = ty * ty list * ty * expr * string * bool
 
@@ -437,7 +450,10 @@ let reflect_expr evars env c : func list * expr =
 
         match Constr.kind c with
 
-        | Constr.Rel idx -> Var (reflect_type ty_c, idx - 1)
+        | Constr.Rel idx ->
+                Format.eprintf "using ty_c = %s - for Rel %d\n"
+                    (string_of_constr ty_c) idx;
+                Var (reflect_type ty_c, idx - 1)
 
         | Constr.Lambda (arg_name, arg_ty_c, body) ->
                 let env' = Environ.push_rel (arg_name, None, arg_ty_c) env in
@@ -502,7 +518,11 @@ let reflect_expr evars env c : func list * expr =
 
                         let arg_tys = List.map (fun arg ->
                             let (_, ty_c) = Typing.type_of env evars arg in
+                            Format.eprintf "using arg ty_c = %s - for %s\n"
+                                (string_of_constr ty_c) (string_of_constr arg);
                             reflect_type ty_c) args in
+                        Format.eprintf "using ty_c = %s - for DataConstr %s\n"
+                            (string_of_constr ty_c) (string_of_constr ctor);
                         (Constr (ty_c, ctor, arg_tys, ct, List.map go' args),
                          args')
 
@@ -514,6 +534,9 @@ let reflect_expr evars env c : func list * expr =
 
                         let case_tys = List.map (fun case ->
                             let (_, ty_c) = Typing.type_of env evars case in
+                            let ty_c = Reductionops.nf_beta evars ty_c in
+                            Format.eprintf "using case ty_c = %s - for %s\n"
+                                (string_of_constr ty_c) (string_of_constr case);
                             reflect_type ty_c) cases in
                         let target_tyn = Constr.mkApp (base_tyn, Array.of_list params) in
                         let env' = Environ.push_rel (Name.Anonymous, None, target_tyn) env in
@@ -523,10 +546,10 @@ let reflect_expr evars env c : func list * expr =
                             (Constr.mkApp (motive, Array.of_list [Constr.mkRel 1])) in
                         let ret_ty = reflect_type ret_ty_c in
 
-                        (*
                         Format.eprintf "tried to reduce motive: %s ==> %s\n"
                             (string_of_constr motive)
                             (string_of_constr ret_ty_c);
+                        (*
                         Format.eprintf "cases = [%s]; target = %s\n"
                             (String.concat "; " (List.map string_of_constr cases))
                             (string_of_constr target);
@@ -577,6 +600,8 @@ let reflect_expr evars env c : func list * expr =
                 | DataConstr (ctor, ct, num_params, num_fields) ->
                         assert (num_params = 0);
                         assert (num_fields = 0);
+                        Format.eprintf "using ty_c = %s - for Constructor %s\n"
+                            (string_of_constr ty_c) (string_of_constr ctor);
                         Constr (ty_c, ctor, [], ct, [])
                 | _ -> raise (Reflect_error (Format.sprintf
                     "unsupported constructor: %s" (string_of_constr c)))
@@ -606,6 +631,7 @@ let tyn_params c : Term.constr list =
 let rec emit_tyn c : Term.constr =
     match Constr.kind c with
     | Constr.App (base, params) ->
+            Format.eprintf "emitting app tyn: %s\n" (string_of_constr c);
             let (base_tyn, num_params) = get_tyn base in
             assert (Array.length params = num_params);
             let param_tyns = Array.map emit_tyn params in
@@ -636,6 +662,7 @@ let c_hcons = init_once (fun () -> resolve_symbol pkg_hlist "hcons")
 let c_here = init_once (fun () -> resolve_symbol pkg_hlist "Here")
 let c_there = init_once (fun () -> resolve_symbol pkg_hlist "There")
 
+let t_genv = init_once (fun () -> resolve_symbol pkg_sourcelifted "genv")
 let c_genv_nil = init_once (fun () -> resolve_symbol pkg_sourcelifted "GenvNil")
 let c_genv_cons = init_once (fun () -> resolve_symbol pkg_sourcelifted "GenvCons")
 
@@ -659,6 +686,8 @@ let c_constr = init_once (fun () -> resolve_symbol pkg_sourcelifted "Constr")
 let c_close = init_once (fun () -> resolve_symbol pkg_sourcelifted "Close")
 let c_elim = init_once (fun () -> resolve_symbol pkg_sourcelifted "Elim")
 
+let t_compilation_unit = init_once (fun () ->
+    resolve_symbol pkg_compilation_unit "compilation_unit")
 let c_compilation_unit = init_once (fun () ->
     resolve_symbol pkg_compilation_unit "CompilationUnit")
 
@@ -700,6 +729,23 @@ let rec emit_member a_ty a (xs : Term.constr list) idx =
     else
         let mb = emit_member a_ty a (List.tl xs) (idx - 1) in
         mk c_there [a_ty; a; List.hd xs; emit_list a_ty (List.tl xs); mb]
+
+
+
+let is_bad_motive ty =
+    match ty with
+    | ADT tyn -> begin
+            match Constr.kind tyn with
+            | Constr.App (base, _) -> begin
+                    match Constr.kind base with
+                    | Constr.Lambda (_, _, _) -> true
+                    | _ -> false
+            end
+            | _ -> false
+    end
+    | _ -> false
+
+
 
 (* g_tys: list of constrs of type `type * list type * type`
  * l_tys: list of constrs of type `type` *)
@@ -840,13 +886,20 @@ let emit_compilation_unit funcs : Term.constr =
 
 
 
+
+
 let tac c : unit Proofview.tactic =
     Proofview.Goal.enter (fun gl ->
         let env = Proofview.Goal.env gl in
         let evars = Proofview.Goal.sigma gl in
+        let t_start = Sys.time () in
         let (funcs, top) = reflect_expr evars env c in
-        Format.eprintf "funcs:\n%s\n" (string_of_func_list funcs);
+        let t_mid = Sys.time () in
+        (*Format.eprintf "funcs:\n%s\n" (string_of_func_list funcs);*)
         let result = emit_compilation_unit funcs in
+        let t_end = Sys.time () in
+        Format.eprintf "Done - %fs reflect, %fs emit\n"
+            (t_mid -. t_start) (t_end -. t_mid);
         Tactics.New.refine (fun evars -> (evars, result))
     )
 
