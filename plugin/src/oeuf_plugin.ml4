@@ -405,7 +405,7 @@ let reflect_expr evars env c : func list * expr =
     let env0 = env in
 
     let funcs : func list ref = ref [] in
-    let pub_names : StrSet.t ref = ref StrSet.empty in
+    let used_names : StrSet.t ref = ref StrSet.empty in
     let func_cache : expr Names.Cmap.t ref = ref Names.Cmap.empty in
     let counter : int ref = ref 0 in
 
@@ -415,23 +415,19 @@ let reflect_expr evars env c : func list * expr =
         x
     in
 
-    let next_lambda base =
-        Format.sprintf "%s_lam%d" base (get_counter ())
-    in
-
-    let fresh_public' base =
-        if not (StrSet.mem base !pub_names) then base
+    let fresh' base =
+        if not (StrSet.mem base !used_names) then base
         else
             let rec go () =
-                let name = base ^ string_of_int (get_counter ()) in
-                if not (StrSet.mem name !pub_names) then name
+                let name = base ^ "_" ^ string_of_int (get_counter ()) in
+                if not (StrSet.mem name !used_names) then name
                 else go ()
             in go ()
     in
 
-    let fresh_public base =
-        let name = fresh_public' base in
-        pub_names := StrSet.add name !pub_names;
+    let fresh base =
+        let name = fresh' base in
+        used_names := StrSet.add name !used_names;
         name
     in
 
@@ -442,6 +438,8 @@ let reflect_expr evars env c : func list * expr =
         idx
     in
 
+    (* `name` is a proposed name to use for the next lambda we see.  if the
+     * exact name is in use, we'll choose a fresh identifier instead. *)
     let rec go env locals name pub c : expr =
         (* Format.eprintf " ----- %s\n" (string_of_constr c); *)
         let go' = go env locals name pub in
@@ -451,8 +449,6 @@ let reflect_expr evars env c : func list * expr =
         match Constr.kind c with
 
         | Constr.Rel idx ->
-                Format.eprintf "using ty_c = %s - for Rel %d\n"
-                    (string_of_constr ty_c) idx;
                 Var (reflect_type ty_c, idx - 1)
 
         | Constr.Lambda (arg_name, arg_ty_c, body) ->
@@ -461,8 +457,10 @@ let reflect_expr evars env c : func list * expr =
                 let arg_ty = reflect_type arg_ty_c in
 
                 (* lift the lambda to a top-level function, and get its index *)
-                let lam_name = next_lambda name in
-                let body' : expr = go env' (arg_ty :: locals) lam_name false body in
+                let name = fresh name in
+                (* just propose the same name for the next lambda down.  it
+                 * will get a _123 appended by `fresh`. *)
+                let body' : expr = go env' (arg_ty :: locals) name false body in
 
                 (* take the type of the pre-lifted body.  this solves the
                  * problem of un-normalized eliminator motives showing up in
@@ -518,11 +516,7 @@ let reflect_expr evars env c : func list * expr =
 
                         let arg_tys = List.map (fun arg ->
                             let (_, ty_c) = Typing.type_of env evars arg in
-                            Format.eprintf "using arg ty_c = %s - for %s\n"
-                                (string_of_constr ty_c) (string_of_constr arg);
                             reflect_type ty_c) args in
-                        Format.eprintf "using ty_c = %s - for DataConstr %s\n"
-                            (string_of_constr ty_c) (string_of_constr ctor);
                         (Constr (ty_c, ctor, arg_tys, ct, List.map go' args),
                          args')
 
@@ -535,8 +529,6 @@ let reflect_expr evars env c : func list * expr =
                         let case_tys = List.map (fun case ->
                             let (_, ty_c) = Typing.type_of env evars case in
                             let ty_c = Reductionops.nf_beta evars ty_c in
-                            Format.eprintf "using case ty_c = %s - for %s\n"
-                                (string_of_constr ty_c) (string_of_constr case);
                             reflect_type ty_c) cases in
                         let target_tyn = Constr.mkApp (base_tyn, Array.of_list params) in
                         let env' = Environ.push_rel (Name.Anonymous, None, target_tyn) env in
@@ -545,15 +537,6 @@ let reflect_expr evars env c : func list * expr =
                         let ret_ty_c = Reduction.whd_betaiotazeta env'
                             (Constr.mkApp (motive, Array.of_list [Constr.mkRel 1])) in
                         let ret_ty = reflect_type ret_ty_c in
-
-                        Format.eprintf "tried to reduce motive: %s ==> %s\n"
-                            (string_of_constr motive)
-                            (string_of_constr ret_ty_c);
-                        (*
-                        Format.eprintf "cases = [%s]; target = %s\n"
-                            (String.concat "; " (List.map string_of_constr cases))
-                            (string_of_constr target);
-                            *)
 
                         (Elim (case_tys, target_tyn, ret_ty, elim, List.map go' cases, go' target),
                          args)
@@ -584,7 +567,7 @@ let reflect_expr evars env c : func list * expr =
                     in
                     let body = Mod_subst.force_constr subst_body in
                     let body = Reduction.nf_betaiota env0 body in
-                    let name = fresh_public (Label.to_string (Constant.label const)) in
+                    let name = Label.to_string (Constant.label const) in
 
                     Format.eprintf "retrieved body: %s = %s\n" (string_of_constr c) (string_of_constr body);
                     let closure = go env0 [] name true body in
@@ -600,8 +583,6 @@ let reflect_expr evars env c : func list * expr =
                 | DataConstr (ctor, ct, num_params, num_fields) ->
                         assert (num_params = 0);
                         assert (num_fields = 0);
-                        Format.eprintf "using ty_c = %s - for Constructor %s\n"
-                            (string_of_constr ty_c) (string_of_constr ctor);
                         Constr (ty_c, ctor, [], ct, [])
                 | _ -> raise (Reflect_error (Format.sprintf
                     "unsupported constructor: %s" (string_of_constr c)))
@@ -895,7 +876,7 @@ let tac c : unit Proofview.tactic =
         let t_start = Sys.time () in
         let (funcs, top) = reflect_expr evars env c in
         let t_mid = Sys.time () in
-        (*Format.eprintf "funcs:\n%s\n" (string_of_func_list funcs);*)
+        Format.eprintf "funcs:\n%s\n" (string_of_func_list funcs);
         let result = emit_compilation_unit funcs in
         let t_end = Sys.time () in
         Format.eprintf "Done - %fs reflect, %fs emit\n"
