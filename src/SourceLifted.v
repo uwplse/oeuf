@@ -421,14 +421,12 @@ Definition run_elim {G L case_tys target_tyn ret_ty}
         (cases : hlist (expr G L) case_tys)
         (target : value G (ADT target_tyn))
         : expr G L ret_ty.
-refine (
-    match target in value _ (ADT target_tyn_)
-        return forall
-            (e_ : elim case_tys (ADT target_tyn_) ret_ty), _ with
-    | @VConstr _  target_tyn ctor arg_tys  ct args => fun e => _
-    | VClose _ _ => idProp
-    end e).
-clear e0 target target_tyn0.
+revert e. pattern target_tyn, target.
+let f := match goal with [ |- ?f target_tyn target ] => f end in
+refine match target as target_ in value _ (ADT target_tyn_)
+        return f target_tyn_ target_ with
+    | @VConstr _  target_tyn ctor arg_tys  ct args => _
+    end; intros.  clear target target_tyn0.
 
 (* note: if you add any new cases here, you must also add cases to
    run_elim_denote in SourceLiftedProofs.v *)
