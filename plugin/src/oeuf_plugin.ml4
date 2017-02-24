@@ -506,13 +506,6 @@ let reflect_expr evars env c : func list * expr =
                         let args' = args in
                         let (params, args') = split_at num_params args' in
                         let (args, args') = split_at num_fields args' in
-                        (*
-                        Format.eprintf "took %s: %d params, %d args, %d left\n"
-                            (string_of_constr ctor)
-                            (List.length params)
-                            (List.length args)
-                            (List.length args');
-                            *)
 
                         let arg_tys = List.map (fun arg ->
                             let (_, ty_c) = Typing.type_of env evars arg in
@@ -541,10 +534,6 @@ let reflect_expr evars env c : func list * expr =
                         (Elim (case_tys, target_tyn, ret_ty, elim, List.map go' cases, go' target),
                          args)
             in
-            (*
-            Format.eprintf "apply %s to %d args\n" (string_of_expr func) (List.length args);
-            Format.eprintf " type of function = %s\n" (string_of_ty (expr_ty func));
-            *)
             let rec build_app (func : expr) (args : Term.constr list) : expr =
                 match args with
                 | [] -> func
