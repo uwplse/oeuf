@@ -197,29 +197,84 @@ let pkg_sourcevalues = ["SourceValues"]
 let pkg_sourcelifted = ["SourceLifted"]
 let pkg_compilation_unit = ["CompilationUnit"]
 
+let pkg_binnums = ["Coq"; "Numbers"; "BinNums"]
 
-let type_defns : (string list * string * string option * int * (string * int) list) list = [
+
+type ctor_defn =
+    { name : string
+    ; rname : string
+    ; num_fields : int
+    }
+
+type type_defn =
+    { pkg : string list
+    ; name : string
+    ; rname : string
+    ; ename : string
+    ; num_params : int
+    ; ctors : ctor_defn list
+    }
+
+let simple_ctor_defn name num_fields : ctor_defn =
+    { name = name
+    ; rname = name
+    ; num_fields = num_fields
+    }
+
+let simple_type_defn pkg name num_params ctors : type_defn =
+    { pkg = pkg
+    ; name = name
+    ; rname = name
+    ; ename = String.capitalize name
+    ; num_params = num_params
+    ; ctors = List.map (fun (name, num_fields) -> simple_ctor_defn name num_fields) ctors
+    }
+
+
+let type_defns : type_defn list = [
     (* module, type name, reflected type name, number of params, (constructor, num fields) list *)
-    (pkg_datatypes, "nat", None, 0, 
-        [("O", 0); ("S", 1)]);
-    (pkg_datatypes, "bool", None, 0,
-        [("true", 0); ("false", 0)]);
-    (pkg_datatypes, "list", None, 1,
-        [("nil", 0); ("cons", 2)]);
-    (pkg_datatypes, "unit", None, 0,
-        [("tt", 0)]);
-    (pkg_datatypes, "prod", Some "pair", 2,
-        [("pair", 2)])
+    simple_type_defn pkg_datatypes "nat" 0
+        [("O", 0); ("S", 1)];
+    simple_type_defn pkg_datatypes "bool" 0
+        [("true", 0); ("false", 0)];
+    simple_type_defn pkg_datatypes "list" 1
+        [("nil", 0); ("cons", 2)];
+    simple_type_defn pkg_datatypes "unit" 0
+        [("tt", 0)];
+
+    { pkg = pkg_datatypes
+    ; name = "prod"
+    ; rname = "pair"
+    ; ename = "Pair"
+    ; num_params = 2
+    ; ctors = [simple_ctor_defn "pair" 2]
+    };
+
+    { pkg = pkg_datatypes
+    ; name = "option"
+    ; rname = "option"
+    ; ename = "Option"
+    ; num_params = 1
+    ; ctors = [
+        { name = "Some"; rname = "some"; num_fields = 1 };
+        { name = "None"; rname = "none"; num_fields = 1 }
+    ]};
+
+    simple_type_defn pkg_binnums "positive" 0
+        [("xI", 1); ("xO", 1); ("xH", 0)]
+    (*
+    (pkg_binnums, "N", None, 0,
+        [("N0", 0), ("Npos", 1)])
+        *)
 ]
 
 
 let tyn_map = init_once (fun () ->
     List.map
-        (fun (pkg, name, rname, params, _ctor_names) ->
-            let denotation = resolve_symbol pkg name in
-            let refl_name = String.concat "" ["T"; Option.default name rname] in
-            let reflection = resolve_symbol pkg_utopia refl_name in
-            (denotation, (reflection, params)))
+        (fun t ->
+            let denotation = resolve_symbol t.pkg t.name in
+            let reflection = resolve_symbol pkg_utopia ("T" ^ t.rname) in
+            (denotation, (reflection, t.num_params)))
     type_defns)
 
 let lookup_tyn c = constr_assoc c (tyn_map ())
@@ -239,20 +294,19 @@ type what =
     | Eliminator of Term.constr * Term.constr * int * int
 
 let what_map = init_once (fun () ->
-    List.flatten (List.map (fun (pkg, name, rname, params, ctors) ->
-        (List.map (fun (ctor_name, fields) ->
-            let func = resolve_symbol pkg ctor_name in
-            let ctor = resolve_symbol pkg_utopia ("C" ^ ctor_name) in
-            let ct = resolve_symbol pkg_sourcevalues ("CT" ^ ctor_name) in
-            (func, DataConstr (ctor, ct, params, fields))) ctors))
+    List.flatten (List.map (fun (t : type_defn) ->
+        (List.map (fun (c : ctor_defn) ->
+            let func = resolve_symbol t.pkg c.name in
+            let ctor = resolve_symbol pkg_utopia ("C" ^ c.rname) in
+            let ct = resolve_symbol pkg_sourcevalues ("CT" ^ c.rname) in
+            (func, DataConstr (ctor, ct, t.num_params, c.num_fields))) t.ctors))
     type_defns)
     @
-    List.map (fun (pkg, name, rname, params, ctors) ->
-        let rname = Option.default name rname in
-        let func = resolve_symbol pkg (name ^ "_rect") in
-        let ty = resolve_symbol pkg name in
-        let elim = resolve_symbol pkg_sourcelifted ("E" ^ String.capitalize rname) in
-        (func, Eliminator (ty, elim, params, List.length ctors)))
+    List.map (fun (t : type_defn) ->
+        let func = resolve_symbol t.pkg (t.name ^ "_rect") in
+        let ty = resolve_symbol t.pkg t.name in
+        let elim = resolve_symbol pkg_sourcelifted ("E" ^ t.ename) in
+        (func, Eliminator (ty, elim, t.num_params, List.length t.ctors)))
     type_defns
 )
 
@@ -517,6 +571,16 @@ let reflect_expr evars env c : func list * expr =
                 else ();
 
                 Names.Cmap.find const !func_cache
+
+        | Constr.Construct (ctor, univ) -> begin
+                match what_is_this c with
+                | DataConstr (ctor, ct, num_params, num_fields) ->
+                        assert (num_params = 0);
+                        assert (num_fields = 0);
+                        Constr (ty_c, ctor, [], ct, [])
+                | _ -> raise (Reflect_error (Format.sprintf
+                    "unsupported constructor: %s" (string_of_constr c)))
+        end
 
         | _ ->
                 raise (Success
