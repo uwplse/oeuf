@@ -18,17 +18,30 @@ Hint Resolve type_eq_dec : eq_dec.
 Inductive constr_type : constr_name -> list type -> type_name -> Type :=
 | CTO            : constr_type CO         []                          Tnat
 | CTS            : constr_type CS         [ADT Tnat]                  Tnat
+
 | CTtrue         : constr_type Ctrue      []                          Tbool
 | CTfalse        : constr_type Cfalse     []                          Tbool
+
 | CTnil ty       : constr_type Cnil       []                          (Tlist ty)
 | CTcons ty      : constr_type Ccons      [ADT ty; ADT (Tlist ty)]    (Tlist ty)
+
 | CTtt           : constr_type Ctt        []                          Tunit
+
 | CTpair ty1 ty2 : constr_type Cpair      [ADT ty1; ADT ty2]          (Tpair ty1 ty2)
+
 | CTsome ty      : constr_type Csome      [ADT ty]                    (Toption ty)
 | CTnone ty      : constr_type Cnone      []                          (Toption ty)
+
 | CTxI           : constr_type CxI        [ADT Tpositive]             Tpositive
 | CTxO           : constr_type CxO        [ADT Tpositive]             Tpositive
 | CTxH           : constr_type CxH        []                          Tpositive
+
+| CTN0           : constr_type CN0        []                          TN
+| CTNpos         : constr_type CNpos      [ADT Tpositive]             TN
+
+| CTZ0           : constr_type CZ0        []                          TZ
+| CTZpos         : constr_type CZpos      [ADT Tpositive]             TZ
+| CTZneg         : constr_type CZneg      [ADT Tpositive]             TZ
 .
 
 
@@ -68,17 +81,30 @@ Definition constr_denote {arg_tys ty c} (ct : constr_type c arg_tys ty) :
   match ct with
   | CTO => fun _ => 0
   | CTS => fun h => S (hhead h)
+
   | CTtrue => fun _ => true
   | CTfalse => fun _ => false
+
   | CTnil _ => fun _ => []
   | CTcons _ => fun h => cons (hhead h) (hhead (htail h))
+
   | CTtt => fun _ => tt
+
   | CTpair _ _ => fun h => (hhead h, hhead (htail h))
+
   | CTsome _ => fun h => Some (hhead h)
   | CTnone _ => fun h => None
+
   | CTxI => fun h => xI (hhead h)
   | CTxO => fun h => xO (hhead h)
   | CTxH => fun h => xH
+
+  | CTN0 => fun h => N0
+  | CTNpos => fun h => Npos (hhead h)
+
+  | CTZ0 => fun h => Z0
+  | CTZpos => fun h => Zpos (hhead h)
+  | CTZneg => fun h => Zneg (hhead h)
   end.
 
 Definition value_denote

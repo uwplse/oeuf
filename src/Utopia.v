@@ -8,6 +8,8 @@ Inductive type_name :=
 | Tpair : type_name -> type_name -> type_name
 | Toption : type_name -> type_name
 | Tpositive
+| TN
+| TZ
 .
 
 
@@ -24,6 +26,8 @@ Fixpoint type_name_denote (tyn : type_name) : Type :=
   | Tpair ty1 ty2 => type_name_denote ty1 * type_name_denote ty2
   | Toption ty => option (type_name_denote ty)
   | Tpositive => positive
+  | TN => N
+  | TZ => Z
   end.
 
 Inductive constr_name :=
@@ -40,6 +44,11 @@ Inductive constr_name :=
 | CxI
 | CxO
 | CxH
+| CN0
+| CNpos
+| CZ0
+| CZpos
+| CZneg
 .
 
 Definition constructor_index ctor : nat :=
@@ -63,6 +72,13 @@ Definition constructor_index ctor : nat :=
     | CxI => 0
     | CxO => 1
     | CxH => 2
+
+    | CN0 => 0
+    | CNpos => 1
+
+    | CZ0 => 0
+    | CZpos => 1
+    | CZneg => 2
     end.
 
 Definition constructor_arg_n ctor : nat :=
@@ -86,6 +102,13 @@ Definition constructor_arg_n ctor : nat :=
     | CxI => 1
     | CxO => 1
     | CxH => 0
+
+    | CN0 => 0
+    | CNpos => 1
+
+    | CZ0 => 0
+    | CZpos => 1
+    | CZneg => 1
     end.
 
 Definition ctor_arg_is_recursive ctor pos : bool :=
@@ -118,6 +141,13 @@ Definition type_constr ty idx : option constr_name :=
     | Tpositive, 0 => Some CxI
     | Tpositive, 1 => Some CxO
     | Tpositive, 2 => Some CxH
+
+    | TN, 0 => Some CN0
+    | TN, 1 => Some CNpos
+
+    | TZ, 0 => Some CZ0
+    | TZ, 1 => Some CZpos
+    | TZ, 2 => Some CZneg
 
     | _, _ => None
     end.
