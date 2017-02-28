@@ -710,6 +710,7 @@ let rec emit_ty_list ctx tys : Term.constr =
     else ();
     Constr.mkRel (Hashtbl.find ctx.ty_list_cache tys)
 
+
 let rec emit_list a_ty xs =
     match xs with
     | [] -> mk c_nil [a_ty]
@@ -718,11 +719,11 @@ let rec emit_list a_ty xs =
 let emit_map a_ty f xs =
     emit_list a_ty (List.map f xs)
 
-let emit_sig ctx arg_ty free_tys ret_ty =
-    let sg = (arg_ty, free_tys, ret_ty) in
+let emit_sig ctx sg =
     if not (Hashtbl.mem ctx.sig_cache sg) then
         let ty = t_type () in
         let list_ty = mk t_list [ty] in
+        let (arg_ty, free_tys, ret_ty) = sg in
         let c = 
             mk c_pair [mk t_prod [ty; list_ty]; ty;
                 mk c_pair [ty; list_ty;
@@ -736,6 +737,18 @@ let emit_sig ctx arg_ty free_tys ret_ty =
         Hashtbl.add ctx.sig_cache sg idx
     else ();
     Constr.mkRel (Hashtbl.find ctx.sig_cache sg)
+
+let rec emit_sig_list ctx sgs : Term.constr =
+    if not (Hashtbl.mem ctx.sig_list_cache sgs) then
+        let c = match sgs with
+            | [] -> mk c_nil [t_sig ()]
+            | sg :: sgs -> mk c_cons [t_sig ();
+                    emit_sig ctx sg; emit_sig_list ctx sgs]
+        in 
+        let idx = ctx.emit_let "sig_list" (mk t_list [t_sig ()]) c in
+        Hashtbl.add ctx.sig_list_cache sgs idx
+    else ();
+    Constr.mkRel (Hashtbl.find ctx.sig_list_cache sgs)
 
 let rec emit_member a_ty a (xs : Term.constr list) idx =
     if idx == 0 then
@@ -760,11 +773,13 @@ let is_bad_motive ty =
     | _ -> false
 
 
-(* g_tys: list of constrs of type `type * list type * type`
- * l_tys: list of constrs of type `type` *)
-let emit_expr ctx (g_tys : Term.constr list) (l_tys : Term.constr list) e : Term.constr =
-    let g_tys_c = emit_list (t_sig ()) g_tys in
-    let l_tys_c = emit_list (t_type ()) l_tys in
+let emit_expr ctx (g_tys : fn_sig list) (l_tys : ty list) e : Term.constr =
+    let g_tys_c = emit_sig_list ctx g_tys in
+    let l_tys_c = emit_ty_list ctx l_tys in
+
+    (* transitional *)
+    let g_tys' = List.map (emit_sig ctx) g_tys in
+    let l_tys' = List.map (emit_ty ctx) l_tys in
 
     let hlist_a = t_type () in
     let hlist_b = mk t_expr [g_tys_c; l_tys_c] in
@@ -784,7 +799,7 @@ let emit_expr ctx (g_tys : Term.constr list) (l_tys : Term.constr list) e : Term
         | Var (ty, idx) ->
                 mk c_var [
                     g_tys_c; l_tys_c; emit_ty ctx ty;
-                    emit_member (t_type ()) (emit_ty ctx ty) l_tys idx
+                    emit_member (t_type ()) (emit_ty ctx ty) l_tys' idx
                 ]
 
         | App (ty1, ty2, func, arg) ->
@@ -808,13 +823,13 @@ let emit_expr ctx (g_tys : Term.constr list) (l_tys : Term.constr list) e : Term
                 let arg_ty_c = emit_ty ctx arg_ty in
                 let free_tys_c = emit_ty_list ctx free_tys in
                 let ret_ty_c = emit_ty ctx ret_ty in
-                let sig_c = emit_sig ctx arg_ty free_tys ret_ty in
+                let sig_c = emit_sig ctx (arg_ty, free_tys, ret_ty) in
                 (* convert 0-based function index to de Bruijn *)
                 let db_idx = List.length g_tys - 1 - idx in
                 mk c_close [
                     g_tys_c; l_tys_c;
                     arg_ty_c; free_tys_c; ret_ty_c;
-                    emit_member (t_sig ()) sig_c g_tys db_idx;
+                    emit_member (t_sig ()) sig_c g_tys' db_idx;
                     snd (go_hlist free)
                 ]
 
@@ -839,24 +854,24 @@ let emit_expr ctx (g_tys : Term.constr list) (l_tys : Term.constr list) e : Term
 
 (* returns both the list of signatures and the genv of function bodies *)
 let emit_funcs ctx funcs : Term.constr * Term.constr =
-    let rec go (g_tys : Term.constr list) (g : Term.constr) funcs : Term.constr * Term.constr =
+    let rec go (g_tys : fn_sig list) (g : Term.constr) funcs : Term.constr * Term.constr =
         match funcs with
-        | [] -> (emit_list (t_sig ()) g_tys, g)
+        | [] -> (emit_sig_list ctx g_tys, g)
         | (arg_ty, free_tys, ret_ty, body, name, _) :: funcs ->
                 let arg_ty_c = emit_ty ctx arg_ty in
                 let free_ty_cs = List.map (emit_ty ctx) free_tys in
                 let ret_ty_c = emit_ty ctx ret_ty in
-                let sig_c = emit_sig ctx arg_ty free_tys ret_ty in
+                let sig_c = emit_sig ctx (arg_ty, free_tys, ret_ty) in
 
-                let l_tys = arg_ty_c :: free_ty_cs in
+                let l_tys = arg_ty :: free_tys in
                 Format.eprintf "emitting %s = %s\n" name (string_of_expr body);
                 Format.pp_print_flush Format.err_formatter ();
                 let body' = emit_expr ctx g_tys l_tys body in
 
                 go
-                    (sig_c :: g_tys)
+                    ((arg_ty, free_tys, ret_ty) :: g_tys)
                     (mk c_genv_cons [
-                        sig_c; emit_list (t_sig ()) g_tys;
+                        sig_c; emit_sig_list ctx g_tys;
                         body'; g
                     ])
                     funcs
