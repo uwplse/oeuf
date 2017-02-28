@@ -674,6 +674,16 @@ let tyn_params c : Term.constr list =
     | Constr.App (_, params) -> Array.to_list params
     | _ -> []
 
+
+let rec emit_list a_ty xs =
+    match xs with
+    | [] -> mk c_nil [a_ty]
+    | x :: xs -> mk c_cons [a_ty; x; emit_list a_ty xs]
+
+let emit_map a_ty f xs =
+    emit_list a_ty (List.map f xs)
+
+
 let rec emit_tyn c : Term.constr =
     match Constr.kind c with
     | Constr.App (base, params) ->
@@ -697,6 +707,12 @@ let rec emit_ty ctx ty : Term.constr =
     else ();
     Constr.mkRel (Hashtbl.find ctx.ty_cache ty)
 
+let rec emit_ty' ty : Term.constr =
+    match ty with
+    | ADT tyn_c -> mk c_adt [emit_tyn tyn_c]
+    | Arrow (ty1, ty2) ->
+            mk c_arrow [emit_ty' ty1; emit_ty' ty2]
+
 let rec emit_ty_list ctx tys : Term.constr =
     if not (Hashtbl.mem ctx.ty_list_cache tys) then
         let c = match tys with
@@ -709,14 +725,8 @@ let rec emit_ty_list ctx tys : Term.constr =
     else ();
     Constr.mkRel (Hashtbl.find ctx.ty_list_cache tys)
 
-
-let rec emit_list a_ty xs =
-    match xs with
-    | [] -> mk c_nil [a_ty]
-    | x :: xs -> mk c_cons [a_ty; x; emit_list a_ty xs]
-
-let emit_map a_ty f xs =
-    emit_list a_ty (List.map f xs)
+let emit_ty_list' tys : Term.constr =
+    emit_map (t_type ()) emit_ty' tys
 
 let emit_sig ctx sg =
     if not (Hashtbl.mem ctx.sig_cache sg) then
@@ -736,6 +746,21 @@ let emit_sig ctx sg =
         Hashtbl.add ctx.sig_cache sg idx
     else ();
     Constr.mkRel (Hashtbl.find ctx.sig_cache sg)
+
+let emit_sig' sg =
+    let ty = t_type () in
+    let list_ty = mk t_list [ty] in
+    let (arg_ty, free_tys, ret_ty) = sg in
+    mk c_pair [mk t_prod [ty; list_ty]; ty;
+        mk c_pair [ty; list_ty;
+            emit_ty' arg_ty;
+            emit_ty_list' free_tys
+        ];
+        emit_ty' ret_ty
+    ]
+
+let emit_sig_list' sgs : Term.constr =
+    emit_map (t_sig ()) emit_sig' sgs
 
 let rec emit_sig_list ctx sgs : Term.constr =
     if not (Hashtbl.mem ctx.sig_list_cache sgs) then
@@ -872,11 +897,50 @@ let emit_expr ctx (g_tys : fn_sig list) (l_tys : ty list) e : Term.constr =
 
     in go e
 
+let mk_ctx (_ : unit) : emit_ctx * (Term.constr -> Term.constr) ref =
+    let let_counter = ref 0 in
+    let add_lets : ref (Term.constr -> Term.constr) = ref (fun x -> x) in
+    let emit_let name ty c =
+        let f = !add_lets in
+        let name' = Names.Name (Id.of_string name) in
+        add_lets := (fun rest -> f (Constr.mkLetIn (name', c, ty, rest)));
+        let_counter := !let_counter + 1;
+        (* 0 = first let, -9 = 10th let.  these are all invalid (so they'll be
+         * caught quickly if one slips into the final term), but easy to
+         * convert to valid ones (idx' = depth + idx) *)
+        - !let_counter + 1
+    in
+    let ctx =
+        { emit_let = emit_let
+        ; ty_cache = Hashtbl.create 50
+        ; sig_cache = Hashtbl.create 50
+        ; ty_list_cache = Hashtbl.create 50
+        ; sig_list_cache = Hashtbl.create 50
+        ; ty_member_cache = Hashtbl.create 50
+        ; sig_member_cache = Hashtbl.create 50
+        } in
+    (ctx, add_lets)
+
+let unflip_rels c =
+    let rec go depth c =
+        match Constr.kind c with
+        | Constr.Rel idx -> Constr.mkRel (depth + idx)
+        | _ -> Constr.map_with_binders (fun d -> d + 1) go depth c
+    in
+    go 0 c
+
+let with_ctx (f : emit_ctx -> Term.constr) : Term.constr =
+    let (ctx, add_lets) = mk_ctx () in
+    let result = f ctx in
+    unflip_rels (!add_lets result)
+
 (* returns both the list of signatures and the genv of function bodies *)
-let emit_funcs ctx funcs : Term.constr * Term.constr =
-    let rec go (g_tys : fn_sig list) (g_idx : int) funcs : Term.constr * Term.constr =
+let emit_funcs (prefix_sigs : fn_sig list) (prefix : Term.constr) funcs : Term.constr =
+    let (ctx, add_lets) = mk_ctx () in
+
+    let rec go (g_tys : fn_sig list) (g_idx : int) funcs : Term.constr =
         match funcs with
-        | [] -> (emit_sig_list ctx g_tys, Constr.mkRel g_idx)
+        | [] -> Constr.mkRel g_idx
         | (arg_ty, free_tys, ret_ty, body, name, _) :: funcs ->
                 let l_tys = arg_ty :: free_tys in
                 Format.eprintf "emitting %s = %s\n" name (string_of_expr body);
@@ -903,8 +967,12 @@ let emit_funcs ctx funcs : Term.constr * Term.constr =
 
                 go g_tys' g'_idx funcs
     in
-    let g_nil_idx = ctx.emit_let "g" (mk t_genv [mk c_nil [t_sig ()]]) (c_genv_nil ()) in
-    go [] g_nil funcs
+
+    let prefix_ty = mk t_genv [emit_sig_list ctx prefix_sigs] in
+    let prefix_idx = ctx.emit_let "prefix" prefix_ty prefix in
+    let result = go prefix_sigs prefix_idx funcs in
+
+    unflip_rels (!add_lets result)
 
 
 let emit_bool b : Term.constr =
@@ -932,46 +1000,26 @@ let emit_string s : Term.constr =
     ) s;
     !tmp (c_empty_string ())
 
-let unflip_rels c =
-    let rec go depth c =
-        match Constr.kind c with
-        | Constr.Rel idx -> Constr.mkRel (depth + idx)
-        | _ -> Constr.map_with_binders (fun d -> d + 1) go depth c
-    in
-    go 0 c
+let func_sig f =
+    let (arg_ty, free_tys, ret_ty, _, _, _) = f in
+    (arg_ty, free_tys, ret_ty)
+
+(* in `funcs`, the "oldest" function is first.  but in `G`, it's last. *)
+let g_sigs funcs =
+    List.rev (List.map func_sig funcs)
 
 let emit_compilation_unit funcs : Term.constr =
-    let let_counter = ref 0 in
-    let add_lets : ref (Term.constr -> Term.constr) = ref (fun x -> x) in
-    let emit_let name ty c =
-        let f = !add_lets in
-        let name' = Names.Name (Id.of_string name) in
-        add_lets := (fun rest -> f (Constr.mkLetIn (name', c, ty, rest)));
-        let_counter := !let_counter + 1;
-        (* 0 = first let, -9 = 10th let.  these are all invalid (so they'll be
-         * caught quickly if one slips into the final term), but easy to
-         * convert to valid ones (idx' = depth + idx) *)
-        - !let_counter + 1
-    in
-    let ctx =
-        { emit_let = emit_let
-        ; ty_cache = Hashtbl.create 50
-        ; sig_cache = Hashtbl.create 50
-        ; ty_list_cache = Hashtbl.create 50
-        ; sig_list_cache = Hashtbl.create 50
-        ; ty_member_cache = Hashtbl.create 50
-        ; sig_member_cache = Hashtbl.create 50
-        } in
+    let funcs = funcs in
+    let types = with_ctx (fun ctx ->
+        emit_map (t_sig ()) (emit_sig ctx) (g_sigs funcs)) in
+    let exprs = emit_funcs [] (c_genv_nil ()) funcs in
 
-    let (types, exprs) = emit_funcs ctx funcs in
-    unflip_rels (!add_lets (
-        mk c_compilation_unit [
-            types;
-            exprs;
-            emit_map (t_string ()) (fun (_, _, _, _, name, pub) ->
-                emit_string (if not pub then "__" ^ name else name)) funcs
-        ]
-    ))
+    mk c_compilation_unit [
+        types;
+        exprs;
+        emit_map (t_string ()) (fun (_, _, _, _, name, pub) ->
+            emit_string (if not pub then "__" ^ name else name)) funcs
+    ]
 
 
 
@@ -1019,10 +1067,12 @@ let tac c : unit Proofview.tactic =
         let t_end = Sys.time () in
         Format.eprintf "Lifted %d functions - %fs reflect, %fs emit\n"
             (List.length funcs) (t_mid -. t_start) (t_end -. t_mid);
+
             (*
         Format.eprintf " === printing term ... === \n";
         Format.eprintf "%a\n" pp_constr result;
         *)
+
         Format.eprintf " === counting constructors ... === \n";
         Format.pp_print_flush Format.err_formatter ();
         print_ctor_counts env (count_ctors result);
