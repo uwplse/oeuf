@@ -750,12 +750,38 @@ let rec emit_sig_list ctx sgs : Term.constr =
     else ();
     Constr.mkRel (Hashtbl.find ctx.sig_list_cache sgs)
 
-let rec emit_member a_ty a (xs : Term.constr list) idx =
-    if idx == 0 then
-        mk c_here [a_ty; a; emit_list a_ty (List.tl xs)]
-    else
-        let mb = emit_member a_ty a (List.tl xs) (idx - 1) in
-        mk c_there [a_ty; a; List.hd xs; emit_list a_ty (List.tl xs); mb]
+
+let emit_ty_member ctx (xs : ty list) idx =
+    let target = List.nth xs idx in
+    let target_c = emit_ty ctx target in
+    let rec go xs idx =
+        if idx == 0 then
+            mk c_here [t_type (); target_c;
+                    emit_ty_list ctx (List.tl xs)]
+        else
+            let mb = go (List.tl xs) (idx - 1) in
+            mk c_there [t_type (); target_c;
+                    emit_ty ctx (List.hd xs);
+                    emit_ty_list ctx (List.tl xs);
+                    mb]
+    in
+    go xs idx
+
+let emit_sig_member ctx (xs : fn_sig list) idx =
+    let target = List.nth xs idx in
+    let target_c = emit_sig ctx target in
+    let rec go xs idx =
+        if idx == 0 then
+            mk c_here [t_sig (); target_c;
+                    emit_sig_list ctx (List.tl xs)]
+        else
+            let mb = go (List.tl xs) (idx - 1) in
+            mk c_there [t_sig (); target_c;
+                    emit_sig ctx (List.hd xs);
+                    emit_sig_list ctx (List.tl xs);
+                    mb]
+    in
+    go xs idx
 
 
 
@@ -777,10 +803,6 @@ let emit_expr ctx (g_tys : fn_sig list) (l_tys : ty list) e : Term.constr =
     let g_tys_c = emit_sig_list ctx g_tys in
     let l_tys_c = emit_ty_list ctx l_tys in
 
-    (* transitional *)
-    let g_tys' = List.map (emit_sig ctx) g_tys in
-    let l_tys' = List.map (emit_ty ctx) l_tys in
-
     let hlist_a = t_type () in
     let hlist_b = mk t_expr [g_tys_c; l_tys_c] in
 
@@ -799,7 +821,7 @@ let emit_expr ctx (g_tys : fn_sig list) (l_tys : ty list) e : Term.constr =
         | Var (ty, idx) ->
                 mk c_var [
                     g_tys_c; l_tys_c; emit_ty ctx ty;
-                    emit_member (t_type ()) (emit_ty ctx ty) l_tys' idx
+                    emit_ty_member ctx l_tys idx
                 ]
 
         | App (ty1, ty2, func, arg) ->
@@ -829,7 +851,7 @@ let emit_expr ctx (g_tys : fn_sig list) (l_tys : ty list) e : Term.constr =
                 mk c_close [
                     g_tys_c; l_tys_c;
                     arg_ty_c; free_tys_c; ret_ty_c;
-                    emit_member (t_sig ()) sig_c g_tys' db_idx;
+                    emit_sig_member ctx g_tys db_idx;
                     snd (go_hlist free)
                 ]
 
