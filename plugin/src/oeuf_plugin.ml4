@@ -807,14 +807,16 @@ let emit_expr ctx (g_tys : fn_sig list) (l_tys : ty list) e : Term.constr =
     let hlist_b = mk t_expr [g_tys_c; l_tys_c] in
 
     let rec go e : Term.constr =
-        let rec go_hlist es : Term.constr * Term.constr =
+        let rec go_hlist es : ty list * Term.constr =
             match es with
-            | [] -> (mk c_nil [t_type ()], mk c_hnil [hlist_a; hlist_b])
+            | [] -> ([], mk c_hnil [hlist_a; hlist_b])
             | e :: es ->
-                    let ty = emit_ty ctx (expr_ty e) in
+                    let ty = expr_ty e in
                     let (tys, h) = go_hlist es in
-                    (mk c_cons [t_type (); ty; tys],
-                     mk c_hcons [hlist_a; hlist_b; ty; go e; tys; h])
+                    (ty :: tys,
+                     mk c_hcons [hlist_a; hlist_b;
+                            emit_ty ctx ty; go e;
+                            emit_ty_list ctx tys; h])
         in
 
         match e with
