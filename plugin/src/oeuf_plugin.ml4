@@ -610,6 +610,7 @@ let c_pair = init_once (fun () -> resolve_symbol pkg_datatypes "pair")
 let c_hnil = init_once (fun () -> resolve_symbol pkg_hlist "hnil")
 let c_hcons = init_once (fun () -> resolve_symbol pkg_hlist "hcons")
 
+let t_member = init_once (fun () -> resolve_symbol pkg_hlist "member")
 let c_here = init_once (fun () -> resolve_symbol pkg_hlist "Here")
 let c_there = init_once (fun () -> resolve_symbol pkg_hlist "There")
 
@@ -664,10 +665,8 @@ type emit_ctx =
     ; sig_cache : (fn_sig, int) Hashtbl.t
     ; ty_list_cache : (ty list, int) Hashtbl.t
     ; sig_list_cache : (fn_sig list, int) Hashtbl.t
-    (*
-    ; var_member_cache : (ty list * int, int) Hashtbl.t
-    ; fn_member_cache : (fn_sig list * int, int) Hashtbl.t
-    *)
+    ; ty_member_cache : (ty list * int, int) Hashtbl.t
+    ; sig_member_cache : (fn_sig list * int, int) Hashtbl.t
     }
 
 let tyn_params c : Term.constr list =
@@ -751,52 +750,49 @@ let rec emit_sig_list ctx sgs : Term.constr =
     Constr.mkRel (Hashtbl.find ctx.sig_list_cache sgs)
 
 
-let emit_ty_member ctx (xs : ty list) idx =
-    let target = List.nth xs idx in
-    let target_c = emit_ty ctx target in
-    let rec go xs idx =
-        if idx == 0 then
-            mk c_here [t_type (); target_c;
-                    emit_ty_list ctx (List.tl xs)]
-        else
-            let mb = go (List.tl xs) (idx - 1) in
-            mk c_there [t_type (); target_c;
-                    emit_ty ctx (List.hd xs);
-                    emit_ty_list ctx (List.tl xs);
-                    mb]
-    in
-    go xs idx
+let rec emit_ty_member ctx (xs : ty list) idx =
+    if not (Hashtbl.mem ctx.ty_member_cache (xs, idx)) then
+        let target = List.nth xs idx in
+        let target_c = emit_ty ctx target in
+        let list_c = emit_ty_list ctx xs in
+        let c =
+            if idx == 0 then
+                mk c_here [t_type (); target_c;
+                        emit_ty_list ctx (List.tl xs)]
+            else
+                let mb = emit_ty_member ctx (List.tl xs) (idx - 1) in
+                mk c_there [t_type (); target_c;
+                        emit_ty ctx (List.hd xs);
+                        emit_ty_list ctx (List.tl xs);
+                        mb]
+        in
+        let mb_ty = mk t_member [t_type (); target_c; list_c] in
+        let let_idx = ctx.emit_let "ty_member" mb_ty c in
+        Hashtbl.add ctx.ty_member_cache (xs, idx) let_idx
+    else ();
+    Constr.mkRel (Hashtbl.find ctx.ty_member_cache (xs, idx))
 
-let emit_sig_member ctx (xs : fn_sig list) idx =
-    let target = List.nth xs idx in
-    let target_c = emit_sig ctx target in
-    let rec go xs idx =
-        if idx == 0 then
-            mk c_here [t_sig (); target_c;
-                    emit_sig_list ctx (List.tl xs)]
-        else
-            let mb = go (List.tl xs) (idx - 1) in
-            mk c_there [t_sig (); target_c;
-                    emit_sig ctx (List.hd xs);
-                    emit_sig_list ctx (List.tl xs);
-                    mb]
-    in
-    go xs idx
-
-
-
-let is_bad_motive ty =
-    match ty with
-    | ADT tyn -> begin
-            match Constr.kind tyn with
-            | Constr.App (base, _) -> begin
-                    match Constr.kind base with
-                    | Constr.Lambda (_, _, _) -> true
-                    | _ -> false
-            end
-            | _ -> false
-    end
-    | _ -> false
+let rec emit_sig_member ctx (xs : fn_sig list) idx =
+    if not (Hashtbl.mem ctx.sig_member_cache (xs, idx)) then
+        let target = List.nth xs idx in
+        let target_c = emit_sig ctx target in
+        let list_c = emit_sig_list ctx xs in
+        let c =
+            if idx == 0 then
+                mk c_here [t_sig (); target_c;
+                        emit_sig_list ctx (List.tl xs)]
+            else
+                let mb = emit_sig_member ctx (List.tl xs) (idx - 1) in
+                mk c_there [t_sig (); target_c;
+                        emit_sig ctx (List.hd xs);
+                        emit_sig_list ctx (List.tl xs);
+                        mb]
+        in
+        let mb_ty = mk t_member [t_sig (); target_c; list_c] in
+        let let_idx = ctx.emit_let "sig_member" mb_ty c in
+        Hashtbl.add ctx.sig_member_cache (xs, idx) let_idx
+    else ();
+    Constr.mkRel (Hashtbl.find ctx.sig_member_cache (xs, idx))
 
 
 let emit_expr ctx (g_tys : fn_sig list) (l_tys : ty list) e : Term.constr =
@@ -956,6 +952,8 @@ let emit_compilation_unit funcs : Term.constr =
         ; sig_cache = Hashtbl.create 50
         ; ty_list_cache = Hashtbl.create 50
         ; sig_list_cache = Hashtbl.create 50
+        ; ty_member_cache = Hashtbl.create 50
+        ; sig_member_cache = Hashtbl.create 50
         } in
 
     let (types, exprs) = emit_funcs ctx funcs in
