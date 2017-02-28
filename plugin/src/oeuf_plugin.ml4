@@ -874,29 +874,36 @@ let emit_expr ctx (g_tys : fn_sig list) (l_tys : ty list) e : Term.constr =
 
 (* returns both the list of signatures and the genv of function bodies *)
 let emit_funcs ctx funcs : Term.constr * Term.constr =
-    let rec go (g_tys : fn_sig list) (g : Term.constr) funcs : Term.constr * Term.constr =
+    let rec go (g_tys : fn_sig list) (g_idx : int) funcs : Term.constr * Term.constr =
         match funcs with
-        | [] -> (emit_sig_list ctx g_tys, g)
+        | [] -> (emit_sig_list ctx g_tys, Constr.mkRel g_idx)
         | (arg_ty, free_tys, ret_ty, body, name, _) :: funcs ->
-                let arg_ty_c = emit_ty ctx arg_ty in
-                let free_ty_cs = List.map (emit_ty ctx) free_tys in
-                let ret_ty_c = emit_ty ctx ret_ty in
-                let sig_c = emit_sig ctx (arg_ty, free_tys, ret_ty) in
-
                 let l_tys = arg_ty :: free_tys in
                 Format.eprintf "emitting %s = %s\n" name (string_of_expr body);
                 Format.pp_print_flush Format.err_formatter ();
-                let body' = emit_expr ctx g_tys l_tys body in
+                let func = emit_expr ctx g_tys l_tys body in
 
-                go
-                    ((arg_ty, free_tys, ret_ty) :: g_tys)
-                    (mk c_genv_cons [
-                        sig_c; emit_sig_list ctx g_tys;
-                        body'; g
-                    ])
-                    funcs
+                let func_ty = mk t_expr [
+                    emit_sig_list ctx g_tys;
+                    emit_ty_list ctx l_tys;
+                    emit_ty ctx ret_ty
+                ] in
+                let func_idx = ctx.emit_let "func" func_ty func in
+
+                let sg = (arg_ty, free_tys, ret_ty) in
+                let g_tys' = sg :: g_tys in
+                let g'_ty = mk t_genv [emit_sig_list ctx g_tys'] in
+                let g' = mk c_genv_cons [
+                    emit_sig ctx sg;
+                    emit_sig_list ctx g_tys;
+                    Constr.mkRel func_idx;
+                    Constr.mkRel g_idx
+                ] in
+                let g'_idx = ctx.emit_let "g" g'_ty g' in
+
+                go g_tys' g'_idx funcs
     in
-    let g_nil = c_genv_nil () in
+    let g_nil_idx = ctx.emit_let "g" (mk t_genv [mk c_nil [t_sig ()]]) (c_genv_nil ()) in
     go [] g_nil funcs
 
 
