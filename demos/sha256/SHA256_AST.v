@@ -13,4 +13,4 @@ Require Import OeufPlugin.OeufPlugin.
 
 Require Import String.
 
-Time Definition test : compilation_unit := ltac:(oeuf_reflect pos_add).
+Time Definition sha_256_cu : compilation_unit := ltac:(oeuf_reflect SHA_256).
