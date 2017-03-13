@@ -76,11 +76,18 @@ exception Reflect_error of string
 
 
 
+(*** intermediate representation for SourceLang functions ***)
 
 type ty =
     (* the constr is a `type_name` *)
       ADT of Term.constr
     | Arrow of ty * ty
+
+type funcref =
+    (* reference to a lifted lambda in the current block *)
+      Near of int
+    (* reference to the entry point of a previous block *)
+    | Far of int
 
 (* this mirrors the definition of SourceLifted.expr, including indices (but not
  * the parameters, `G` and `L`).  `member` is represented by `int`. *)
@@ -91,7 +98,7 @@ type expr =
     | Constr of Term.constr * Term.constr * ty list * Term.constr * expr list
     (* note: the int is not a de Bruijn index, but the index of the target
      * function in order of declaration. *)
-    | Close of ty * ty list * ty * int * expr list
+    | Close of ty * ty list * ty * funcref * expr list
     (* _, type_name, _, elim, _, _ *)
     | Elim of ty list * Term.constr * ty * Term.constr * expr list * expr
 
@@ -119,7 +126,14 @@ let rec iter_tys f stk e =
 
 
 (* arg_ty, free_tys, ret_ty, body, name, pub *)
-type func = ty * ty list * ty * expr * string * bool
+type func =
+    { arg_ty : ty
+    ; free_tys: ty list
+    ; ret_ty : ty
+    ; body : expr
+    ; name : string
+    ; pub : bool
+    }
 
 
 let rec string_of_ty t =
@@ -127,6 +141,11 @@ let rec string_of_ty t =
     | ADT tyn -> Format.asprintf "%a" pp_constr tyn
     | Arrow (ty1, ty2) ->
             Format.sprintf "(%s) -> %s" (string_of_ty ty1) (string_of_ty ty2)
+
+let rec string_of_funcref fr =
+    match fr with
+    | Near idx -> Format.sprintf "Near(%d)" idx
+    | Far idx -> Format.sprintf "Far(%d)" idx
 
 let rec string_of_expr e =
     let base =
@@ -140,9 +159,9 @@ let rec string_of_expr e =
                 Format.sprintf "%s %s"
                     ctor_name
                     (String.concat " " (List.map string_of_expr args))
-        | Close (_arg_ty, _free_tys, _ret_ty, idx, free) ->
-                Format.sprintf "<%d %s>"
-                    idx
+        | Close (_arg_ty, _free_tys, _ret_ty, fr, free) ->
+                Format.sprintf "<%s %s>"
+                    (string_of_funcref fr)
                     (String.concat " " (List.map string_of_expr free))
         | Elim (_case_tys, _target_tyn, _ty, e, cases, target) ->
                 let elim_name = Format.asprintf "%a" pp_constr e in
@@ -158,17 +177,19 @@ let rec string_of_expr_list es =
     | [] -> ""
     | e :: es -> Format.sprintf "%s\n%s" (string_of_expr e) (string_of_expr_list es)
 
-let rec string_of_func_list es =
-    match es with
+let rec string_of_func_list fs =
+    match fs with
     | [] -> ""
-    | (_, _, _, e, name, pub) :: es ->
+    | f :: fs ->
             Format.sprintf "%s%s: %s\n%s"
-                (if pub then "" else "__")
-                name
-                (string_of_expr e)
-                (string_of_func_list es)
+                (if f.pub then "" else "__")
+                (f.name)
+                (string_of_expr (f.body))
+                (string_of_func_list fs)
 
 
+
+(*** descriptions of supported data types ***)
 
 let init_once f =
     let storage = ref None in
@@ -314,6 +335,8 @@ let what_is_this c =
 
 
 
+(*** misc. helper functions ***)
+
 let free_list free =
     let rec go n tys =
         match tys with
@@ -377,6 +400,8 @@ module StrSet = Set.Make(String)
 
 
 
+(*** reflection to the IR defined above ***)
+
 let unfold_constr env c : Term.constr =
     match Constr.kind c with
     | Constr.Const (const, univ) ->
@@ -405,12 +430,12 @@ let rec reflect_type env c =
             raise (Reflect_error (Format.sprintf
                 "unsupported constr in type: %s" (string_of_constr c)))
 
+type reflect_ctx =
+    { const_closure : Term.constr -> expr
+    ; fresh : string -> string
+    }
 
-
-let reflect_expr evars env c : func list * expr =
-    let env0 = env in
-
-    let funcs : func list ref = ref [] in
+let mk_reflect_ctx const_closure =
     let used_names : StrSet.t ref = ref StrSet.empty in
     let func_cache : expr Names.Cmap.t ref = ref Names.Cmap.empty in
     let counter : int ref = ref 0 in
@@ -437,11 +462,20 @@ let reflect_expr evars env c : func list * expr =
         name
     in
 
+    { const_closure = const_closure
+    ; fresh = fresh
+    }
 
-    let lift func =
+let reflect_expr ctx evars env name c : func list =
+    let env0 = env in
+
+    let funcs : func list ref = ref [] in
+
+    let lift arg_ty free_tys ret_ty body name pub : funcref =
+        let func = { arg_ty; free_tys; ret_ty; body; name; pub } in
         let idx = List.length !funcs in
         funcs := !funcs @ [func];
-        idx
+        Near idx
     in
 
     (* `name` is a proposed name to use for the next lambda we see.  if the
@@ -462,7 +496,7 @@ let reflect_expr evars env c : func list * expr =
                 let arg_ty = reflect_type env arg_ty_c in
 
                 (* lift the lambda to a top-level function, and get its index *)
-                let name = fresh name in
+                let name = ctx.fresh name in
                 (* just propose the same name for the next lambda down.  it
                  * will get a _123 appended by `fresh`. *)
                 let body' : expr = go env' (arg_ty :: locals) name false body in
@@ -473,7 +507,7 @@ let reflect_expr evars env c : func list * expr =
                  * doesn't work for some reason), we let the elim cases
                  * normalize, then take the result from them. *)
                 let ret_ty = expr_ty body' in
-                let idx = lift (arg_ty, locals, ret_ty, body', name, pub) in
+                let idx = lift arg_ty locals ret_ty body' name pub in
 
                 (* build a closure using the entire current environment *)
                 Close (arg_ty, locals, ret_ty, idx, free_list locals)
@@ -486,24 +520,11 @@ let reflect_expr evars env c : func list * expr =
                 | NormalFunc ->
                         let (ty_params, args) = split_while (is_type evars env) args in
 
-                        if List.length ty_params == 0 then (go' func, args)
+                        if List.length ty_params == 0 then
+                            (go' func, args)
                         else
-                            (* this is the application of a polymorphic
-                             * function to some type parameters.  unfold the
-                             * definition of the function, then normalize away
-                             * the type variables. *)
-                            let func' = unfold_constr env func in
-                            let mono = Constr.mkApp (func', Array.of_list ty_params) in
-                            let mono = Reduction.nf_betaiota env mono in
-                            if Constr.equal mono c then
-                                raise (Reflect_error (Format.sprintf
-                                    "failed to monomorphize application: %s"
-                                    (string_of_constr c)))
-                            else
-                                Format.eprintf "monomorphized: %s ==> %s\n"
-                                    (string_of_constr c)
-                                    (string_of_constr mono);
-                                (go' mono, args)
+                            let c' = Constr.mkApp (func, Array.of_list ty_params) in
+                            (ctx.const_closure c', args)
 
                 | DataConstr (ctor, ct, num_params, num_fields) ->
                         (* `args` are the arguments to the Constr.
@@ -551,26 +572,7 @@ let reflect_expr evars env c : func list * expr =
             build_app func args
         end
 
-        | Constr.Const (const, univ) ->
-                if not (Names.Cmap.mem const !func_cache) then
-                    let const_body = Environ.lookup_constant const env0 in
-                    let subst_body = match const_body.const_body with
-                        | Declarations.Def subst_body -> subst_body
-                        | _ -> raise (Reflect_error
-                            (Format.sprintf "can't get body for Const %s" (string_of_constr c)))
-                    in
-                    let body = Mod_subst.force_constr subst_body in
-                    let body = Reduction.nf_betaiota env0 body in
-                    let name = Label.to_string (Constant.label const) in
-
-                    Format.eprintf "retrieved body: %s = %s\n" (string_of_constr c) (string_of_constr body);
-                    let closure = go env0 [] name true body in
-
-                    func_cache := Names.Cmap.add const closure !func_cache;
-
-                else ();
-
-                Names.Cmap.find const !func_cache
+        | Constr.Const (const, univ) -> ctx.const_closure c
 
         | Constr.Construct (ctor, univ) -> begin
                 match what_is_this c with
@@ -590,8 +592,95 @@ let reflect_expr evars env c : func list * expr =
     (* simplify away some annoying stuff, like applications of the motive
      * within eliminator calls. *)
     let c = Reduction.nf_betaiota env c in
-    let top = go env [] "oeuf_entry" true c in
-    (!funcs, top)
+    let top = go env [] name true c in
+    !funcs
+
+
+let make_ident s =
+    let go1 c =
+        if Char.compare 'a' c <= 0 && Char.compare c 'z' <= 0 then c
+        else if Char.compare 'A' c <= 0 && Char.compare c 'Z' <= 0 then c
+        else if Char.compare '0' c <= 0 && Char.compare c '9' <= 0 then c
+        else ' '
+    in
+    let go2 c = if c == ' ' then '_' else c in
+    String.map go2 (String.trim (String.map go1 s))
+
+let reflect_block evars env c =
+    let blocks : func list list ref = ref [] in
+
+    let push_block block : funcref =
+        let idx = List.length !blocks in
+        blocks := !blocks @ [block];
+        Far idx
+    in
+
+    let funcref_table = Hashtbl.create 10 in
+
+    (* mutual recursion via the heap *)
+    let ctx_ref = ref None in
+    let ctx () = Option.get !ctx_ref in
+
+    let go c : expr =
+        let ctx = ctx () in
+        if not (Hashtbl.mem funcref_table c) then begin
+            Format.eprintf "reflecting entry point %s\n" (string_of_constr c);
+            let block =
+                match Constr.kind c with
+                | Constr.Const (const, univ) ->
+                        let const_body = Environ.lookup_constant const env in
+                        let subst_body = match const_body.const_body with
+                            | Declarations.Def subst_body -> subst_body
+                            | _ -> raise (Reflect_error
+                                (Format.sprintf "can't get body for Const %s" (string_of_constr c)))
+                        in
+                        let body = Mod_subst.force_constr subst_body in
+                        let body = Reduction.nf_betaiota env body in
+                        let name = Label.to_string (Constant.label const) in
+
+                        reflect_expr ctx evars env name body
+
+                | Constr.App (func, ty_params) ->
+                        (* this is the application of a polymorphic function to
+                         * some type parameters.  unfold the definition of the
+                         * function, then normalize away the type variables. *)
+                        let func' = unfold_constr env func in
+                        let mono = Constr.mkApp (func', ty_params) in
+                        let mono = Reduction.nf_betaiota env mono in
+                        let mono =
+                            if Constr.equal mono c then
+                                raise (Reflect_error (Format.sprintf
+                                    "failed to monomorphize application: %s"
+                                    (string_of_constr c)))
+                            else mono in
+                        Format.eprintf "monomorphized: %s ==> %s\n"
+                            (string_of_constr c)
+                            (string_of_constr mono);
+                        let name = make_ident (string_of_constr c) in
+
+                        reflect_expr ctx evars env name mono
+            in
+
+            let f = List.nth block (List.length block - 1) in
+            let fr = push_block block in
+            let closure = Close (f.arg_ty, f.free_tys, f.ret_ty, fr, []) in
+            Hashtbl.add funcref_table c closure
+            end
+        else ();
+        Hashtbl.find funcref_table c
+    in
+
+    ctx_ref := Some (mk_reflect_ctx go);
+    go c;
+    !blocks
+
+
+(* TODO 
+
+
+
+
+    *)
 
 
 
@@ -659,15 +748,65 @@ let c_empty_string = init_once (fun () -> resolve_symbol pkg_string "EmptyString
 
 type fn_sig = ty * ty list * ty
 
+let rec string_of_sig s =
+    let (arg_ty, free_tys, ret_ty) = s in
+    Format.sprintf "(%s, [%s], %s)"
+        (string_of_ty arg_ty)
+        (String.concat "; " (List.map string_of_ty free_tys))
+        (string_of_ty ret_ty)
+
 type emit_ctx =
     { emit_let : string -> Term.types -> Term.constr -> int
     ; ty_cache : (ty, int) Hashtbl.t
     ; sig_cache : (fn_sig, int) Hashtbl.t
     ; ty_list_cache : (ty list, int) Hashtbl.t
     ; sig_list_cache : (fn_sig list, int) Hashtbl.t
+    ; sig_list_base_cache : (fn_sig list * Term.constr, int) Hashtbl.t
     ; ty_member_cache : (ty list * int, int) Hashtbl.t
     ; sig_member_cache : (fn_sig list * int, int) Hashtbl.t
+    ; sig_member_base_cache : (fn_sig list * Term.constr, int) Hashtbl.t
     }
+
+let mk_emit_ctx (_ : unit) : emit_ctx * (Term.constr -> Term.constr) ref =
+    let let_counter = ref 0 in
+    let add_lets : ref (Term.constr -> Term.constr) = ref (fun x -> x) in
+    let emit_let name ty c =
+        let f = !add_lets in
+        let name' = Names.Name (Id.of_string name) in
+        add_lets := (fun rest -> f (Constr.mkLetIn (name', c, ty, rest)));
+        let_counter := !let_counter + 1;
+        (* 0 = first let, -9 = 10th let.  these are all invalid (so they'll be
+         * caught quickly if one slips into the final term), but easy to
+         * convert to valid ones (idx' = depth + idx) *)
+        - !let_counter + 1
+    in
+    let ctx =
+        { emit_let = emit_let
+        ; ty_cache = Hashtbl.create 50
+        ; sig_cache = Hashtbl.create 50
+        ; ty_list_cache = Hashtbl.create 50
+        ; sig_list_cache = Hashtbl.create 50
+        ; sig_list_base_cache = Hashtbl.create 50
+        ; ty_member_cache = Hashtbl.create 50
+        ; sig_member_cache = Hashtbl.create 50
+        ; sig_member_base_cache = Hashtbl.create 50
+        } in
+    (ctx, add_lets)
+
+let unflip_rels c =
+    let rec go depth c =
+        match Constr.kind c with
+        | Constr.Rel idx -> Constr.mkRel (depth + idx)
+        | _ -> Constr.map_with_binders (fun d -> d + 1) go depth c
+    in
+    go 0 c
+
+let with_emit_ctx (f : emit_ctx -> Term.constr) : Term.constr =
+    let (ctx, add_lets) = mk_emit_ctx () in
+    let result = f ctx in
+    unflip_rels (!add_lets result)
+
+
 
 let tyn_params c : Term.constr list =
     match Constr.kind c with
@@ -820,8 +959,134 @@ let rec emit_sig_member ctx (xs : fn_sig list) idx =
     Constr.mkRel (Hashtbl.find ctx.sig_member_cache (xs, idx))
 
 
-let emit_expr ctx (g_tys : fn_sig list) (l_tys : ty list) e : Term.constr =
-    let g_tys_c = emit_sig_list ctx g_tys in
+type reflection =
+    (* list of signatures up to (and including) the current block *)
+    { sigs : Term.constr
+    (* convert a `member` for the previous block into one for the current block *)
+    ; promote : Term.constr
+    (* global environment, of type `genv sigs` *)
+    ; genv : Term.constr
+    (* `member` referring to the main entry point.  this is always `Here`. *)
+    ; mb : Term.constr
+    }
+
+let mk_base_reflection () =
+    { sigs = mk c_nil [t_sig ()]
+    ; promote =
+        Constr.mkLambda (Name.Anonymous, t_sig (),
+        Constr.mkLambda (Name.Anonymous,
+                mk t_member [t_sig (); Constr.mkRel 1; mk c_nil [t_sig ()]],
+            Constr.mkRel 1))
+    ; genv = c_genv_nil ()
+    ; mb = c_tt ()      (* typechecking will fail if this is ever used *)
+    }
+
+type emit_global_ctx =
+    { last_refl : unit -> reflection
+    ; nth_refl : int -> reflection
+    ; emit_refl : reflection -> unit
+    ; current_index : unit -> int
+    }
+
+let mk_emit_global_ctx () =
+    let refls = ref [] in
+    let ctx =
+        { last_refl = (fun () ->
+            if List.length !refls = 0 then mk_base_reflection ()
+            else List.nth !refls (List.length !refls - 1))
+        ; nth_refl = (fun idx -> List.nth !refls idx)
+        ; emit_refl = (fun r -> refls := !refls @ [r])
+        ; current_index = (fun () -> List.length !refls)
+        } in
+    ctx
+
+let rec emit_sig_list_base ctx base sgs : Term.constr =
+    if not (Hashtbl.mem ctx.sig_list_base_cache (sgs, base)) then
+        let c = match sgs with
+            | [] -> base
+            | sg :: sgs -> mk c_cons [t_sig ();
+                    emit_sig ctx sg; emit_sig_list_base ctx base sgs]
+        in 
+        let idx = ctx.emit_let "sig_list_base" (mk t_list [t_sig ()]) c in
+        Hashtbl.add ctx.sig_list_base_cache (sgs, base) idx
+    else ();
+    Constr.mkRel (Hashtbl.find ctx.sig_list_base_cache (sgs, base))
+
+    (*
+let rec emit_sig_list_base ctx base sgs : Term.constr =
+    match sgs with
+    | [] -> base
+    | sg :: sgs -> mk c_cons [t_sig ();
+            emit_sig ctx sg; emit_sig_list_base ctx base sgs]
+*)
+
+let emit_refl_promote_body ctx base_sgs target mb sgs : Term.constr =
+    let rec go sgs =
+        match sgs with
+        | [] -> mb
+        | sg :: sgs ->
+                mk c_there [t_sig (); target;
+                        emit_sig ctx sg;
+                        emit_sig_list_base ctx base_sgs sgs;
+                        go sgs]
+    in
+    go sgs
+
+(* wrap `base_mb` (of type `member target base_sgs`) in `List.length xs` `There`s.
+ * the first `sig` in `xs` will be used for the outermost `There`. *)
+let emit_sig_member_uncached' loop ctx base_sgs base_mb (xs : fn_sig list) target =
+    match xs with
+    | [] -> base_mb
+    | x :: xs ->
+            let mb = loop ctx base_sgs base_mb xs target in
+            mk c_there [t_sig (); target;
+                    emit_sig ctx x;
+                    emit_sig_list_base ctx base_sgs xs;
+                    mb]
+
+let rec emit_sig_member_uncached ctx base_sgs base_mb xs target =
+    emit_sig_member_uncached' emit_sig_member_uncached
+        ctx base_sgs base_mb xs target
+
+let rec emit_sig_member_cached ctx base_sgs base_mb (xs : fn_sig list) target =
+    (* cache key includes only base_mb, not base_sgs, because the type of
+     * base_mb depends on base_sgs *)
+    if not (Hashtbl.mem ctx.sig_member_base_cache (xs, base_mb)) then
+        let c = emit_sig_member_uncached' emit_sig_member_cached
+            ctx base_sgs base_mb xs target in
+        let mb_ty = mk t_member [t_sig (); target;
+                emit_sig_list_base ctx base_sgs xs] in
+        let let_idx = ctx.emit_let "sig_member_base" mb_ty c in
+        Hashtbl.add ctx.sig_member_base_cache (xs, base_mb) let_idx
+    else ();
+    Constr.mkRel (Hashtbl.find ctx.sig_member_base_cache (xs, base_mb))
+
+(* emit a `member` referring to the `idx`'th element in `xs`.  the member
+ * indexes into the list `xs ++ base_sgs`. *)
+let rec emit_sig_member_base ctx base_sgs (xs : fn_sig list) idx =
+    let (before, (target :: after)) = split_at idx xs in
+    let target_c = emit_sig ctx target in
+    let after_sgs = emit_sig_list_base ctx base_sgs after in
+    let base_mb = mk c_here [t_sig (); target_c; after_sgs] in
+    let after_sgs' = mk c_cons [t_sig (); target_c; after_sgs] in
+    emit_sig_member_cached ctx after_sgs' base_mb before target_c
+
+let emit_refl_promote_body ctx base_sgs target mb sgs : Term.constr =
+    emit_sig_member_uncached ctx base_sgs mb sgs target
+
+
+let rec promote_member gctx first last sg mb =
+    if first >= last then mb
+    else
+        let promote = (gctx.nth_refl (first + 1)).promote in
+        let mb' = Constr.mkApp (promote, Array.of_list [sg; mb]) in
+        promote_member gctx (first + 1) last sg mb'
+
+let emit_expr gctx ctx (g_tys : fn_sig list) (l_tys : ty list) e : Term.constr =
+    let prev = gctx.last_refl () in
+    let base_sgs = prev.sigs in
+
+    let g_tys_c = emit_sig_list_base ctx base_sgs g_tys in
     let l_tys_c = emit_ty_list ctx l_tys in
 
     let hlist_a = t_type () in
@@ -864,19 +1129,32 @@ let emit_expr ctx (g_tys : fn_sig list) (l_tys : ty list) e : Term.constr =
                     ct'; snd (go_hlist args)
                 ]
 
-        | Close (arg_ty, free_tys, ret_ty, idx, free) ->
+        | Close (arg_ty, free_tys, ret_ty, fr, free) -> begin
                 let arg_ty_c = emit_ty ctx arg_ty in
                 let free_tys_c = emit_ty_list ctx free_tys in
                 let ret_ty_c = emit_ty ctx ret_ty in
                 let sig_c = emit_sig ctx (arg_ty, free_tys, ret_ty) in
-                (* convert 0-based function index to de Bruijn *)
-                let db_idx = List.length g_tys - 1 - idx in
+
+                let mb =
+                    match fr with
+                    | Near idx ->
+                            let db_idx = List.length g_tys - 1 - idx in
+                            emit_sig_member_base ctx base_sgs g_tys db_idx
+                    | Far idx ->
+                            let cur = gctx.current_index () in
+                            let mb_orig = (gctx.nth_refl idx).mb in
+                            let mb_start = promote_member gctx idx (cur - 1) sig_c mb_orig in
+                            let mb = emit_sig_member_cached ctx base_sgs mb_start g_tys sig_c in
+                            mb
+                in
+
                 mk c_close [
                     g_tys_c; l_tys_c;
                     arg_ty_c; free_tys_c; ret_ty_c;
-                    emit_sig_member ctx g_tys db_idx;
+                    mb;
                     snd (go_hlist free)
                 ]
+        end
 
         | Elim (case_tys, target_tyn, ret_ty, elim, cases, target) ->
                 let params = List.map emit_tyn (tyn_params target_tyn) in
@@ -897,130 +1175,27 @@ let emit_expr ctx (g_tys : fn_sig list) (l_tys : ty list) e : Term.constr =
 
     in go e
 
-let mk_ctx (_ : unit) : emit_ctx * (Term.constr -> Term.constr) ref =
-    let let_counter = ref 0 in
-    let add_lets : ref (Term.constr -> Term.constr) = ref (fun x -> x) in
-    let emit_let name ty c =
-        let f = !add_lets in
-        let name' = Names.Name (Id.of_string name) in
-        add_lets := (fun rest -> f (Constr.mkLetIn (name', c, ty, rest)));
-        let_counter := !let_counter + 1;
-        (* 0 = first let, -9 = 10th let.  these are all invalid (so they'll be
-         * caught quickly if one slips into the final term), but easy to
-         * convert to valid ones (idx' = depth + idx) *)
-        - !let_counter + 1
-    in
-    let ctx =
-        { emit_let = emit_let
-        ; ty_cache = Hashtbl.create 50
-        ; sig_cache = Hashtbl.create 50
-        ; ty_list_cache = Hashtbl.create 50
-        ; sig_list_cache = Hashtbl.create 50
-        ; ty_member_cache = Hashtbl.create 50
-        ; sig_member_cache = Hashtbl.create 50
-        } in
-    (ctx, add_lets)
+let emit_genv gctx ctx funcs : Term.constr =
+    let prev = gctx.last_refl () in
 
-let unflip_rels c =
-    let rec go depth c =
-        match Constr.kind c with
-        | Constr.Rel idx -> Constr.mkRel (depth + idx)
-        | _ -> Constr.map_with_binders (fun d -> d + 1) go depth c
-    in
-    go 0 c
-
-let with_ctx (f : emit_ctx -> Term.constr) : Term.constr =
-    let (ctx, add_lets) = mk_ctx () in
-    let result = f ctx in
-    unflip_rels (!add_lets result)
-
-(* returns both the list of signatures and the genv of function bodies *)
-let emit_funcs (prefix_sigs : fn_sig list) (prefix : Term.constr) funcs : Term.constr =
-    let (ctx, add_lets) = mk_ctx () in
-
-    let rec go (g_tys : fn_sig list) (g_idx : int) funcs : Term.constr =
+    let rec go (g_acc : Term.constr) (g_tys : fn_sig list) funcs : Term.constr =
         match funcs with
-        | [] -> Constr.mkRel g_idx
-        | (arg_ty, free_tys, ret_ty, body, name, _) :: funcs ->
-                let l_tys = arg_ty :: free_tys in
-                Format.eprintf "emitting %s = %s\n" name (string_of_expr body);
-                Format.pp_print_flush Format.err_formatter ();
-                let func = emit_expr ctx g_tys l_tys body in
+        | [] -> g_acc
+        | f :: funcs ->
+                let l_tys = f.arg_ty :: f.free_tys in
+                let sg = (f.arg_ty, f.free_tys, f.ret_ty) in
+                let func_c = emit_expr gctx ctx g_tys l_tys f.body in
 
-                let func_ty = mk t_expr [
-                    emit_sig_list ctx g_tys;
-                    emit_ty_list ctx l_tys;
-                    emit_ty ctx ret_ty
-                ] in
-                let func_idx = ctx.emit_let "func" func_ty func in
-
-                let sg = (arg_ty, free_tys, ret_ty) in
-                let g_tys' = sg :: g_tys in
-                let g'_ty = mk t_genv [emit_sig_list ctx g_tys'] in
-                let g' = mk c_genv_cons [
-                    emit_sig ctx sg;
-                    emit_sig_list ctx g_tys;
-                    Constr.mkRel func_idx;
-                    Constr.mkRel g_idx
-                ] in
-                let g'_idx = ctx.emit_let "g" g'_ty g' in
-
-                go g_tys' g'_idx funcs
+                let g_acc' =
+                    mk c_genv_cons [
+                        emit_sig ctx sg;
+                        emit_sig_list_base ctx prev.sigs g_tys;
+                        func_c;
+                        g_acc
+                    ] in
+                go g_acc' (sg :: g_tys) funcs
     in
-
-    let prefix_ty = mk t_genv [emit_sig_list ctx prefix_sigs] in
-    let prefix_idx = ctx.emit_let "prefix" prefix_ty prefix in
-    let result = go prefix_sigs prefix_idx funcs in
-
-    unflip_rels (!add_lets result)
-
-
-let emit_bool b : Term.constr =
-    if b then c_true ()
-    else c_false ()
-
-let emit_ascii c : Term.constr =
-    let c = Char.code c in
-    mk c_ascii [
-        emit_bool ((c lsr 0) land 1 = 1);
-        emit_bool ((c lsr 1) land 1 = 1);
-        emit_bool ((c lsr 2) land 1 = 1);
-        emit_bool ((c lsr 3) land 1 = 1);
-        emit_bool ((c lsr 4) land 1 = 1);
-        emit_bool ((c lsr 5) land 1 = 1);
-        emit_bool ((c lsr 6) land 1 = 1);
-        emit_bool ((c lsr 7) land 1 = 1)
-    ]
-
-let emit_string s : Term.constr =
-    let tmp = ref (fun cs -> cs) in
-    String.iter (fun c ->
-        let k = !tmp in
-        tmp := fun cs -> k (mk c_string [emit_ascii c; cs])
-    ) s;
-    !tmp (c_empty_string ())
-
-let func_sig f =
-    let (arg_ty, free_tys, ret_ty, _, _, _) = f in
-    (arg_ty, free_tys, ret_ty)
-
-(* in `funcs`, the "oldest" function is first.  but in `G`, it's last. *)
-let g_sigs funcs =
-    List.rev (List.map func_sig funcs)
-
-let emit_compilation_unit funcs : Term.constr =
-    let funcs = funcs in
-    let types = with_ctx (fun ctx ->
-        emit_map (t_sig ()) (emit_sig ctx) (g_sigs funcs)) in
-    let exprs = emit_funcs [] (c_genv_nil ()) funcs in
-
-    mk c_compilation_unit [
-        types;
-        exprs;
-        emit_map (t_string ()) (fun (_, _, _, _, name, pub) ->
-            emit_string (if not pub then "__" ^ name else name)) funcs
-    ]
-
+    go prev.genv [] funcs
 
 
 let count_ctors (c : Term.constr) : (Names.constructor * int) list =
@@ -1049,36 +1224,171 @@ let print_ctor_counts env lst =
         Format.eprintf " %9d %s\n" n (String.trim s)) lst
 
 
+let define name body ty : Term.constr =
+    let t_start = Sys.time () in
 
+    let c = ref None in
+    let (evars, env) = Lemmas.get_current_context () in
+    let body_e = Constrextern.extern_constr true env evars body in
+    let ty_e = Constrextern.extern_constr true env evars ty in
 
-
-
-
-
-let tac c : unit Proofview.tactic =
-    Proofview.Goal.enter (fun gl ->
-        let env = Proofview.Goal.env gl in
-        let evars = Proofview.Goal.sigma gl in
-        let t_start = Sys.time () in
-        let (funcs, top) = reflect_expr evars env c in
-        let t_mid = Sys.time () in
-        Format.eprintf "reflected %d funcs\n" (List.length funcs);
-        let result = emit_compilation_unit funcs in
-        let t_end = Sys.time () in
-        Format.eprintf "Lifted %d functions - %fs reflect, %fs emit\n"
-            (List.length funcs) (t_mid -. t_start) (t_end -. t_mid);
-
-            (*
-        Format.eprintf " === printing term ... === \n";
-        Format.eprintf "%a\n" pp_constr result;
+    (*
+    Format.eprintf " == defining %s : %s ==\n" name (string_of_constr ty);
+    print_ctor_counts env (count_ctors body);
+    (*
+    Format.eprintf "DEFINE %s : %s = \n%s\n"
+        name
+        (string_of_constr ty)
+        (string_of_constr body);
         *)
+    Format.pp_print_flush Format.err_formatter ();
+    *)
 
-        Format.eprintf " === counting constructors ... === \n";
-        Format.pp_print_flush Format.err_formatter ();
-        print_ctor_counts env (count_ctors result);
-        Format.pp_print_flush Format.err_formatter ();
-        Tactics.New.refine (fun evars -> (evars, result))
-    )
+    Command.do_definition
+        (Id.of_string name)
+        (Global, false (* not (universe?) polymorphic *), Definition)
+        None    (* no universe bindings *)
+        []      (* no argument binders *)
+        None    (* no reduction command surrounding the body *)
+        body_e
+        (Some ty_e)
+        (Lemmas.mk_hook (fun _ gr ->
+            c := Some (Universes.constr_of_global gr)));
+
+    let t_end = Sys.time () in
+    Format.eprintf "defined %s in %fs\n" name (t_end -. t_start);
+    Format.pp_print_flush Format.err_formatter ();
+
+    Option.get !c
+
+let set_opacity opacity c =
+    let const =
+        match Constr.kind c with
+        | Constr.Const (const, univ) -> const
+        | _ -> raise (Reflect_error "expected a global constant")
+    in
+    Redexpr.set_strategy false [(opacity, [Names.EvalConstRef const])]
+
+let define_block gctx block : unit =
+    let rev_sigs = List.rev (List.map (fun (f : func) ->
+        (f.arg_ty, f.free_tys, f.ret_ty)) block) in
+    let last_func = List.nth block (List.length block - 1) in
+    let name = last_func.name in
+
+    let prev = gctx.last_refl () in
+
+    let sigs_base = prev.sigs in
+    let sigs = with_emit_ctx (fun ctx ->
+        emit_sig_list_base ctx sigs_base rev_sigs) in
+    let sigs_c = define (name ^ "_sigs") sigs (mk t_list [t_sig ()]) in
+
+    let promote_body = with_emit_ctx (fun ctx ->
+        emit_refl_promote_body ctx sigs_base (Constr.mkRel 2) (Constr.mkRel 1) rev_sigs) in
+    let promote =
+        Constr.mkLambda (Name.Anonymous, t_sig (),
+        Constr.mkLambda (Name.Anonymous, mk t_member [t_sig (); Constr.mkRel 1; prev.sigs],
+            promote_body)) in
+    let promote_ty =
+        Constr.mkProd (Name.Anonymous, t_sig (),
+        Constr.mkProd (Name.Anonymous, mk t_member [t_sig (); Constr.mkRel 1; prev.sigs],
+            mk t_member [t_sig (); Constr.mkRel 2; sigs_c])) in
+    let promote_c = define (name ^ "_promote") promote promote_ty in
+
+    let genv = with_emit_ctx (fun ctx ->
+        emit_genv gctx ctx block) in
+    let genv_ty = mk t_genv [sigs_c] in
+    let genv_c = define (name ^ "_genv") genv genv_ty in
+
+    let mb = with_emit_ctx (fun ctx ->
+        mk c_here [t_sig ();
+            emit_sig ctx (List.hd rev_sigs);
+            emit_sig_list_base ctx prev.sigs (List.tl rev_sigs)]) in
+    let mb_ty = mk t_member [t_sig (); 
+            emit_sig' (List.hd rev_sigs);
+            sigs_c] in
+    let mb_c = define (name ^ "_mb") mb mb_ty in
+
+
+    (*
+    set_opacity Conv_oracle.Opaque sigs_c;
+    set_opacity Conv_oracle.Opaque promote_c;
+    set_opacity Conv_oracle.Opaque genv_c;
+    set_opacity Conv_oracle.Opaque mb_c;
+    *)
+
+    gctx.emit_refl
+        { sigs = sigs_c
+        ; promote = promote_c
+        ; genv = genv_c
+        ; mb = mb_c
+        }
+
+let collect_block_names (funcs : func list) =
+    List.map (fun (f : func) -> f.name) funcs
+
+let collect_names blocks =
+    List.concat (List.map collect_block_names blocks)
+
+let emit_bool b : Term.constr =
+    if b then c_true ()
+    else c_false ()
+
+let emit_ascii c : Term.constr =
+    let c = Char.code c in
+    mk c_ascii [
+        emit_bool ((c lsr 0) land 1 = 1);
+        emit_bool ((c lsr 1) land 1 = 1);
+        emit_bool ((c lsr 2) land 1 = 1);
+        emit_bool ((c lsr 3) land 1 = 1);
+        emit_bool ((c lsr 4) land 1 = 1);
+        emit_bool ((c lsr 5) land 1 = 1);
+        emit_bool ((c lsr 6) land 1 = 1);
+        emit_bool ((c lsr 7) land 1 = 1)
+    ]
+
+let emit_string s : Term.constr =
+    let tmp = ref (fun cs -> cs) in
+    String.iter (fun c ->
+        let k = !tmp in
+        tmp := fun cs -> k (mk c_string [emit_ascii c; cs])
+    ) s;
+    !tmp (c_empty_string ())
+
+let rec emit_string_list ss : Term.constr =
+    match ss with
+    | [] -> mk c_nil [t_string ()]
+    | s :: ss ->
+            mk c_cons [t_string ();
+                emit_string s;
+                emit_string_list ss]
+
+let define_cu gctx cu_name blocks : unit =
+    let last = gctx.last_refl () in
+    let types = last.sigs in
+    let exprs = last.genv in
+    let names = emit_string_list (collect_names blocks) in
+    let cu = mk c_compilation_unit [types; exprs; names] in
+    let _ = define cu_name cu (t_compilation_unit ()) in
+    ()
+
+
+let reflect_vernac c name =
+    let (evars, env) = Lemmas.get_current_context () in
+    (* TODO: either force `Set Printing All`, or build a better version of
+     * `extern_constr` that doesn't depend on printing mode *)
+
+    let t_start = Sys.time () in
+    let blocks : func list list = reflect_block evars env c in
+    let t_mid = Sys.time () in
+    Format.eprintf "reflected %d blocks\n" (List.length blocks);
+    (*
+    let result = emit_compilation_unit funcs in
+    *)
+    let gctx = mk_emit_global_ctx () in
+    List.iter (fun blk -> define_block gctx blk) blocks;
+    define_cu gctx name blocks;
+    let t_end = Sys.time () in
+    ()
 
 VERNAC COMMAND EXTEND Write_to_file
 | [ "Oeuf" "Eval" red_expr(red) "Then" "Write" "To" "File" string(f) constr(c) ] -> [
@@ -1095,6 +1405,10 @@ VERNAC COMMAND EXTEND Write_to_file
   ]
 END
 
-TACTIC EXTEND oeuf_reflect
-| [ "oeuf_reflect" constr(c) ] -> [tac c]
+VERNAC COMMAND EXTEND Oeuf_reflect_vernac
+| [ "Oeuf" "Reflect" constr(c) "As" ident(name) ] -> [
+    let (evars, env) = Lemmas.get_current_context () in
+    let (c, _) = Constrintern.interp_constr env evars c in
+    reflect_vernac c (Names.Id.to_string name)
+  ]
 END
