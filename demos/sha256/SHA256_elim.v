@@ -1136,31 +1136,28 @@ reflexivity.
 Qed.
 
 
-Definition lt_16 (n : nat) : bool :=
-    nat_rect (fun _ => unit -> bool) (fun dummy => true) (fun n _ dummy =>
-    nat_rect (fun _ => unit -> bool) (fun dummy => true) (fun n _ dummy =>
-    nat_rect (fun _ => unit -> bool) (fun dummy => true) (fun n _ dummy =>
-    nat_rect (fun _ => unit -> bool) (fun dummy => true) (fun n _ dummy =>
-    nat_rect (fun _ => unit -> bool) (fun dummy => true) (fun n _ dummy =>
-    nat_rect (fun _ => unit -> bool) (fun dummy => true) (fun n _ dummy =>
-    nat_rect (fun _ => unit -> bool) (fun dummy => true) (fun n _ dummy =>
-    nat_rect (fun _ => unit -> bool) (fun dummy => true) (fun n _ dummy =>
-    nat_rect (fun _ => unit -> bool) (fun dummy => true) (fun n _ dummy =>
-    nat_rect (fun _ => unit -> bool) (fun dummy => true) (fun n _ dummy =>
-    nat_rect (fun _ => unit -> bool) (fun dummy => true) (fun n _ dummy =>
-    nat_rect (fun _ => unit -> bool) (fun dummy => true) (fun n _ dummy =>
-    nat_rect (fun _ => unit -> bool) (fun dummy => true) (fun n _ dummy =>
-    nat_rect (fun _ => unit -> bool) (fun dummy => true) (fun n _ dummy =>
-    nat_rect (fun _ => unit -> bool) (fun dummy => true) (fun n _ dummy =>
-    nat_rect (fun _ => unit -> bool) (fun dummy => true) (fun n _ dummy =>
-    false)
-    n dummy) n dummy) n dummy) n dummy)  n dummy) n dummy) n dummy) n dummy)
-    n dummy) n dummy) n dummy) n dummy)  n dummy) n dummy) n dummy) n tt.
+Definition lt (n m : nat) : bool :=
+    nat_rect (fun _ => nat -> unit -> bool)
+        (fun m => nat_rect (fun _ => unit -> bool)
+            (fun dummy => false)
+            (fun m' IHm dummy => true)
+            m)
+        (fun n' IHn => fun m => nat_rect (fun _ => unit -> bool)
+            (fun dummy => false)
+            (fun m IHm dummy => IHn m dummy)
+            m)
+        n m tt.
 
-Lemma lt_16_correct : forall n,
-    lt_16 n = true <-> (n < 16)%nat.
-do 16 try destruct n as [| n]; simpl; split; intro;
-        solve [eauto | omega | discriminate].
+Lemma lt_correct : forall n m,
+    lt n m = true <-> (n < m)%nat.
+induction n; destruct m; split; intros; simpl in *.
+all: try solve [discriminate | exfalso; omega].
+all: try solve [reflexivity].
+all: try solve [omega].
+- change (lt (S n) (S m)) with (lt n m) in *.
+  rewrite IHn in *. omega.
+- change (lt (S n) (S m)) with (lt n m).
+  rewrite IHn. omega.
 Qed.
 
 
@@ -1185,19 +1182,19 @@ Definition W' (M : nat -> N) (t : nat) : list N :=
                 (t_add (t_add (sigma_1 (nthi IHt 1)) (nthi IHt 6))
                        (t_add (sigma_0 (nthi IHt 14)) (nthi IHt 15))
                     :: IHt)
-                (lt_16 (List_length IHt)))
+                (lt (List_length IHt) 16))
         t.
 
 Lemma W'_length : forall M t,
     length (W' M t) = S t.
 induction t; simpl; try reflexivity.
-destruct (lt_16 _); simpl; congruence.
+destruct (lt _ 16); simpl; congruence.
 Qed.
 
 Lemma W'_nthi_S : forall M t i,
     nthi (W' M (S t)) (S i) = nthi (W' M t) i.
 intros.
-simpl. destruct (lt_16 _); simpl.
+simpl. destruct (lt _ 16); simpl.
 all: cbn [nthi list_rect nat_rect].
 all: fold (nthi (W' M t) i).
 all: reflexivity.
@@ -1217,7 +1214,7 @@ induction t; induction i; intros0 Hi HM.
   destruct (lt_dec (S t) 16) as [Hlt | Hge].
 
   + rewrite SHA256_N.W_unfold_last by omega.
-    rewrite <- lt_16_correct in Hlt.
+    rewrite <- lt_correct in Hlt.
     simpl. rewrite W'_length, Hlt. simpl. cbn [nthi list_rect nat_rect].
     eapply HM.
 
@@ -1226,8 +1223,8 @@ induction t; induction i; intros0 Hi HM.
     remember (SHA256_N.t_add _ _) as rhs.
 
     pose proof Hge as Hge'.
-    rewrite <- lt_16_correct in Hge'. destruct (lt_16 _) eqn:Hlt_16; try congruence.
-    simpl. rewrite W'_length, Hlt_16. simpl.
+    rewrite <- lt_correct in Hge'. destruct (lt _ _) eqn:Hlt; try congruence.
+    simpl. rewrite W'_length, Hlt. simpl.
     cbn [nthi list_rect nat_rect].
 
     rewrite 4 IHt; auto; try omega.
