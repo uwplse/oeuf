@@ -959,9 +959,86 @@ let rec emit_sig_member ctx (xs : fn_sig list) idx =
     Constr.mkRel (Hashtbl.find ctx.sig_member_cache (xs, idx))
 
 
+
+
+
+let count_ctors (c : Term.constr) : (Names.constructor * int) list =
+    let tbl = Hashtbl.create 20 in
+    let rec go c =
+        match Constr.kind c with
+        | Constr.Construct (ctor, univ) ->
+                if Hashtbl.mem tbl ctor then
+                    Hashtbl.replace tbl ctor (Hashtbl.find tbl ctor + 1)
+                else
+                    Hashtbl.add tbl ctor 1
+        | _ -> ();
+        Constr.iter go c
+    in
+    go c;
+
+    let lst = ref [] in
+    Hashtbl.iter (fun k v -> lst := (k, v) :: !lst) tbl;
+    List.sort (fun (_,v1) (_,v2) -> v1 - v2) !lst
+
+let pp_constructor env fmt x = Pp.pp_with fmt (Printer.pr_constructor env x)
+
+let print_ctor_counts env lst =
+    List.iter (fun (ctor, n) ->
+        let s = Format.asprintf "%a" (pp_constructor env) ctor in
+        Format.eprintf " %9d %s\n" n (String.trim s)) lst
+
+
+
+let define name body ty : Term.constr =
+    let t_start = Sys.time () in
+
+    let c = ref None in
+    let (evars, env) = Lemmas.get_current_context () in
+    let body_e = Constrextern.extern_constr true env evars body in
+    let ty_e = Constrextern.extern_constr true env evars ty in
+
+    (*
+    Format.eprintf " == defining %s : %s ==\n" name (string_of_constr ty);
+    print_ctor_counts env (count_ctors body);
+    Format.eprintf "DEFINE %s : %s = \n%s\n"
+        name
+        (string_of_constr ty)
+        (string_of_constr body);
+    Format.pp_print_flush Format.err_formatter ();
+    *)
+
+    Command.do_definition
+        (Id.of_string name)
+        (Global, false (* not (universe?) polymorphic *), Definition)
+        None    (* no universe bindings *)
+        []      (* no argument binders *)
+        None    (* no reduction command surrounding the body *)
+        body_e
+        (Some ty_e)
+        (Lemmas.mk_hook (fun _ gr ->
+            c := Some (Universes.constr_of_global gr)));
+
+    let t_end = Sys.time () in
+    Format.eprintf "defined %s in %fs\n" name (t_end -. t_start);
+    Format.pp_print_flush Format.err_formatter ();
+
+    Option.get !c
+
+let set_opacity opacity c =
+    let const =
+        match Constr.kind c with
+        | Constr.Const (const, univ) -> const
+        | _ -> raise (Reflect_error "expected a global constant")
+    in
+    Redexpr.set_strategy false [(opacity, [Names.EvalConstRef const])]
+
+
+
 type reflection =
+    { name : string
+    ; entry_sig : Term.constr
     (* list of signatures up to (and including) the current block *)
-    { sigs : Term.constr
+    ; sigs : Term.constr
     (* convert a `member` for the previous block into one for the current block *)
     ; promote : Term.constr
     (* global environment, of type `genv sigs` *)
@@ -971,7 +1048,9 @@ type reflection =
     }
 
 let mk_base_reflection () =
-    { sigs = mk c_nil [t_sig ()]
+    { name = "_dummy"
+    ; entry_sig = c_tt ()   (* typechecking will fail if this is ever used *)
+    ; sigs = mk c_nil [t_sig ()]
     ; promote =
         Constr.mkLambda (Name.Anonymous, t_sig (),
         Constr.mkLambda (Name.Anonymous,
@@ -986,17 +1065,36 @@ type emit_global_ctx =
     ; nth_refl : int -> reflection
     ; emit_refl : reflection -> unit
     ; current_index : unit -> int
+    ; promoted_member : int -> Term.constr
     }
 
 let mk_emit_global_ctx () =
     let refls = ref [] in
+    let members = ref [] in
+
+    let promote_members r =
+        let go (r', mb) =
+            let name = r'.name ^ "_mb__at__" ^ r.name in
+            let mb' = Constr.mkApp (r.promote, Array.of_list [r'.entry_sig; mb]) in
+            let mb'_ty = mk t_member [t_sig (); r'.entry_sig; r.sigs] in
+            let mb'_c = define name mb' mb'_ty in
+            mb'_c
+        in
+        members := List.map go (List.combine !refls !members)
+    in
+
     let ctx =
         { last_refl = (fun () ->
             if List.length !refls = 0 then mk_base_reflection ()
             else List.nth !refls (List.length !refls - 1))
         ; nth_refl = (fun idx -> List.nth !refls idx)
-        ; emit_refl = (fun r -> refls := !refls @ [r])
+        ; emit_refl = (fun r -> begin
+            promote_members r;
+            refls := !refls @ [r];
+            members := !members @ [r.mb]
+        end)
         ; current_index = (fun () -> List.length !refls)
+        ; promoted_member = (fun idx -> List.nth !members idx)
         } in
     ctx
 
@@ -1011,14 +1109,6 @@ let rec emit_sig_list_base ctx base sgs : Term.constr =
         Hashtbl.add ctx.sig_list_base_cache (sgs, base) idx
     else ();
     Constr.mkRel (Hashtbl.find ctx.sig_list_base_cache (sgs, base))
-
-    (*
-let rec emit_sig_list_base ctx base sgs : Term.constr =
-    match sgs with
-    | [] -> base
-    | sg :: sgs -> mk c_cons [t_sig ();
-            emit_sig ctx sg; emit_sig_list_base ctx base sgs]
-*)
 
 let emit_refl_promote_body ctx base_sgs target mb sgs : Term.constr =
     let rec go sgs =
@@ -1074,13 +1164,6 @@ let rec emit_sig_member_base ctx base_sgs (xs : fn_sig list) idx =
 let emit_refl_promote_body ctx base_sgs target mb sgs : Term.constr =
     emit_sig_member_uncached ctx base_sgs mb sgs target
 
-
-let rec promote_member gctx first last sg mb =
-    if first >= last then mb
-    else
-        let promote = (gctx.nth_refl (first + 1)).promote in
-        let mb' = Constr.mkApp (promote, Array.of_list [sg; mb]) in
-        promote_member gctx (first + 1) last sg mb'
 
 let emit_expr gctx ctx (g_tys : fn_sig list) (l_tys : ty list) e : Term.constr =
     let prev = gctx.last_refl () in
@@ -1141,10 +1224,8 @@ let emit_expr gctx ctx (g_tys : fn_sig list) (l_tys : ty list) e : Term.constr =
                             let db_idx = List.length g_tys - 1 - idx in
                             emit_sig_member_base ctx base_sgs g_tys db_idx
                     | Far idx ->
-                            let cur = gctx.current_index () in
-                            let mb_orig = (gctx.nth_refl idx).mb in
-                            let mb_start = promote_member gctx idx (cur - 1) sig_c mb_orig in
-                            let mb = emit_sig_member_cached ctx base_sgs mb_start g_tys sig_c in
+                            let mb0 = gctx.promoted_member idx in
+                            let mb = emit_sig_member_cached ctx base_sgs mb0 g_tys sig_c in
                             mb
                 in
 
@@ -1198,77 +1279,6 @@ let emit_genv gctx ctx funcs : Term.constr =
     go prev.genv [] funcs
 
 
-let count_ctors (c : Term.constr) : (Names.constructor * int) list =
-    let tbl = Hashtbl.create 20 in
-    let rec go c =
-        match Constr.kind c with
-        | Constr.Construct (ctor, univ) ->
-                if Hashtbl.mem tbl ctor then
-                    Hashtbl.replace tbl ctor (Hashtbl.find tbl ctor + 1)
-                else
-                    Hashtbl.add tbl ctor 1
-        | _ -> ();
-        Constr.iter go c
-    in
-    go c;
-
-    let lst = ref [] in
-    Hashtbl.iter (fun k v -> lst := (k, v) :: !lst) tbl;
-    List.sort (fun (_,v1) (_,v2) -> v1 - v2) !lst
-
-let pp_constructor env fmt x = Pp.pp_with fmt (Printer.pr_constructor env x)
-
-let print_ctor_counts env lst =
-    List.iter (fun (ctor, n) ->
-        let s = Format.asprintf "%a" (pp_constructor env) ctor in
-        Format.eprintf " %9d %s\n" n (String.trim s)) lst
-
-
-let define name body ty : Term.constr =
-    let t_start = Sys.time () in
-
-    let c = ref None in
-    let (evars, env) = Lemmas.get_current_context () in
-    let body_e = Constrextern.extern_constr true env evars body in
-    let ty_e = Constrextern.extern_constr true env evars ty in
-
-    (*
-    Format.eprintf " == defining %s : %s ==\n" name (string_of_constr ty);
-    print_ctor_counts env (count_ctors body);
-    (*
-    Format.eprintf "DEFINE %s : %s = \n%s\n"
-        name
-        (string_of_constr ty)
-        (string_of_constr body);
-        *)
-    Format.pp_print_flush Format.err_formatter ();
-    *)
-
-    Command.do_definition
-        (Id.of_string name)
-        (Global, false (* not (universe?) polymorphic *), Definition)
-        None    (* no universe bindings *)
-        []      (* no argument binders *)
-        None    (* no reduction command surrounding the body *)
-        body_e
-        (Some ty_e)
-        (Lemmas.mk_hook (fun _ gr ->
-            c := Some (Universes.constr_of_global gr)));
-
-    let t_end = Sys.time () in
-    Format.eprintf "defined %s in %fs\n" name (t_end -. t_start);
-    Format.pp_print_flush Format.err_formatter ();
-
-    Option.get !c
-
-let set_opacity opacity c =
-    let const =
-        match Constr.kind c with
-        | Constr.Const (const, univ) -> const
-        | _ -> raise (Reflect_error "expected a global constant")
-    in
-    Redexpr.set_strategy false [(opacity, [Names.EvalConstRef const])]
-
 let define_block gctx block : unit =
     let rev_sigs = List.rev (List.map (fun (f : func) ->
         (f.arg_ty, f.free_tys, f.ret_ty)) block) in
@@ -1317,7 +1327,9 @@ let define_block gctx block : unit =
     *)
 
     gctx.emit_refl
-        { sigs = sigs_c
+        { name = name
+        ; entry_sig = emit_sig' (List.hd rev_sigs)
+        ; sigs = sigs_c
         ; promote = promote_c
         ; genv = genv_c
         ; mb = mb_c
