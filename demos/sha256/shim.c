@@ -3,6 +3,9 @@
 #include <stdint.h>
 
 
+void* SHA_256(void*, void*);
+
+
 union list* read_input() {
     uint8_t buf[4096];
     union list* head = NULL;
@@ -57,7 +60,14 @@ void print_hex(union list* l) {
 }
 
 
+void* closure(void (*f)(void*, void*)) {
+    struct closure* c = malloc(sizeof(struct closure));
+    c->f = f;
+    return c;
+}
+
 int main() {
     union list* l = read_input();
-    print_hex(l);
+    union list* hash = call(closure(SHA_256), l);
+    print_hex(hash);
 }
