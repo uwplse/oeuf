@@ -38,7 +38,6 @@ Require OeufIntern.
 Require SourceLifted.
 (*Require Echo.*)
 Require Pretty.
-Require IdProg. (* TODO: temporary, until SourceLifted parser works *)
 
 (* Standard lib *)
 Require Import ExtrOcamlBasic.
@@ -185,8 +184,8 @@ Separate Extraction
    Oeuf.transf_whole_program
    OeufIntern.transf_whole_program
    Pretty.compilation_unit.parse
-   IdProg.oeuf_prog
-   IdProg.idM
+(*   IdProg.oeuf_prog
+   IdProg.idM*)
 .
 
 Cd "..".
