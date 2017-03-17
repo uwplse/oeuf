@@ -337,7 +337,7 @@ let compile_oeuf cu shim_ast sourcename asmname linked_cmname oeuf_cmname =
 
   (* Convert to Asm *)
   let ocm,scm,lcm,asm =
-  match OeufIntern.transf_whole_program IdProg.idM cu shim_ast with
+  match Oeuf.transf_whole_program cu shim_ast with
     | Errors.OK (((ocm,scm),lcm),asm) -> 
       (match Asmexpand.expand_program asm with
       | Errors.OK asm' -> ocm,scm,lcm,asm'
