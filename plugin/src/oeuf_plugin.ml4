@@ -466,6 +466,16 @@ let mk_reflect_ctx const_closure =
     ; fresh = fresh
     }
 
+let make_ident s =
+    let go1 c =
+        if Char.compare 'a' c <= 0 && Char.compare c 'z' <= 0 then c
+        else if Char.compare 'A' c <= 0 && Char.compare c 'Z' <= 0 then c
+        else if Char.compare '0' c <= 0 && Char.compare c '9' <= 0 then c
+        else ' '
+    in
+    let go2 c = if c == ' ' then '_' else c in
+    String.map go2 (String.trim (String.map go1 s))
+
 let reflect_expr ctx evars env name c : func list =
     let env0 = env in
 
@@ -496,7 +506,7 @@ let reflect_expr ctx evars env name c : func list =
                 let arg_ty = reflect_type env arg_ty_c in
 
                 (* lift the lambda to a top-level function, and get its index *)
-                let name = ctx.fresh name in
+                let name = ctx.fresh (make_ident name) in
                 (* just propose the same name for the next lambda down.  it
                  * will get a _123 appended by `fresh`. *)
                 let body' : expr = go env' (arg_ty :: locals) name false body in
@@ -595,16 +605,6 @@ let reflect_expr ctx evars env name c : func list =
     let top = go env [] name true c in
     !funcs
 
-
-let make_ident s =
-    let go1 c =
-        if Char.compare 'a' c <= 0 && Char.compare c 'z' <= 0 then c
-        else if Char.compare 'A' c <= 0 && Char.compare c 'Z' <= 0 then c
-        else if Char.compare '0' c <= 0 && Char.compare c '9' <= 0 then c
-        else ' '
-    in
-    let go2 c = if c == ' ' then '_' else c in
-    String.map go2 (String.trim (String.map go1 s))
 
 let reflect_block evars env c =
     let blocks : func list list ref = ref [] in
