@@ -1378,7 +1378,7 @@ let define_cu gctx cu_name blocks : unit =
     let last = gctx.last_refl () in
     let types = last.sigs in
     let exprs = last.genv in
-    let names = emit_string_list (collect_names blocks) in
+    let names = emit_string_list (List.rev (collect_names blocks)) in
     let cu = mk c_compilation_unit [types; exprs; names] in
     let _ = define cu_name cu (t_compilation_unit ()) in
     ()
