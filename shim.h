@@ -20,6 +20,23 @@ union nat {
     } S;
 };
 
+#define TAG_nat_O       0
+#define TAG_nat_S       1
+
+union nat* make_O() {
+    union nat* n = malloc(SIZEOF_FIELD(union nat, O));
+    n->O.tag = TAG_nat_O;
+    return n;
+}
+
+union nat* make_S(union nat* m) {
+    union nat* n = malloc(SIZEOF_FIELD(union nat, S));
+    n->S.tag = TAG_nat_S;
+    n->S.n = m;
+    return n;
+}
+
+// TODO: deprecated
 union nat* make_nat(int n) {
     union nat* ptr = malloc(4);
     ptr->tag = 0;
@@ -34,6 +51,7 @@ union nat* make_nat(int n) {
     return ptr;
 }
 
+// TODO: deprecated
 int read_nat(union nat* n) {
     int i = 0;
     while (n->tag == 1) {
@@ -41,6 +59,25 @@ int read_nat(union nat* n) {
         n = n->S.n;
     }
     return i;
+}
+
+union nat* nat_of_uint(unsigned x) {
+    union nat* result = make_O();
+    for (int i = 0; i < x; ++i) {
+        result = make_S(result);
+    }
+    return result;
+}
+
+unsigned uint_of_nat(union nat* n) {
+    unsigned result = 0;
+    while (n->tag != TAG_nat_O) {
+        // If n->tag isn't TAG_nat_O, it must be TAG_nat_S
+        result += 1;
+        n = n->S.n;
+    }
+    return result;
+
 }
 
 
@@ -59,12 +96,14 @@ union bool {
   int tag;
 };
 
+// TODO: deprecated
 union bool* make_bool(int b) {
   union bool* result = malloc(4);
   result->tag = (b ? 0 : 1);
   return result;
 }
 
+// TODO: deprecated
 int read_bool(union bool* b) {
   return b->tag == 0;
 }
@@ -99,6 +138,7 @@ union list* make_cons(void* x, union list* xs) {
     return l;
 }
 
+// TODO: deprecated
 void print_list_nat(union list* l) {
   while (l->tag == TAG_list_cons) {
     int i = read_nat(l->cons.data);
@@ -301,9 +341,18 @@ void print_N(union N* n) {
 }
 
 
+typedef void* oeuf_function(void*, void*);
+
 struct closure {
-    void* (*f)(void*, void*);
+    oeuf_function* f;
+    void* upvars[];
 };
+
+struct closure* make_closure(oeuf_function* f) {
+    struct closure* c = malloc(sizeof(struct closure));
+    c->f = f;
+    return c;
+}
 
 void* call(void* f, void* a) {
     return (((struct closure*)f)->f)(f, a);
@@ -323,3 +372,5 @@ void* vcall(void* f, ...) {
 }
 
 #define VCALL(f, ...)   (vcall((f), __VA_ARGS__, NULL))
+
+#define OEUF_CALL(f, ...)   (VCALL(make_closure(f), __VA_ARGS__))
