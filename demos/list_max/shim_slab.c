@@ -2,7 +2,7 @@
 // temporaries allocated by the first call before making the second one.
 //
 // First compile slab.c:
-//      gcc -c slab/slab.c -o slab/slab.o -m32
+//      gcc -c slab/slab.c -o slab/slab.o -O3 -m32
 // Then compile this program:
 //      ./OeufDriver.native list_max.oeuf demos/list_max/shim_slab.c \
 //          -I . -I slab -Wl,slab/slab.o -Wl,--wrap=malloc
@@ -13,7 +13,7 @@
 //
 // A good test case is:
 //      echo 3000 3000 3000 | /usr/bin/time ./a.out
-// This test takes about 50% less memory and 30% less time, compared to a
+// This test takes about 50% less memory and 65% less time, compared to a
 // version compiled with -DDISABLE_SLAB.
 
 #include <stdio.h>
@@ -54,7 +54,7 @@ int main() {
 
     // Copy out the result, then flush the second slab.
     result = uint_of_nat(result_);
-    slab_flush(slab_end());
+    slab_flush(slab);
 
     printf("%u\n", result);
     return 0;
