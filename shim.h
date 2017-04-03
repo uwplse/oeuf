@@ -36,6 +36,29 @@ union nat* make_S(union nat* m) {
     return n;
 }
 
+union nat* clone_nat(union nat* n) {
+    union nat* m = NULL;
+    union nat** mp = &m;
+    while (n != NULL) {
+        switch (n->tag) {
+            case TAG_nat_O:
+                *mp = make_O();
+                n = NULL;
+                break;
+
+            case TAG_nat_S:
+                *mp = make_S(NULL);
+                mp = &(*mp)->S.n;
+                n = n->S.n;
+                break;
+
+            default:
+                abort();
+        }
+    }
+    return m;
+}
+
 // TODO: deprecated
 union nat* make_nat(int n) {
     union nat* ptr = malloc(4);
@@ -77,7 +100,6 @@ unsigned uint_of_nat(union nat* n) {
         n = n->S.n;
     }
     return result;
-
 }
 
 
