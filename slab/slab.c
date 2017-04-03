@@ -47,6 +47,7 @@ void* slab_end() {
     struct slab_header* slab = slab_head;
     slab_head = NULL;
     slab_tail = NULL;
+    return slab;
 }
 
 // Drop all slab-allocated objects.
