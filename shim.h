@@ -222,8 +222,8 @@ union prod {
     int tag;
     struct {
         int tag;
-        void* left;
-        void* right;
+        void* fst;
+        void* snd;
     } pair;
 };
 
@@ -231,16 +231,16 @@ union prod {
 
 // Constructors
 
-union prod* make_pair(void* left, void* right) {
+union prod* make_pair(void* fst, void* snd) {
     union prod* p = malloc(SIZEOF_FIELD(union prod, pair));
     p->pair.tag = TAG_prod_pair;
-    p->pair.left = left;
-    p->pair.right = right;
+    p->pair.fst = fst;
+    p->pair.snd = snd;
     return p;
 }
 
 union prod* clone_prod(union prod* p, clone_func f1, clone_func f2) {
-    return make_pair(f1(p->pair.left), f2(p->pair.right));
+    return make_pair(f1(p->pair.fst), f2(p->pair.snd));
 }
 
 
@@ -426,7 +426,7 @@ union N* clone_N(union N* n) {
 
 // Conversions
 
-union N* uint_to_N(unsigned x) {
+union N* N_of_uint(unsigned x) {
     if (x == 0) {
         return make_N0();
     } else {
@@ -434,7 +434,7 @@ union N* uint_to_N(unsigned x) {
     }
 }
 
-unsigned N_to_uint(union N* n) {
+unsigned uint_of_N(union N* n) {
     switch (n->tag) {
         case TAG_N_N0:
             return 0;
