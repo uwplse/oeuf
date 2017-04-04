@@ -14,7 +14,7 @@ union list* read_input() {
         size_t count = fread(buf, 1, sizeof(buf), stdin);
         for (size_t i = 0; i < count; ++i) {
             *tail = make_cons(uint_to_N(buf[i]), NULL);
-            tail = &(*tail)->cons.next;
+            tail = &(*tail)->cons.tail;
         }
     }
     *tail = make_nil();
@@ -32,13 +32,13 @@ void write_output(union list* l) {
                 return;
 
             case TAG_list_cons:
-                buf[count] = N_to_uint(l->cons.data);
+                buf[count] = N_to_uint(l->cons.head);
                 ++count;
                 if (count == sizeof(buf)) {
                     fwrite(buf, 1, count, stdout);
                     count = 0;
                 }
-                l = l->cons.next;
+                l = l->cons.tail;
                 break;
         }
     }
@@ -52,22 +52,16 @@ void print_hex(union list* l) {
                 return;
 
             case TAG_list_cons:
-                printf("%02x", N_to_uint(l->cons.data));
-                l = l->cons.next;
+                printf("%02x", N_to_uint(l->cons.head));
+                l = l->cons.tail;
                 break;
         }
     }
 }
 
 
-void* closure(void (*f)(void*, void*)) {
-    struct closure* c = malloc(sizeof(struct closure));
-    c->f = f;
-    return c;
-}
-
 int main() {
     union list* l = read_input();
-    union list* hash = call(closure(SHA_256), l);
+    union list* hash = OEUF_CALL(SHA_256, l);
     print_hex(hash);
 }

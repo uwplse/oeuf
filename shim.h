@@ -8,6 +8,11 @@
 
 #define SIZEOF_FIELD(t, f)      (sizeof(((t*)4096)->f))
 
+typedef void* clone_func(void*);
+typedef void print_func(void*);
+
+
+//// nat ////
 
 union nat {
     int tag;
@@ -23,6 +28,8 @@ union nat {
 #define TAG_nat_O       0
 #define TAG_nat_S       1
 
+// Constructors
+
 union nat* make_O() {
     union nat* n = malloc(SIZEOF_FIELD(union nat, O));
     n->O.tag = TAG_nat_O;
@@ -37,18 +44,18 @@ union nat* make_S(union nat* m) {
 }
 
 union nat* clone_nat(union nat* n) {
-    union nat* m = NULL;
-    union nat** mp = &m;
+    union nat* head = NULL;
+    union nat** tail_p = &head;
     while (n != NULL) {
         switch (n->tag) {
             case TAG_nat_O:
-                *mp = make_O();
+                *tail_p = make_O();
                 n = NULL;
                 break;
 
             case TAG_nat_S:
-                *mp = make_S(NULL);
-                mp = &(*mp)->S.n;
+                *tail_p = make_S(NULL);
+                tail_p = &(*tail_p)->S.n;
                 n = n->S.n;
                 break;
 
@@ -56,33 +63,10 @@ union nat* clone_nat(union nat* n) {
                 abort();
         }
     }
-    return m;
+    return head;
 }
 
-// TODO: deprecated
-union nat* make_nat(int n) {
-    union nat* ptr = malloc(4);
-    ptr->tag = 0;
-
-    for (int i = 1; i <= n; ++i) {
-        union nat* tmp = malloc(8);
-        tmp->tag = 1;
-        tmp->S.n = ptr;
-        ptr = tmp;
-    }
-
-    return ptr;
-}
-
-// TODO: deprecated
-int read_nat(union nat* n) {
-    int i = 0;
-    while (n->tag == 1) {
-        ++i;
-        n = n->S.n;
-    }
-    return i;
-}
+// Conversions
 
 union nat* nat_of_uint(unsigned x) {
     union nat* result = make_O();
@@ -103,33 +87,63 @@ unsigned uint_of_nat(union nat* n) {
 }
 
 
+//// unit ////
+
 union unit {
-  int tag;
+    int tag;
+    struct {
+        int tag;
+    } tt;
 };
 
+#define TAG_unit_tt         0
+
+// Constructors
+
 union unit* make_unit() {
-    union unit* result = malloc(4);
-    result->tag = 0;
+    union unit* result = malloc(SIZEOF_FIELD(union unit, tt));
+    result->tt.tag = TAG_unit_tt;
     return result;
 }
 
 
-union bool {
-  int tag;
+//// bool ////
+
+union bool_ {
+    int tag;
+    struct {
+        int tag;
+    } true_;
+    struct {
+        int tag;
+    } false_;
 };
 
-// TODO: deprecated
-union bool* make_bool(int b) {
-  union bool* result = malloc(4);
-  result->tag = (b ? 0 : 1);
-  return result;
+#define TAG_bool_true   0
+#define TAG_bool_false  1
+
+// Constructors
+
+union bool_* make_true() {
+    union bool_* result = malloc(SIZEOF_FIELD(union bool_, true_));
+    result->true_.tag = TAG_bool_true;
+    return result;
 }
 
-// TODO: deprecated
-int read_bool(union bool* b) {
-  return b->tag == 0;
+union bool_* make_false() {
+    union bool_* result = malloc(SIZEOF_FIELD(union bool_, false_));
+    result->false_.tag = TAG_bool_false;
+    return result;
 }
 
+// Conversions
+
+int int_of_bool(union bool_* b) {
+    return b->tag == TAG_bool_true;
+}
+
+
+//// list ////
 
 union list {
     int tag;
@@ -138,13 +152,15 @@ union list {
     } nil;
     struct {
         int tag;
-        void* data;
-        union list* next;
+        void* head;
+        union list* tail;
     } cons;
 };
 
 #define TAG_list_nil        0
 #define TAG_list_cons       1
+
+// Constructors
 
 union list* make_nil() {
     union list* l = malloc(SIZEOF_FIELD(union list, nil));
@@ -152,41 +168,57 @@ union list* make_nil() {
     return l;
 }
 
-union list* make_cons(void* x, union list* xs) {
+union list* make_cons(void* head, union list* tail) {
     union list* l = malloc(SIZEOF_FIELD(union list, cons));
     l->cons.tag = TAG_list_cons;
-    l->cons.data = x;
-    l->cons.next = xs;
+    l->cons.head = head;
+    l->cons.tail = tail;
     return l;
 }
 
-// TODO: deprecated
-void print_list_nat(union list* l) {
-  while (l->tag == TAG_list_cons) {
-    int i = read_nat(l->cons.data);
-    printf("%d\n", i);
-    l = l->cons.next;
-  }
+union list* clone_list(union list* l, clone_func f) {
+    union list* head = NULL;
+    union list** tail_p = &head;
+    while (l != NULL) {
+        switch (l->tag) {
+            case TAG_list_nil:
+                *tail_p = make_nil();
+                l = NULL;
+                break;
+
+            case TAG_list_cons:
+                *tail_p = make_cons(f(l->cons.head), NULL);
+                tail_p = &(*tail_p)->cons.tail;
+                l = l->cons.tail;
+                break;
+
+            default:
+                abort();
+        }
+    }
+    return head;
 }
 
-typedef void (*print_func)(void*);
+// Utilities
 
-void print_list(union list* l, print_func f) {
+void print_list(union list* l, print_func* f) {
     switch (l->tag) {
         case TAG_list_nil:
             printf("[]");
             break;
 
         case TAG_list_cons:
-            f(l->cons.data);
+            f(l->cons.head);
             printf(" :: ");
-            print_list(l->cons.next, f);
+            print_list(l->cons.tail, f);
             break;
     }
 }
 
 
-union pair {
+//// prod ////
+
+union prod {
     int tag;
     struct {
         int tag;
@@ -195,24 +227,34 @@ union pair {
     } pair;
 };
 
-union pair* make_pair(void* x, void* y) {
-    union pair* p = malloc(SIZEOF_FIELD(union pair, pair));
-    p->pair.tag = 0;
-    p->pair.left = x;
-    p->pair.right = y;
+#define TAG_prod_pair   0
+
+// Constructors
+
+union prod* make_pair(void* left, void* right) {
+    union prod* p = malloc(SIZEOF_FIELD(union prod, pair));
+    p->pair.tag = TAG_prod_pair;
+    p->pair.left = left;
+    p->pair.right = right;
     return p;
 }
 
+union prod* clone_prod(union prod* p, clone_func f1, clone_func f2) {
+    return make_pair(f1(p->pair.left), f2(p->pair.right));
+}
+
+
+//// positive ////
 
 union positive {
     int tag;
     struct {
         int tag;
-        void* p;
+        union positive* p;
     } xI;
     struct {
         int tag;
-        void* p;
+        union positive* p;
     } xO;
     struct {
         int tag;
@@ -222,6 +264,8 @@ union positive {
 #define TAG_positive_xI     0
 #define TAG_positive_xO     1
 #define TAG_positive_xH     2
+
+// Constructors
 
 union positive* make_xI(union positive* q) {
     union positive* p = malloc(SIZEOF_FIELD(union positive, xI));
@@ -242,6 +286,37 @@ union positive* make_xH() {
     p->xH.tag = TAG_positive_xH;
     return p;
 }
+
+union positive* clone_positive(union positive* p) {
+    union positive* head = NULL;
+    union positive** tail_p = &head;
+    while (p != NULL) {
+        switch (p->tag) {
+            case TAG_positive_xI:
+                *tail_p = make_xI(NULL);
+                tail_p = &(*tail_p)->xO.p;
+                p = p->xI.p;
+                break;
+
+            case TAG_positive_xO:
+                *tail_p = make_xO(NULL);
+                tail_p = &(*tail_p)->xO.p;
+                p = p->xO.p;
+                break;
+
+            case TAG_positive_xH:
+                *tail_p = make_xH();
+                p = NULL;
+                break;
+
+            default:
+                abort();
+        }
+    }
+    return head;
+}
+
+// Conversions
 
 union positive* uint_to_positive(unsigned x) {
     assert(x >= 1);
@@ -282,6 +357,8 @@ unsigned positive_to_uint(union positive* p) {
     }
 }
 
+// Utilities
+
 void print_positive(union positive* p) {
     switch (p->tag) {
         case TAG_positive_xI:
@@ -303,6 +380,8 @@ void print_positive(union positive* p) {
 }
 
 
+//// N ////
+
 union N {
     int tag;
     struct {
@@ -317,6 +396,8 @@ union N {
 #define TAG_N_N0            0
 #define TAG_N_Npos          1
 
+// Constructors
+
 union N* make_N0() {
     union N* n = malloc(SIZEOF_FIELD(union N, N0));
     n->N0.tag = TAG_N_N0;
@@ -329,6 +410,21 @@ union N* make_Npos(union positive* p) {
     n->Npos.p = p;
     return n;
 }
+
+union N* clone_N(union N* n) {
+    switch (n->tag) {
+        case TAG_N_N0:
+            return make_N0();
+
+        case TAG_N_Npos:
+            return make_Npos(clone_positive(n->Npos.p));
+
+        default:
+            abort();
+    }
+}
+
+// Conversions
 
 union N* uint_to_N(unsigned x) {
     if (x == 0) {
@@ -348,6 +444,8 @@ unsigned N_to_uint(union N* n) {
     }
 }
 
+// Utilities
+
 void print_N(union N* n) {
     switch (n->tag) {
         case TAG_N_N0:
@@ -362,6 +460,9 @@ void print_N(union N* n) {
     }
 }
 
+
+
+//// closure ////
 
 typedef void* oeuf_function(void*, void*);
 
