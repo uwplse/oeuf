@@ -13,7 +13,7 @@ union list* read_input() {
     while (!feof(stdin) && !ferror(stdin)) {
         size_t count = fread(buf, 1, sizeof(buf), stdin);
         for (size_t i = 0; i < count; ++i) {
-            *tail = make_cons(uint_to_N(buf[i]), NULL);
+            *tail = make_cons(N_of_uint(buf[i]), NULL);
             tail = &(*tail)->cons.tail;
         }
     }
@@ -32,7 +32,7 @@ void write_output(union list* l) {
                 return;
 
             case TAG_list_cons:
-                buf[count] = N_to_uint(l->cons.head);
+                buf[count] = uint_of_N(l->cons.head);
                 ++count;
                 if (count == sizeof(buf)) {
                     fwrite(buf, 1, count, stdout);
@@ -52,7 +52,7 @@ void print_hex(union list* l) {
                 return;
 
             case TAG_list_cons:
-                printf("%02x", N_to_uint(l->cons.head));
+                printf("%02x", uint_of_N(l->cons.head));
                 l = l->cons.tail;
                 break;
         }
