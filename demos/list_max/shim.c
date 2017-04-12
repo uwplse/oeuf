@@ -1,17 +1,29 @@
 #include <stdio.h>
 #include "shim.h"
 
-oeuf_function max;
+oeuf_function list_max;
+
+union list* read_nat_list() {
+    union list* head = NULL;
+    union list** tail = &head;
+    unsigned n;
+    union nat* n_;
+    while (scanf("%u", &n) == 1) {
+        n_ = nat_of_uint(n);
+        *tail = make_cons(n_, NULL);
+        tail = &(*tail)->cons.tail;
+    }
+    *tail = make_nil();
+    return head;
+}
 
 int main() {
-    unsigned int n, m, result;
-    union nat *n_, *m_, *result_;
-    scanf("%u %u", &n, &m);
-    n_ = nat_of_uint(n);
-    m_ = nat_of_uint(m);
-    result_ = OEUF_CALL(max, n_, m_);
+    union list* input_ = read_nat_list();
+    unsigned result;
+    union nat* result_;
+    result_ = OEUF_CALL(list_max, input_);
     result = uint_of_nat(result_);
-    printf("%u\n", result);
+    printf("max = %u\n", result);
     return 0;
 }
 
