@@ -28,35 +28,63 @@
 
 oeuf_function max;
 
+union list* read_nat_list() {
+    union list* head = NULL;
+    union list** tail = &head;
+    unsigned n;
+    union nat* n_;
+    while (scanf("%u", &n) == 1) {
+        n_ = nat_of_uint(n);
+        *tail = make_cons(n_, NULL);
+        tail = &(*tail)->cons.tail;
+    }
+    *tail = make_nil();
+    return head;
+}
+
+union nat* slab_max(union list* input) {
+    slab_begin();
+
+    union nat* cur = make_O();
+
+    void* slab = slab_end();
+
+    while (input != NULL) {
+        switch (input->tag) {
+            case TAG_list_nil:
+                input = NULL;
+                // leave current slab alive
+                break;
+
+            case TAG_list_cons:
+                // Temporary slab
+                slab_begin();
+                cur = OEUF_CALL(max, cur, input->cons.head);
+                void* slab_tmp = slab_end();
+
+                // Output slab
+                slab_begin();
+                cur = clone_nat(cur);
+                void* slab_out = slab_end();
+
+                // Rotate slabs
+                slab_flush(slab);
+                slab_flush(slab_tmp);
+                slab = slab_out;
+
+                // Advance list
+                input = input->cons.tail;
+                break;
+        }
+    }
+
+    return cur;
+}
+
 int main() {
-    unsigned int n1, n2, n3, result;
-    union nat *a_, *b_, *result_;
-    void* slab;
-
-    scanf("%u %u %u", &n1, &n2, &n3);
-
-    // Compute max(n1, n2)
-    slab_begin();
-    a_ = nat_of_uint(n1);
-    b_ = nat_of_uint(n2);
-    result_ = OEUF_CALL(max, a_, b_);
-    slab = slab_end();
-
-    // Copy out the result into a new slab, then flush the old one.
-    slab_begin();
-    a_ = clone_nat(result_);
-    slab_flush(slab);
-
-    // Compute max(max(n1, n2), n3)
-    b_ = nat_of_uint(n3);
-    result_ = OEUF_CALL(max, a_, b_);
-    slab = slab_end();
-
-    // Copy out the result, then flush the second slab.
-    result = uint_of_nat(result_);
-    slab_flush(slab);
-
-    printf("%u\n", result);
+    union list* input_ = read_nat_list();
+    union nat* result_ = slab_max(input_);
+    printf("max = %u\n", uint_of_nat(result_));
     return 0;
 }
 
