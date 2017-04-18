@@ -487,4 +487,30 @@ destruct e; intros; simpl.
 
 Qed.
 
+Lemma denote_callstate :
+  forall G (g : genv G) ty1 ty2 (vf : value G (Arrow ty1 ty2)) (va : value G ty1) s,
+    is_callstate g vf va s ->
+    state_denote (genv_denote g) s = (value_denote (genv_denote g) vf) (value_denote (genv_denote g) va).
+Proof.
+  intros.
+  invc H.
+  fix_existT.
+  subst. subst vf.
+  clear H3 H6.
+  simpl.
+  rewrite gget_gget_weaken.
+  rewrite <- genv_denote_gget.
+  reflexivity.
+Qed.
 
+
+Lemma denote_finalstate :
+  forall G (g : genv G) ty (v : value G ty) s,
+    final_state s v ->
+    state_denote (genv_denote g) s = value_denote (genv_denote g) v.
+Proof.
+  intros.
+  invc H.
+  fix_existT. subst.
+  reflexivity.
+Qed.

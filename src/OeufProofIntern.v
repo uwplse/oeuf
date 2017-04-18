@@ -1362,5 +1362,79 @@ Section OeufSimulation.
       eassumption. reflexivity.
       eassumption.
     Qed.
-      
+
+(* Let s ′ be a Cminor callstate, representing an application of the
+Cminor closure value f ′ to the Cminor value a′. Suppose there
+exist Gallina values f and a such that f ∼ f ′ and a ∼ a′ and the
+application f a is well-typed in Gallina. Then there exists a value
+r ′ such that f a ∼ r ′, and there exists a Cminor returnstate t ′
+carrying the value r ′ such that the Cminor state s ′ takes zero or
+more steps to reach t ′.*)
+
+Require Import SourceLiftedProofs.
+
+Inductive value_match (ty : type) (gv : type_denote ty) (hv : HighValues.value) : Prop :=
+| mv :
+    forall (slv : SourceLifted.value G ty),
+      @match_values _ (fst EFP) (fst EFP2) (snd EFP) M slv hv ->
+      value_denote (genv_denote g) slv = gv ->
+      value_match ty gv hv.
+
+Axiom sourcelifted_termination :
+  forall G rty (st : SourceLifted.state G rty) (g : SourceLifted.genv G),
+  exists v,
+    Semantics.star _ _ (SourceLifted.sstep) g st (SourceLifted.Stop v).
+
+Lemma star_sstep_denote :
+  forall G (g : SourceLifted.genv G) rty (s1 s2: SourceLifted.state G rty),
+    Semantics.star _ _ SourceLifted.sstep g s1 s2 ->
+    state_denote (genv_denote g) s1 = state_denote (genv_denote g) s2.
+Proof.
+  induction 1; intros.
+  reflexivity.
+  eapply sstep_denote in H; congruence.
+Qed.
+
+Theorem oeuf_spec :
+  forall tyA tyR
+         (fv : type_denote (Arrow tyA tyR))
+         (av : type_denote tyA)
+         (fhv ahv : HighValues.value)
+         (cmst : Cminor.state),
+    cminor_is_callstate P3 fhv ahv cmst ->
+    value_match _ fv fhv ->
+    value_match _ av ahv ->
+    exists cmst' rhv,
+      TraceSemantics.star Cminor.step (Genv.globalenv P3) cmst E0 cmst' /\
+      cminor_final_state P3 cmst' rhv /\
+      value_match tyR (fv av) rhv.
+Proof.
+  intros.
+  inversion H0. inversion H1.
+  eapply oeuf_match_callstate in H; eauto.
+  repeat (break_exists; break_and).
+  pose proof (sourcelifted_termination _ _ x g).
+  break_exists.
+  pose proof H7 as Hstar.
+  eapply oeuf_star_simulation in H7; try eassumption.
+  repeat (break_exists; break_and).
+  assert (SourceLifted.final_state (Stop x1) x1) by
+      constructor.
+  copy H9.
+  eapply oeuf_match_final_states in H9; try eassumption.
+  repeat (break_exists; break_and).
+  exists x3. exists x4.
+  split; try eassumption.
+  split; try eassumption.
+  econstructor. eassumption.
+  eapply denote_callstate in H6.
+  eapply denote_finalstate in H10.
+  instantiate (1 := g) in H10.
+  eapply star_sstep_denote in Hstar.
+  congruence.
+Qed.
+            
+            
+
+    
 End OeufSimulation.
