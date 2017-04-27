@@ -5,6 +5,8 @@ Require Import Utopia.
 Require SourceValues.
 Include SourceValues.
 
+Require Import OpaqueOps.
+
 
 (* an eliminator that takes cases with types given by the first index,
    eliminates a target with type given by the second index,
@@ -49,6 +51,10 @@ Inductive expr {G : list (type * list type * type)} {L : list type} : type -> Ty
     hlist (expr) case_tys ->
     expr (ADT target_tyn) ->
     expr ty
+| OpaqueOp : forall {arg_tys ret_ty},
+        opaque_oper arg_tys ret_ty ->
+        hlist expr arg_tys ->
+        expr ret_ty
 .
 
 End expr.
@@ -81,6 +87,7 @@ Definition weaken_value {G} fn_sig :
         match v with
         | VConstr ct args => VConstr ct (go_hlist args)
         | VClose mb free => VClose (There mb) (go_hlist free)
+        | VOpaque v => VOpaque v
         end in @go.
 
 Definition weaken_value_hlist {G} fn_sig :
@@ -107,6 +114,7 @@ Definition weaken_expr {G L} fn_sig :
         | Constr ctor args => Constr ctor (go_hlist args)
         | Close mb free => Close (There mb) (go_hlist free)
         | Elim e cases target => Elim e (go_hlist cases) (go target)
+        | OpaqueOp op args => OpaqueOp op (go_hlist args)
         end
     in @go.
 
@@ -131,7 +139,7 @@ Definition weaken_body {G} fn_sig :
 (* (static) global environments.  Similar to an hlist, but each value can refer
    to the tail that comes after it. *)
 
-Inductive genv : list (type * list type * type) -> Set :=
+Inductive genv : list (type * list type * type) -> Type :=
 | GenvNil : genv []
 | GenvCons : forall {fn_sig rest},
         body_expr rest fn_sig ->
@@ -270,6 +278,7 @@ Definition expr_denote {G L} (g : hlist func_type_denote G) (l : hlist type_deno
             let free' := go_hlist free in
             fun x => func free' x
         | Elim e cases target => elim_denote e (go_hlist cases) (go target)
+        | OpaqueOp op args => opaque_oper_denote op (go_hlist args)
         end in @go.
 
 Definition expr_hlist_denote {G L} (g : hlist func_type_denote G) (l : hlist type_denote L) :
@@ -305,7 +314,7 @@ Definition genv_denote {G} (g : genv G) : hlist func_type_denote G :=
 (* `cont G rty ty`: a continuation, valid in global environment `G`, that
    requires a value of type `ty`, and eventually proceeds to a `Stop` state
    containing a result value of type `rty` (assuming termination). *)
-Inductive cont {G} {rty : type} : type -> Set :=
+Inductive cont {G} {rty : type} : type -> Type :=
 | KAppL {L ty1 ty2}
         (e2 : expr G L ty1)
         (l : hlist (value G) L)
@@ -336,6 +345,13 @@ Inductive cont {G} {rty : type} : type -> Set :=
         (l : hlist (value G) L)
         (k : cont ty)
         : cont (ADT target_tyn)
+| KOpaqueOp {L vtys ety etys ret_ty}
+        (op : opaque_oper (vtys ++ [ety] ++ etys) ret_ty)
+        (vs : hlist (expr G L) vtys)
+        (es : hlist (expr G L) etys)
+        (l : hlist (value G) L)
+        (k : cont ret_ty)
+        : cont ety
 | KStop : cont rty
 .
 Implicit Arguments cont [].
@@ -375,6 +391,11 @@ Definition cont_denote {G rty ty} (g : hlist func_type_denote G) (k : cont G rty
                 let l' := locals_denote l in
                 let cases' := expr_hlist_denote g l' cases in
                 go k (elim_denote e cases' x)
+        | KOpaqueOp op vs es l k => fun x =>
+                let l' := locals_denote l in
+                let vs' := expr_hlist_denote g l' vs in
+                let es' := expr_hlist_denote g l' es in
+                go k (opaque_oper_denote op (happ vs' (hcons x es')))
         | KStop => fun x => x
         end in go k.
 
@@ -402,6 +423,8 @@ Definition run_cont {G rty ty} (k : cont G rty ty) : value G ty -> state G rty :
             fun v => Run (Close mb (happ vs (hcons (Value v) es))) l k
     | KElim e cases l k =>
             fun v => Run (Elim e cases (Value v)) l k
+    | KOpaqueOp op vs es l k =>
+            fun v => Run (OpaqueOp op (happ vs (hcons (Value v) es))) l k
     | KStop => fun v => Stop v
     end.
 
@@ -613,6 +636,25 @@ Inductive sstep {G rty} (g : genv G) : state G rty -> state G rty -> Prop :=
             (l : hlist _ L) k,
         sstep g (Run (Elim e cases (Value target)) l k)
                 (Run (run_elim e cases target) l k)
+
+| SOpaqueOpStep : forall {L vtys ety etys ret_ty}
+            (op : opaque_oper (vtys ++ [ety] ++ etys) ret_ty)
+            (vs : hlist (expr G L) vtys)
+            (e : expr G L ety)
+            (es : hlist (expr G L) etys)
+            (l : hlist _ L) k,
+        HForall (@is_value G L) vs ->
+        ~ is_value e ->
+        sstep g (Run (OpaqueOp op (happ vs (hcons e es))) l k)
+                (Run e l (KOpaqueOp op vs es l k))
+
+| SOpaqueOpDone : forall {L vtys ret_ty}
+            (op : opaque_oper vtys ret_ty)
+            (vs : hlist (value G) vtys)
+            (l : hlist _ L) k,
+        let es := hmap (@Value G L) vs in
+        sstep g (Run (OpaqueOp op es) l k)
+                (Run (Value (opaque_oper_denote_source op vs)) l k)
 .
 
 
@@ -752,6 +794,8 @@ Definition expr_rect_mut_comb G L
         Pl free -> P (Close mb free))
     (HElim : forall {case_tys target_tyn ty} (e : elim case_tys (ADT target_tyn) ty) cases target,
         Pl cases -> P target -> P (Elim e cases target))
+    (HOpaqueOp : forall {arg_tys ret_ty} (op : opaque_oper arg_tys ret_ty) args,
+        Pl args -> P (OpaqueOp op args))
     (Hhnil : Pl hnil)
     (Hhcons : forall {ty tys} (e : expr G L ty) (es : hlist (expr G L) tys),
         P e -> Pl es -> Pl (hcons e es)) :
@@ -770,6 +814,7 @@ Definition expr_rect_mut_comb G L
         | Constr ct args => HConstr ct args (go_hlist args)
         | Close mb free => HClose mb free (go_hlist free)
         | Elim e cases target => HElim e cases target (go_hlist cases) (go target)
+        | OpaqueOp op args => HOpaqueOp op args (go_hlist args)
         end in
     let fix go_hlist {tys} (es : hlist (expr G L) tys) :=
         match es as es_ return Pl es_ with
@@ -778,8 +823,8 @@ Definition expr_rect_mut_comb G L
         end in
     (@go, @go_hlist).
 
-Definition expr_rect_mut G L P Pl HValue HVar HApp HConstr HClose HElim Hhnil Hhcons :=
-    fst (expr_rect_mut_comb G L P Pl HValue HVar HApp HConstr HClose HElim Hhnil Hhcons).
+Definition expr_rect_mut G L P Pl HValue HVar HApp HConstr HClose HElim HOpaqueOp Hhnil Hhcons :=
+    fst (expr_rect_mut_comb G L P Pl HValue HVar HApp HConstr HClose HElim HOpaqueOp Hhnil Hhcons).
 
 
 

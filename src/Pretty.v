@@ -12,7 +12,10 @@ Set Implicit Arguments.
 Notation "( x , y , .. , z )" := (existT _ .. (existT _ x y) .. z).
 
 
+(* TODO - serialization & proofs are disabled due to missing Opaque support *)
+
 Module type_name.
+(*
   Fixpoint to_tree (tyn : type_name) : tree symbol.t :=
     match tyn with
     | Tnat            => atom (symbol.of_string_unsafe "nat")
@@ -25,6 +28,7 @@ Module type_name.
     | TN              => atom (symbol.of_string_unsafe "N")
     | TZ              => atom (symbol.of_string_unsafe "Z")
     end.
+  *)
 
   Fixpoint from_tree (t : tree symbol.t) : option type_name :=
     match t with
@@ -65,6 +69,7 @@ Module type_name.
     | _ => None
     end.
 
+  (*
   Lemma to_from_tree_id : forall ty, from_tree (to_tree ty) = Some ty.
   Proof.
     induction ty; simpl; auto.
@@ -77,15 +82,18 @@ Module type_name.
     forall tyn, Forall symbol.wf (type_name.to_tree tyn).
   Proof. induction tyn; simpl; auto. Qed.
   Hint Resolve to_tree_wf.
+  *)
 End type_name.
 
 
 Module type.
+(*
   Fixpoint to_tree (ty : type) : tree symbol.t :=
     match ty with
     | ADT tyn => node [atom (symbol.of_string_unsafe "ADT"); type_name.to_tree tyn]
     | Arrow ty1 ty2 => node [atom (symbol.of_string_unsafe "Arrow"); to_tree ty1; to_tree ty2]
     end.
+  *)
 
   Fixpoint from_tree (t : tree symbol.t) : option type :=
     match t with
@@ -104,6 +112,7 @@ Module type.
     | _ => None
     end.
 
+  (*
   Lemma to_from_tree_id : forall ty, from_tree (to_tree ty) = Some ty.
   Proof.
     induction ty; simpl; unfold_option.
@@ -115,6 +124,7 @@ Module type.
     forall ty, Forall symbol.wf (type.to_tree ty).
   Proof. induction ty; simpl; auto. Qed.
   Hint Resolve to_tree_wf.
+  *)
 End type.
 
 
@@ -392,6 +402,7 @@ End elim.
 
 
 Module value.
+(*
   Fixpoint to_tree {G ty} (e : value G ty) {struct e} : tree symbol.t.
     refine (let fix go_hlist {G tys} (h : hlist (value G) tys) : list (tree symbol.t) :=
                 match h with
@@ -418,6 +429,7 @@ Module value.
       | hnil => []
       | hcons e h => to_tree e :: go_hlist h
       end.
+  *)
 
   Fixpoint from_tree (t : tree symbol.t) {G} {struct t} : option {ty : type & value G ty}.
     refine (let fix go_list (l : list (tree symbol.t)) G :
@@ -485,6 +497,7 @@ Module value.
         end
       end.
 
+  (*
   Lemma to_from_tree_id_and : forall G,
     (forall ty (e : value G ty), from_tree (to_tree e) = Some (ty,e)) *
     (forall args h, from_tree_list (to_tree_hlist h) G = Some (args, h)).
@@ -538,10 +551,12 @@ Module value.
 
   Definition pretty w {G ty} (e : value G ty) : String.string :=
     pretty_tree w (to_tree e).
+  *)
 
   Definition parse (s : String.string) {G} : option {ty : type & value G ty} :=
     parse s >>= (fun t => from_tree t).
 
+  (*
   Lemma parse_print_id : forall G ty (e : value G ty), parse (print e) = Some (ty, e).
   Proof.
     unfold parse, print.
@@ -557,10 +572,12 @@ Module value.
     unfold_option.
     now rewrite parse_pretty_tree, to_from_tree_id by auto.
   Qed.
+  *)
 End value.
 
 
 Module expr.
+(*
   Fixpoint to_tree {G L ty} (e : expr G L ty) {struct e} : tree symbol.t.
     refine (let fix go_hlist {G L l} (h : hlist (expr G L) l) : list (tree symbol.t) :=
                 match h with
@@ -598,6 +615,7 @@ Module expr.
       | hnil => []
       | hcons e h => to_tree e :: go_hlist h
       end.
+  *)
 
   Fixpoint from_tree (t : tree symbol.t) {G L} {struct t} : option {ty : type & expr G L ty}.
     refine (let fix go_list (l : list (tree symbol.t)) G L :
@@ -713,6 +731,7 @@ Module expr.
         end
       end.
 
+  (*
   Lemma to_from_tree_id_and : forall G L,
     (forall ty (e : expr G L ty), from_tree (to_tree e) = Some (ty,e)) *
     (forall args h, from_tree_list (to_tree_hlist h) G L = Some (args, h)).
@@ -772,10 +791,12 @@ Module expr.
 
   Definition pretty w {G L ty} (e : expr G L ty) : String.string :=
     pretty_tree w (to_tree e).
+  *)
 
   Definition parse (s : String.string) {G L} : option {ty : type & expr G L ty} :=
     parse s >>= (fun t => from_tree t).
 
+  (*
   Lemma parse_print_id : forall G L ty (e : expr G L ty), parse (print e) = Some (ty, e).
   Proof.
     unfold parse, print.
@@ -791,10 +812,12 @@ Module expr.
     unfold_option.
     now rewrite parse_pretty_tree, to_from_tree_id by auto.
   Qed.
+  *)
 End expr.
 
 
 Module genv.
+(*
   Fixpoint to_tree {G} (g : genv G) {struct g} : tree symbol.t.
     refine match g with
            | GenvNil => node [atom (symbol.of_string_unsafe "genvnil")]
@@ -809,6 +832,7 @@ Module genv.
              end e
            end.
   Defined.
+  *)
 
   Fixpoint from_tree (t : tree symbol.t) {struct t} : option {G : list _ & genv G}.
     refine match t with
@@ -839,6 +863,7 @@ Module genv.
            end.
   Defined.
 
+  (*
   Lemma to_from_tree_id :
     (forall G (g : genv G), from_tree (to_tree g) = Some (G, g)).
   Proof.
@@ -872,10 +897,12 @@ Module genv.
 
   Definition pretty w {G} (g : genv G) : String.string :=
     pretty_tree w (to_tree g).
+  *)
 
   Definition parse (s : String.string) : option {G : list _ & genv G} :=
     parse s >>= (fun t => from_tree t).
 
+  (*
   Lemma parse_print_id : forall G (g : genv G), parse (print g) = Some (G, g).
   Proof.
     unfold parse, print.
@@ -893,6 +920,7 @@ Module genv.
     rewrite parse_pretty_tree by auto using to_tree_wf.
     now rewrite to_from_tree_id by auto.
   Qed.
+  *)
 End genv.
 
 
@@ -910,10 +938,12 @@ Module compilation_unit.
   Proof. unfold current_version_vector. auto. Qed.
   Hint Resolve current_version_vector_wf.
 
+  (*
   Definition to_tree (j : compilation_unit) : tree symbol.t :=
     node [node [atom (symbol.of_string_unsafe "version"); node current_version_vector];
           node (List.map (fun s => atom (symbol.of_string_safe s)) (names j));
           genv.to_tree (exprs j)].
+  *)
 
   Definition from_tree (t : tree symbol.t) : option compilation_unit :=
     match t with
@@ -932,6 +962,7 @@ Module compilation_unit.
     | _ => None
     end.
 
+  (*
   Lemma to_from_tree_id :
     forall j, from_tree (to_tree j) = Some j.
   Proof.
@@ -958,10 +989,12 @@ Module compilation_unit.
 
   Definition pretty w j : String.string :=
     pretty_tree w (to_tree j).
+  *)
 
   Definition parse (s : String.string) : option compilation_unit :=
     parse s >>= from_tree.
 
+  (*
   Lemma parse_print_id : forall j, parse (print j) = Some j.
   Proof.
     unfold parse, print.
@@ -977,4 +1010,5 @@ Module compilation_unit.
     unfold_option.
     now rewrite parse_pretty_tree, to_from_tree_id by auto.
   Qed.
+  *)
 End compilation_unit.

@@ -53,6 +53,9 @@ Definition compile_highest {G ty} :=
                 HighestValues.Constr ctor (go_list args)
         | @SourceLifted.VClose _ _ _ _ mb free =>
                 HighestValues.Close (compile_member mb) (go_list free)
+        | @SourceLifted.VOpaque _ _ v =>
+                (* TODO *)
+                HighestValues.Constr Utopia.Cfalse []
         end in @go ty.
 
 Definition compile_highest_list {G tys} :=

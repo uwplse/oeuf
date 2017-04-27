@@ -39,6 +39,7 @@ Definition compile_expr {G L ty} :=
         | @A.Close _ _ _ _ _ mb free => B.MkClose (compile_member mb) (go_list free)
         | @A.Elim _ _ _ ty _ _ cases target =>
                 B.Elim ty (go_list cases) (go target)
+        | @A.OpaqueOp _ _ _ _ op args => B.Value (Constr Cfalse []) (* TODO *)
         end in @go ty.
 
 Definition compile_expr_list {G L tys} :=
@@ -77,6 +78,8 @@ Definition compile_cont {G rty ty} :=
                     (go_list vs) (go_list es) (go_value_list l) (go_cont k)
         | @A.KElim _ _ _ _ ty _ _ cases l k =>
                 B.KElim ty (go_list cases) (go_value_list l) (go_cont k)
+        | A.KOpaqueOp op vs es l k =>
+                B.KStop (* TODO *)
         | A.KStop => B.KStop
         end in @go_cont ty.
 
@@ -125,6 +128,8 @@ simpl.
   fold (@compile_value_list (sig :: G) free_tys). fold (@A.weaken_value_hlist G sig).
   rewrite IHv. reflexivity.
 
+- reflexivity. (* TODO *)
+
 - reflexivity.
 
 - rewrite IHv, IHv0. reflexivity.
@@ -157,6 +162,8 @@ simpl.
 - fold B.weaken_expr_list. fold (@compile_expr_list G L case_tys).
   fold (@compile_expr_list (sig :: G) L case_tys). fold (@A.weaken_expr_hlist G L sig).
   rewrite IHe, IHe0. reflexivity.
+
+- reflexivity. (* TODO *)
 
 - reflexivity.
 
@@ -192,7 +199,9 @@ induction k; intros; simpl; try reflexivity.
 
 - fold (@compile_expr_list G L (vtys ++ ety :: etys)).
   rewrite compile_happ_expr. simpl. reflexivity.
-Qed.
+
+- admit. (* TODO *)
+Admitted.
 
 Lemma compile_is_value : forall G L ty (e : A.expr G L ty),
     A.is_value e ->
@@ -220,9 +229,10 @@ induction e using A.expr_rect_mut with
 intros0 Bval; try solve [invc Bval].
 
 - simpl. constructor.
+- admit. (* TODO *)
 - simpl. constructor.
 - simpl. invc Bval. constructor; eauto.
-Qed.
+Admitted.
 
 Lemma compile_isnt_value : forall G L ty (e : A.expr G L ty),
     ~ A.is_value e ->
@@ -551,7 +561,11 @@ all: fix_existT; subst.
     eapply compile_run_elim.
   + simpl. reflexivity.
 
-Qed.
+- admit. (* TODO *)
+
+- admit. (* TODO *)
+
+Admitted.
 
 
 Lemma compile_state_inv : forall G rty (a : A.state G rty) be bl bk
@@ -579,7 +593,8 @@ Lemma compile_expr_Value_inv : forall G L ty (ae : A.expr G L ty) bv
 intros0 HQ Hcomp.
 destruct ae; try discriminate.
 simpl in Hcomp. eapply HQ. congruence.
-Qed.
+admit. (* TODO *)
+Admitted.
 
 Lemma compile_value_Constr_inv : forall G tyn
         (av : A.value G (A.ADT tyn))
@@ -680,6 +695,8 @@ all: on (compile_expr _ = _), invc.
 - eexists. split. i_lem @A.SValue.
   + i_lem compile_run_cont.
 
+- admit. (* TODO *)
+
 - eexists. split. i_lem @A.SVar.
   + on _, rewrite_fwd compile_hget_value.
     simpl. congruence.
@@ -750,7 +767,7 @@ all: on (compile_expr _ = _), invc.
     erewrite compile_run_elim with (e := e) (target := A.VConstr ct args0) in *.
     congruence.
 
-Qed.
+Admitted.
 
 
 Lemma match_callstate : forall G (AE : A.genv G) BE Bmeta

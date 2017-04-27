@@ -24,6 +24,7 @@ fold (@weaken_value_hlist G fn_sig).
 
 - f_equal. exact IHv.
 - rewrite <- IHv. reflexivity.
+- reflexivity.
 
 - reflexivity.
 - erewrite <- IHv, <- IHv0. reflexivity.
@@ -48,6 +49,7 @@ fold (@weaken_expr_hlist G L fn_sig).
 - rewrite <- IHe. reflexivity.
 - rewrite <- IHe. reflexivity.
 - rewrite <- IHe, <- IHe0. reflexivity.
+- rewrite <- IHe. reflexivity.
 
 - reflexivity.
 - erewrite <- IHe, <- IHe0. reflexivity.
@@ -323,6 +325,10 @@ intros0 Hstep. inv Hstep.
     do 3 rewrite expr_hlist_denote_is_hmap.
     rewrite hmap_app. simpl. reflexivity.
 
+  + refold_expr_hlist_denote g l0.
+    do 3 rewrite expr_hlist_denote_is_hmap.
+    rewrite hmap_app. simpl. reflexivity.
+
 - simpl. rewrite value_hlist_denote_is_hmap. rewrite hget_hmap. reflexivity.
 
 - simpl. reflexivity.
@@ -353,7 +359,22 @@ intros0 Hstep. inv Hstep.
 
 - simpl. refold_expr_hlist_denote g l. f_equal.
   apply run_elim_denote.
-Qed.
+
+- simpl. refold_expr_hlist_denote g l.
+  do 3 rewrite expr_hlist_denote_is_hmap.
+  rewrite hmap_app. simpl. reflexivity.
+
+- simpl. refold_expr_hlist_denote g l. refold_value_hlist_denote g.
+  unfold es.  rewrite expr_hlist_denote_is_hmap. rewrite hmap_hmap.
+  admit.  (* TODO *)
+  (* This is the point where we need a lemma relating `opaque_oper_denote` to
+     `opaque_oper_denote_source`. *)
+  (* old tactics, copied from Constr and Close cases:
+  rewrite value_hlist_denote_is_hmap with (vs0 := vs).
+  simpl. reflexivity.
+  *)
+
+Admitted.
 
 
 
@@ -484,6 +505,16 @@ destruct e; intros; simpl.
   on _, invc_using expr_is_value_inv.
   on _, invert_nullary value_adt_inv v.
   eexists. eapply SEliminate.
+
+- rename h into args.
+  destruct (find_first_non_value args) as
+    [ (vtys & ety & etys & vs & e & es & ? & ? & Heq) | (vs & Heq) ].
+
+  + revert o. dependent rewrite Heq.
+    intros. eexists. eapply SOpaqueOpStep; auto.
+
+  + rewrite Heq.
+    eexists. eapply SOpaqueOpDone.
 
 Qed.
 
