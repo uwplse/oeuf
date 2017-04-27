@@ -1,17 +1,17 @@
 Require Import Common.
 Require Import HList.
 Require Import Utopia.
-(* Require Import OpaqueTypes. *)
+Require Import OpaqueTypes.
 
 
 Inductive type :=
 | ADT : type_name -> type
 | Arrow : type -> type -> type
-(* | Opaque : opaque_type_name -> type *)
+| Opaque : opaque_type_name -> type
 .
 
 Definition type_eq_dec (t1 t2 : type) : {t1 = t2} + {t1 <> t2}.
-  decide equality; auto using type_name_eq_dec.
+  decide equality; auto using type_name_eq_dec, opaque_type_name_eq_dec.
 Defined.
 Hint Resolve type_eq_dec : eq_dec.
 
@@ -45,7 +45,6 @@ Inductive constr_type : constr_name -> list type -> type_name -> Type :=
 .
 
 
-
 Section value.
 (* since these types make hlists of recursive calls, the auto-generated schemes are garbage. *)
 Local Unset Elimination Schemes.
@@ -58,6 +57,9 @@ Inductive value {G : list (type * list type * type)} : type -> Type :=
         member (arg_ty, free_tys, ret_ty) G ->
         hlist (value) free_tys ->
         value (Arrow arg_ty ret_ty)
+| VOpaque : forall {oty},
+        opaque_type_denote oty ->
+        value (Opaque oty)
 .
 
 End value.
@@ -70,6 +72,7 @@ Fixpoint type_denote (ty : type) : Type :=
   match ty with
   | ADT tyn => type_name_denote tyn
   | Arrow ty1 ty2 => type_denote ty1 -> type_denote ty2
+  | Opaque oty => opaque_type_denote oty
   end.
 
 Definition func_type_denote (fty : type * list type * type) : Type :=
@@ -122,6 +125,7 @@ Definition value_denote
                 let func := hget g mb in
                 let free' := go_hlist free in
                 fun x => func free' x
+        | VOpaque v => v
         end in @go.
 
 Definition value_hlist_denote
@@ -145,6 +149,7 @@ Definition value_rect_mut_comb G
         Pl args -> P (VConstr ct args))
     (HVClose : forall {arg_ty free_tys ret_ty} (mb : member (arg_ty, free_tys, ret_ty) G) free,
         Pl free -> P (VClose mb free))
+    (HVOpaque : forall {oty} (v : opaque_type_denote oty), P (VOpaque v))
     (Hhnil : Pl hnil)
     (Hhcons : forall {ty tys} (v : value G ty) (vs : hlist (value G) tys),
         P v -> Pl vs -> Pl (hcons v vs)) :
@@ -159,6 +164,7 @@ Definition value_rect_mut_comb G
         match v as v_ return P v_ with
         | VConstr ct args => HVConstr ct args (go_hlist args)
         | VClose mb free => HVClose mb free (go_hlist free)
+        | VOpaque v => HVOpaque v
         end in
     let fix go_hlist {tys} (vs : hlist (value G) tys) :=
         match vs as vs_ return Pl vs_ with
@@ -167,7 +173,7 @@ Definition value_rect_mut_comb G
         end in
     (@go, @go_hlist).
 
-Definition value_rect_mut G P Pl HVConstr HVClose Hhnil Hhcons :=
-    fst (value_rect_mut_comb G P Pl HVConstr HVClose Hhnil Hhcons).
+Definition value_rect_mut G P Pl HVConstr HVClose HVOpaque Hhnil Hhcons :=
+    fst (value_rect_mut_comb G P Pl HVConstr HVClose HVOpaque Hhnil Hhcons).
 
 
