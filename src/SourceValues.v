@@ -177,3 +177,16 @@ Definition value_rect_mut G P Pl HVConstr HVClose HVOpaque Hhnil Hhcons :=
     fst (value_rect_mut_comb G P Pl HVConstr HVClose HVOpaque Hhnil Hhcons).
 
 
+(* dependent case analysis scheme for values *)
+Lemma case_value_opaque :
+  forall G o (P : value G (Opaque o) -> Type),
+    (forall ov : opaque_type_denote o, P (VOpaque ov)) ->
+    forall v, P v.
+Proof.
+  intros G o P H v.
+  revert P H.
+  refine match v with
+         | VOpaque _ => _
+         end.
+  auto.
+Qed.
