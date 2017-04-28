@@ -1,5 +1,5 @@
 Require Import Program.
-Require Import SourceLifted Utopia List Monads HList CompilationUnit ListLemmas.
+Require Import SourceLifted Utopia List Monads HList CompilationUnit ListLemmas OpaqueTypes.
 Require Import StuartTact.
 Import ListNotations.
 
@@ -11,11 +11,36 @@ Set Implicit Arguments.
 
 Notation "( x , y , .. , z )" := (existT _ .. (existT _ x y) .. z).
 
+Module opaque_type_name.
 
-(* TODO - serialization & proofs are disabled due to missing Opaque support *)
+  Definition to_tree (oty : opaque_type_name) : tree symbol.t :=
+    match oty with
+    | Oint => atom (symbol.of_string_unsafe "int")
+    end.
+
+  Definition from_tree (t : tree symbol.t) : option opaque_type_name :=
+    match t with
+    | atom s =>
+      if symbol.eq_dec s (symbol.of_string_unsafe "int")
+      then Some Oint
+      else None
+    | _ => None
+    end.
+
+  Lemma to_from_tree_id : forall oty, from_tree (to_tree oty) = Some oty.
+  Proof.
+    now destruct oty.
+  Qed.
+
+  Lemma to_tree_wf:
+    forall oty, Forall symbol.wf (to_tree oty).
+  Proof. destruct oty; simpl; auto. Qed.
+  Hint Resolve to_tree_wf.
+
+End opaque_type_name.
 
 Module type_name.
-(*
+
   Fixpoint to_tree (tyn : type_name) : tree symbol.t :=
     match tyn with
     | Tnat            => atom (symbol.of_string_unsafe "nat")
@@ -28,7 +53,7 @@ Module type_name.
     | TN              => atom (symbol.of_string_unsafe "N")
     | TZ              => atom (symbol.of_string_unsafe "Z")
     end.
-  *)
+
 
   Fixpoint from_tree (t : tree symbol.t) : option type_name :=
     match t with
@@ -69,7 +94,7 @@ Module type_name.
     | _ => None
     end.
 
-  (*
+
   Lemma to_from_tree_id : forall ty, from_tree (to_tree ty) = Some ty.
   Proof.
     induction ty; simpl; auto.
@@ -82,18 +107,19 @@ Module type_name.
     forall tyn, Forall symbol.wf (type_name.to_tree tyn).
   Proof. induction tyn; simpl; auto. Qed.
   Hint Resolve to_tree_wf.
-  *)
+
 End type_name.
 
 
 Module type.
-(*
+
   Fixpoint to_tree (ty : type) : tree symbol.t :=
     match ty with
     | ADT tyn => node [atom (symbol.of_string_unsafe "ADT"); type_name.to_tree tyn]
     | Arrow ty1 ty2 => node [atom (symbol.of_string_unsafe "Arrow"); to_tree ty1; to_tree ty2]
+    | Opaque oty => node [atom (symbol.of_string_unsafe "Opaque"); opaque_type_name.to_tree oty]
     end.
-  *)
+
 
   Fixpoint from_tree (t : tree symbol.t) : option type :=
     match t with
@@ -108,23 +134,28 @@ Module type.
            | [t1; t2] => Arrow <$> from_tree t1 <*> from_tree t2
            | _ => None
            end
+      else if symbol.eq_dec s (symbol.of_string_unsafe "Opaque")
+      then match l with
+           | [t1] => Opaque <$> opaque_type_name.from_tree t1
+           | _ => None
+           end
       else None
     | _ => None
     end.
 
-  (*
+
   Lemma to_from_tree_id : forall ty, from_tree (to_tree ty) = Some ty.
   Proof.
     induction ty; simpl; unfold_option.
     - now rewrite type_name.to_from_tree_id.
     - now rewrite IHty1, IHty2.
+    - now rewrite opaque_type_name.to_from_tree_id.
   Qed.
 
   Lemma to_tree_wf:
     forall ty, Forall symbol.wf (type.to_tree ty).
   Proof. induction ty; simpl; auto. Qed.
   Hint Resolve to_tree_wf.
-  *)
 End type.
 
 
@@ -400,9 +431,61 @@ Module elim.
   Qed.
 End elim.
 
+Module int.
+  Definition to_tree (i : Integers.Int.int) : tree symbol.t :=
+    atom (Z_to_symbol (Integers.Int.unsigned i)).
+
+  Definition from_tree (t : tree symbol.t) : option Integers.Int.int :=
+    match t with
+    | atom s => Some (Integers.Int.repr (Z_from_symbol s))
+    | _ => None
+    end.
+
+  Lemma to_from_tree : forall i, from_tree (to_tree i) = Some i.
+  Proof.
+    unfold from_tree, to_tree.
+    intros.
+    now rewrite Z_to_from_symbol, Integers.Int.repr_unsigned.
+  Qed.
+
+  Lemma to_tree_wf:
+    forall i, Forall symbol.wf (to_tree i).
+  Proof. unfold to_tree; simpl; auto using Z_to_symbol_wf. Qed.
+  Hint Resolve to_tree_wf.
+End int.
+
+Module opaque_type_denote.
+  Definition to_tree {oty} : opaque_type_denote oty -> tree symbol.t :=
+    match oty with
+    | Oint => int.to_tree
+    end.
+
+  Definition from_tree (t : tree symbol.t) : option {oty : opaque_type_name &
+                                                        opaque_type_denote oty} :=
+    match int.from_tree t with
+    | Some v => Some (Oint, v)
+    | None => None
+    end.
+
+  Lemma to_from_tree : forall oty (v : opaque_type_denote oty),
+      from_tree (to_tree v) = Some (oty, v).
+  Proof.
+    intros oty.
+    refine match oty with
+           | Oint => _
+           end.
+    intros.
+    unfold from_tree, to_tree.
+    now rewrite int.to_from_tree.
+  Qed.
+
+  Lemma to_tree_wf:
+    forall oty (v : opaque_type_denote oty), Forall symbol.wf (to_tree v).
+  Proof. destruct oty; simpl; auto. Qed.
+  Hint Resolve to_tree_wf.
+End opaque_type_denote.
 
 Module value.
-(*
   Fixpoint to_tree {G ty} (e : value G ty) {struct e} : tree symbol.t.
     refine (let fix go_hlist {G tys} (h : hlist (value G) tys) : list (tree symbol.t) :=
                 match h with
@@ -420,6 +503,9 @@ Module value.
              node [atom (symbol.of_string_unsafe "vclose");
                    atom (nat_to_symbol (member_to_nat mb));
                    node (go_hlist _ _ free)]
+           | VOpaque v =>
+             node [atom (symbol.of_string_unsafe "vopaque");
+                   opaque_type_denote.to_tree v]
            end.
   Defined.
 
@@ -429,7 +515,6 @@ Module value.
       | hnil => []
       | hcons e h => to_tree e :: go_hlist h
       end.
-  *)
 
   Fixpoint from_tree (t : tree symbol.t) {G} {struct t} : option {ty : type & value G ty}.
     refine (let fix go_list (l : list (tree symbol.t)) G :
@@ -476,6 +561,15 @@ Module value.
                   end free end end end
                   | _ => None
                   end
+             else if symbol.eq_dec tag (symbol.of_string_unsafe "vopaque")
+             then match l with
+                  | [t] =>
+                  match opaque_type_denote.from_tree t with
+                  | Some (oty, v) => Some (Opaque oty, VOpaque v)
+                  | None => None
+                  end
+                  | _ => None
+                  end
              else None
            | _ => None
            end.
@@ -497,7 +591,7 @@ Module value.
         end
       end.
 
-  (*
+
   Lemma to_from_tree_id_and : forall G,
     (forall ty (e : value G ty), from_tree (to_tree e) = Some (ty,e)) *
     (forall args h, from_tree_list (to_tree_hlist h) G = Some (args, h)).
@@ -519,6 +613,7 @@ Module value.
       dependent destruction e.
       auto.
 
+    - now rewrite opaque_type_denote.to_from_tree.
     - auto.
     - now rewrite H, H0.
   Qed.
@@ -551,12 +646,10 @@ Module value.
 
   Definition pretty w {G ty} (e : value G ty) : String.string :=
     pretty_tree w (to_tree e).
-  *)
 
   Definition parse (s : String.string) {G} : option {ty : type & value G ty} :=
     parse s >>= (fun t => from_tree t).
 
-  (*
   Lemma parse_print_id : forall G ty (e : value G ty), parse (print e) = Some (ty, e).
   Proof.
     unfold parse, print.
@@ -572,12 +665,40 @@ Module value.
     unfold_option.
     now rewrite parse_pretty_tree, to_from_tree_id by auto.
   Qed.
-  *)
 End value.
 
+Module opaque_oper.
+
+  Definition to_tree {l ty} (o : OpaqueOps.opaque_oper l ty) : tree symbol.t :=
+    match o with
+    | OpaqueOps.Oadd => atom (symbol.of_string_unsafe "add")
+    | OpaqueOps.Otest => atom (symbol.of_string_unsafe "test")
+    end.
+
+  Definition from_tree (t : tree symbol.t)
+    : option {l : list type & {ty : type & OpaqueOps.opaque_oper l ty}} :=
+    match t with
+    | atom s =>
+      if symbol.eq_dec s (symbol.of_string_unsafe "add")
+      then Some (_, (_, OpaqueOps.Oadd))
+      else if symbol.eq_dec s (symbol.of_string_unsafe "test")
+      then Some (_, (_, OpaqueOps.Otest))
+      else None
+    | _ => None
+    end.
+
+  Lemma to_from_tree : forall l ty (o : OpaqueOps.opaque_oper l ty),
+      from_tree (to_tree o) = Some (l, (ty, o)).
+  Proof. destruct o; simpl; auto. Qed.
+
+  Lemma to_tree_wf : forall l ty (o : OpaqueOps.opaque_oper l ty),
+      Forall symbol.wf (to_tree o).
+  Proof. destruct o; simpl; auto. Qed.
+  Hint Resolve to_tree_wf.
+End opaque_oper.
 
 Module expr.
-(*
+
   Fixpoint to_tree {G L ty} (e : expr G L ty) {struct e} : tree symbol.t.
     refine (let fix go_hlist {G L l} (h : hlist (expr G L) l) : list (tree symbol.t) :=
                 match h with
@@ -606,6 +727,10 @@ Module expr.
                    type.to_tree ty;
                    node (go_hlist _ _ _ cases);
                    to_tree _ _ _ target]
+           | @OpaqueOp _ _ _ _ op args =>
+             node [atom (symbol.of_string_unsafe "opaque");
+                   opaque_oper.to_tree op;
+                   node (go_hlist _ _ _ args)]
            end.
   Defined.
 
@@ -615,7 +740,6 @@ Module expr.
       | hnil => []
       | hcons e h => to_tree e :: go_hlist h
       end.
-  *)
 
   Fixpoint from_tree (t : tree symbol.t) {G L} {struct t} : option {ty : type & expr G L ty}.
     refine (let fix go_list (l : list (tree symbol.t)) G L :
@@ -710,6 +834,20 @@ Module expr.
                   end end end
                   | _ => None
                   end
+             else if symbol.eq_dec tag (symbol.of_string_unsafe "opaque")
+             then match l with
+                  | [op; node t_args] =>
+                  match opaque_oper.from_tree op with None => None
+                  | Some (l, (ty, op)) => 
+                  match go_list t_args _ _ with None => None
+                  | Some (tys, h) =>
+                  match list_eq_dec type_eq_dec l tys with right _ => None
+                  | left pf => match pf with eq_refl => fun h =>
+                  Some (ty, OpaqueOp op h)
+                  end h
+                  end end end
+                  | _ => None
+                  end
              else None
            | _ => None
            end.
@@ -731,7 +869,6 @@ Module expr.
         end
       end.
 
-  (*
   Lemma to_from_tree_id_and : forall G L,
     (forall ty (e : expr G L ty), from_tree (to_tree e) = Some (ty,e)) *
     (forall args h, from_tree_list (to_tree_hlist h) G L = Some (args, h)).
@@ -756,7 +893,11 @@ Module expr.
       fold @to_tree_hlist.
       rewrite type.to_from_tree_id, H, H0.
       now rewrite elim.check_elim_correct with (e := e).
-
+    - fold @from_tree_list.
+      fold @to_tree_hlist.
+      rewrite opaque_oper.to_from_tree, H.
+      break_match; try congruence.
+      now dependent destruction e.
     - auto.
     - now rewrite H, H0.
   Qed.
@@ -791,12 +932,10 @@ Module expr.
 
   Definition pretty w {G L ty} (e : expr G L ty) : String.string :=
     pretty_tree w (to_tree e).
-  *)
 
   Definition parse (s : String.string) {G L} : option {ty : type & expr G L ty} :=
     parse s >>= (fun t => from_tree t).
 
-  (*
   Lemma parse_print_id : forall G L ty (e : expr G L ty), parse (print e) = Some (ty, e).
   Proof.
     unfold parse, print.
@@ -812,12 +951,10 @@ Module expr.
     unfold_option.
     now rewrite parse_pretty_tree, to_from_tree_id by auto.
   Qed.
-  *)
 End expr.
 
 
 Module genv.
-(*
   Fixpoint to_tree {G} (g : genv G) {struct g} : tree symbol.t.
     refine match g with
            | GenvNil => node [atom (symbol.of_string_unsafe "genvnil")]
@@ -832,7 +969,6 @@ Module genv.
              end e
            end.
   Defined.
-  *)
 
   Fixpoint from_tree (t : tree symbol.t) {struct t} : option {G : list _ & genv G}.
     refine match t with
@@ -863,7 +999,6 @@ Module genv.
            end.
   Defined.
 
-  (*
   Lemma to_from_tree_id :
     (forall G (g : genv G), from_tree (to_tree g) = Some (G, g)).
   Proof.
@@ -897,12 +1032,10 @@ Module genv.
 
   Definition pretty w {G} (g : genv G) : String.string :=
     pretty_tree w (to_tree g).
-  *)
 
   Definition parse (s : String.string) : option {G : list _ & genv G} :=
     parse s >>= (fun t => from_tree t).
 
-  (*
   Lemma parse_print_id : forall G (g : genv G), parse (print g) = Some (G, g).
   Proof.
     unfold parse, print.
@@ -920,7 +1053,6 @@ Module genv.
     rewrite parse_pretty_tree by auto using to_tree_wf.
     now rewrite to_from_tree_id by auto.
   Qed.
-  *)
 End genv.
 
 
@@ -938,12 +1070,10 @@ Module compilation_unit.
   Proof. unfold current_version_vector. auto. Qed.
   Hint Resolve current_version_vector_wf.
 
-  (*
   Definition to_tree (j : compilation_unit) : tree symbol.t :=
     node [node [atom (symbol.of_string_unsafe "version"); node current_version_vector];
           node (List.map (fun s => atom (symbol.of_string_safe s)) (names j));
           genv.to_tree (exprs j)].
-  *)
 
   Definition from_tree (t : tree symbol.t) : option compilation_unit :=
     match t with
@@ -962,7 +1092,6 @@ Module compilation_unit.
     | _ => None
     end.
 
-  (*
   Lemma to_from_tree_id :
     forall j, from_tree (to_tree j) = Some j.
   Proof.
@@ -989,12 +1118,10 @@ Module compilation_unit.
 
   Definition pretty w j : String.string :=
     pretty_tree w (to_tree j).
-  *)
 
   Definition parse (s : String.string) : option compilation_unit :=
     parse s >>= from_tree.
 
-  (*
   Lemma parse_print_id : forall j, parse (print j) = Some j.
   Proof.
     unfold parse, print.
@@ -1010,5 +1137,4 @@ Module compilation_unit.
     unfold_option.
     now rewrite parse_pretty_tree, to_from_tree_id by auto.
   Qed.
-  *)
 End compilation_unit.
