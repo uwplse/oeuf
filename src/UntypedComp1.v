@@ -19,6 +19,12 @@ Module B := Untyped1.
 
 Require MatchValues.
 
+Definition opaque_oper_to_name {atys rty} (op : OpaqueOps.opaque_oper atys rty)
+    : HighestOpaqueOps.opaque_oper_name :=
+  match op with
+  | OpaqueOps.Oadd => HighestOpaqueOps.ONadd
+  | OpaqueOps.Otest => HighestOpaqueOps.ONtest
+  end.
 
 Notation compile_member := MatchValues.compile_member.
 Notation compile_value := MatchValues.compile_highest.
@@ -39,7 +45,7 @@ Definition compile_expr {G L ty} :=
         | @A.Close _ _ _ _ _ mb free => B.MkClose (compile_member mb) (go_list free)
         | @A.Elim _ _ _ ty _ _ cases target =>
                 B.Elim ty (go_list cases) (go target)
-        | @A.OpaqueOp _ _ _ _ op args => B.Value (Constr Cfalse []) (* TODO *)
+        | @A.OpaqueOp _ _ _ _ op args => B.Opaque (opaque_oper_to_name op) (go_list args)
         end in @go ty.
 
 Definition compile_expr_list {G L tys} :=
@@ -79,7 +85,7 @@ Definition compile_cont {G rty ty} :=
         | @A.KElim _ _ _ _ ty _ _ cases l k =>
                 B.KElim ty (go_list cases) (go_value_list l) (go_cont k)
         | A.KOpaqueOp op vs es l k =>
-                B.KStop (* TODO *)
+                B.KOpaque (opaque_oper_to_name op) (go_list vs) (go_list es) (go_value_list l) (go_cont k)
         | A.KStop => B.KStop
         end in @go_cont ty.
 
@@ -163,7 +169,9 @@ simpl.
   fold (@compile_expr_list (sig :: G) L case_tys). fold (@A.weaken_expr_hlist G L sig).
   rewrite IHe, IHe0. reflexivity.
 
-- reflexivity. (* TODO *)
+- fold B.weaken_expr_list. fold (@compile_expr_list G L arg_tys).
+  fold (@compile_expr_list (sig :: G) L arg_tys). fold (@A.weaken_expr_hlist G L sig).
+  rewrite IHe. reflexivity.
 
 - reflexivity.
 
@@ -229,10 +237,9 @@ induction e using A.expr_rect_mut with
 intros0 Bval; try solve [invc Bval].
 
 - simpl. constructor.
-- admit. (* TODO *)
 - simpl. constructor.
 - simpl. invc Bval. constructor; eauto.
-Admitted.
+Qed.
 
 Lemma compile_isnt_value : forall G L ty (e : A.expr G L ty),
     ~ A.is_value e ->
@@ -593,8 +600,7 @@ Lemma compile_expr_Value_inv : forall G L ty (ae : A.expr G L ty) bv
 intros0 HQ Hcomp.
 destruct ae; try discriminate.
 simpl in Hcomp. eapply HQ. congruence.
-admit. (* TODO *)
-Admitted.
+Qed.
 
 Lemma compile_value_Constr_inv : forall G tyn
         (av : A.value G (A.ADT tyn))
@@ -675,6 +681,36 @@ induction aes; intros0 HQ Hcomp.
   simpl. congruence.
 Qed.
 
+Lemma compile_value_unwrap_opaque G (v : SourceLifted.value G (SourceValues.Opaque OpaqueTypes.Oint)) :
+  OpaqueOps.unwrap_opaque v = HighestOpaqueOps.unwrap_opaque_highest_int (compile_value v).
+Proof.
+  refine match v with
+         | SourceLifted.VOpaque v => _
+         end.
+  destruct o.
+  reflexivity.
+Qed.
+
+
+Lemma compile_value_opaque_oper G rty atys
+      (op : OpaqueOps.opaque_oper atys rty) (vs : hlist (_ G) _):
+  compile_value (OpaqueOps.opaque_oper_denote_source op vs) =
+  HighestOpaqueOps.opaque_oper_denote_highest (opaque_oper_to_name op) (compile_value_list vs).
+Proof.
+  destruct op; simpl.
+  - destruct vs using case_hlist_cons.
+    destruct vs using case_hlist_cons.
+    destruct vs using case_hlist_nil.
+    simpl.
+    rewrite !compile_value_unwrap_opaque.
+    reflexivity.
+  - destruct vs using case_hlist_cons.
+    destruct vs using case_hlist_nil.
+    simpl.
+    rewrite compile_value_unwrap_opaque.
+    break_if; reflexivity.
+Qed.
+
 Theorem I_bsim : forall G rty (AE : A.genv G) (BE : list B.expr)
     (a : A.state G rty) (b b' : B.state),
     compile_genv AE = BE ->
@@ -694,8 +730,6 @@ all: on (compile_expr _ = _), invc.
 
 - eexists. split. i_lem @A.SValue.
   + i_lem compile_run_cont.
-
-- admit. (* TODO *)
 
 - eexists. split. i_lem @A.SVar.
   + on _, rewrite_fwd compile_hget_value.
@@ -752,6 +786,20 @@ all: on (compile_expr _ = _), invc.
   + simpl. fold (@compile_value_list G free_tys). reflexivity.
 
 
+- fold (@compile_expr_list G L arg_tys) in *.
+  revert o0 Bstep. pattern arg_tys, h.
+  eapply compile_expr_list_3part_inv; eauto. intros.
+  subst.
+  eexists. split. i_lem @A.SOpaqueOpStep.
+  + i_lem compile_is_value_list'.
+  + i_lem compile_isnt_value'.
+  + simpl. reflexivity.
+
+- fold (@compile_expr_list G L arg_tys) in *.
+  on _, invc_using compile_expr_list_map_value_inv.
+  eexists. split. i_lem @A.SOpaqueOpDone.
+  + simpl. rewrite compile_value_opaque_oper. reflexivity.
+
 - fold (@compile_expr_list G L case_tys) in *.
 
   eexists. split. i_lem @A.SElimTarget.
@@ -767,7 +815,7 @@ all: on (compile_expr _ = _), invc.
     erewrite compile_run_elim with (e := e) (target := A.VConstr ct args0) in *.
     congruence.
 
-Admitted.
+Qed.
 
 
 Lemma match_callstate : forall G (AE : A.genv G) BE Bmeta

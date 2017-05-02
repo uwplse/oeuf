@@ -1,12 +1,17 @@
 Require Import Common.
 Require Import Utopia.
 Require Import Metadata.
+Require Import OpaqueTypes.
 
 Definition function_name := nat.
+
+Inductive opaque_value :=
+| Oint (i : Integers.Int.int).
 
 Inductive value :=
 | Constr (ctor : constr_name) (args : list value)
 | Close (f : function_name) (free : list value)
+| Opaque (o : opaque_value)
 .
 
 Definition value_rect_mut
@@ -14,6 +19,7 @@ Definition value_rect_mut
         (Pl : list value -> Type)
     (HConstr :  forall ctor args, Pl args -> P (Constr ctor args))
     (HClose :   forall fname free, Pl free -> P (Close fname free))
+    (HOpaque :  forall v, P (Opaque v))
     (Hnil :     Pl [])
     (Hcons :    forall v vs, P v -> Pl vs -> Pl (v :: vs))
     (v : value) : P v :=
@@ -26,6 +32,7 @@ Definition value_rect_mut
         match v as v_ return P v_ with
         | Constr ctor args => HConstr ctor args (go_list args)
         | Close fname free => HClose fname free (go_list free)
+        | Opaque v => HOpaque v
         end in go v.
 
 Definition value_rect_mut'
@@ -33,6 +40,7 @@ Definition value_rect_mut'
         (Pl : list value -> Type)
     (HConstr :  forall ctor args, Pl args -> P (Constr ctor args))
     (HClose :   forall fname free, Pl free -> P (Close fname free))
+    (HOpaque :  forall v, P (Opaque v))
     (Hnil :     Pl [])
     (Hcons :    forall v vs, P v -> Pl vs -> Pl (v :: vs)) :
     (forall v, P v) * (forall vs, Pl vs) :=
@@ -45,6 +53,7 @@ Definition value_rect_mut'
         match v as v_ return P v_ with
         | Constr ctor args => HConstr ctor args (go_list args)
         | Close fname free => HClose fname free (go_list free)
+        | Opaque v => HOpaque v
         end in
     let fix go_list vs :=
         match vs as vs_ return Pl vs_ with
@@ -57,9 +66,10 @@ Definition value_rect_mut'
 Definition value_ind' (P : value -> Prop)
     (HConstr :  forall ctor args, Forall P args -> P (Constr ctor args))
     (HClose :   forall fname free, Forall P free -> P (Close fname free))
+    (HOpaque :  forall v, P (Opaque v))
     (v : value) : P v :=
     ltac:(refine (@value_rect_mut P (Forall P)
-        HConstr HClose _ _ v); eauto).
+        HConstr HClose HOpaque _ _ v); eauto).
 
 
 Inductive public_value (M : list metadata) : value -> Prop :=
@@ -69,5 +79,6 @@ Inductive public_value (M : list metadata) : value -> Prop :=
 | PvClose : forall fname free,
         public_fname M fname ->
         Forall (public_value M) free ->
-        public_value M (Close fname free).
+        public_value M (Close fname free)
+| PvOpaque : forall v, public_value M (Opaque v).
 

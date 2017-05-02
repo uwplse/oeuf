@@ -29,6 +29,8 @@ Require HighestValues.
 Require HigherValue.
 Require HighValues.
 
+Require Import OpaqueTypes.
+
 Close Scope Z.
 
 
@@ -40,6 +42,11 @@ Definition compile_member {A : Type} {x : A} {l} :=
         | Here => 0
         | There mb' => S (go mb')
         end in @go x l.
+
+Definition compile_opaque_denote {oty} : opaque_type_denote oty -> HighestValues.opaque_value :=
+  match oty with
+  | Oint => HighestValues.Oint
+  end.
 
 Definition compile_highest {G ty} :=
     let fix go {ty} (v : SourceLifted.value G ty) :=
@@ -54,8 +61,7 @@ Definition compile_highest {G ty} :=
         | @SourceLifted.VClose _ _ _ _ mb free =>
                 HighestValues.Close (compile_member mb) (go_list free)
         | @SourceLifted.VOpaque _ _ v =>
-                (* TODO *)
-                HighestValues.Constr Utopia.Cfalse []
+                HighestValues.Opaque (compile_opaque_denote v)
         end in @go ty.
 
 Definition compile_highest_list {G tys} :=
