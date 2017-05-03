@@ -48,6 +48,7 @@ Definition uncompile_value :=
         match v with
         | Constr ctor args => S.MkConstr ctor (go_list args)
         | Close fname free => S.MkClose fname (go_list free)
+        | Opaque ov => S.MkConstr Cfalse [] (* TODO *)
         end in go.
 
 Definition uncompile_value_list :=
