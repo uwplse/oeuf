@@ -5,6 +5,7 @@ Require Import Utopia.
 Require Import FunctionalExtensionality.
 
 Require Import SourceLifted.
+Require Import OpaqueOps.
 
 
 
@@ -307,25 +308,6 @@ Ltac refold_value_hlist_denote g :=
     fold (@value_hlist_denote _ (genv_denote g)).
 
 
-(* Opaque op simulation theorem for first change of representation. *)
-Lemma opaque_oper_denote_denote_source_sim:
-  forall G (g : genv G) vtys ret_ty
-    (op : OpaqueOps.opaque_oper vtys ret_ty)
-    (vs : hlist (value G) vtys),
-    OpaqueOps.opaque_oper_denote op
-                                 (hmap (fun a b => value_denote (genv_denote g) b) vs) =
-    value_denote (genv_denote g) (OpaqueOps.opaque_oper_denote_source op vs).
-Proof.
-  intros.
-  destruct op;
-    repeat match goal with
-           | [ h : hlist _ (_ :: _) |- _ ] => destruct h using case_hlist_cons
-           | [ h : hlist _ [] |- _ ] => destruct h using case_hlist_nil
-           | [ v : value _ (SourceValues.Opaque _) |- _ ] => destruct v using case_value_opaque
-           end; simpl; try break_if; auto.
-Qed.
-
-
 (* the main theorem: denotation is preserved when taking a step *)
 
 Theorem sstep_denote : forall {G rty} (g : genv G) (s1 s2 : state G rty),
@@ -384,7 +366,7 @@ intros0 Hstep. inv Hstep.
 
 - simpl. refold_expr_hlist_denote g l. refold_value_hlist_denote g.
   unfold es.  rewrite expr_hlist_denote_is_hmap. rewrite hmap_hmap.
-  simpl. rewrite opaque_oper_denote_denote_source_sim. reflexivity.
+  simpl. rewrite opaque_oper_source_sim. reflexivity.
 Qed.
 
 

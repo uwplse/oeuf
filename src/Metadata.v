@@ -1,6 +1,5 @@
 Require Import Arith List.
 Require String.
-Require CompilationUnit.
 
 Inductive access :=
 | Public
@@ -14,10 +13,6 @@ Record metadata := Metadata {
     m_access : access
 }.
 
-
-Definition init_metadata j :=
-    let go name := Metadata name Public in
-    (CompilationUnit.exprs j, map go (CompilationUnit.names j)).
 
 Definition check_length {A} (cu : list A * list metadata) :=
     let '(exprs, metas) := cu in
