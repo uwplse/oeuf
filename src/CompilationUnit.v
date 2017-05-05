@@ -1,8 +1,8 @@
 Require Import List String HList SourceLifted.
 Import ListNotations.
 Require Semantics.
-Require Import HighValues.
 Require Import Utopia.
+Require Import Metadata.
 
 Record compilation_unit :=
   CompilationUnit {
@@ -14,4 +14,8 @@ Record compilation_unit :=
 Definition singleton {ty} (e : body_expr [] ty) (name : string) : compilation_unit :=
   CompilationUnit [ty] (GenvCons e GenvNil) [name].
 
+
+Definition init_metadata j :=
+    let go name := Metadata name Public in
+    (exprs j, map go (names j)).
 

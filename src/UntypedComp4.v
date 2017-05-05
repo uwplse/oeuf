@@ -34,7 +34,7 @@ Definition compile_expr :=
         | AS.MkConstr ctor args => B.MkConstr ctor (go_list args)
         | AS.MkClose fname free => B.MkClose fname (go_list free)
         | AS.Elim ty cases target => B.Elim ty (go_list cases) (go target)
-        | AS.Opaque o args => B.MkConstr Cfalse [] (* TODO *)
+        | AS.OpaqueOp o args => B.MkConstr Cfalse [] (* TODO *)
         end in go.
 
 Definition compile_expr_list :=

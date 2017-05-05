@@ -8,6 +8,7 @@ Require Import HList.
 Require Import CompilationUnit.
 Require Import Semantics.
 Require Import HighestValues.
+Require Import OpaqueOps.
 
 Require SourceLiftedProofs.
 
@@ -18,13 +19,6 @@ Module A := SourceLifted.
 Module B := Untyped1.
 
 Require MatchValues.
-
-Definition opaque_oper_to_name {atys rty} (op : OpaqueOps.opaque_oper atys rty)
-    : HighestOpaqueOps.opaque_oper_name :=
-  match op with
-  | OpaqueOps.Oadd => HighestOpaqueOps.ONadd
-  | OpaqueOps.Otest => HighestOpaqueOps.ONtest
-  end.
 
 Notation compile_member := MatchValues.compile_member.
 Notation compile_value := MatchValues.compile_highest.
@@ -45,7 +39,7 @@ Definition compile_expr {G L ty} :=
         | @A.Close _ _ _ _ _ mb free => B.MkClose (compile_member mb) (go_list free)
         | @A.Elim _ _ _ ty _ _ cases target =>
                 B.Elim ty (go_list cases) (go target)
-        | @A.OpaqueOp _ _ _ _ op args => B.Opaque (opaque_oper_to_name op) (go_list args)
+        | @A.OpaqueOp _ _ _ _ op args => B.OpaqueOp (opaque_oper_to_name op) (go_list args)
         end in @go ty.
 
 Definition compile_expr_list {G L tys} :=
@@ -85,7 +79,7 @@ Definition compile_cont {G rty ty} :=
         | @A.KElim _ _ _ _ ty _ _ cases l k =>
                 B.KElim ty (go_list cases) (go_value_list l) (go_cont k)
         | A.KOpaqueOp op vs es l k =>
-                B.KOpaque (opaque_oper_to_name op) (go_list vs) (go_list es) (go_value_list l) (go_cont k)
+                B.KOpaqueOp (opaque_oper_to_name op) (go_list vs) (go_list es) (go_value_list l) (go_cont k)
         | A.KStop => B.KStop
         end in @go_cont ty.
 
@@ -681,35 +675,6 @@ induction aes; intros0 HQ Hcomp.
   simpl. congruence.
 Qed.
 
-Lemma compile_value_unwrap_opaque G (v : SourceLifted.value G (SourceValues.Opaque OpaqueTypes.Oint)) :
-  OpaqueOps.unwrap_opaque v = HighestOpaqueOps.unwrap_opaque_highest_int (compile_value v).
-Proof.
-  refine match v with
-         | SourceLifted.VOpaque v => _
-         end.
-  destruct o.
-  reflexivity.
-Qed.
-
-
-Lemma compile_value_opaque_oper G rty atys
-      (op : OpaqueOps.opaque_oper atys rty) (vs : hlist (_ G) _):
-  compile_value (OpaqueOps.opaque_oper_denote_source op vs) =
-  HighestOpaqueOps.opaque_oper_denote_highest (opaque_oper_to_name op) (compile_value_list vs).
-Proof.
-  destruct op; simpl.
-  - destruct vs using case_hlist_cons.
-    destruct vs using case_hlist_cons.
-    destruct vs using case_hlist_nil.
-    simpl.
-    rewrite !compile_value_unwrap_opaque.
-    reflexivity.
-  - destruct vs using case_hlist_cons.
-    destruct vs using case_hlist_nil.
-    simpl.
-    rewrite compile_value_unwrap_opaque.
-    break_if; reflexivity.
-Qed.
 
 Theorem I_bsim : forall G rty (AE : A.genv G) (BE : list B.expr)
     (a : A.state G rty) (b b' : B.state),
@@ -798,7 +763,9 @@ all: on (compile_expr _ = _), invc.
 - fold (@compile_expr_list G L arg_tys) in *.
   on _, invc_using compile_expr_list_map_value_inv.
   eexists. split. i_lem @A.SOpaqueOpDone.
-  + simpl. rewrite compile_value_opaque_oper. reflexivity.
+  + simpl.
+    rewrite <- opaque_oper_highest_sim in * by eauto using SourceLifted.genv_denote.
+    on (Some _ = Some v'), invc.  reflexivity.
 
 - fold (@compile_expr_list G L case_tys) in *.
 

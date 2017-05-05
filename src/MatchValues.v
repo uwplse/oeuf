@@ -24,7 +24,7 @@ Require Import EricTact.
 
 Require Import HList.
 
-Require SourceLifted.
+Require SourceValues.
 Require HighestValues.
 Require HigherValue.
 Require HighValues.
@@ -43,30 +43,25 @@ Definition compile_member {A : Type} {x : A} {l} :=
         | There mb' => S (go mb')
         end in @go x l.
 
-Definition compile_opaque_denote {oty} : opaque_type_denote oty -> HighestValues.opaque_value :=
-  match oty with
-  | Oint => HighestValues.Oint
-  end.
-
 Definition compile_highest {G ty} :=
-    let fix go {ty} (v : SourceLifted.value G ty) :=
-        let fix go_list {tys} (vs : hlist (SourceLifted.value G) tys) :=
+    let fix go {ty} (v : SourceValues.value G ty) :=
+        let fix go_list {tys} (vs : hlist (SourceValues.value G) tys) :=
             match vs with
             | hnil => []
             | hcons v vs => go v :: go_list vs
             end in
         match v with
-        | @SourceLifted.VConstr _ _ ctor _ _ args =>
+        | @SourceValues.VConstr _ _ ctor _ _ args =>
                 HighestValues.Constr ctor (go_list args)
-        | @SourceLifted.VClose _ _ _ _ mb free =>
+        | @SourceValues.VClose _ _ _ _ mb free =>
                 HighestValues.Close (compile_member mb) (go_list free)
-        | @SourceLifted.VOpaque _ _ v =>
-                HighestValues.Opaque (compile_opaque_denote v)
+        | @SourceValues.VOpaque _ _ v =>
+                HighestValues.Opaque _ v
         end in @go ty.
 
 Definition compile_highest_list {G tys} :=
     let go {ty} := @compile_highest G ty in
-    let fix go_list {tys} (vs : hlist (SourceLifted.value G) tys) :=
+    let fix go_list {tys} (vs : hlist (SourceValues.value G) tys) :=
         match vs with
         | hnil => []
         | hcons v vs => go v :: go_list vs

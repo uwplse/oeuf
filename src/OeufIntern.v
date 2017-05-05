@@ -108,7 +108,7 @@ Definition transf_untyped_to_cminor (M : MatchValues.id_map) (l : list Untyped1.
 
 
 Definition transf_oeuf_to_untyped1 (j : CompilationUnit.compilation_unit) : res Untyped1.prog_type :=
-  OK (Metadata.init_metadata j)
+  OK (CompilationUnit.init_metadata j)
   @@ UntypedComp1.compile_cu
  @@@ Metadata.check_length.
 
