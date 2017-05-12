@@ -4,6 +4,7 @@ Require Import Utopia.
 Require Import Metadata.
 Require Import Semantics.
 Require Import HighestValues.
+Require Import OpaqueOps.
 
 Require Export Untyped4.
 
@@ -95,6 +96,28 @@ Inductive sstep (g : list expr) : state -> state -> Prop :=
         sstep g (Run e l k)
                 (run_cont k (Close fname vs))
 
+| SOpaqueOpStep : forall
+            (o : opaque_oper_name)
+            (vs : list expr)
+            (e : expr)
+            (es : list expr)
+            l k,
+        Forall is_value vs ->
+        ~ is_value e ->
+        sstep g (Run (OpaqueOp o (vs ++ e :: es)) l k)
+                (Run e l (KOpaqueOp o vs es l k))
+
+| SOpaqueOpDone : forall
+            (o : opaque_oper_name)
+            (es : list expr)
+            (vs : list value)
+            (v' : value)
+            l k,
+        Forall2 expr_value es vs ->
+        opaque_oper_denote_highest o vs = Some v' ->
+        sstep g (Run (OpaqueOp o es) l k)
+                (run_cont k v')
+
 | SElimTarget : forall
             (ty : type_name)
             (cases : list expr)
@@ -136,6 +159,7 @@ Definition expr_rect_mut (P : expr -> Type) (Pl : list expr -> Type)
     (HMkConstr : forall ctor args, Pl args -> P (MkConstr ctor args))
     (HMkClose : forall fname free, Pl free -> P (MkClose fname free))
     (HElim :    forall ty cases target, Pl cases -> P target -> P (Elim ty cases target))
+    (HOpaqueOp : forall o args, Pl args -> P (OpaqueOp o args))
     (Hnil :     Pl [])
     (Hcons :    forall e es, P e -> Pl es -> Pl (e :: es))
     (e : expr) : P e :=
@@ -153,13 +177,14 @@ Definition expr_rect_mut (P : expr -> Type) (Pl : list expr -> Type)
         | MkConstr ctor args => HMkConstr ctor args (go_list args)
         | MkClose fname free => HMkClose fname free (go_list free)
         | Elim ty cases target => HElim ty cases target (go_list cases) (go target)
+        | OpaqueOp o args => HOpaqueOp o args (go_list args)
         end in go e.
 
 Definition expr_rect_mut' (P : expr -> Type) (Pl : list expr -> Type)
-    HValue HArg HUpVar HApp HMkConstr HMkClose HElim Hnil Hcons
+    HValue HArg HUpVar HApp HMkConstr HMkClose HElim HOpaqueOp Hnil Hcons
     : (forall e, P e) * (forall es, Pl es) :=
     let go := expr_rect_mut P Pl 
-        HValue HArg HUpVar HApp HMkConstr HMkClose HElim Hnil Hcons
+        HValue HArg HUpVar HApp HMkConstr HMkClose HElim HOpaqueOp Hnil Hcons
         in
     let fix go_list es :=
         match es as es_ return Pl es_ with
@@ -209,7 +234,7 @@ all: try solve [right; inversion 1; on >expr_value, invc].
   + right. inversion 1. eauto.
 
 - finish_mut_induction value_dec using list.
-Qed.
+Defined.
 
 
 

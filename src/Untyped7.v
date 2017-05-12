@@ -4,6 +4,7 @@ Require Import Utopia.
 Require Import Metadata.
 Require Import Semantics.
 Require Import HighestValues.
+Require Import OpaqueOps.
 
 
 Inductive expr :=
@@ -13,6 +14,7 @@ Inductive expr :=
 | Constr (ctor : constr_name) (args : list expr)
 | Close (fname : nat) (free : list expr)
 | Elim (ty : type_name) (cases : list expr) (target : expr)
+| OpaqueOp (o : opaque_oper_name) (args : list expr)
 .
 
 Inductive is_value : expr -> Prop :=
@@ -33,6 +35,8 @@ Inductive cont :=
 | KClose (fname : nat) (vs : list expr) (es : list expr)
         (l : list expr) (k : cont)
 | KElim (ty : type_name) (cases : list expr) (l : list expr) (k : cont)
+| KOpaqueOp (o : opaque_oper_name) (vs : list expr) (es : list expr)
+        (l : list expr) (k : cont)
 | KStop
 .
 
@@ -53,6 +57,8 @@ Definition run_cont (k : cont) : expr -> state :=
             fun v => Run (Close mb (vs ++ v :: es)) l k
     | KElim e cases l k =>
             fun v => Run (Elim e cases v) l k
+    | KOpaqueOp o vs es l k =>
+            fun v => Run (OpaqueOp o (vs ++ v :: es)) l k
     | KStop => fun v => Stop v
     end.
 
@@ -143,6 +149,30 @@ Inductive sstep (g : list expr) : state -> state -> Prop :=
         sstep g (Run (Close fname vs) l k)
                 (run_cont k (Close fname vs))
 
+| SOpaqueOpStep : forall
+            (o : opaque_oper_name)
+            (vs : list expr)
+            (e : expr)
+            (es : list expr)
+            l k,
+        Forall is_value vs ->
+        ~ is_value e ->
+        sstep g (Run (OpaqueOp o (vs ++ e :: es)) l k)
+                (Run e l (KOpaqueOp o vs es l k))
+
+    (* TODO - need an expr variant that represents an opaque value *)
+                (*
+| SOpaqueOpDone : forall
+            (o : opaque_oper_name)
+            (vs : list value)
+            (v' : value)
+            l k,
+        Forall2 is_value vs ->
+        opaque_oper_denote_highest o vs = Some v' ->
+        sstep g (Run (OpaqueOp o vs) l k)
+                (run_cont k v')
+                *)
+
 | SElimTarget : forall
             (ty : type_name)
             (cases : list expr)
@@ -182,6 +212,7 @@ Definition expr_rect_mut (P : expr -> Type) (Pl : list expr -> Type)
     (HConstr :  forall ctor args, Pl args -> P (Constr ctor args))
     (HClose :   forall fname free, Pl free -> P (Close fname free))
     (HElim :    forall ty cases target, Pl cases -> P target -> P (Elim ty cases target))
+    (HOpaqueOp : forall o args, Pl args -> P (OpaqueOp o args))
     (Hnil :     Pl [])
     (Hcons :    forall e es, P e -> Pl es -> Pl (e :: es))
     (e : expr) : P e :=
@@ -198,13 +229,14 @@ Definition expr_rect_mut (P : expr -> Type) (Pl : list expr -> Type)
         | Constr ctor args => HConstr ctor args (go_list args)
         | Close fname free => HClose fname free (go_list free)
         | Elim ty cases target => HElim ty cases target (go_list cases) (go target)
+        | OpaqueOp o args => HOpaqueOp o args (go_list args)
         end in go e.
 
 Definition expr_rect_mut' (P : expr -> Type) (Pl : list expr -> Type)
-    HArg HUpVar HApp HConstr HClose HElim Hnil Hcons
+    HArg HUpVar HApp HConstr HClose HElim HOpaqueOp Hnil Hcons
     : (forall e, P e) * (forall es, Pl es) :=
     let go := expr_rect_mut P Pl 
-        HArg HUpVar HApp HConstr HClose HElim Hnil Hcons
+        HArg HUpVar HApp HConstr HClose HElim HOpaqueOp Hnil Hcons
         in
     let fix go_list es :=
         match es as es_ return Pl es_ with

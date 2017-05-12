@@ -34,7 +34,7 @@ Definition compile_expr :=
         | AS.MkConstr ctor args => B.MkConstr ctor (go_list args)
         | AS.MkClose fname free => B.MkClose fname (go_list free)
         | AS.Elim ty cases target => B.Elim ty (go_list cases) (go target)
-        | AS.OpaqueOp o args => B.MkConstr Cfalse [] (* TODO *)
+        | AS.OpaqueOp op args => B.OpaqueOp op (go_list args)
         end in go.
 
 Definition compile_expr_list :=
@@ -71,6 +71,9 @@ Inductive I_expr : AS.expr -> B.expr -> Prop :=
         Forall2 I_expr acases bcases ->
         I_expr atarget btarget ->
         I_expr (AS.Elim ty acases atarget) (B.Elim ty bcases btarget)
+| IOpaqueOp : forall op aargs bargs,
+        Forall2 I_expr aargs bargs ->
+        I_expr (AS.OpaqueOp op aargs) (B.OpaqueOp op bargs)
 .
 
 Inductive I_cont : AS.cont -> B.cont -> Prop :=
@@ -99,6 +102,12 @@ Inductive I_cont : AS.cont -> B.cont -> Prop :=
         I_cont ak bk ->
         I_cont (AS.KElim ty acases l ak)
                (B.KElim ty bcases l bk)
+| IKOpaqueOp : forall op l  avs aes ak  bvs bes bk,
+        Forall2 I_expr avs bvs ->
+        Forall2 I_expr aes bes ->
+        I_cont ak bk ->
+        I_cont (AS.KOpaqueOp op avs aes l ak)
+               (B.KOpaqueOp op bvs bes l bk)
 | IKStop : I_cont AS.KStop B.KStop
 .
 
@@ -120,6 +129,7 @@ Lemma I_run_cont : forall ak bk v,
     I_cont ak bk ->
     I (AS.run_cont ak v) (B.run_cont bk v).
 intros0 II; invc II; repeat i_ctor.
+- i_lem Forall2_app. i_ctor. i_ctor.
 - i_lem Forall2_app. i_ctor. i_ctor.
 - i_lem Forall2_app. i_ctor. i_ctor.
 Qed.
@@ -220,6 +230,18 @@ all: try solve [eexists; split; repeat i_ctor].
   eexists. split. i_lem B.SCloseDone.
   i_ctor. i_ctor.
 
+- (* SOpaqueOpStep *)
+  on (Forall2 _ (_ ++ _) _), invc_using Forall2_app_inv.
+  on (Forall2 _ (_ :: _) _), invc.
+  eexists. split. i_lem B.SOpaqueOpStep.
+  + list_magic_on (vs, (ys1, tt)).
+  + i_ctor. i_ctor.
+
+- (* SOpaqueOpDone *)
+  erewrite I_expr_map_value with (bes := bargs) by eauto.
+  eexists. split. i_lem B.SOpaqueOpDone.
+  i_ctor. i_ctor.
+
 - (* SEliminate *)
   on (I_expr _ btarget), invc.
   fwd eapply Forall2_nth_error_ex as HH; eauto.  destruct HH as (bcase & ? & ?).
@@ -227,8 +249,6 @@ all: try solve [eexists; split; repeat i_ctor].
   i_ctor. i_lem I_unroll_elim. i_ctor.
 Qed.
 
-
-Lemma sorry {A} : A. Admitted.
 
 Lemma compile_I_expr : forall a b,
     compile_expr a = b ->
@@ -240,8 +260,6 @@ mut_induction a using AS.expr_rect_mut' with
 [ intros0 Hcomp; subst b; simpl in *; fold compile_expr_list; try i_ctor.. | ].
 
 - (* var -> Arg / UpVar *) destruct idx; i_ctor.
-
-- exact sorry. (* TODO *)
 
 - finish_mut_induction compile_I_expr using list.
 Qed exporting.

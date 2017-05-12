@@ -202,8 +202,9 @@ induction k; intros; simpl; try reflexivity.
 - fold (@compile_expr_list G L (vtys ++ ety :: etys)).
   rewrite compile_happ_expr. simpl. reflexivity.
 
-- admit. (* TODO *)
-Admitted.
+- fold (@compile_expr_list G L (vtys ++ ety :: etys)).
+  rewrite compile_happ_expr. simpl. reflexivity.
+Qed.
 
 Lemma compile_is_value : forall G L ty (e : A.expr G L ty),
     A.is_value e ->
@@ -562,11 +563,21 @@ all: fix_existT; subst.
     eapply compile_run_elim.
   + simpl. reflexivity.
 
-- admit. (* TODO *)
+- eexists. split.
+  simpl. fold (@compile_expr_list G L (vtys ++ ety :: etys)).
+  rewrite compile_happ_expr. simpl. i_lem B.SOpaqueOpStep.
+  + i_lem compile_is_value_list.
+  + i_lem compile_isnt_value.
+  + simpl. reflexivity.
 
-- admit. (* TODO *)
+- eexists. split.
+  simpl. fold (@compile_expr_list G L vtys). unfold es0. rewrite compile_hmap_value.
+  i_lem B.SOpaqueOpDone.
+  + erewrite <- opaque_oper_highest_sim. reflexivity.
+    eapply A.genv_denote; assumption.
+  + simpl. fold (@compile_value_list G vtys). reflexivity.
 
-Admitted.
+Qed.
 
 
 Lemma compile_state_inv : forall G rty (a : A.state G rty) be bl bk
