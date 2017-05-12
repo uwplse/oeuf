@@ -38,6 +38,7 @@ Definition compile_expr :=
         | AS.MkConstr ctor args => B.Constr ctor <$> go_list args
         | AS.MkClose fname free => B.Close fname <$> go_list free
         | AS.Elim ty cases target => B.Elim ty <$> go_list cases <*> go target
+        | AS.OpaqueOp op args => B.OpaqueOp op <$> go_list args
         end in go.
 
 Definition compile_expr_list :=
@@ -92,6 +93,9 @@ Inductive I_expr : AS.expr -> B.expr -> Prop :=
         Forall2 I_expr acases bcases ->
         I_expr atarget btarget ->
         I_expr (AS.Elim ty acases atarget) (B.Elim ty bcases btarget)
+| IOpaqueOp : forall op aargs bargs,
+        Forall2 I_expr aargs bargs ->
+        I_expr (AS.OpaqueOp op aargs) (B.OpaqueOp op bargs)
 .
 
 Inductive I_cont : AS.cont -> B.cont -> Prop :=
@@ -125,6 +129,13 @@ Inductive I_cont : AS.cont -> B.cont -> Prop :=
         I_cont ak bk ->
         I_cont (AS.KElim ty acases al ak)
                (B.KElim ty bcases bl bk)
+| IKOpaqueOp : forall op  avs aes al ak  bvs bes bl bk,
+        Forall2 I_expr avs bvs ->
+        Forall2 I_expr aes bes ->
+        Forall2 B.expr_value bl al ->
+        I_cont ak bk ->
+        I_cont (AS.KOpaqueOp op avs aes al ak)
+               (B.KOpaqueOp op bvs bes bl bk)
 | IKStop : I_cont AS.KStop B.KStop
 .
 
@@ -149,6 +160,8 @@ Lemma I_run_cont : forall av ak bv bk,
     I_cont ak bk ->
     I (AS.run_cont ak av) (B.run_cont bk bv).
 intros0 IIval IIcont; invc IIval; invc IIcont; repeat i_ctor.
+- i_lem Forall2_app. i_ctor. i_ctor. i_ctor.
+- i_lem Forall2_app. i_ctor. i_ctor. i_ctor.
 - i_lem Forall2_app. i_ctor. i_ctor. i_ctor.
 - i_lem Forall2_app. i_ctor. i_ctor. i_ctor.
 - i_lem Forall2_app. i_ctor. i_ctor. i_ctor.
@@ -359,6 +372,13 @@ all: invc II.
   + i_lem I_run_cont.
 
 
+- on (I_expr (AS.OpaqueOp _ _) _), invc.  on _, invc_using Forall2_3part_inv.
+  eexists. split. i_lem B.SOpaqueOpStep.
+  i_ctor. i_ctor.
+
+- admit. (* OpaqueOpDone - NYI in Untyped7 *)
+
+
 - on >I_expr, invc.
   eexists. split. i_lem B.SElimTarget.
   i_ctor. i_ctor.
@@ -373,7 +393,7 @@ all: invc II.
     symmetry.  i_lem Forall2_length.
   + i_ctor. i_lem I_unroll_elim. i_ctor.
 
-Qed.
+Admitted.
 
 
 

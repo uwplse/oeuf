@@ -4,6 +4,7 @@ Require Import Utopia.
 Require Import Metadata.
 Require Import Semantics.
 Require Import HighestValues.
+Require Import OpaqueOps.
 
 Require Export Untyped1.
 
@@ -73,6 +74,27 @@ Inductive sstep (g : list expr) : state -> state -> Prop :=
         let es := map Value vs in
         sstep g (Run (MkClose fname es) l k)
                 (Run (Value (Close fname vs)) l k)
+
+| SOpaqueOpStep : forall
+            (o : opaque_oper_name)
+            (vs : list expr)
+            (e : expr)
+            (es : list expr)
+            l k,
+        Forall is_value vs ->
+        ~ is_value e ->
+        sstep g (Run (OpaqueOp o (vs ++ e :: es)) l k)
+                (Run e l (KOpaqueOp o vs es l k))
+
+| SOpaqueOpDone : forall
+            (o : opaque_oper_name)
+            (vs : list value)
+            (v' : value)
+            l k,
+        let es := map Value vs in
+        opaque_oper_denote_highest o vs = Some v' ->
+        sstep g (Run (OpaqueOp o es) l k)
+                (Run (Value v') l k)
 
 | SElimTarget : forall
             (ty : type_name)

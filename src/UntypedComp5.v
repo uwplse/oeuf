@@ -38,28 +38,6 @@ End compile.
 
 
 
-Definition uncompile_value :=
-    let fix go v :=
-        let fix go_list vs :=
-            match vs with
-            | [] => []
-            | v :: vs => go v :: go_list vs
-            end in
-        match v with
-        | Constr ctor args => S.MkConstr ctor (go_list args)
-        | Close fname free => S.MkClose fname (go_list free)
-        | Opaque ty v => S.MkConstr Cfalse [] (* TODO *)
-        end in go.
-
-Definition uncompile_value_list :=
-    let go := uncompile_value in
-    let fix go_list vs :=
-        match vs with
-        | [] => []
-        | v :: vs => go v :: go_list vs
-        end in go_list.
-
-
 Inductive I : S.state -> S.state -> Prop :=
 | IRun : forall l e k,
         ~ S.is_value e ->
@@ -90,6 +68,7 @@ Definition metric_cont :=
         | S.KConstr _ _ _ _ k => S (go k)
         | S.KClose _ _ _ _ k => S (go k)
         | S.KElim _ _ _ k => S (go k)
+        | S.KOpaqueOp _ _ _ _ k => S (go k)
         | S.KStop => 1
         end in go.
 

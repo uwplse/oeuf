@@ -46,6 +46,9 @@ Inductive I_expr : S.expr -> S.expr -> Prop :=
         Forall2 I_expr acases bcases ->
         I_expr atarget btarget ->
         I_expr (S.Elim ty acases atarget) (S.Elim ty bcases btarget)
+| IOpaqueOp : forall op aargs bargs,
+        Forall2 I_expr aargs bargs ->
+        I_expr (S.OpaqueOp op aargs) (S.OpaqueOp op bargs)
 .
 
 Inductive I_cont : S.cont -> S.cont -> Prop :=
@@ -74,6 +77,12 @@ Inductive I_cont : S.cont -> S.cont -> Prop :=
         I_cont ak bk ->
         I_cont (S.KElim ty acases l ak)
                (S.KElim ty bcases l bk)
+| IKOpaqueOp : forall op l  avs aes ak  bvs bes bk,
+        Forall2 I_expr avs bvs ->
+        Forall2 I_expr aes bes ->
+        I_cont ak bk ->
+        I_cont (S.KOpaqueOp op avs aes l ak)
+               (S.KOpaqueOp op bvs bes l bk)
 | IKStop : I_cont S.KStop S.KStop
 .
 
@@ -152,6 +161,7 @@ Lemma I_run_cont : forall v ak bk,
     I_cont ak bk ->
     I (S.run_cont ak v) (S.run_cont bk v).
 intros0 II; invc II; repeat i_ctor.
+- i_lem Forall2_app. i_ctor. i_ctor. i_ctor.
 - i_lem Forall2_app. i_ctor. i_ctor. i_ctor.
 - i_lem Forall2_app. i_ctor. i_ctor. i_ctor.
 Qed.
@@ -444,6 +454,7 @@ Definition expr_metric :=
         | S.MkConstr _ args => 2 + go_list args
         | S.MkClose _ free => 2 + go_list free
         | S.Elim _ _ target => 2 + go target
+        | S.OpaqueOp _ args => 2 + go_list args
         end in go.
 
 Definition expr_metric_list :=
@@ -464,6 +475,7 @@ Definition cont_metric :=
         | S.KConstr _ vs es _ k => 1 + go_expr_list vs + go_expr_list es + go k
         | S.KClose _ vs es _ k => 1 + go_expr_list vs + go_expr_list es + go k
         | S.KElim _ _ _ k => 1 + go k
+        | S.KOpaqueOp _ vs es _ k => 1 + go_expr_list vs + go_expr_list es + go k
         | S.KStop => 0
         end in go.
 
@@ -676,6 +688,30 @@ all: try solve [
       -- i_lem IInValue.
          eapply unroll_cont_expr_value with (result := ae_last); eauto.
          eapply MkClose_expr_value, MkClose_expr_value_2.
+
+
+(* SOpaqueOpStep *)
+- on _, invc_using Forall2_3part_inv.
+  rename ys1 into bvs. rename y2 into be.  rename ys3 into bes.
+  destruct (B.value_dec be) as [[be_v ?] | ?].
+
+  + eexists. split. right. split. reflexivity.
+    * simpl. fold expr_metric_list. rewrite expr_metric_list_app. simpl. omega.
+    * eapply IInValue with (depth := 0)
+        (apat := fun v => S.OpaqueOp _ (_ ++ v :: _))
+        (bpat := fun v => S.OpaqueOp _ (_ ++ v :: _));
+        simpl; eauto using I_expr_expr_value.
+      -- i_ctor. i_lem Forall2_app.
+      -- simpl. reflexivity.
+
+  + (* Left and right are both values.  Proceed in lockstep. *)
+    eexists. split. left. i_lem B.SOpaqueOpStep.
+    i_ctor. i_ctor.
+
+(* SOpaqueOpDone *)
+- eexists. split. left. i_lem B.SOpaqueOpDone.
+  + eapply I_expr_expr_value'_list. i_lem Forall2_map_l.
+  + i_lem I_run_cont.
 
 
 (* SElimTarget *)

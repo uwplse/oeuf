@@ -58,10 +58,7 @@ intros0 Henv Astep; inv Astep.
 all: try solve [i_ctor].
 
 - i_lem B.SMakeCall. rewrite <- compile_get_weaken. auto.
-
-- admit. (* TODO *)
-- admit. (* TODO *)
-Admitted.
+Qed.
 
 
 
