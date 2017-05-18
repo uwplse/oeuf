@@ -36,17 +36,18 @@ Definition compile : A.expr -> compiler_monad B.expr :=
             | p :: ps => cons <$> go_pair p <*> go_list_pair ps
             end in
         match e with
+        | A.Value v => ret_state (B.Value v)
         | A.Arg => ret_state B.Arg
         | A.UpVar n => ret_state (B.UpVar n)
         | A.Call f a => B.Call <$> go f <*> go a
-        | A.Constr tag args => B.Constr tag <$> go_list args
+        | A.MkConstr tag args => B.MkConstr tag <$> go_list args
         | A.Elim cases target =>
                 go_list_pair cases >>= fun cases' =>
                 go target >>= fun target' =>
                 get_next >>= fun n' =>
                 emit cases' >>= fun _ =>
                 ret_state (B.ElimN n' cases' target')
-        | A.Close fname free => B.Close fname <$> go_list free
+        | A.MkClose fname free => B.MkClose fname <$> go_list free
         end in go.
 
 Definition compile_list :=
@@ -97,17 +98,18 @@ Definition gen_elim_names : String.string -> A.expr -> state (nat * list String.
             | p :: ps => go_pair name p >> go_list_pair name ps
             end in
         match e with
+        | A.Value _ => ret_state tt
         | A.Arg => ret_state tt
         | A.UpVar n => ret_state tt
         | A.Call f a => go name f >> go name a
-        | A.Constr tag args => go_list name args
+        | A.MkConstr tag args => go_list name args
         | A.Elim cases target =>
                 next_idx >>= fun idx =>
                 let name' := String.append (String.append name "_elim") (nat_to_string idx) in
                 go_list_pair name' cases >>
                 go name' target >>
                 record_name name'
-        | A.Close fname free => go_list name free
+        | A.MkClose fname free => go_list name free
         end in go.
 
 Fixpoint gen_elim_names_list (exprs : list A.expr) (metas : list metadata) :
@@ -139,7 +141,9 @@ Ltac refold_compile :=
     fold compile_list_pair in *.
 
 
+
 Inductive I_expr : A.expr -> B.expr -> Prop :=
+| IValue : forall v, I_expr (A.Value v) (B.Value v)
 | IArg : I_expr A.Arg B.Arg
 | IUpVar : forall n,
         I_expr (A.UpVar n) (B.UpVar n)
@@ -149,7 +153,7 @@ Inductive I_expr : A.expr -> B.expr -> Prop :=
         I_expr (A.Call af aa) (B.Call bf ba)
 | IConstr : forall tag aargs bargs,
         Forall2 I_expr aargs bargs ->
-        I_expr (A.Constr tag aargs) (B.Constr tag bargs)
+        I_expr (A.MkConstr tag aargs) (B.MkConstr tag bargs)
 | IElim : forall acases atarget num bcases btarget,
         Forall2 (fun ap bp => I_expr (fst ap) (fst bp) /\ snd ap = snd bp)
             acases bcases ->
@@ -158,66 +162,57 @@ Inductive I_expr : A.expr -> B.expr -> Prop :=
                (B.ElimN num bcases btarget)
 | IClose : forall tag afree bfree,
         Forall2 I_expr afree bfree ->
-        I_expr (A.Close tag afree) (B.Close tag bfree)
+        I_expr (A.MkClose tag afree) (B.MkClose tag bfree)
 .
+Hint Resolve IValue.
 
 Inductive I : A.state -> B.state -> Prop :=
 | IRun : forall ae al ak be bl bk,
         I_expr ae be ->
-        Forall A.value al ->
-        Forall B.value bl ->
-        Forall2 I_expr al bl ->
-        (forall av bv,
-            A.value av ->
-            B.value bv ->
-            I_expr av bv ->
-            I (ak av) (bk bv)) ->
+        al = bl ->
+        (forall v,
+            I (ak v) (bk v)) ->
         I (A.Run ae al ak) (B.Run be bl bk)
 
-| IStop : forall ae be,
-        I_expr ae be ->
-        I (A.Stop ae) (B.Stop be).
+| IStop : forall v,
+        I (A.Stop v) (B.Stop v).
 
 
 
 Lemma I_expr_value : forall a b,
     I_expr a b ->
-    A.value a ->
-    B.value b.
-induction a using A.expr_ind''; intros0 II Aval; invc Aval; invc II.
-- constructor. list_magic_on (args, (bargs, tt)).
-- constructor. list_magic_on (free, (bfree, tt)).
+    A.is_value a ->
+    B.is_value b.
+intros0 II Aval. invc Aval. invc II. constructor.
 Qed.
 Hint Resolve I_expr_value.
 
 Lemma I_expr_value' : forall b a,
     I_expr a b ->
-    B.value b ->
-    A.value a.
-induction b using B.expr_ind''; intros0 II Bval; invc Bval; invc II.
-- constructor. list_magic_on (args, (aargs, tt)).
-- constructor. list_magic_on (free, (afree, tt)).
+    B.is_value b ->
+    A.is_value a.
+intros0 II Bval. invc Bval. invc II. constructor.
 Qed.
 
 Lemma I_expr_not_value : forall a b,
     I_expr a b ->
-    ~A.value a ->
-    ~B.value b.
+    ~A.is_value a ->
+    ~B.is_value b.
 intros. intro. fwd eapply I_expr_value'; eauto.
 Qed.
 Hint Resolve I_expr_not_value.
 
 Lemma I_expr_not_value' : forall a b,
     I_expr a b ->
-    ~B.value b ->
-    ~A.value a.
+    ~B.is_value b ->
+    ~A.is_value a.
 intros. intro. fwd eapply I_expr_value; eauto.
 Qed.
 
 Lemma Forall_I_expr_value : forall aes bes,
     Forall2 I_expr aes bes ->
-    Forall A.value aes ->
-    Forall B.value bes.
+    Forall A.is_value aes ->
+    Forall B.is_value bes.
 intros. list_magic_on (aes, (bes, tt)).
 Qed.
 Hint Resolve Forall_I_expr_value.
@@ -237,6 +232,8 @@ Lemma compile_extend : forall ae s be' s',
     exists s'', s' = s ++ s''.
 induction ae using A.expr_ind''; intros0 Hcomp;
 simpl in Hcomp; refold_compile; break_bind_state.
+
+- exists []. eauto using app_nil_r.
 
 - exists []. eauto using app_nil_r.
 
@@ -331,6 +328,7 @@ intros0 Hcomp; simpl in Hcomp; refold_compile; break_bind_state.
 
 (* compile *)
 
+- constructor.
 - constructor.
 - constructor.
 
@@ -463,7 +461,7 @@ Lemma unroll_sim : forall rec,
     forall bcase bargs bmk_rec,
     A.unroll_elim acase aargs rec amk_rec = Some ae' ->
     I_expr acase bcase ->
-    Forall2 I_expr aargs bargs ->
+    aargs = bargs ->
     (forall av bv,
         I_expr av bv ->
         I_expr (amk_rec av) (bmk_rec bv)) ->
@@ -471,7 +469,7 @@ Lemma unroll_sim : forall rec,
         B.unroll_elim bcase bargs rec bmk_rec = Some be' /\
         I_expr ae' be'.
 first_induction aargs; destruct rec; intros0 Aunroll IIcase IIargs IImk_rec;
-try discriminate; on (Forall2 _ _ bargs), invc.
+try discriminate; subst bargs.
 
 - simpl in *. inject_some.
   eexists. eauto.
@@ -481,6 +479,16 @@ try discriminate; on (Forall2 _ _ bargs), invc.
     i_ctor. i_ctor.
   + eapply IHaargs; eauto.
     i_ctor.
+Qed.
+
+Lemma I_expr_map_value : forall vs bes,
+    Forall2 I_expr (map A.Value vs) bes ->
+    bes = map B.Value vs.
+induction vs; intros0 II; invc II.
+- reflexivity.
+- simpl. f_equal.
+  + on >I_expr, invc. reflexivity.
+  + apply IHvs. eauto.
 Qed.
 
 
@@ -497,18 +505,10 @@ intros0 Henv II Astep; [ | solve [invc Astep] ].
 
 inv Astep; invc II; try on (I_expr _ _), invc.
 
-- fwd eapply Forall2_nth_error_ex with (xs := al) (ys := bl); eauto.
-    break_exists. break_and.
-  assert (A.value v).  { eapply Forall_nth_error; eauto. }
-
-  eexists. split. eapply B.SArg; eauto.
+- eexists. split. eapply B.SArg; eauto.
   on _, eapply_; eauto.
 
-- fwd eapply Forall2_nth_error_ex with (xs := al) (ys := bl); eauto.
-    break_exists. break_and.
-  assert (A.value v).  { eapply Forall_nth_error; eauto. }
-
-  eexists. split. eapply B.SUpVar; eauto.
+- eexists. split. eapply B.SUpVar; eauto.
   on _, eapply_; eauto.
 
 - on _, invc_using Forall2_3part_inv.
@@ -516,7 +516,9 @@ inv Astep; invc II; try on (I_expr _ _), invc.
   eexists. split. eapply B.SCloseStep; eauto.
   i_ctor. i_ctor. i_ctor. eauto using Forall2_app.
 
-- eexists. split. eapply B.SCloseDone; eauto.
+- fwd eapply I_expr_map_value; eauto. subst.
+
+  eexists. split. eapply B.SCloseDone; eauto.
   on _, eapply_; eauto.
   all: constructor; eauto.
 
@@ -525,7 +527,9 @@ inv Astep; invc II; try on (I_expr _ _), invc.
   eexists. split. eapply B.SConstrStep; eauto.
   i_ctor. i_ctor. i_ctor. eauto using Forall2_app.
 
-- eexists. split. eapply B.SConstrDone; eauto.
+- fwd eapply I_expr_map_value; eauto. subst.
+
+  eexists. split. eapply B.SConstrDone; eauto.
   on _, eapply_; eauto.
   all: constructor; eauto.
 
@@ -537,7 +541,8 @@ inv Astep; invc II; try on (I_expr _ _), invc.
 
 - fwd eapply Forall2_nth_error_ex with (xs := AE) (ys := BE) as HH; eauto.
     destruct HH as (bbody & ? & ?).
-  on (I_expr (A.Close _ _) _), invc.
+  on (I_expr _ bf), invc.
+  on (I_expr _ ba), invc.
 
   eexists. split. eapply B.SMakeCall; eauto.
   i_ctor.
@@ -573,55 +578,6 @@ Lemma compile_cu_metas : forall A Ameta B Bmeta Belims Belim_names,
 simpl. intros. repeat break_match. subst. inject_pair. auto.
 Qed.
 
-Lemma expr_value_I_expr : forall be v,
-    B.expr_value be v ->
-    exists ae,
-        A.expr_value ae v /\
-        I_expr ae be.
-make_first v. intros v. revert v.
-mut_induction v using value_rect_mut' with
-    (Pl := fun vs => forall bes,
-        Forall2 B.expr_value bes vs ->
-        exists aes,
-            Forall2 A.expr_value aes vs /\
-            Forall2 I_expr aes bes);
-[intros0 Hev; invc Hev.. | ].
-
-- destruct (IHv ?? **) as (? & ? & ?).
-  eauto using A.EvConstr, IConstr.
-
-- destruct (IHv ?? **) as (? & ? & ?).
-  eauto using A.EvClose, IClose.
-
-- eauto.
-
-- destruct (IHv ?? **) as (? & ? & ?).
-  destruct (IHv0 ?? **) as (? & ? & ?).
-  eauto.
-
-- finish_mut_induction expr_value_I_expr using list.
-Qed exporting.
-
-Lemma expr_value_I_expr' : forall ae be v,
-    A.expr_value ae v ->
-    I_expr ae be ->
-    B.expr_value be v.
-induction ae using A.expr_rect_mut with
-    (Pl := fun ae => forall be v,
-        Forall2 A.expr_value ae v ->
-        Forall2 I_expr ae be ->
-        Forall2 B.expr_value be v)
-    (Pp := fun ap => forall be v,
-        A.expr_value (fst ap) v ->
-        I_expr (fst ap) be ->
-        B.expr_value be v)
-    (Plp := fun aps => forall bes vs,
-        Forall2 (fun ap v => A.expr_value (fst ap) v) aps vs ->
-        Forall2 (fun ap be => I_expr (fst ap) be) aps bes ->
-        Forall2 (fun be v => B.expr_value be v) bes vs);
-intros0 Hae II; try solve [invc Hae; invc II; econstructor; eauto | simpl in *; eauto].
-Qed.
-
 
 
 
@@ -647,18 +603,12 @@ Section Preservation.
 
       fwd eapply Forall2_nth_error_ex' with (ys := B) as HH; eauto.
         destruct HH as (abody & ? & ?).
-      fwd eapply expr_value_I_expr as HH; eauto. destruct HH as (? & ? & ?).
-      fwd eapply expr_value_I_expr_list as HH; eauto. destruct HH as (? & ? & ?).
 
       eexists. split.
-      + econstructor. 4: eauto.
-        all: eauto using A.expr_value_value, A.expr_value_value_list.
-        i_ctor.
+      + i_ctor.  i_ctor.
       + i_ctor.
 
     - simpl. intros0 II Afinal. invc Afinal. invc II.
-      fwd eapply expr_value_I_expr'; eauto.
-      (*fwd eapply I_expr_expr_value; eauto.*)
 
       eexists. split. i_ctor. auto.
 
