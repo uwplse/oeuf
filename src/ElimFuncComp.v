@@ -20,15 +20,16 @@ Definition compile base :=
             | e :: es => go e :: go_list es
             end in
         match e with
+        | T.Value v => E.Value v
         | T.Arg => E.Arg
         | T.UpVar n => E.UpVar n
         | T.Call f a => E.Call (go f) (go a)
-        | T.Constr tag args => E.Constr tag (go_list args)
+        | T.MkConstr tag args => E.MkConstr tag (go_list args)
         | T.ElimN n cases target =>
                 let expect := T.num_locals_list_pair cases in
-                let func := E.CloseDyn (base + n) 0 expect in
+                let func := E.MkCloseDyn (base + n) 0 expect in
                 E.Call func (go target)
-        | T.Close fname free => E.Close fname (go_list free)
+        | T.MkClose fname free => E.MkClose fname (go_list free)
         end in go.
 
 Definition compile_list base :=
@@ -60,7 +61,7 @@ Definition compile_list_pair base :=
 Definition compile_eliminator base n cases :=
     let expect := T.num_locals_list_pair cases in
     let cases' := compile_list_pair base cases in
-    let rec := E.CloseDyn (base + n) 1 expect in
+    let rec := E.MkCloseDyn (base + n) 1 expect in
     E.ElimBody rec cases'.
 
 Fixpoint compile_eliminator_list' base n elims :=
@@ -96,15 +97,16 @@ Definition compile_cu (cu :
 Definition env_ok TE EE ELIMS :=
     EE = compile_env ELIMS TE.
 
-Inductive I_expr (TE : T.env) (EE : E.env) (el : list E.expr) : T.expr -> E.expr -> Prop :=
+Inductive I_expr (TE : T.env) (EE : E.env) (el : list value) : T.expr -> E.expr -> Prop :=
+| IValue : forall v, I_expr TE EE el (T.Value v) (E.Value v)
 | IArg : I_expr TE EE el T.Arg E.Arg
 | IUpVar : forall n, I_expr TE EE el (T.UpVar n) (E.UpVar n)
 | IClose : forall fname tfree efree,
         Forall2 (I_expr TE EE el) tfree efree ->
-        I_expr TE EE el (T.Close fname tfree) (E.Close fname efree)
+        I_expr TE EE el (T.MkClose fname tfree) (E.MkClose fname efree)
 | IConstr : forall tag targs eargs,
         Forall2 (I_expr TE EE el) targs eargs ->
-        I_expr TE EE el (T.Constr tag targs) (E.Constr tag eargs)
+        I_expr TE EE el (T.MkConstr tag targs) (E.MkConstr tag eargs)
 | ICall : forall tf ta ef ea,
         I_expr TE EE el tf ef ->
         I_expr TE EE el ta ea ->
@@ -113,28 +115,23 @@ Inductive I_expr (TE : T.env) (EE : E.env) (el : list E.expr) : T.expr -> E.expr
         fname = length TE + tnum ->
         nth_error EE fname = Some (E.ElimBody erec ecases) ->
         let expect := T.num_locals_list_pair tcases in
-        erec = E.CloseDyn fname 1 expect ->
+        erec = E.MkCloseDyn fname 1 expect ->
         ecases = compile_list_pair (length TE) tcases ->
-        (func = E.CloseDyn fname 0 expect \/ func = E.Close fname el) ->
+        (func = E.MkCloseDyn fname 0 expect \/ func = E.Value (Close fname el)) ->
         I_expr TE EE el ttarget etarget ->
         I_expr TE EE el (T.ElimN tnum tcases ttarget)
                         (E.Call func etarget).
+Hint Resolve IValue.
 
 Inductive I (TE : T.env) (EE : E.env) : T.state -> E.state -> Prop :=
 | IRun : forall te tl tk ee el ek,
         I_expr TE EE el te ee ->
-        Forall T.value tl ->
-        Forall E.value el ->
-        Forall2 (I_expr TE EE []) tl el ->
-        (forall tv ev,
-            T.value tv ->
-            E.value ev ->
-            I_expr TE EE [] tv ev ->
-            I TE EE (tk tv) (ek ev)) ->
+        tl = el ->
+        (forall v,
+            I TE EE (tk v) (ek v)) ->
         I TE EE (T.Run te tl tk) (E.Run ee el ek)
-| IStop : forall te ee,
-        I_expr TE EE [] te ee ->
-        I TE EE (T.Stop te) (E.Stop ee).
+| IStop : forall v,
+        I TE EE (T.Stop v) (E.Stop v).
 
 
 
@@ -312,6 +309,7 @@ induction t using T.expr_rect_mut with
 intros0 Helims Hcomp; simpl in Hcomp; refold_compile (length TE);
 subst.
 
+- (* Value *) constructor.
 - (* Arg *) constructor.
 - (* UpVar *) constructor.
 
@@ -357,34 +355,29 @@ Qed.
 
 Lemma I_expr_value : forall TE EE le t e,
     I_expr TE EE le t e ->
-    T.value t ->
-    E.value e.
-induction t using T.expr_ind''; intros0 II Tval; invc II; invc Tval.
-- constructor. list_magic_on (args, (eargs, tt)).
-- constructor. list_magic_on (free, (efree, tt)).
+    T.is_value t ->
+    E.is_value e.
+intros0 II Tval. invc Tval. invc II. constructor.
 Qed.
 
 Lemma I_expr_value' : forall TE EE le t e,
     I_expr TE EE le t e ->
-    E.value e ->
-    T.value t.
-make_first e.
-induction e using E.expr_ind''; intros0 II Eval; invc II; invc Eval.
-- constructor. list_magic_on (args, (targs, tt)).
-- constructor. list_magic_on (free, (tfree, tt)).
+    E.is_value e ->
+    T.is_value t.
+intros0 II Eval. invc Eval. invc II. constructor.
 Qed.
 
 Lemma I_expr_not_value : forall TE EE le t e,
     I_expr TE EE le t e ->
-    ~T.value t ->
-    ~E.value e.
+    ~T.is_value t ->
+    ~E.is_value e.
 intros. intro. fwd eapply I_expr_value'; eauto.
 Qed.
 
 Lemma I_expr_not_value' : forall TE EE le t e,
     I_expr TE EE le t e ->
-    ~E.value e ->
-    ~T.value t.
+    ~E.is_value e ->
+    ~T.is_value t.
 intros. intro. fwd eapply I_expr_value; eauto.
 Qed.
 
@@ -467,7 +460,7 @@ rewrite map_app. rewrite maximum_app. reflexivity.
 Qed.
 
 Lemma E_num_locals_list_values : forall es,
-    Forall E.value es ->
+    Forall E.is_value es ->
     E.num_locals_list es = 0.
 induction es; intros0 Hval.
 - simpl. reflexivity.
@@ -496,41 +489,36 @@ Lemma unroll_elim_sim : forall TE EE ELIMS,
     forall tcase ecase targs eargs info tmk_rec erec te' ee' el,
     env_ok TE EE ELIMS ->
     I_expr TE EE el tcase ecase ->
-    Forall2 (I_expr TE EE el) targs eargs ->
+    targs = eargs ->
     (forall te ee, I_expr TE EE el te ee -> I_expr TE EE el (tmk_rec te) (E.Call erec ee)) ->
     T.unroll_elim tcase targs info tmk_rec = Some te' ->
     E.unroll_elim erec ecase eargs info = Some ee' ->
     I_expr TE EE el te' ee'.
 first_induction targs; intros0 Henv Hcase Hargs Hrec Tunroll Eunroll;
-invc Hargs; destruct info; try discriminate; simpl in *.
+subst eargs; destruct info; try discriminate; simpl in *.
   { inject_some. assumption. }
 
-rename a into targ. rename y into earg. rename l' into eargs.
-eapply IHtargs with (5 := Tunroll) (6 := Eunroll); try eassumption.
+rename a into targ.
+eapply IHtargs with (5 := Tunroll) (6 := Eunroll); try eassumption; try reflexivity.
 destruct b.
 - constructor.
-  + constructor; eassumption.
-  + eapply Hrec. eassumption.
-- constructor; eassumption.
+  + constructor; eauto.
+  + eapply Hrec. eauto.
+- constructor; eauto.
 Qed.
 
 Lemma T_value_I_expr_locals : forall TE EE el el' t e,
-    T.value t ->
+    T.is_value t ->
     I_expr TE EE el t e ->
     I_expr TE EE el' t e.
-induction t using T.expr_ind''; intros0 Tval II;
-invc II; invc Tval.
-
-- constructor. list_magic_on (args, (eargs, tt)).
-- constructor. list_magic_on (free, (efree, tt)).
+intros0 Tval II. invc Tval. invc II. constructor.
 Qed.
 
 Lemma E_call_close_dyn_either : forall E fname expect l k func arg,
-    Forall E.value l ->
-    (func = E.CloseDyn fname 0 expect \/ func = E.Close fname l) ->
+    (func = E.MkCloseDyn fname 0 expect \/ func = E.Value (Close fname l)) ->
     E.sstar E (E.Run (E.Call func arg) l k)
-              (E.Run (E.Call (E.Close fname l) arg) l k).
-intros0 Hlval Hfunc. destruct Hfunc; subst func.
+              (E.Run (E.Call (E.Value (Close fname l)) arg) l k).
+intros0 Hfunc. destruct Hfunc; subst func.
 
 - E_start HS.
   E_step HS.
@@ -545,13 +533,11 @@ Qed.
 
 Inductive T_state_ok ELIMS : T.state -> Prop :=
 | SokRun : forall e l k,
-        Forall T.value l ->
         T.elims_match ELIMS e ->
-        (forall v, T.value v -> T_state_ok ELIMS (k v)) ->
+        (forall v, T_state_ok ELIMS (k v)) ->
         T_state_ok ELIMS (T.Run e l k)
-| SokStop : forall e,
-        T.elims_match ELIMS e ->
-        T_state_ok ELIMS (T.Stop e)
+| SokStop : forall v,
+        T_state_ok ELIMS (T.Stop v)
 .
 
 Lemma T_state_ok_sim : forall TE ELIMS t t',
@@ -561,8 +547,8 @@ Lemma T_state_ok_sim : forall TE ELIMS t t',
     T_state_ok ELIMS t'.
 intros0 Henv Hok Hstep; invc Hok; invc Hstep.
 
-- on _, eapply_. eapply Forall_nth_error; eauto.
-- on _, eapply_. eapply Forall_nth_error; eauto.
+- on _, eapply_.
+- on _, eapply_.
 
 - (* CloseStep *)
   econstructor; eauto.
@@ -577,9 +563,9 @@ intros0 Henv Hok Hstep; invc Hok; invc Hstep.
     rewrite T.elims_match_list_Forall in *.
     on _, invc_using Forall_3part_inv.
     eapply Forall_app; eauto. constructor; eauto.
-    eapply T.value_elims_match; eauto.
+    eapply T.value_elims_match; eauto. constructor.
 
-- (* CloseDone *) on _, eapply_. constructor. auto.
+- (* CloseDone *) on _, eapply_.
 
 - (* ConstrStep *)
   econstructor; eauto.
@@ -594,9 +580,9 @@ intros0 Henv Hok Hstep; invc Hok; invc Hstep.
     rewrite T.elims_match_list_Forall in *.
     on _, invc_using Forall_3part_inv.
     eapply Forall_app; eauto. constructor; eauto.
-    eapply T.value_elims_match; eauto.
+    eapply T.value_elims_match; eauto. constructor.
 
-- (* ConstrDone *) on _, eapply_. constructor. auto.
+- (* ConstrDone *) on _, eapply_.
 
 - (* CallL *)
   constructor; eauto.
@@ -628,10 +614,19 @@ intros0 Henv Hok Hstep; invc Hok; invc Hstep.
   simpl in *. T.refold_elims_match ELIMS. do 2 break_and.
   cut (T.elims_match_pair ELIMS (case, rec)).
   + simpl. intro. eapply T.unroll_elim_elims_match; eauto.
-    * rewrite <- T.elims_match_list_Forall. auto.
-    * intros. simpl. T.refold_elims_match ELIMS. firstorder.
+    intros. simpl. T.refold_elims_match ELIMS. firstorder.
   + rewrite T.elims_match_list_pair_Forall in *.
     eapply Forall_nth_error; eauto.
+Qed.
+
+Lemma I_expr_map_value : forall TE EE el vs bes,
+    Forall2 (I_expr TE EE el) (map T.Value vs) bes ->
+    bes = map E.Value vs.
+induction vs; intros0 II; invc II.
+- reflexivity.
+- simpl. f_equal.
+  + on >I_expr, invc. reflexivity.
+  + apply IHvs. eauto.
 Qed.
 
 Theorem I_sim : forall TE EE ELIMS t t' e,
@@ -652,29 +647,18 @@ simpl in *; refold_compile (length TE).
 
 - (* SArg *)
   break_match; try discriminate. inject_some.
-  on (Forall2 _ _ _), invc.
 
   eexists. split. eapply E.SPlusOne, E.SArg.
   + reflexivity.
-  + on (Forall T.value _), invc.
-    on (Forall E.value _), invc.
-    eauto.
+  + eauto.
 
 - (* SUpVar *)
   break_match; try discriminate. 
-  on (Forall2 _ _ _), invc.
-  fwd eapply length_nth_error_Some.
-    { eapply Forall2_length. eassumption. }
-    { eassumption. }
   break_exists.
 
   eexists. split. eapply E.SPlusOne, E.SUpVar.
   + simpl. eassumption.
-  + fwd eapply Forall2_nth_error; try eassumption.
-    on (Forall T.value _), invc.
-    on (Forall E.value _), invc.
-    fwd eapply Forall_nth_error with (xs := l); eauto.
-    fwd eapply Forall_nth_error with (xs := l'); eauto.
+  + auto.
 
 - (* SCallL *)
   eexists. split. eapply E.SPlusOne, E.SCallL.
@@ -693,17 +677,14 @@ simpl in *; refold_compile (length TE).
 
 - fwd eapply env_ok_nth_error; eauto. break_exists. break_and.
 
-  on (I_expr _ _ _ (T.Close _ _) _), invc.
+  on (I_expr _ _ _ (T.Value (Close _ _)) _), invc.
+  on (I_expr _ _ _ (T.Value _) _), invc.
   eexists. split. eapply E.SPlusOne, E.SMakeCall.
-  + list_magic_on (free, (efree, tt)). eauto using I_expr_value.
-  + eauto using I_expr_value.
   + eassumption.
   + constructor; eauto.
       { eapply compile_I_expr; eauto.
         rewrite T.elims_match_list_Forall in *.
         eapply Forall_nth_error; eassumption. }
-    all: constructor; try list_magic_on (free, (efree, tt)).
-    all: eauto using I_expr_value, T_value_I_expr_locals.
 
 - destruct (Forall2_app_inv_l _ _ **) as (? & ? & ? & ? & ?).
   on (Forall2 _ (_ :: _) _), invc.
@@ -716,13 +697,9 @@ simpl in *; refold_compile (length TE).
     intros. constructor; eauto.
     constructor. eapply Forall2_app; eauto. constructor; eauto using T_value_I_expr_locals.
 
-- eexists. split. eapply E.SPlusOne, E.SConstrDone.
-  + list_magic_on (args, (eargs, tt)). eauto using I_expr_value.
-  + assert (Forall E.value eargs).
-      { list_magic_on (args, (eargs, tt)). eauto using I_expr_value. }
-    assert (Forall2 (I_expr TE EE []) args eargs).
-      { list_magic_on (args, (eargs, tt)). eauto using T_value_I_expr_locals. }
-    eauto using IConstr, T.VConstr, E.VConstr.
+- fwd eapply I_expr_map_value; eauto. subst.
+  eexists. split. eapply E.SPlusOne, E.SConstrDone.
+  eauto.
 
 - (* SElimNStep *)
   E_start HS.
@@ -732,12 +709,12 @@ simpl in *; refold_compile (length TE).
 
   E_step HS.
     { eapply E.SCallR.
-      - constructor. eauto using Forall_firstn.
+      - constructor.
       - eapply I_expr_not_value; eauto. }
 
   eexists. split. eassumption.
   constructor; eauto.
-  intros0 Tval Eval IE'. constructor; eauto.
+  intros. constructor; eauto.
   econstructor; eauto using T_value_I_expr_locals.
 
 - (* SEliminate *)
@@ -752,8 +729,7 @@ simpl in *; refold_compile (length TE).
   (* make the call *)
   on (I_expr _ _ _ _ etarget), invc.
   E_step HS.
-    { eapply E.SMakeCall; eauto.
-      constructor. list_magic_on (args, (eargs, tt)). eauto using I_expr_value. }
+    { eapply E.SMakeCall; eauto. }
 
   (* now we are at the E.ElimBody *)
 
@@ -777,26 +753,30 @@ simpl in *; refold_compile (length TE).
   }
   assert (length args = length rec) by (eauto using T_unroll_elim_length).
   assert (erec = rec) by (simpl in *; congruence).
-  assert (length eargs = length args) by (symmetry; eauto using Forall2_length).
-  assert (length eargs = length erec) by congruence.
+  (*assert (length eargs = length args) by (symmetry; eauto using Forall2_length).*)
+  (*assert (length eargs = length erec) by congruence.*)
   fwd eapply E_unroll_elim_ok; eauto. destruct ** as (ee' & ?).
   E_step HS.
     { eapply E.SEliminate.
-      - constructor. eauto using Forall_firstn.
-      - list_magic_on (args, (eargs, tt)). eauto using I_expr_value.
+      - constructor.
       - eassumption.
-      - eassumption.
+      - subst rec. eassumption.
     }
 
   eexists. split. eapply HS. unfold S5.
   constructor; eauto.
-  eapply unroll_elim_sim; eauto.
-  + eapply compile_I_expr; eauto.
-    invc Helims'.
-    simpl in *. T.refold_elims_match ELIMS. do 2 break_and.
+  eapply unroll_elim_sim.
+  3: reflexivity.
+  4: eassumption.
+  4: eassumption.
+  1: eauto.
+  + cbn [compile_pair] in *. inject_pair.
+    eapply compile_I_expr; eauto.
+    invc Helims'.  on (T.elims_match _ _), fun H => simpl in H.
+      T.refold_elims_match ELIMS.  break_and.
     rewrite T.elims_match_list_pair_Forall in *.
-    cut (T.elims_match_pair ELIMS (case, rec)). { intro. eauto. }
-    eapply Forall_nth_error; eauto.
+    assert (T.elims_match_pair ELIMS (case, rec)).  { eapply Forall_nth_error; eauto. }
+    on >T.elims_match_pair, fun H => simpl in H. auto.
   + simpl. intros0 IE'. econstructor.
     * reflexivity.
     * eassumption.
@@ -804,7 +784,6 @@ simpl in *; refold_compile (length TE).
     * assumption.
     * right. reflexivity.
     * assumption.
-  + simpl in *. congruence.
 
 - destruct (Forall2_app_inv_l _ _ **) as (? & ? & ? & ? & ?).
   on (Forall2 _ (_ :: _) _), invc.
@@ -817,13 +796,10 @@ simpl in *; refold_compile (length TE).
     intros. constructor; eauto.
     constructor. eapply Forall2_app; eauto. constructor; eauto using T_value_I_expr_locals.
 
-- eexists. split. eapply E.SPlusOne, E.SCloseDone.
-  + list_magic_on (free, (efree, tt)). eauto using I_expr_value.
-  + assert (Forall E.value efree).
-      { list_magic_on (free, (efree, tt)). eauto using I_expr_value. }
-    assert (Forall2 (I_expr TE EE []) free efree).
-      { list_magic_on (free, (efree, tt)). eauto using T_value_I_expr_locals. }
-    eauto using IClose, T.VClose, E.VClose.
+  - fwd eapply I_expr_map_value; eauto. subst.
+
+  eexists. split. eapply E.SPlusOne, E.SCloseDone.
+  eauto.
 
 Qed.
 
@@ -920,56 +896,6 @@ destruct Hpf as (? & ? & ?).
 eapply length_nth_error_Some; try eassumption; eauto.
 Qed.
 
-Lemma expr_value_I_expr : forall A B be v,
-    E.expr_value be v ->
-    exists ae,
-        T.expr_value ae v /\
-        I_expr A B [] ae be.
-make_first v. intros v A B. revert v.
-mut_induction v using value_rect_mut' with
-    (Pl := fun vs => forall bes,
-        Forall2 E.expr_value bes vs ->
-        exists aes,
-            Forall2 T.expr_value aes vs /\
-            Forall2 (I_expr A B []) aes bes);
-[intros0 Hev; invc Hev.. | ].
-
-- destruct (IHv ?? **) as (? & ? & ?).
-  eauto using T.EvConstr, IConstr.
-
-- destruct (IHv ?? **) as (? & ? & ?).
-  eauto using T.EvClose, IClose.
-
-- eauto.
-
-- destruct (IHv ?? **) as (? & ? & ?).
-  destruct (IHv0 ?? **) as (? & ? & ?).
-  eauto.
-
-- finish_mut_induction expr_value_I_expr using list.
-Qed exporting.
-
-Lemma expr_value_I_expr' : forall A B ELIMS ae be v,
-    T.expr_value ae v ->
-    I_expr A B ELIMS ae be ->
-    E.expr_value be v.
-intros A B ELIMS.
-induction ae using T.expr_rect_mut with
-    (Pl := fun ae => forall be v,
-        Forall2 T.expr_value ae v ->
-        Forall2 (I_expr A B ELIMS) ae be ->
-        Forall2 E.expr_value be v)
-    (Pp := fun ap => forall be v,
-        T.expr_value (fst ap) v ->
-        I_expr A B ELIMS (fst ap) be ->
-        E.expr_value be v)
-    (Plp := fun aps => forall bes vs,
-        Forall2 (fun ap v => T.expr_value (fst ap) v) aps vs ->
-        Forall2 (fun ap be => I_expr A B ELIMS (fst ap) be) aps bes ->
-        Forall2 (fun be v => E.expr_value be v) bes vs);
-intros0 Hae II; try solve [invc Hae; invc II; econstructor; eauto | simpl in *; eauto].
-Qed.
-
 
 Require Import Semantics.
 
@@ -997,16 +923,13 @@ Section Preservation.
       fwd eapply env_ok_nth_error as HH; eauto.  destruct HH as (body' & ? & ?).
       assert (body' = body) by congruence. subst body'.
 
-      destruct (expr_value_I_expr A B ae ?? ** ) as (? & ? & ?).
-      fwd eapply expr_value_I_expr_list as HH; eauto.  destruct HH as (? & ? & ?).
-
       eexists. split. 1: econstructor. 1: econstructor. 4: eauto. all: eauto.
       + eapply compile_I_expr; eauto.
         eapply Forall_nth_error; eauto.
       + intros. econstructor; eauto.
       + econstructor; eauto.
         * eapply Forall_nth_error; eauto.
-        * intros. econstructor. eauto using T.value_elims_match.
+        * intros. econstructor.
       + econstructor; eauto.
         * eapply public_value_Ameta; eauto. econstructor; eauto.
         * eapply public_value_Ameta; eauto.
@@ -1015,7 +938,6 @@ Section Preservation.
 
       eexists. split. 2: reflexivity.
       econstructor; eauto.
-      + eapply expr_value_I_expr'; eauto.
       + unfold fst, snd in *. eauto using public_value_Bmeta.
 
     - intros0 Astep. intros0 II.
