@@ -76,3 +76,27 @@ Inductive public_value (M : list metadata) : value -> Prop :=
         Forall (public_value M) free ->
         public_value M (Close fname free).
 
+
+Definition value_eq_dec (x y : value) : { x = y } + { x <> y }.
+revert y.
+induction x using value_rect_mut with
+    (Pl := fun xs => forall ys, { xs = ys } + { xs <> ys }).
+
+- destruct y; try solve [right; inversion 1].
+  destruct (eq_nat_dec tag tag0); [ | right; congruence ]. subst tag0.
+  destruct (IHx args0); [ | right; congruence ]. subst args0.
+  left. reflexivity.
+
+- destruct y; try solve [right; inversion 1].
+  destruct (eq_nat_dec fname f); [ | right; congruence ]. subst f.
+  destruct (IHx free0); [ | right; congruence ]. subst free0.
+  left. reflexivity.
+
+- destruct ys; try solve [right; inversion 1].
+  left. reflexivity.
+
+- destruct ys; try solve [right; inversion 1].
+  destruct (IHx v); [ | right; congruence ]. subst v.
+  destruct (IHx0 ys); [ | right; congruence ]. subst ys.
+  left. reflexivity.
+Defined.

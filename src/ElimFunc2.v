@@ -5,7 +5,7 @@ Require Import Utopia.
 Require Import Monads.
 Require Import ListLemmas.
 Require Import Psatz.
-Require HigherValue.
+Require Import HigherValue.
 
 
 Definition function_name := nat.
@@ -16,30 +16,30 @@ Definition function_name := nat.
 Definition rec_info := list bool.
 
 Inductive expr :=
+| Value (v : value)
 | Arg : expr
 | UpVar : nat -> expr
 | Call : expr -> expr -> expr
-| Constr (tag : nat) (args : list expr)
+| MkConstr (tag : nat) (args : list expr)
 | ElimBody (rec : expr) (cases : list (expr * rec_info))
-| Close (f : function_name) (free : list expr)
+| MkClose (f : function_name) (free : list expr)
 .
 
 Definition env := list expr.
 
-Inductive value : expr -> Prop :=
-| VConstr : forall tag args, Forall value args -> value (Constr tag args)
-| VClose : forall f free, Forall value free -> value (Close f free).
+Inductive is_value : expr -> Prop :=
+| IsValue : forall v, is_value (Value v).
 
 
 Fixpoint unroll_elim (rec : expr)
                      (case : expr)
-                     (args : list expr)
+                     (args : list value)
                      (info : rec_info) : option expr :=
     match args, info with
     | [], [] => Some case
     | arg :: args, r :: info =>
-            let case := Call case arg in
-            let case := if r then Call case (Call rec arg) else case in
+            let case := Call case (Value arg) in
+            let case := if r then Call case (Call rec (Value arg)) else case in
             unroll_elim rec case args info
     | _, _ => None
     end.
@@ -54,12 +54,13 @@ Definition expr_rect_mut
         (Pl : list expr -> Type)
         (Pp : expr * rec_info -> Type)
         (Plp : list (expr * rec_info) -> Type)
+    (HValue :   forall v, P (Value v))
     (HArg :     P Arg)
     (HUpVar :   forall n, P (UpVar n))
     (HCall :    forall f a, P f -> P a -> P (Call f a))
-    (HConstr :  forall tag args, Pl args -> P (Constr tag args))
+    (HConstr :  forall tag args, Pl args -> P (MkConstr tag args))
     (HElimBody : forall rec cases, P rec -> Plp cases -> P (ElimBody rec cases))
-    (HClose :   forall f free, Pl free -> P (Close f free))
+    (HClose :   forall f free, Pl free -> P (MkClose f free))
     (Hnil :     Pl [])
     (Hcons :    forall e es, P e -> Pl es -> Pl (e :: es))
     (Hpair :    forall e r, P e -> Pp (e, r))
@@ -81,12 +82,13 @@ Definition expr_rect_mut
             | p :: ps => Hcons_p p ps (go_pair p) (go_pair_list ps)
             end in
         match e as e_ return P e_ with
+        | Value v => HValue v
         | Arg => HArg
         | UpVar n => HUpVar n
         | Call f a => HCall f a (go f) (go a)
-        | Constr tag args => HConstr tag args (go_list args)
+        | MkConstr tag args => HConstr tag args (go_list args)
         | ElimBody rec cases => HElimBody rec cases (go rec) (go_pair_list cases)
-        | Close f free => HClose f free (go_list free)
+        | MkClose f free => HClose f free (go_list free)
         end in go e.
 
 Definition expr_rect_mut'
@@ -94,12 +96,13 @@ Definition expr_rect_mut'
         (Pl : list expr -> Type)
         (Pp : expr * rec_info -> Type)
         (Plp : list (expr * rec_info) -> Type)
+    (HValue :   forall v, P (Value v))
     (HArg :     P Arg)
     (HUpVar :   forall n, P (UpVar n))
     (HCall :    forall f a, P f -> P a -> P (Call f a))
-    (HConstr :  forall tag args, Pl args -> P (Constr tag args))
+    (HConstr :  forall tag args, Pl args -> P (MkConstr tag args))
     (HElimBody : forall rec cases, P rec -> Plp cases -> P (ElimBody rec cases))
-    (HClose :   forall f free, Pl free -> P (Close f free))
+    (HClose :   forall f free, Pl free -> P (MkClose f free))
     (Hnil :     Pl [])
     (Hcons :    forall e es, P e -> Pl es -> Pl (e :: es))
     (Hpair :    forall e r, P e -> Pp (e, r))
@@ -110,7 +113,7 @@ Definition expr_rect_mut'
     (forall p, Pp p) *
     (forall ps, Plp ps) :=
     let go := expr_rect_mut P Pl Pp Plp
-        HArg HUpVar HCall HConstr HElimBody HClose
+        HValue HArg HUpVar HCall HConstr HElimBody HClose
         Hnil Hcons Hpair Hnil_p Hcons_p in
     let fix go_list es :=
         match es as es_ return Pl es_ with
@@ -129,32 +132,34 @@ Definition expr_rect_mut'
 
 (* Useful wrapper for `expr_rect_mut with (Pl := Forall P)` *)
 Definition expr_ind' (P : expr -> Prop) (Pp : (expr * rec_info) -> Prop)
+    (HValue :   forall v, P (Value v))
     (HArg :     P Arg)
     (HUpVar :   forall n, P (UpVar n))
     (HCall :    forall f a, P f -> P a -> P (Call f a))
-    (HConstr :  forall c args, Forall P args -> P (Constr c args))
+    (HConstr :  forall c args, Forall P args -> P (MkConstr c args))
     (HElimBody : forall rec cases,
         P rec -> Forall Pp cases -> P (ElimBody rec cases))
-    (HClose :   forall f free, Forall P free -> P (Close f free))
+    (HClose :   forall f free, Forall P free -> P (MkClose f free))
     (Hpair :    forall e r, P e -> Pp (e, r))
     (e : expr) : P e :=
     ltac:(refine (@expr_rect_mut P (Forall P) Pp (Forall Pp)
-        HArg HUpVar HCall HConstr HElimBody HClose _ _ Hpair _ _ e); eauto).
+        HValue HArg HUpVar HCall HConstr HElimBody HClose _ _ Hpair _ _ e); eauto).
 
 (* Useful wrapper for `expr_rect_mut with (Pl := Forall P)` *)
 Definition expr_ind'' (P : expr -> Prop)
+    (HValue :   forall v, P (Value v))
     (HArg :     P Arg)
     (HUpVar :   forall n, P (UpVar n))
     (HCall :    forall f a, P f -> P a -> P (Call f a))
-    (HConstr :  forall c args, Forall P args -> P (Constr c args))
+    (HConstr :  forall c args, Forall P args -> P (MkConstr c args))
     (HElimBody : forall rec cases,
         P rec ->
         Forall (fun c => P (fst c)) cases ->
         P (ElimBody rec cases))
-    (HClose :   forall f free, Forall P free -> P (Close f free))
+    (HClose :   forall f free, Forall P free -> P (MkClose f free))
     (e : expr) : P e :=
     ltac:(refine (@expr_rect_mut P (Forall P) (fun c => P (fst c)) (Forall (fun c => P (fst c)))
-        HArg HUpVar HCall HConstr HElimBody HClose _ _ _ _ _ e); eauto).
+        HValue HArg HUpVar HCall HConstr HElimBody HClose _ _ _ _ _ e); eauto).
 
 
 
@@ -175,13 +180,14 @@ Definition num_locals :=
             | p :: ps => max (go_pair p) (go_list_pair ps)
             end in
         match e with
+        | Value v => 0
         | Arg => 1
         | UpVar i => S (S i)
         | Call f a => max (go f) (go a)
-        | Constr _ args => go_list args
+        | MkConstr _ args => go_list args
         (* Recall: ElimBody implicitly accesses Arg, and removes it before running cases *)
         | ElimBody rec cases => max (max (go rec) (S (go_list_pair cases))) 1
-        | Close _ free => go_list free
+        | MkClose _ free => go_list free
         end in go.
 
 (* Nested fixpoint aliases *)
@@ -223,23 +229,13 @@ Lemma num_locals_list_pair_is_maximum : forall es,
 induction es; simpl in *; try destruct a; eauto.
 Qed.
 
-Lemma value_num_locals : forall e, value e -> num_locals e = 0.
-induction e using expr_ind''; intros0 Hval; invc Hval;
-simpl; refold_num_locals;
-rewrite num_locals_list_is_maximum.
-
-- cut (maximum (map num_locals args) <= 0). { intro. lia. }
-  rewrite maximum_le_Forall, <- Forall_map. list_magic_on (args, tt).
-  firstorder lia.
-
-- cut (maximum (map num_locals free) <= 0). { intro. lia. }
-  rewrite maximum_le_Forall, <- Forall_map. list_magic_on (free, tt).
-  firstorder lia.
+Lemma value_num_locals : forall e, is_value e -> num_locals e = 0.
+inversion 1. reflexivity.
 Qed.
 
 Lemma unroll_elim_num_locals : forall rec case args info e',
     unroll_elim rec case args info = Some e' ->
-    num_locals e' <= maximum [num_locals rec; num_locals case; num_locals_list args].
+    num_locals e' <= max (num_locals rec) (num_locals case).
 first_induction args; destruct info; intros0 Hunroll; try discriminate; simpl in *; inject_some.
 - lia.
 - destruct b; specialize (IHargs ?? ?? ?? ?? **); simpl in *; refold_num_locals.
@@ -252,8 +248,8 @@ Qed.
 (* Continuation-based step relation *)
 
 Inductive state :=
-| Run (e : expr) (l : list expr) (k : expr -> state)
-| Stop (e : expr).
+| Run (e : expr) (l : list value) (k : value -> state)
+| Stop (e : value).
 
 Inductive sstep (E : env) : state -> state -> Prop :=
 | SArg : forall l k v,
@@ -264,46 +260,43 @@ Inductive sstep (E : env) : state -> state -> Prop :=
         sstep E (Run (UpVar n) l k) (k v)
 
 | SCloseStep : forall fname vs e es l k,
-        Forall value vs ->
-        ~ value e ->
-        sstep E (Run (Close fname (vs ++ [e] ++ es)) l k)
-                (Run e l (fun v => Run (Close fname (vs ++ [v] ++ es)) l k))
+        Forall is_value vs ->
+        ~ is_value e ->
+        sstep E (Run (MkClose fname (vs ++ [e] ++ es)) l k)
+                (Run e l (fun v => Run (MkClose fname (vs ++ [Value v] ++ es)) l k))
 | SCloseDone : forall fname vs l k,
-        Forall value vs ->
-        sstep E (Run (Close fname vs) l k) (k (Close fname vs))
+        let es := map Value vs in
+        sstep E (Run (MkClose fname es) l k) (k (Close fname vs))
 
 | SConstrStep : forall fname vs e es l k,
-        Forall value vs ->
-        ~ value e ->
-        sstep E (Run (Constr fname (vs ++ [e] ++ es)) l k)
-                (Run e l (fun v => Run (Constr fname (vs ++ [v] ++ es)) l k))
+        Forall is_value vs ->
+        ~ is_value e ->
+        sstep E (Run (MkConstr fname (vs ++ [e] ++ es)) l k)
+                (Run e l (fun v => Run (MkConstr fname (vs ++ [Value v] ++ es)) l k))
 | SConstrDone : forall fname vs l k,
-        Forall value vs ->
-        sstep E (Run (Constr fname vs) l k) (k (Constr fname vs))
+        let es := map Value vs in
+        sstep E (Run (MkConstr fname es) l k) (k (Constr fname vs))
 
 | SCallL : forall e1 e2 l k,
-        ~ value e1 ->
+        ~ is_value e1 ->
         sstep E (Run (Call e1 e2) l k)
-                (Run e1 l (fun v => Run (Call v e2) l k))
+                (Run e1 l (fun v => Run (Call (Value v) e2) l k))
 | SCallR : forall e1 e2 l k,
-        value e1 ->
-        ~ value e2 ->
+        is_value e1 ->
+        ~ is_value e2 ->
         sstep E (Run (Call e1 e2) l k)
-                (Run e2 l (fun v => Run (Call e1 v) l k))
+                (Run e2 l (fun v => Run (Call e1 (Value v)) l k))
 | SMakeCall : forall fname free arg l k body,
-        Forall value free ->
-        value arg ->
         nth_error E fname = Some body ->
-        sstep E (Run (Call (Close fname free) arg) l k)
+        sstep E (Run (Call (Value (Close fname free)) (Value arg)) l k)
                 (Run body (arg :: free) k)
 
 | SElimStepRec : forall rec cases l k,
-        ~ value rec ->
+        ~ is_value rec ->
         sstep E (Run (ElimBody rec cases) l k)
-                (Run rec l (fun v => Run (ElimBody v cases) l k))
+                (Run rec l (fun v => Run (ElimBody (Value v) cases) l k))
 | SEliminate : forall rec cases tag args l k case info e',
-        value rec ->
-        Forall value args ->
+        is_value rec ->
         nth_error cases tag = Some (case, info) ->
         unroll_elim rec case args info = Some e' ->
         (* XXX this step *removes* the scrutinee from the local context!
@@ -331,33 +324,19 @@ Require Import Metadata.
 Definition prog_type : Type := list expr * list metadata.
 Definition valtype := HigherValue.value.
 
-Inductive expr_value : expr -> valtype -> Prop :=
-| EvConstr : forall tag args1 args2,
-        Forall2 expr_value args1 args2 ->
-        expr_value (Constr tag args1)
-                   (HigherValue.Constr tag args2)
-| EvClose : forall tag free1 free2,
-        Forall2 expr_value free1 free2 ->
-        expr_value (Close tag free1)
-                   (HigherValue.Close tag free2)
-.
-
 Inductive is_callstate (prog : prog_type) : valtype -> valtype -> state -> Prop :=
-| IsCallstate : forall fname free free_e av ae body,
+| IsCallstate : forall fname free av body,
         nth_error (fst prog) fname = Some body ->
         let fv := HigherValue.Close fname free in
-        expr_value ae av ->
-        Forall2 expr_value free_e free ->
         HigherValue.public_value (snd prog) fv ->
         HigherValue.public_value (snd prog) av ->
         is_callstate prog fv av
-            (Run body (ae :: free_e) Stop).
+            (Run body (av :: free) Stop).
 
 Inductive final_state (prog : prog_type) : state -> valtype -> Prop :=
-| FinalState : forall e v,
-        expr_value e v ->
+| FinalState : forall v,
         HigherValue.public_value (snd prog) v ->
-        final_state prog (Stop e) v.
+        final_state prog (Stop v) v.
 
 Definition initial_env (prog : prog_type) : env := fst prog.
 
@@ -388,12 +367,13 @@ Definition enough_free E :=
             | p :: ps => go_pair p /\ go_list_pair ps
             end in
         match e with
+        | Value _ => True
         | Arg => True
         | UpVar _ => True
         | Call f a => go f /\ go a
-        | Constr _ args => go_list args
+        | MkConstr _ args => go_list args
         | ElimBody rec cases => go rec /\ go_list_pair cases
-        | Close fname free => go_list free /\
+        | MkClose fname free => go_list free /\
             exists body,
                 nth_error E fname = Some body /\
                 num_locals body <= S (length free)
@@ -430,14 +410,10 @@ Ltac refold_enough_free E :=
 Inductive enough_free_state E : state -> Prop :=
 | EfsRun : forall e l k,
         enough_free E e ->
-        Forall (enough_free E) l ->
-        (forall v,
-            enough_free E v ->
-            enough_free_state E (k v)) ->
+        (forall v, enough_free_state E (k v)) ->
         enough_free_state E (Run e l k)
-| EfsStop : forall e,
-        enough_free E e ->
-        enough_free_state E (Stop e).
+| EfsStop : forall v,
+        enough_free_state E (Stop v).
 
 Lemma enough_free_list_Forall : forall E es,
     enough_free_list E es <-> Forall (enough_free E) es.
@@ -472,6 +448,7 @@ induction e using expr_rect_mut with
     (Plp := fun ps => { Forall (fun p => enough_free E (fst p)) ps } +
                       { ~ Forall (fun p => enough_free E (fst p)) ps }).
 
+- left. constructor.
 - left. constructor.
 - left. constructor.
 - destruct IHe1; [ | efd_fail E ].
@@ -517,13 +494,11 @@ Lemma enough_free_unroll_elim : forall E rec case args info e',
     unroll_elim rec case args info = Some e' ->
     enough_free E rec ->
     enough_free E case ->
-    enough_free_list E args ->
     enough_free E e'.
-first_induction args; destruct info; intros0 Hunroll EFrec EFcase EFargs; try discriminate.
+first_induction args; destruct info; intros0 Hunroll EFrec EFcase; try discriminate.
   { simpl in *. congruence. }
 
 simpl in *. refold_enough_free E.
-destruct EFargs.
 destruct b.
 - eapply IHargs; try eassumption.
   simpl. auto.
@@ -539,10 +514,10 @@ Lemma enough_free_step : forall E s s',
 intros0 Henv Hefs Hstep. invc Hstep; invc Hefs.
 
 - (* SArg *)
-  eapply H5. eapply Forall_nth_error; eauto.
+  eapply H4.
 
 - (* SUpVar *)
-  eapply H5. eapply Forall_nth_error; eauto.
+  eapply H4.
 
 - (* SCloseStep *)
   on (enough_free _ _), invc. refold_enough_free E. rewrite enough_free_list_Forall in *.
@@ -551,8 +526,9 @@ intros0 Henv Hefs Hstep. invc Hstep; invc Hefs.
   constructor; eauto.
   intros. constructor; eauto.
   simpl. refold_enough_free E. rewrite enough_free_list_Forall.
-  split; eauto using Forall_app.
-  rewrite app_length in *. simpl in *. assumption.
+  rewrite app_length in *. simpl in *.
+  split; [|assumption].
+  eapply Forall_app; eauto. eapply Forall_cons; eauto. constructor.
 
 - (* SCloseDone *) eauto.
 
@@ -563,7 +539,7 @@ intros0 Henv Hefs Hstep. invc Hstep; invc Hefs.
   constructor; eauto.
   intros. constructor; eauto.
   simpl. refold_enough_free E. rewrite enough_free_list_Forall.
-  eauto using Forall_app.
+  eapply Forall_app; eauto. eapply Forall_cons; eauto. constructor.
 
 - (* SConstrDone *) eauto.
 
@@ -571,21 +547,17 @@ intros0 Henv Hefs Hstep. invc Hstep; invc Hefs.
   on (enough_free _ _), invc.
   constructor; eauto.
   intros. constructor; eauto.
-  split; assumption.
+  split; [constructor | assumption].
 
 - (* SCallR *)
   on (enough_free _ _), invc.
   constructor; eauto.
   intros. constructor; eauto.
-  split; assumption.
+  split; [assumption | constructor].
 
 - (* SMakeCall *)
   constructor; eauto.
     { eapply Forall_nth_error with (xs := E); eassumption. }
-  on (enough_free _ _), invc.
-  on (enough_free _ (Close _ _)), invc. refold_enough_free E.
-  rewrite enough_free_list_Forall in *.
-  eauto.
 
 - (* SElimStepRec *)
   on (enough_free _ _), invc. refold_enough_free E.
@@ -595,8 +567,6 @@ intros0 Henv Hefs Hstep. invc Hstep; invc Hefs.
 
 - (* SEliminate *)
   on (enough_free _ _), invc. refold_enough_free E.
-  on (Forall _ (Constr _ _ :: _)), invc.
-  simpl in *. refold_enough_free E.
 
   fwd eapply enough_free_unroll_elim; try eassumption; eauto.
     { cut (enough_free_pair E (case, info)); [ simpl; intro; assumption | ].
@@ -632,12 +602,13 @@ Definition no_elim_body :=
             | e :: es => go e /\ go_list es
             end in
         match e with
+        | Value v => True
         | Arg => True
         | UpVar _ => True
         | Call f a => go f /\ go a
-        | Constr _ args => go_list args
+        | MkConstr _ args => go_list args
         | ElimBody _ _ => False
-        | Close _ free => go_list free
+        | MkClose _ free => go_list free
         end in go.
 
 Definition no_elim_body_list :=
@@ -783,12 +754,13 @@ Definition shift :=
             | p :: ps => go_pair p :: go_list_pair ps
             end in
         match e with
+        | Value v => Value v
         | Arg => UpVar 0
         | UpVar n => UpVar (S n)
         | Call f a => Call (go f) (go a)
-        | Constr tag args => Constr tag (go_list args)
+        | MkConstr tag args => MkConstr tag (go_list args)
         | ElimBody rec cases => ElimBody (go rec) (go_list_pair cases)
-        | Close fname free => Close fname (go_list free)
+        | MkClose fname free => MkClose fname (go_list free)
         end in go.
 
 Definition shift_list :=
@@ -820,34 +792,8 @@ Ltac refold_shift :=
 
 
 
-Definition value_dec : forall e : expr, { value e } + { ~ value e }.
-induction e using expr_rect_mut with
-    (Pl := fun es => { Forall value es } + { ~ Forall value es })
-    (Pp := fun p => { value (fst p) } + { ~ value (fst p) })
-    (Plp := fun ps => { Forall (fun p => value (fst p)) ps } +
-                      { ~ Forall (fun p => value (fst p)) ps });
-try solve [left; constructor | right; inversion 1].
-
-- (* constr *)
-  destruct IHe; [ | right; inversion 1; eauto ].
-  left. constructor. eauto.
-
-- (* close *)
-  destruct IHe; [ | right; inversion 1; eauto ].
-  left. constructor. eauto.
-
-- (* cons *)
-  destruct IHe; [ | right; inversion 1; eauto ].
-  destruct IHe0; [ | right; inversion 1; eauto ].
-  left. constructor; eauto.
-
-- (* pair *)
-  simpl. assumption.
-
-- (* cons *)
-  destruct IHe; [ | right; inversion 1; eauto ].
-  destruct IHe0; [ | right; inversion 1; eauto ].
-  left. constructor; eauto.
+Definition is_value_dec : forall e : expr, { is_value e } + { ~ is_value e }.
+destruct e; solve [left; constructor | right; inversion 1].
 Defined.
 
 
@@ -903,7 +849,7 @@ destruct (eq_nat_dec i n).
 Qed.
 
 Lemma upvar_list_not_value : forall n,
-    Forall (fun e => ~ value e) (upvar_list n).
+    Forall (fun e => ~ is_value e) (upvar_list n).
 intros. eapply nth_error_Forall. intros.
 assert (i < n).
   { rewrite <- upvar_list_length with (n := n). rewrite <- nth_error_Some.  congruence. }
@@ -914,7 +860,7 @@ Qed.
 
 
 Definition rec_shape e :=
-    exists fname n, e = Close fname (upvar_list n).
+    exists fname n, e = MkClose fname (upvar_list n).
 
 Definition elim_rec_shape :=
     let fix go e :=
@@ -932,12 +878,13 @@ Definition elim_rec_shape :=
             | p :: ps => go_pair p /\ go_list_pair ps
             end in
         match e with
+        | Value _ => True
         | Arg => True
         | UpVar _ => True
         | Call f a => go f /\ go a
-        | Constr _ args => go_list args
+        | MkConstr _ args => go_list args
         | ElimBody rec cases => rec_shape rec /\ go rec /\ go_list_pair cases
-        | Close _ free => go_list free
+        | MkClose _ free => go_list free
         end in go.
 
 Definition elim_rec_shape_list :=
@@ -985,6 +932,9 @@ induction x using expr_rect_mut with
     (Pp := fun x => forall y, { x = y } + { x <> y })
     (Plp := fun x => forall y, { x = y } + { x <> y });
 destruct y; try solve [right; inversion 1 | left; auto].
+
+- destruct (value_eq_dec v v0); [ | right; inversion 1; auto ].
+  left. congruence.
 
 - destruct (eq_nat_dec n n0); [ | right; inversion 1; auto ].
   left. congruence.
@@ -1070,59 +1020,5 @@ simpl in *; refold_elim_rec_shape; repeat break_and.
 
 Defined.
 
-
-
-Lemma expr_value_value : forall e v,
-    expr_value e v ->
-    value e.
-mut_induction e using expr_rect_mut' with
-    (Pl := fun es => forall vs,
-        Forall2 expr_value es vs ->
-        Forall value es)
-    (Pp := fun e : _ * rec_info => forall v,
-        expr_value (fst e) v ->
-        value (fst e))
-    (Plp := fun (es : list (_ * rec_info)) => forall vs,
-        Forall2 (fun e v => expr_value (fst e) v) es vs ->
-        Forall (fun e => value (fst e)) es);
-[intros0 Hev; try solve [invc Hev + simpl in *; eauto].. | ].
-
-- invc Hev. constructor. eauto.
-- invc Hev. constructor. eauto.
-
-- finish_mut_induction expr_value_value using list pair list_pair.
-Qed exporting.
-Hint Resolve expr_value_value.
-Hint Resolve expr_value_value_list.
-
-Lemma expr_value_inj : forall e v1 v2,
-    expr_value e v1 ->
-    expr_value e v2 ->
-    v1 = v2.
-mut_induction e using expr_rect_mut' with
-    (Pl := fun es => forall vs1 vs2,
-        Forall2 expr_value es vs1 ->
-        Forall2 expr_value es vs2 ->
-        vs1 = vs2)
-    (Pp := fun (p : expr * rec_info) => True)
-    (Plp := fun (ps : list (expr * rec_info)) => True);
-[ eauto; intros0 Hv1 Hv2; invc Hv1; invc Hv2; f_equal; eauto.. | ].
-
-- finish_mut_induction expr_value_inj using list pair list_pair.
-Qed exporting.
-
-Lemma expr_value_sur : forall v e1 e2,
-    expr_value e1 v ->
-    expr_value e2 v ->
-    e1 = e2.
-mut_induction v using HigherValue.value_rect_mut' with
-    (Pl := fun vs => forall es1 es2,
-        Forall2 expr_value es1 vs ->
-        Forall2 expr_value es2 vs ->
-        es1 = es2);
-[ eauto; intros0 Hv1 Hv2; invc Hv1; invc Hv2; f_equal; eauto.. | ].
-
-- finish_mut_induction expr_value_sur using list.
-Qed exporting.
 
 
