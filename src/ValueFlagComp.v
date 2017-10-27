@@ -20,13 +20,14 @@ Definition compile :=
             | e :: es => go e :: go_list es
             end in
         match e with
+        | A.Value v => B.Value v
         | A.Arg => B.Arg
         | A.Self => B.Self
         | A.Deref e off => B.Deref (go e) off
         | A.Call f a => B.Call (go f) (go a)
-        | A.Constr tag args => B.MkConstr tag (go_list args)
+        | A.MkConstr tag args => B.MkConstr tag (go_list args)
         | A.Switch cases => B.Switch (go_list cases)
-        | A.Close fname free => B.MkClose fname (go_list free)
+        | A.MkClose fname free => B.MkClose fname (go_list free)
         end in go.
 
 Definition compile_list :=
@@ -74,10 +75,10 @@ Qed.
 Inductive I_value : A.expr -> value -> Prop :=
 | IvConstr : forall tag aargs bargs,
         Forall2 I_value aargs bargs ->
-        I_value (A.Constr tag aargs) (Constr tag bargs)
+        I_value (A.MkConstr tag aargs) (Constr tag bargs)
 | IvClose : forall tag afree bfree,
         Forall2 I_value afree bfree ->
-        I_value (A.Close tag afree) (Close tag bfree).
+        I_value (A.MkClose tag afree) (Close tag bfree).
 
 Inductive I_expr : A.expr -> B.expr -> Prop :=
 | IArg : I_expr A.Arg B.Arg
@@ -96,17 +97,17 @@ Inductive I_expr : A.expr -> B.expr -> Prop :=
 
 | IConstrVal : forall tag aargs bargs,
         Forall2 I_value aargs bargs ->
-        I_expr (A.Constr tag aargs) (B.Value (Constr tag bargs))
+        I_expr (A.MkConstr tag aargs) (B.Value (Constr tag bargs))
 | IConstrMk : forall tag aargs bargs,
         Forall2 I_expr aargs bargs ->
-        I_expr (A.Constr tag aargs) (B.MkConstr tag bargs)
+        I_expr (A.MkConstr tag aargs) (B.MkConstr tag bargs)
 
 | ICloseVal : forall tag afree bfree,
         Forall2 I_value afree bfree ->
-        I_expr (A.Close tag afree) (B.Value (Close tag bfree))
+        I_expr (A.MkClose tag afree) (B.Value (Close tag bfree))
 | ICloseMk : forall tag afree bfree,
         Forall2 I_expr afree bfree ->
-        I_expr (A.Close tag afree) (B.MkClose tag bfree)
+        I_expr (A.MkClose tag afree) (B.MkClose tag bfree)
 .
 
 Inductive I : A.state -> B.state -> Prop :=
@@ -116,7 +117,7 @@ Inductive I : A.state -> B.state -> Prop :=
         I_value aa ba ->
         ~ B.is_value be ->
         (forall av bv,
-            A.value av ->
+            A.is_value av ->
             I_value av bv ->
             I (ak av) (bk bv)) ->
         I (A.Run ae aa as_ ak) (B.Run be ba bs bk)
