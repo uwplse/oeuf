@@ -1,34 +1,43 @@
 Require Import Common.
 Require StepLib.
 Require Import Psatz.
+Require Import ListLemmas.
 
 Require Import Utopia.
 Require Import Monads.
-Require HigherValue.
+Require Export HigherValue.
 
 Definition function_name := nat.
 
 Inductive expr :=
+| Value : value -> expr
 | Arg : expr
 | UpVar : nat -> expr
 | Deref : expr -> nat -> expr
 | Call : expr -> expr -> expr
-| Constr (tag : nat) (args : list expr)
+| MkConstr (tag : nat) (args : list expr)
 | Switch (cases : list expr)
-| Close (f : function_name) (free : list expr)
+| MkClose (f : function_name) (free : list expr)
 .
 
 Definition env := list expr.
 
-Inductive value : expr -> Prop :=
-| VConstr : forall tag args, Forall value args -> value (Constr tag args)
-| VClose : forall f free, Forall value free -> value (Close f free).
+Inductive is_value : expr -> Prop :=
+| IsValue : forall v, is_value (Value v).
 
 (* Continuation-based step relation *)
 
 Inductive state :=
-| Run (e : expr) (l : list expr) (k : expr -> state)
-| Stop (e : expr).
+| Run (e : expr) (l : list value) (k : value -> state)
+| Stop (v : value).
+
+Definition unwrap e :=
+    match e with
+    | Value v => Some v
+    | _ => None
+    end.
+
+Definition unwrap_list := map_partial unwrap.
 
 Inductive sstep (E : env) : state -> state -> Prop :=
 | SArg : forall l k v,
@@ -39,50 +48,44 @@ Inductive sstep (E : env) : state -> state -> Prop :=
         sstep E (Run (UpVar n) l k) (k v)
 
 | SDerefStep : forall e off l k,
-        ~ value e ->
+        ~ is_value e ->
         sstep E (Run (Deref e off) l k)
-                (Run e l (fun v => Run (Deref v off) l k))
+                (Run e l (fun v => Run (Deref (Value v) off) l k))
 | SDerefinateConstr : forall tag args off l k v,
-        Forall value args ->
         nth_error args off = Some v ->
-        sstep E (Run (Deref (Constr tag args) off) l k) (k v)
+        sstep E (Run (Deref (Value (Constr tag args)) off) l k) (k v)
 | SDerefinateClose : forall fname free off l k v,
-        Forall value free ->
         nth_error free off = Some v ->
-        sstep E (Run (Deref (Close fname free) off) l k) (k v)
-
+        sstep E (Run (Deref (Value (Close fname free)) off) l k) (k v)
 | SConstrStep : forall fname vs e es l k,
-        Forall value vs ->
-        ~ value e ->
-        sstep E (Run (Constr fname (vs ++ [e] ++ es)) l k)
-                (Run e l (fun v => Run (Constr fname (vs ++ [v] ++ es)) l k))
-| SConstrDone : forall fname vs l k,
-        Forall value vs ->
-        sstep E (Run (Constr fname vs) l k) (k (Constr fname vs))
+        Forall is_value vs ->
+        ~ is_value e ->
+        sstep E (Run (MkConstr fname (vs ++ [e] ++ es)) l k)
+                (Run e l (fun v => Run (MkConstr fname (vs ++ [Value v] ++ es)) l k))
+| SConstrDone : forall fname es vs l k,
+        unwrap_list es = Some vs ->
+        sstep E (Run (MkConstr fname es) l k) (k (Constr fname vs))
 
 | SCloseStep : forall fname vs e es l k,
-        Forall value vs ->
-        ~ value e ->
-        sstep E (Run (Close fname (vs ++ [e] ++ es)) l k)
-                (Run e l (fun v => Run (Close fname (vs ++ [v] ++ es)) l k))
-| SCloseDone : forall fname vs l k,
-        Forall value vs ->
-        sstep E (Run (Close fname vs) l k) (k (Close fname vs))
-
+        Forall is_value vs ->
+        ~ is_value e ->
+        sstep E (Run (MkClose fname (vs ++ [e] ++ es)) l k)
+                (Run e l (fun v => Run (MkClose fname (vs ++ [Value v] ++ es)) l k))
+| SCloseDone : forall fname es vs l k,
+        unwrap_list es = Some vs ->
+        sstep E (Run (MkClose fname es) l k) (k (Close fname vs))
 | SCallL : forall e1 e2 l k,
-        ~ value e1 ->
+        ~ is_value e1 ->
         sstep E (Run (Call e1 e2) l k)
-                (Run e1 l (fun v => Run (Call v e2) l k))
+                (Run e1 l (fun v => Run (Call (Value v) e2) l k))
 | SCallR : forall e1 e2 l k,
-        value e1 ->
-        ~ value e2 ->
+        is_value e1 ->
+        ~ is_value e2 ->
         sstep E (Run (Call e1 e2) l k)
-                (Run e2 l (fun v => Run (Call e1 v) l k))
+                (Run e2 l (fun v => Run (Call e1 (Value v)) l k))
 | SMakeCall : forall fname free arg l k body,
-        Forall value free ->
-        value arg ->
         nth_error E fname = Some body ->
-        sstep E (Run (Call (Close fname free) arg) l k)
+        sstep E (Run (Call (Value (Close fname free)) (Value arg)) l k)
                 (Run body (arg :: free) k)
 
 | SSwitchinate : forall cases tag args l k case,
@@ -108,23 +111,11 @@ Require Import Metadata.
 Definition prog_type : Type := list expr * list metadata.
 Definition valtype := HigherValue.value.
 
-Inductive expr_value : expr -> valtype -> Prop :=
-| EvConstr : forall tag args1 args2,
-        Forall2 expr_value args1 args2 ->
-        expr_value (Constr tag args1)
-                   (HigherValue.Constr tag args2)
-| EvClose : forall tag free1 free2,
-        Forall2 expr_value free1 free2 ->
-        expr_value (Close tag free1)
-                   (HigherValue.Close tag free2)
-.
 
 Inductive is_callstate (prog : prog_type) : valtype -> valtype -> state -> Prop :=
 | IsCallstate : forall fname free free_e av ae body,
         nth_error (fst prog) fname = Some body ->
         let fv := HigherValue.Close fname free in
-        expr_value ae av ->
-        Forall2 expr_value free_e free ->
         HigherValue.public_value (snd prog) fv ->
         HigherValue.public_value (snd prog) av ->
         is_callstate prog fv av
@@ -133,10 +124,9 @@ Inductive is_callstate (prog : prog_type) : valtype -> valtype -> state -> Prop 
 Definition initial_env (prog : prog_type) : env := fst prog.
 
 Inductive final_state (prog : prog_type) : state -> valtype -> Prop :=
-| FinalState : forall v e,
-        expr_value e v ->
+| FinalState : forall v,
         HigherValue.public_value (snd prog) v ->
-        final_state prog (Stop e) v.
+        final_state prog (Stop v) v.
 
 
 Require Semantics.
@@ -155,12 +145,13 @@ Definition expr_rect_mut
         (P : expr -> Type)
         (Pl : list expr -> Type)
     (HArg :     P Arg)
+    (HValue :   forall v, P (Value v))
     (HUpVar :   forall n, P (UpVar n))
     (HDeref :   forall e off, P e -> P (Deref e off))
     (HCall :    forall f a, P f -> P a -> P (Call f a))
-    (HConstr :  forall tag args, Pl args -> P (Constr tag args))
+    (HConstr :  forall tag args, Pl args -> P (MkConstr tag args))
     (HSwitch :  forall cases, Pl cases -> P (Switch cases))
-    (HClose :   forall f free, Pl free -> P (Close f free))
+    (HClose :   forall f free, Pl free -> P (MkClose f free))
     (Hnil :     Pl [])
     (Hcons :    forall e es, P e -> Pl es -> Pl (e :: es))
     (e : expr) : P e :=
@@ -172,26 +163,28 @@ Definition expr_rect_mut
             end in
         match e as e_ return P e_ with
         | Arg => HArg
+        | Value v => HValue v
         | UpVar n => HUpVar n
         | Deref e off => HDeref e off (go e)
         | Call f a => HCall f a (go f) (go a)
-        | Constr tag args => HConstr tag args (go_list args)
+        | MkConstr tag args => HConstr tag args (go_list args)
         | Switch cases => HSwitch cases (go_list cases)
-        | Close f free => HClose f free (go_list free)
+        | MkClose f free => HClose f free (go_list free)
         end in go e.
 
 (* Useful wrapper for `expr_rect_mut with (Pl := Forall P)` *)
 Definition expr_ind' (P : expr -> Prop)
     (HArg :     P Arg)
+    (HValue :   forall v, P (Value v))
     (HUpVar :   forall n, P (UpVar n))
     (HDeref :   forall e off, P e -> P (Deref e off))
     (HCall :    forall f a, P f -> P a -> P (Call f a))
-    (HConstr :  forall tag args, Forall P args -> P (Constr tag args))
+    (HConstr :  forall tag args, Forall P args -> P (MkConstr tag args))
     (HSwitch :  forall cases, Forall P cases -> P (Switch cases))
-    (HClose :   forall f free, Forall P free -> P (Close f free))
+    (HClose :   forall f free, Forall P free -> P (MkClose f free))
     (e : expr) : P e :=
     ltac:(refine (@expr_rect_mut P (Forall P)
-        HArg HUpVar HDeref HCall HConstr HSwitch HClose _ _ e); eauto).
+        HArg HValue HUpVar HDeref HCall HConstr HSwitch HClose _ _ e); eauto).
 
 
 
@@ -244,7 +237,7 @@ destruct (eq_nat_dec i n).
 Qed.
 
 Lemma upvar_list_not_value : forall n,
-    Forall (fun e => ~ value e) (upvar_list n).
+    Forall (fun e => ~ is_value e) (upvar_list n).
 intros. eapply nth_error_Forall. intros.
 assert (i < n).
   { rewrite <- upvar_list_length with (n := n). rewrite <- nth_error_Some.  congruence. }
@@ -252,7 +245,7 @@ rewrite upvar_list_nth_error in * by auto.
 inject_some. inversion 1.
 Qed.
 
-
+(*
 Lemma expr_value_value : forall e v,
     expr_value e v ->
     value e.
@@ -274,3 +267,4 @@ induction e; intros0 Hev; invc Hev; eauto using expr_value_value.
 Qed.
 Hint Resolve expr_value_value_list.
 
+*)
