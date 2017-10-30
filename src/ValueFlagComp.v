@@ -41,12 +41,10 @@ Definition compile_list :=
 Ltac refold_compile :=
     fold compile_list in *.
 
-
 Definition compile_cu (cu : list A.expr * list metadata) : list B.expr * list metadata :=
     let '(exprs, metas) := cu in
     let exprs' := compile_list exprs in
     (exprs', metas).
-
 
 Lemma compile_list_is_map : forall aes,
     compile_list aes = map compile aes.
@@ -68,19 +66,13 @@ intros. induction es.
 - simpl. f_equal. eauto.
 Qed.
 
-
-
-
-
-Inductive I_value : A.expr -> value -> Prop :=
-| IvConstr : forall tag aargs bargs,
-        Forall2 I_value aargs bargs ->
-        I_value (A.MkConstr tag aargs) (Constr tag bargs)
-| IvClose : forall tag afree bfree,
-        Forall2 I_value afree bfree ->
-        I_value (A.MkClose tag afree) (Close tag bfree).
+(* Inductive I_value : value -> value -> Prop := *)
+(* | Ival : forall v, *)
+(*     I_value v v. *)
 
 Inductive I_expr : A.expr -> B.expr -> Prop :=
+| IValue : forall v,
+    I_expr (A.Value v) (B.Value v)
 | IArg : I_expr A.Arg B.Arg
 | ISelf : I_expr A.Self B.Self
 | IDeref : forall ae be off,
@@ -94,95 +86,79 @@ Inductive I_expr : A.expr -> B.expr -> Prop :=
 | ISwitch : forall acases bcases,
         Forall2 I_expr acases bcases ->
         I_expr (A.Switch acases) (B.Switch bcases)
-
-| IConstrVal : forall tag aargs bargs,
-        Forall2 I_value aargs bargs ->
-        I_expr (A.MkConstr tag aargs) (B.Value (Constr tag bargs))
 | IConstrMk : forall tag aargs bargs,
         Forall2 I_expr aargs bargs ->
         I_expr (A.MkConstr tag aargs) (B.MkConstr tag bargs)
-
-| ICloseVal : forall tag afree bfree,
-        Forall2 I_value afree bfree ->
-        I_expr (A.MkClose tag afree) (B.Value (Close tag bfree))
 | ICloseMk : forall tag afree bfree,
         Forall2 I_expr afree bfree ->
         I_expr (A.MkClose tag afree) (B.MkClose tag bfree)
 .
 
 Inductive I : A.state -> B.state -> Prop :=
-| IRun : forall ae aa as_ ak  be ba bs bk,
+| IRun : forall ae a s ak  be bk,
         I_expr ae be ->
-        I_value as_ bs ->
-        I_value aa ba ->
         ~ B.is_value be ->
-        (forall av bv,
-            A.is_value av ->
-            I_value av bv ->
-            I (ak av) (bk bv)) ->
-        I (A.Run ae aa as_ ak) (B.Run be ba bs bk)
-
-| IStop : forall av bv,
-        I_value av bv ->
-        I (A.Stop av) (B.Stop bv).
+        (forall v,
+            I (ak v) (bk v)) ->
+        I (A.Run ae a s ak) (B.Run be a s bk)
+| IStop : forall v,
+        I (A.Stop v) (B.Stop v).
 
 
+(* Lemma I_value_value : forall a b, *)
+(*     I_value a b -> *)
+(*     A.value a. *)
+(* induction a using A.expr_ind'; intros0 II; invc II. *)
+(* - constructor. list_magic_on (args, (bargs, tt)). *)
+(* - constructor. list_magic_on (free, (bfree, tt)). *)
+(* Qed. *)
+(* Hint Resolve I_value_value. *)
 
-Lemma I_value_value : forall a b,
-    I_value a b ->
-    A.value a.
-induction a using A.expr_ind'; intros0 II; invc II.
-- constructor. list_magic_on (args, (bargs, tt)).
-- constructor. list_magic_on (free, (bfree, tt)).
-Qed.
-Hint Resolve I_value_value.
-
-Lemma Forall_I_value_value : forall as_ bs,
-    Forall2 I_value as_ bs ->
-    Forall A.value as_.
-intros. list_magic_on (as_, (bs, tt)).
-Qed.
-Hint Resolve Forall_I_value_value.
+(* Lemma Forall_I_value_value : forall as_ bs, *)
+(*     Forall2 I_value as_ bs -> *)
+(*     Forall A.value as_. *)
+(* intros. list_magic_on (as_, (bs, tt)). *)
+(* Qed. *)
+(* Hint Resolve Forall_I_value_value. *)
 
 Lemma I_expr_value' : forall b a,
     I_expr a b ->
-    B.is_value b ->
-    A.value a.
-induction b using B.expr_ind'; intros0 II Bval; invc Bval; invc II.
-- constructor. eauto.
-- constructor. eauto.
+    B.is_value b <->
+    A.is_value a.
+Proof.
+  induction b using B.expr_ind';
+    intros; split; intros;
+      on (I_expr _ _), invc;
+      try constructor;
+      try on (A.is_value _), invc;
+      try on (B.is_value _), invc.
 Qed.
 
 Lemma I_expr_not_value : forall a b,
     I_expr a b ->
-    ~A.value a ->
+    ~A.is_value a <->
     ~B.is_value b.
-intros. intro. fwd eapply I_expr_value'; eauto.
+Proof.
+  intros. split.
+  - intros. intro. fwd eapply I_expr_value'; firstorder; eauto.
+  - intros. intro. fwd eapply I_expr_value'; firstorder; eauto.
 Qed.
 Hint Resolve I_expr_not_value.
-
-
 
 Theorem compile_I_expr : forall ae be,
     compile ae = be ->
     I_expr ae be.
-induction ae using A.expr_rect_mut with
-    (Pl := fun aes => forall bes,
-        compile_list aes = bes ->
-        Forall2 I_expr aes bes);
-intros0 Hcomp;
-simpl in Hcomp; refold_compile; try rewrite <- Hcomp in *;
-try solve [eauto | constructor; eauto].
+Proof.
+  induction ae using A.expr_rect_mut with
+  (Pl := fun aes => forall bes,
+             compile_list aes = bes ->
+             Forall2 I_expr aes bes);
+    intros0 Hcomp;
+    simpl in Hcomp; refold_compile; try rewrite <- Hcomp in *;
+      try solve [eauto | constructor; eauto].
 Qed.
 
-Lemma I_value_I_expr : forall a b,
-    I_value a b ->
-    I_expr a (B.Value b).
-induction a using A.expr_ind'; intros0 II; invc II; constructor; assumption.
-Qed.
-Hint Resolve I_value_I_expr.
-
-
+(*
 Definition compile_value : A.expr -> value :=
     let fix go e :=
         let fix go_list es :=
@@ -191,8 +167,8 @@ Definition compile_value : A.expr -> value :=
             | e :: es => go e :: go_list es
             end in
         match e with
-        | A.Constr tag args => Constr tag (go_list args)
-        | A.Close fname free => Close fname (go_list free)
+        | A.MkConstr tag args => Constr tag (go_list args)
+        | A.MkClose fname free => Close fname (go_list free)
         | _ => Constr 0 []
         end in go.
 
@@ -209,13 +185,15 @@ Ltac refold_compile_value :=
 
 Lemma compile_value_list_is_map : forall a,
     compile_value_list a = map compile_value a.
-induction a; simpl; eauto.
+Proof.
+  induction a; simpl; eauto.
 Qed.
 
 Lemma compile_value_I_value : forall a b,
     compile_value a = b ->
-    A.value a ->
+    A.is_value a ->
     I_value a b.
+Proof.
 induction a using A.expr_rect_mut with
     (Pl := fun as_ => forall bs,
         compile_value_list as_ = bs ->
@@ -258,7 +236,7 @@ induction a using A.expr_ind'; intros0 II; invc II; constructor; eauto.
 Qed.
 Hint Resolve value_I_expr_I_value.
 
-
+*)
 
 
 Ltac B_start HS :=
@@ -331,9 +309,6 @@ Ltac B_plus HS :=
 
 
 
-
-
-
 Lemma nth_error_3part : forall A (xs : list A) i x,
     nth_error xs i = Some x ->
     xs = firstn i xs ++ [x] ++ skipn (S i) xs.
@@ -350,9 +325,9 @@ induction es; constructor; eauto. constructor.
 Qed.
 
 
-
+(*
 Lemma eval_mkconstr_one : forall BE tag av vs e es a s k,
-    A.value av ->
+    A.is_value av ->
     I_expr av e ->
     Forall B.is_value vs ->
     (forall k, ~ B.is_value e -> B.sstar BE (B.Run e a s k) (k (compile_value av))) ->
@@ -417,6 +392,7 @@ eapply sstar_then_sstar.
     * rewrite compile_value_list_is_map. 
       eapply map_nth_error. eapply map_nth_error. assumption.
 Qed.
+
 
 Lemma eval_mkconstr' : forall BE tag aargs bargs a s k,
     Forall A.value aargs ->
@@ -587,11 +563,14 @@ eapply splus_sstar, eval_value_expr; eauto.
 Qed.
 
 
-
+(* No longer true *)
 Lemma compile_not_value : forall a b,
     compile a = b ->
     ~ B.is_value b.
-induction a using A.expr_ind'; intros0 Hcomp; simpl in *; refold_compile; subst; inversion 1.
+Proof.
+  
+  induction a using A.expr_ind'; intros0 Hcomp; simpl in *; refold_compile; subst; inversion 1.
+  simpl.
 Qed.
 
 Lemma compile_cases_arent_values : forall a b,
@@ -630,283 +609,156 @@ intros0 Hcomp; simpl in *; refold_compile; subst;
 simpl; B.refold_no_values; eauto.
 Qed.
 
-
-
-
-Ltac i_ctor := intros; constructor; eauto.
-Ltac i_lem H := intros; eapply H; eauto.
+*)
 
 Theorem I_sim : forall AE BE a a' b,
     compile_list AE = BE ->
-    B.cases_arent_values (B.state_expr b) ->
     I a b ->
     A.sstep AE a a' ->
     exists b',
-        B.splus BE b b' /\
+        B.sstep BE b b' /\
         I a' b'.
+Proof.
+  destruct a as [ae al ak | ae];
+    intros0 Henv II Astep; [ | solve [invc Astep] ].
 
-destruct a as [ae al ak | ae];
-intros0 Henv Bcases II Astep; [ | solve [invc Astep] ].
-
-inv Astep; invc II; try on (I_expr _ _), invc.
-all: simpl in *; B.refold_cases_arent_values; repeat break_and.
-
-- (* Arg *)
-  eexists. split. eapply B.SPlusOne, B.SArg.
-  on _, eapply_; eauto.
-
-- (* Self *)
-  eexists. split. eapply B.SPlusOne, B.SSelf.
-  on _, eapply_; eauto.
-
-- (* DerefStep *)
-  eexists. split. eapply B.SPlusOne, B.SDerefStep; eauto.
-  i_ctor. i_ctor. i_ctor. inversion 1.
-
-- (* DerefinateConstr *)
-  on (I_expr (A.Constr _ _) _), invc.
-
-  + fwd eapply Forall2_nth_error_ex as HH; eauto.  destruct HH as (bv & ? & ?).
-    eexists. split. eapply B.SPlusOne, B.SDerefinateConstr; eauto.
-    on _, eapply_; eauto.
-
-  + B_start HS.
-    B_step HS. { eapply B.SDerefStep. inversion 1. }
-    B_plus HS.
-      { eapply eval_value_expr; eauto using IConstrMk.
-        + constructor. auto.
-        + inversion 1. }
-    simpl in *. refold_compile_value.
-    B_step HS.
-      { eapply B.SDerefinateConstr.
-        rewrite compile_value_list_is_map.
-        eapply map_nth_error. eassumption. }
-
-    assert (A.value v). { eapply Forall_nth_error; eauto. }
-
-    eexists. split. exact HS.
-    on _, eapply_; eauto.
-
-- (* DerefinateClose *)
-  on (I_expr (A.Close _ _) _), invc.
-
-  + fwd eapply Forall2_nth_error_ex as HH; eauto.  destruct HH as (bv & ? & ?).
-    eexists. split. eapply B.SPlusOne, B.SDerefinateClose; eauto.
-    on _, eapply_; eauto.
-
-  + B_start HS.
-    B_step HS. { eapply B.SDerefStep. inversion 1. }
-    B_plus HS.
-      { eapply eval_value_expr; eauto using ICloseMk.
-        + constructor. auto.
-        + inversion 1. }
-    simpl in *. refold_compile_value.
-    B_step HS.
-      { eapply B.SDerefinateClose.
-        rewrite compile_value_list_is_map.
-        eapply map_nth_error. eassumption. }
-
-    assert (A.value v). { eapply Forall_nth_error; eauto. }
-
-    eexists. split. exact HS.
-    on _, eapply_; eauto.
+  inv Astep; invc II; try on (I_expr _ _), invc.
+  all: simpl in *; B.refold_cases_arent_values; repeat break_and.
+  all: try solve [
+             eexists; split; try solve [econstructor; eauto];
+             try solve [eauto]].
 
 
-- (* ConstrStep - I_value *)
-  on (~ B.is_value _), contradict. constructor.
+  - (* DerefStep *)
+    eexists; split.
+    econstructor; eauto.
+    eapply I_expr_not_value; eauto.
+    econstructor; eauto.
+    eapply I_expr_not_value; eauto.
+    intros.
+    repeat econstructor; eauto.
+    intros HH; inv HH.
 
-- (* ConstrStep - I_expr *)
-  on _, invc_using Forall2_3part_inv.
+  - (* DerefinateConstr *)
+    on (I_expr _ _), inv.
+    eexists; split.
+    eapply B.SDerefinateConstr. eassumption.
+    eauto.
 
-  B_start HS.
-  B_star HS. { eapply eval_mkconstr_partial; eauto. }
-  B_step HS. { eapply B.SConstrStep; eauto using B_map_Value_Forall_is_value. }
+  - (* DerefinateClose *)
+    on (I_expr _ _), inv.
+    eexists; split.
+    eapply B.SDerefinateClose. eassumption.
+    eauto.
 
-  eexists. split. exact HS.
-  i_ctor. i_ctor. i_ctor.
-  + eapply Forall2_app; [| eapply Forall2_cons]; eauto.
-    rewrite compile_value_list_is_map. do 2 rewrite <- Forall2_map_r.
-    rewrite Forall2_same. list_magic_on (vs, tt).
-  + inversion 1.
+  - (* ConstrStep *)
+    apply Forall2_app_inv_l in H2. (* TODO: get rid of hyp names *)
+    break_exists. break_and. subst.
+    on (Forall2 _ (_ :: _) _), inv.
+    assert (Forall B.is_value x).
+    {
+      admit.
+    }
+    eexists; split.
+    econstructor. eauto.
+    eapply I_expr_not_value; eauto.
+    econstructor; eauto.
+    eapply I_expr_not_value; eauto.
+    intros.
+    repeat econstructor; eauto.
+    simpl.
+    eapply Forall2_app; eauto.
+    econstructor; eauto. econstructor.
+    intros HH; inv HH.
 
-- (* ConstrDone - I_value *)
-  on (~ B.is_value _), contradict. constructor.
+  - (* ConstrDone *)
+    eexists; split.
+    econstructor; eauto.
+    + (* need lemma *)
+      instantiate (1 := vs).
+      admit.
+      
+    + solve [eauto].
 
-- (* ConstrDone - I_expr *)
-  B_start HS.
-  B_plus HS. { eapply eval_value_expr; eauto using IConstrMk. constructor. auto. }
+  - (* CloseStep *)
+    apply Forall2_app_inv_l in H2. (* TODO: get rid of hyp names *)
+    break_exists. break_and. subst.
+    on (Forall2 _ (_ :: _) _), inv.
+    assert (Forall B.is_value x).
+    {
+      admit.
+    }
+    eexists; split.
+    econstructor. eauto.
+    eapply I_expr_not_value; eauto.
+    econstructor; eauto.
+    eapply I_expr_not_value; eauto.
+    intros.
+    repeat econstructor; eauto.
+    simpl.
+    eapply Forall2_app; eauto.
+    econstructor; eauto. econstructor.
+    intros HH; inv HH.
+    
+  - (* CloseDone *)
+    eexists; split.
+    econstructor; eauto.
+    + (* need lemma *)
+      instantiate (1 := vs).
+      admit.
+      
+    + solve [eauto].
 
-  eexists. split. exact HS.
-  on _, eapply_; eauto.
-  + constructor. assumption.
-  + simpl. refold_compile_value. constructor.
-    rewrite compile_value_list_is_map. rewrite <- Forall2_map_r. rewrite Forall2_same.
-    list_magic_on (vs, tt).
+  - (* CallL *)
+    eexists; split.
+    eapply B.SCallL.
+    eapply I_expr_not_value; eauto.
+    repeat econstructor; eauto.
+    eapply I_expr_not_value; eauto.
+    intros HH; inv HH.
 
+  - (* CallR *)
+    eexists; split.
+    eapply B.SCallR.
+    eapply I_expr_value'; eauto.
+    eapply I_expr_not_value; eauto.
+    repeat econstructor; eauto.
+    eapply I_expr_not_value; eauto.
+    intros HH; inv HH.
 
-- (* CloseStep - I_value *)
-  on (~ B.is_value _), contradict. constructor.
+  - (* MakeCall *)
+    on (I_expr _ _ ), invc.
+    on (I_expr _ _ ), invc.
+    
+    eexists; split.
+    eapply B.SMakeCall.
+    (* need lemma *)
+    instantiate (1 := compile body).
+    admit.
 
-- (* CloseStep - I_expr *)
-  on _, invc_using Forall2_3part_inv.
+    econstructor.
+    eapply compile_I_expr; eauto.
 
-  B_start HS.
-  B_star HS. { eapply eval_mkclose_partial; eauto. }
-  B_step HS. { eapply B.SCloseStep; eauto using B_map_Value_Forall_is_value. }
+    (* What's up with this ? *)
+    admit.
 
-  eexists. split. exact HS.
-  i_ctor. i_ctor. i_ctor.
-  + eapply Forall2_app; [| eapply Forall2_cons]; eauto.
-    rewrite compile_value_list_is_map. do 2 rewrite <- Forall2_map_r.
-    rewrite Forall2_same. list_magic_on (vs, tt).
-  + inversion 1.
+    eauto.
 
-- (* CloseDone - I_value *)
-  on (~ B.is_value _), contradict. constructor.
+  - (* Switchinate *)
+    
+    eexists; split.
+    eapply B.SSwitchinate.
+    + (* need lemma *)
+      instantiate (1 := compile case).
+      admit.
 
-- (* CloseDone - I_expr *)
-  B_start HS.
-  B_plus HS. { eapply eval_value_expr; eauto using ICloseMk. constructor. auto. }
-
-  eexists. split. exact HS.
-  on _, eapply_; eauto.
-  + constructor. assumption.
-  + simpl. refold_compile_value. constructor.
-    rewrite compile_value_list_is_map. rewrite <- Forall2_map_r. rewrite Forall2_same.
-    list_magic_on (vs, tt).
-
-
-- (* CallL *)
-  B_start HS.
-  B_step HS. { eapply B.SCallL. eauto. }
-
-  eexists. split. exact HS.
-  i_ctor. i_ctor. i_ctor. inversion 1.
-
-- (* CallR *)
-  destruct (B.is_value_dec bf).
-
-  + B_start HS.
-    B_step HS. { eapply B.SCallR; eauto. } 
-    eexists. split. exact HS.
-    i_ctor. i_ctor. i_ctor. inversion 1.
-
-  + B_start HS.
-    B_step HS. { eapply B.SCallL; eauto. }
-    B_plus HS. { eapply eval_value_expr; eauto. }
-    B_step HS. { eapply B.SCallR; eauto. constructor. }
-    eexists. split. exact HS.
-    i_ctor. i_ctor. i_ctor. inversion 1.
-
-- (* MakeCall *)
-  fwd eapply compile_list_Forall with (aes := AE); eauto.
-  fwd eapply Forall2_nth_error_ex as HH; eauto.  destruct HH as (bbody & ? & ?).
-
-  rename ba0 into barg.
-  on (I_expr (A.Close _ _) bf), invc; destruct (B.is_value_dec barg).
-
-  + (* func is value, arg is value *)
-    on (B.is_value barg), invc.
-    B_start HS.
-    B_step HS. { eapply B.SMakeCall; eauto. }
-
-    eexists. split. exact HS.
-    i_ctor.
-    * eauto using compile_I_expr.
-    * constructor. assumption.
-    * destruct body; inversion 1.
-
-  + (* func is value, arg is not *)
-    B_start HS.
-    B_step HS. { eapply B.SCallR; eauto. constructor. }
-    B_plus HS. { eapply eval_value_expr; eauto. }
-    B_step HS. { eapply B.SMakeCall; eauto. }
-
-    eexists. split. exact HS.
-    i_ctor.
-    * eauto using compile_I_expr.
-    * constructor. assumption.
-    * destruct body; inversion 1.
-
-  + (* func is non-value, arg is value *)
-    on (B.is_value barg), invc.
-    B_start HS.
-    B_step HS. { eapply B.SCallL; eauto. inversion 1. }
-    B_plus HS.
-      { eapply eval_value_expr; eauto using ICloseMk.
-        - constructor. auto.
-        - inversion 1. }
-    simpl in *. refold_compile_value.
-    B_step HS. { eapply B.SMakeCall; eauto. }
-
-    eexists. split. exact HS.
-    i_ctor.
-    * eauto using compile_I_expr.
-    * constructor.
-      rewrite compile_value_list_is_map. rewrite <- Forall2_map_r, Forall2_same.
-      list_magic_on (free, tt).
-    * destruct body; inversion 1.
-
-  + (* func is non-value, arg is non-value *)
-    B_start HS.
-    B_step HS. { eapply B.SCallL; eauto. inversion 1. }
-    B_plus HS.
-      { eapply eval_value_expr; eauto using ICloseMk.
-        - constructor. auto.
-        - inversion 1. }
-    B_step HS. { eapply B.SCallR; eauto. constructor. }
-    B_plus HS. { eapply eval_value_expr; eauto. }
-    simpl in *. refold_compile_value.
-    B_step HS. { eapply B.SMakeCall; eauto. }
-
-    eexists. split. exact HS.
-    i_ctor.
-    * eauto using compile_I_expr.
-    * constructor.
-      rewrite compile_value_list_is_map. rewrite <- Forall2_map_r, Forall2_same.
-      list_magic_on (free, tt).
-    * destruct body; inversion 1.
-
-- (* Switch *)
-  fwd eapply Forall2_nth_error_ex with (xs := cases) (ys := bcases) as HH; eauto.
-    destruct HH as (bcase & ? & ?).
-  on (I_value (A.Constr _ _) _), invc.
-
-  B_start HS.
-  B_step HS. { eapply B.SSwitchinate. eauto. }
-
-  eexists. split. exact HS.
-  i_ctor.
-  + constructor. auto.
-  + pattern bcase. eapply Forall_nth_error; eauto.
-
-Qed.
-
-
-Inductive I' : A.state -> B.state -> Prop :=
-| I'_intro : forall a b,
-        I a b ->
-        B.cases_arent_values_state b ->
-        I' a b.
-
-Theorem I'_sim : forall AE BE a a' b,
-    compile_list AE = BE ->
-    I' a b ->
-    A.sstep AE a a' ->
-    exists b',
-        B.splus BE b b' /\
-        I' a' b'.
-intros. on >I', invc.
-
-fwd eapply I_sim; eauto.
-  { on >B.cases_arent_values_state, invc; eauto. simpl. auto. }
-break_exists; break_and.
-
-eexists; split; eauto. constructor; eauto.
-eapply B.splus_cases_arent_values; try eassumption.
-- eapply compile_cases_arent_values_list. reflexivity.
-Qed.
-
+    + econstructor.
+      eapply compile_I_expr; eauto.
+      (* Again, what's up with this? *)
+      admit.
+      eauto.
+Admitted.
+      
 
 
 Lemma compile_cu_Forall : forall A Ameta B Bmeta,
@@ -916,6 +768,7 @@ intros. simpl in *. inject_pair.
 eapply compile_list_Forall. auto.
 Qed.
 
+(*
 Lemma value_conv : forall v,
     exists e, A.expr_value e v.
 induction v using value_rect_mut with
@@ -926,7 +779,7 @@ Qed.
 Lemma value_conv_list : forall vs,
     exists es, Forall2 A.expr_value es vs.
 induction vs; break_exists; eauto.
-destruct (value_conv **). eauto.
+(*destruct (value_conv **). eauto.
 Qed.
 
 Lemma expr_value_I_value : forall e v,
@@ -957,22 +810,22 @@ intros;
 try on >A.expr_value, invc;
 try on >I_value, invc.
 
-- specialize (IHe ?? ?? ** **). congruence.
-- specialize (IHe ?? ?? ** **). congruence.
+(*- specialize (IHe ?? ?? ** **). congruence.
+(*- specialize (IHe ?? ?? ** **). congruence.
 - do 2 on >Forall2, invc. reflexivity.
 - do 2 on (Forall2 _ (_ :: _) _), invc.
-  specialize (IHe ?? ?? ** **).
-  specialize (IHe0 ?? ?? ** **).
+(*  specialize (IHe ?? ?? ** **).
+(*  specialize (IHe0 ?? ?? ** **).
   subst. reflexivity.
 Qed.
-
+*)
 
 Lemma compile_cu_metas : forall A Ameta B Bmeta,
     compile_cu (A, Ameta) = (B, Bmeta) ->
     Ameta = Bmeta.
 simpl. inversion 1. auto.
 Qed.
-
+(*
 Lemma I_value_public : forall M av ae bv,
     A.expr_value ae av ->
     I_value ae bv ->
@@ -987,6 +840,7 @@ induction av using value_rect_mut with
         Forall (public_value M) bvs);
 intros0 Aev II Apub; invc Aev; invc II; invc Apub; i_ctor.
 Qed.
+*)
 
 Require Semantics.
 
@@ -1004,31 +858,35 @@ Section Preservation.
     fwd eapply compile_cu_Forall; eauto.
     fwd eapply compile_cu_metas; eauto.
 
-    eapply Semantics.forward_simulation_plus with
-        (match_states := I')
+    eapply Semantics.forward_simulation_step with
+        (match_states := I)
         (match_values := @eq value).
 
     - simpl. intros. on >B.is_callstate, invc. simpl in *.
-      destruct ltac:(i_lem Forall2_nth_error_ex') as (abody & ? & ?).
-      destruct (value_conv_list free) as (afree & ?).
-      destruct (value_conv av2) as (av1 & ?).
-
-      eexists. split; repeat i_ctor.
-      + i_lem compile_I_expr.
-      + list_magic_on (afree, (free, tt)).
-      + i_lem compile_not_value.
-      + i_lem compile_cases_arent_values.
-
-    - intros0 II Afinal. invc Afinal. invc II. on >I, invc.
+      assert (exists abody, compile abody = body) by admit.
+      break_exists. subst.
+      exists (A.Run x av2 (Close fname free) A.Stop).
+      split.
+      repeat econstructor; eauto.
+      eapply compile_I_expr; eauto.
+      (* again not true? *)
+      admit.
+      econstructor; eauto.
+      simpl.
+      admit.
+      
+    - intros0 II Afinal. invc Afinal. invc II. 
       eexists; split.
-      + i_ctor. i_lem I_value_public.
-      + i_lem expr_value_I_value_eq.
-
+      econstructor. simpl in *. auto.
+      reflexivity.
     - intros0 Astep. intros0 II.
-      eapply splus_semantics_sim, I'_sim; try eassumption.
+      
+      eapply I_sim; try eassumption.
       simpl. simpl in TRANSF. congruence.
-    Defined.
+  Admitted.
+  (*Defined.*)
 
+(*
     Lemma match_val_eq :
       Semantics.fsim_match_val _ _ fsim = eq.
     Proof.
@@ -1042,5 +900,6 @@ Section Preservation.
       inv Heqf. reflexivity.
 
   Qed.
-
+ *)
+  
 End Preservation.
