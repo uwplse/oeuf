@@ -66,10 +66,6 @@ intros. induction es.
 - simpl. f_equal. eauto.
 Qed.
 
-(* Inductive I_value : value -> value -> Prop := *)
-(* | Ival : forall v, *)
-(*     I_value v v. *)
-
 Inductive I_expr : A.expr -> B.expr -> Prop :=
 | IValue : forall v,
     I_expr (A.Value v) (B.Value v)
@@ -369,17 +365,17 @@ Section Preservation.
   Defined.
 
 
-    Lemma match_val_eq :
-      Semantics.fsim_match_val _ _ fsim = eq.
-    Proof.
-      unfold fsim. simpl.
-      unfold Semantics.fsim_match_val.
-      break_match. repeat (break_match_hyp; try congruence).
-      try unfold forward_simulation_step in *.
-      try unfold forward_simulation_plus in *.
-      try unfold forward_simulation_star in *.
-      try unfold forward_simulation_star_wf in *.
-      inv Heqf. reflexivity.
+  Lemma match_val_eq :
+    Semantics.fsim_match_val _ _ fsim = eq.
+  Proof.
+    unfold fsim. simpl.
+    unfold Semantics.fsim_match_val.
+    break_match. repeat (break_match_hyp; try congruence).
+    try unfold forward_simulation_step in *.
+    try unfold forward_simulation_plus in *.
+    try unfold forward_simulation_star in *.
+    try unfold forward_simulation_star_wf in *.
+    inv Heqf. reflexivity.
 
   Qed.
   
