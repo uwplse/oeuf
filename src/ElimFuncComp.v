@@ -27,7 +27,7 @@ Definition compile base :=
         | T.MkConstr tag args => E.MkConstr tag (go_list args)
         | T.ElimN n cases target =>
                 let expect := T.num_locals_list_pair cases in
-                let func := E.MkCloseDyn (base + n) 0 expect in
+                let func := E.MkCloseDyn (base + n) false expect in
                 E.Call func (go target)
         | T.MkClose fname free => E.MkClose fname (go_list free)
         end in go.
@@ -61,7 +61,7 @@ Definition compile_list_pair base :=
 Definition compile_eliminator base n cases :=
     let expect := T.num_locals_list_pair cases in
     let cases' := compile_list_pair base cases in
-    let rec := E.MkCloseDyn (base + n) 1 expect in
+    let rec := E.MkCloseDyn (base + n) true expect in
     E.ElimBody rec cases'.
 
 Fixpoint compile_eliminator_list' base n elims :=
@@ -115,9 +115,9 @@ Inductive I_expr (TE : T.env) (EE : E.env) (el : list value) : T.expr -> E.expr 
         fname = length TE + tnum ->
         nth_error EE fname = Some (E.ElimBody erec ecases) ->
         let expect := T.num_locals_list_pair tcases in
-        erec = E.MkCloseDyn fname 1 expect ->
+        erec = E.MkCloseDyn fname true expect ->
         ecases = compile_list_pair (length TE) tcases ->
-        (func = E.MkCloseDyn fname 0 expect \/ func = E.Value (Close fname el)) ->
+        (func = E.MkCloseDyn fname false expect \/ func = E.Value (Close fname el)) ->
         I_expr TE EE el ttarget etarget ->
         I_expr TE EE el (T.ElimN tnum tcases ttarget)
                         (E.Call func etarget).
@@ -515,21 +515,21 @@ intros0 Tval II. invc Tval. invc II. constructor.
 Qed.
 
 Lemma E_call_close_dyn_either : forall E fname expect l k func arg,
-    (func = E.MkCloseDyn fname 0 expect \/ func = E.Value (Close fname l)) ->
+    (func = E.MkCloseDyn fname false expect \/ func = E.Value (Close fname l)) ->
     E.sstar E (E.Run (E.Call func arg) l k)
-              (E.Run (E.Call (E.Value (Close fname l)) arg) l k).
-intros0 Hfunc. destruct Hfunc; subst func.
+            (E.Run (E.Call (E.Value (Close fname l)) arg) l k).
+Proof.
+  intros0 Hfunc. destruct Hfunc; subst func.
 
-- E_start HS.
-  E_step HS.
+  - E_start HS.
+    E_step HS.
     { eapply E.SCallL. inversion 1. }
-  E_step HS.
+    E_step HS.
     { eapply E.SCloseDyn. }
-  eapply splus_sstar. assumption.
+    eapply splus_sstar. assumption.
 
-- eapply E.SStarNil.
+  - eapply E.SStarNil.
 Qed.
-
 
 Inductive T_state_ok ELIMS : T.state -> Prop :=
 | SokRun : forall e l k,

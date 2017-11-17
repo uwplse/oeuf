@@ -49,6 +49,7 @@ Definition transf_untyped_to_self_close (l : list Untyped1.expr * list Metadata.
   @@@ transf_untyped_to_switched
   @@ SelfCloseComp.compile_cu.
 
+(* TODO: ValueFlagComp is just the Identity function now *)
 Definition transf_untyped_to_value_flag (l : list Untyped1.expr * list Metadata.metadata)  :=
   OK l
   @@@ transf_untyped_to_self_close

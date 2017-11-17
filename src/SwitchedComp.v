@@ -32,20 +32,21 @@ Definition compile (e : AS.expr) : B.expr :=
             | e :: es => go e :: go_list es
             end in
         match e with
+        | AS.Value v => B.Value v
         | AS.Arg => B.Arg
         | AS.UpVar n => B.UpVar n
         | AS.Call f a => B.Call (go f) (go a)
-        | AS.Constr tag args => B.Constr tag (go_list args)
+        | AS.MkConstr tag args => B.MkConstr tag (go_list args)
         | AS.ElimBody rec cases =>
                 let rec' := go rec in
-                let fix go_cases rec' cases :=
+                let fix go_cases cases :=
                     match cases with
                     | [] => []
                     | (e, info) :: cases =>
-                            unroll_case rec' (go e) info :: go_cases rec' cases
+                            unroll_case rec' (go e) info :: go_cases cases
                     end in
-                B.Switch (go_cases rec' cases)
-        | AS.Close fname free => B.Close fname (go_list free)
+                B.Switch (go_cases cases)
+        | AS.MkClose fname free => B.MkClose fname (go_list free)
         end in go e.
 
 Definition compile_list :=
@@ -78,8 +79,6 @@ Definition compile_cu (cu : list AS.expr * list metadata) :
     else
         None.
 
-
-
 Lemma compile_list_is_map : forall es,
     compile_list es = map compile es.
 induction es; simpl; eauto.
@@ -98,8 +97,6 @@ destruct a. simpl. f_equal. eauto.
 Qed.
 
 
-
-
 Definition I_case (P : AS.expr -> B.expr -> Prop) brec ap bcase :=
     (* Using `let '(acase, ainfo) := ap` causes the positivity check to fail (???) *)
     let acase := fst ap in
@@ -109,6 +106,9 @@ Definition I_case (P : AS.expr -> B.expr -> Prop) brec ap bcase :=
         bcase = unroll_case brec bcase0 ainfo.
 
 Inductive I_expr (AE : AS.env) (BE : B.env) : AS.expr -> B.expr -> Prop :=
+| IValue :
+    forall v,
+      I_expr AE BE (AS.Value v) (B.Value v)
 | IArg : I_expr AE BE AS.Arg B.Arg
 | IUpVar : forall n, I_expr AE BE (AS.UpVar n) (B.UpVar n)
 | ICall : forall af aa bf ba,
@@ -117,17 +117,19 @@ Inductive I_expr (AE : AS.env) (BE : B.env) : AS.expr -> B.expr -> Prop :=
         I_expr AE BE (AS.Call af aa) (B.Call bf ba)
 | IConstr :forall tag aargs bargs,
         Forall2 (I_expr AE BE) aargs bargs ->
-        I_expr AE BE (AS.Constr tag aargs) (B.Constr tag bargs)
+        I_expr AE BE (AS.MkConstr tag aargs) (B.MkConstr tag bargs)
 | IElimBody : forall fname n acases brec bcases,
-        let arec := AS.Close fname (AS.upvar_list n) in
+        let arec := AS.MkClose fname (AS.upvar_list n) in
         I_expr AE BE arec brec ->
         Forall2 (I_case (I_expr AE BE) brec) acases bcases ->
         I_expr AE BE (AS.ElimBody arec acases) (B.Switch bcases)
 | IClose :forall tag afree bfree,
         Forall2 (I_expr AE BE) afree bfree ->
-        I_expr AE BE (AS.Close tag afree) (B.Close tag bfree)
+        I_expr AE BE (AS.MkClose tag afree) (B.MkClose tag bfree)
 .
 
+
+(* How cases match during case evaluation *)
 Inductive I_expr_case (AE : AS.env) (BE : B.env)
     (arec : AS.expr) (brec : B.expr)
     (aargs : list AS.expr) :
@@ -150,8 +152,8 @@ Inductive I_expr_case (AE : AS.env) (BE : B.env)
             (AS.Call apre (AS.Call arec aarg))
             (B.Call bpre (B.Call brec barg))
 | IExprCaseValue : forall apre aarg bpre barg n,
-        AS.value aarg ->
-        B.value barg ->
+        AS.is_value aarg ->
+        B.is_value barg ->
         I_expr AE BE aarg barg ->
         I_expr_case AE BE arec brec aargs n apre bpre ->
         I_expr_case AE BE arec brec aargs (S n)
@@ -159,35 +161,31 @@ Inductive I_expr_case (AE : AS.env) (BE : B.env)
             (B.Call bpre barg)
 .
 
+Definition x {A : Type} (x : A) : A := x.
 
+(* TODO: read ElimFuncComp* passes and figure out what they all do *)
+
+(* What's going on here? *)
 Inductive I (AE : AS.env) (BE : B.env) : A.state -> B.state -> Prop :=
-| IRun : forall ae al ak be bl bk,
+| IRun : forall ae ak be bk l,
         I_expr AE BE ae be ->
-        Forall AS.value al ->
-        Forall B.value bl ->
-        Forall2 (I_expr AE BE) al bl ->
-        (forall av bv,
-            AS.value av ->
-            B.value bv ->
-            I_expr AE BE av bv ->
-            I AE BE (ak av) (bk bv)) ->
-        I AE BE (A.Run ae al ak) (B.Run be bl bk)
+        (forall v,
+            I AE BE (ak v) (bk v)) ->
+        I AE BE (A.Run ae l ak) (B.Run be l bk)
 
-| IElimRec : forall fname i n afree acases al ak bcases bl bk,
+
+| IElimRec : forall fname i n afree acases l ak bcases bk,
         n = length afree ->
-        sliding i (skipn 1 al) (AS.upvar_list n) afree ->
-        Forall2 (I_case (I_expr AE BE) (B.Close fname (B.upvar_list n))) acases bcases ->
+        sliding i (skipn 1 l) (AS.upvar_list n) afree -> (* What is this? *)
 
-        Forall AS.value al ->
-        Forall B.value bl ->
-        Forall2 (I_expr AE BE) al bl ->
-        (forall av bv,
-            AS.value av ->
-            B.value bv ->
-            I_expr AE BE av bv ->
-            I AE BE (ak av) (bk bv)) ->
-        I AE BE (A.Run (AS.ElimBody (AS.Close fname afree) acases) al ak)
-                (B.Run (B.Switch bcases) bl bk)
+        Forall2 (I_case (I_expr AE BE) (B.MkClose fname (B.upvar_list n))) acases bcases ->
+
+        (forall v,
+            I AE BE (ak v) (bk v)) ->
+        (* i is always 0???? *)
+        (* 1. step into rec part, eval the closure while rhs doesn't change *)
+        I AE BE (A.Run (AS.ElimBody (AS.Close fname afree) acases) l ak)
+                (B.Run (B.Switch bcases) l bk).
 
 | IElimRecClose : forall fname i n afree acases al ak bcases bl bk,
         n = length afree ->

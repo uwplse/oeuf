@@ -22,7 +22,9 @@ Inductive expr :=
 | MkConstr (tag : nat) (args : list expr)
 | ElimBody (rec : expr) (cases : list (expr * rec_info))
 | MkClose (f : function_name) (free : list expr)
-| MkCloseDyn (f : function_name) (drop : nat) (expect : nat)
+| MkCloseDyn (f : function_name)
+             (drop : bool) (* When making closure, do we drop the first local variable *)
+             (expect : nat) (* How many local variables to expect when making this closure *)
 .
 
 Definition env := list expr.
@@ -197,7 +199,7 @@ Definition num_locals :=
         (* Recall: ElimBody implicitly accesses Arg, and removes it before running cases *)
         | ElimBody rec cases => max (max (go rec) (S (go_list_pair cases))) 1
         | MkClose _ free => go_list free
-        | MkCloseDyn _ drop expect => if eq_nat_dec expect 0 then 0 else drop + expect
+        | MkCloseDyn _ drop expect => if eq_nat_dec expect 0 then 0 else (if drop then S expect else expect)
         end in go.
 
 (* Nested fixpoint aliases *)
@@ -251,6 +253,7 @@ Inductive state :=
 | Run (e : expr) (l : list value) (k : value -> state)
 | Stop (e : value).
 
+
 Inductive sstep (E : env) : state -> state -> Prop :=
 | SArg : forall l k v,
         nth_error l 0 = Some v ->
@@ -270,7 +273,7 @@ Inductive sstep (E : env) : state -> state -> Prop :=
 
 | SCloseDyn : forall fname drop expect l k,
         sstep E (Run (MkCloseDyn fname drop expect) l k)
-                (k (Close fname (skipn drop l)))
+                (k (Close fname (if drop then tl l else l)))
 
 | SConstrStep : forall fname vs e es l k,
         Forall is_value vs ->

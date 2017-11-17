@@ -11,8 +11,6 @@ Require Import Psatz.
 Module A := Switched.
 Module B := SelfClose.
 
-
-
 Definition compile :=
     let fix go e :=
         let fix go_list es :=
