@@ -203,27 +203,6 @@ Proof.
   eapply sstar_then_splus; eauto.
 Qed.
 
-(* MkClose f (close_dyn_free _ _) star steps to MkClose f (map B.value vs) *)
-Lemma mk_close_dyn_step :
-  forall l expect AE f drop bk,
-    (expect <= length l)%nat ->
-      B.sstar (compile_list AE) (B.Run (B.MkClose f (close_dyn_free drop expect)) l bk)
-              (B.Run (B.MkClose f (map B.Value (firstn expect (if drop then tl l else l)))) l bk).
-
-Proof.
-  induction l; intros.
-  simpl. replace (if drop then [] else []) with (@nil value) by (destruct drop; auto).
-  simpl in *.
-  assert (expect = 0%nat) by omega.
-  subst.
-  simpl.
-  unfold close_dyn_free.
-  destruct drop; simpl;
-    eapply SStarNil.
-  
-                   
-  (* Probably close to true *)
-Admitted.
 
 Definition var_n n :=
     match n with
@@ -426,6 +405,398 @@ Proof.
   destruct drop; omega.
 Qed.
 
+(* START *)
+
+Fixpoint close_dyn_free'' (len : nat) (curr : nat) :=
+  match len with
+  | S n => (B.UpVar curr) :: close_dyn_free'' n (S curr)
+  | O => nil
+  end.
+  
+Definition close_dyn_free' (drop : bool) (expect : nat) :=
+  match expect with
+  | O => nil
+  | S n =>
+    let tot := if drop then expect else n in
+    let res := close_dyn_free'' tot O in
+  if drop then
+    res
+  else
+    B.Arg :: res
+  end.
+
+Lemma free_list'_acc :
+  forall expect acc,
+    free_list' acc expect = (free_list' [] expect) ++ acc.
+Proof.
+  induction expect; intros. simpl. reflexivity.
+  simpl. rewrite IHexpect.
+  rewrite (IHexpect [B.UpVar expect]).
+  rewrite app_ass.
+  simpl. reflexivity.
+Qed.
+
+Lemma close_dyn_free''_end :
+  forall n k,
+    close_dyn_free'' (S n) k = close_dyn_free'' n k ++ [B.UpVar (n + k)].
+Proof.
+  induction n; intros.
+  simpl. reflexivity.
+  replace (close_dyn_free'' (S (S n)) k) with (B.UpVar k :: close_dyn_free'' (S n) (S k)) by reflexivity.
+  rewrite IHn.
+  simpl. f_equal. f_equal.
+  replace (n + (S k)) with (S (n + k)) by omega.
+  reflexivity.
+Qed.
+
+Lemma free_list'_eq :
+  forall expect,
+    free_list' [] expect = B.Arg :: close_dyn_free'' expect O.
+Proof.
+  induction expect; intros.
+  simpl. reflexivity.
+  simpl.
+  rewrite free_list'_acc.
+  rewrite IHexpect.
+  simpl. f_equal.
+  replace ([B.UpVar expect]) with ([B.UpVar (expect + 0)]) by (repeat f_equal; omega).
+  rewrite <- close_dyn_free''_end.
+  simpl. reflexivity.
+Qed.
+      
+
+Lemma close_dyn_free_eq :
+  forall drop expect,
+    close_dyn_free drop expect = close_dyn_free' drop expect.
+Proof.
+  induction expect; intros.
+  destruct drop; simpl; auto.
+
+  destruct drop; simpl.
+  rewrite free_list'_acc.
+  rewrite free_list'_eq. simpl.
+  replace ([B.UpVar expect]) with ([B.UpVar (expect + 0)]) by (repeat f_equal; omega).
+  rewrite <- close_dyn_free''_end.
+  reflexivity.
+  rewrite free_list'_eq.
+  reflexivity.
+Qed.
+
+
+(*
+  (* define functional version *)
+  (* l1 has length m *)
+  (* result has length m *)
+  (* first n are from l1, rest from l2 *)
+  Fixpoint slide' {A} (n m : nat) (l1 l2 : list A) :=
+    match m with
+    | O => nil
+    | S m' =>
+      match n,l1,l2 with
+      | S n', f1 :: l1, _ => f1 :: slide' n' m' l1 (tl l2)
+      | O, _, f2 :: l2 => f2 :: slide' O m' (tl l1) l2
+      | _,_,_ => nil
+      end
+    end.
+      
+  Definition slide {A} (n : nat) (l1 l2 : list A) :=
+    slide' n (length l1) l1 l2.
+
+
+  Lemma slide'_right :
+    forall {A} (l2 l1 : list A),
+      slide' 0 (length l2) l1 l2 = l2.
+  Proof.
+    induction l2; intros; simpl; auto.
+    f_equal. eauto.
+  Qed.
+
+  (* Unused? *)
+  Lemma slide'_left :
+    forall {A} (l1 l2 : list A),
+      slide' (length l1) (length l1) l1 l2 = l1.
+  Proof.
+    induction l1; intros; simpl; auto.
+    f_equal. eauto.
+  Qed.
+
+  Lemma slide_sliding :
+    forall {A} n (l1 l2 ys : list A),
+      length l1 = length l2 ->
+      ys = slide n l1 l2 ->
+      sliding n l1 l2 ys.
+  Proof.
+    induction n; intros.
+    subst; simpl.
+    unfold slide.
+    simpl.
+    unfold sliding.
+    simpl. split. reflexivity.
+    rewrite H. rewrite slide'_right. reflexivity.
+    subst; simpl.
+    unfold sliding. unfold slide.
+    destruct l1; destruct l2; simpl in *; try solve [congruence].
+    eauto.
+    split. f_equal.
+
+  Admitted.
+
+ *)
+
+Definition slide {A} (n : nat) (l1 l2 : list A) :=
+  firstn n l1 ++ skipn n l2.
+
+
+Lemma slide_0_anything :
+  forall {A} (l1 l2 l3 : list A),
+    slide 0 l1 l2 = slide 0 l3 l2.
+Proof.
+  intros. unfold slide.
+  simpl. reflexivity.
+Qed.
+
+Lemma mk_close_extra_step :
+  forall BE f aa bb l bk,
+    B.sstar BE (B.Run (B.MkClose f aa) l bk)
+            (B.Run (B.MkClose f bb) l bk) ->
+    forall extra,
+      B.sstar BE (B.Run (B.MkClose f (aa ++ extra)) l bk)
+              (B.Run (B.MkClose f (bb ++ extra)) l bk).
+Proof.
+  intros BE f aa bb l bk.
+  remember (B.Run (B.MkClose f aa) l bk) as st.
+  remember (B.Run (B.MkClose f bb) l bk) as st'.
+  induction 1; intros.
+  subst e. inversion Heqst'.
+  subst.
+  eapply SStarNil.
+  eapply IHsstar; eauto.
+
+
+  (* Maybe this is useful? *)
+Admitted.
+
+Lemma mk_close_dyn_step_false :
+  forall expect l,
+    let a := close_dyn_free' false expect in
+    let b := firstn expect (map B.Value l) in
+    forall AE f bk,
+    (expect <= length l)%nat ->
+    B.sstar (compile_list AE) (B.Run (B.MkClose f (slide O a b)) l bk)
+            (B.Run (B.MkClose f (slide expect a b)) l bk).
+Proof.
+  induction expect; intros. subst a b.
+  unfold slide. simpl.
+  eapply SStarNil.
+  subst a b.
+  assert (expect <= length l) by omega.
+  specialize (IHexpect l).
+  simpl in IHexpect.
+  specialize (IHexpect AE f bk H0).
+  erewrite slide_0_anything.
+  eapply sstar_then_sstar.
+
+Admitted. (* Maybe this will work? *)
+  
+
+(*
+Lemma mk_close_dyn_step_false :
+  forall expect l AE f bk,
+    (expect <= length l)%nat ->
+      B.sstar (compile_list AE) (B.Run (B.MkClose f (close_dyn_free' false expect)) l bk)
+              (B.Run (B.MkClose f (map B.Value (firstn expect l))) l bk).
+Proof.
+  induction expect; intros.
+  simpl. eapply SStarNil.
+  destruct l; simpl in H; try omega.
+  destruct expect.
+  simpl.
+  eapply SStarCons.
+  replace [B.Arg] with (nil ++ [B.Arg] ++ nil) by reflexivity.
+  econstructor.
+  econstructor.
+  intro. inversion H0.
+  eapply SStarCons.
+  econstructor. reflexivity.
+  simpl. eapply SStarNil.
+
+  assert (S expect <= length l) by omega.
+  clear H.
+  specialize (IHexpect _ AE f bk H0).
+
+
+
+    
+                                                       
+  
+
+  
+  
+  (* inducting on expect is not useful *)
+  (* as we have a MkClose with a different length of stuff in it *)
+  (* We need a different induction hypothesis *)
+
+  (* we can use sliding here *)
+  (* This can be a general pattern for inducting on steps like this *)
+  
+
+Qed. 
+  
+*)  
+
+(* MkClose f (close_dyn_free _ _) star steps to MkClose f (map B.value vs) *)
+Lemma mk_close_dyn_step :
+  forall l (expect : nat) AE f (drop : bool) bk,
+    ((if drop then if expect then O else S expect else expect) <= length l)%nat ->
+      B.sstar (compile_list AE) (B.Run (B.MkClose f (close_dyn_free drop expect)) l bk)
+              (B.Run (B.MkClose f (map B.Value (firstn expect (if drop then tl (firstn expect l) else (firstn expect l))))) l bk).
+Proof.
+  induction l; intros.
+  simpl. replace (if drop then [] else []) with (@nil value) by (destruct drop; auto).
+  simpl in *.
+
+(*
+  assert (expect = 0%nat) by omega.
+  subst.
+  simpl.
+  unfold close_dyn_free.
+  destruct drop; simpl;
+    eapply SStarNil.
+  simpl in H.
+*)
+  (* Somehow we need to show that we can step through close_dyn_free *)
+  
+  (* assert (expect = S (length l) \/ expect <= length l) by omega. *)
+  (* destruct H0. subst. *)
+  (* simpl. *)
+  
+  
+Admitted.
+
+(* END *)
+
+Lemma nth_error_Some_ex : forall A (xs : list A) n,
+    n < length xs ->
+    exists x, nth_error xs n = Some x.
+Proof.
+  intros0 Hlen. rewrite <- nth_error_Some in Hlen.
+  destruct (nth_error _ _) eqn:?; try congruence.
+  eauto.
+Qed.
+
+Lemma I_expr_value :
+  forall AE BE x y,
+    I_expr AE BE x y ->
+    A.is_value x <->
+    B.is_value y.
+Proof.
+  intros; split; intros;
+  inversion H0; subst; inversion H; try econstructor.
+Qed.
+
+Lemma I_expr_not_value :
+  forall AE BE x y,
+    I_expr AE BE x y ->
+    ~A.is_value x <->
+    ~B.is_value y.
+Proof.
+  intros; split; intros; intro;
+  inversion H1; subst; inversion H; subst; apply H0; econstructor.
+Qed.
+
+Lemma Forall_I_expr_value :
+  forall AE BE xs ys,
+    Forall2 (I_expr AE BE) xs ys ->
+    Forall A.is_value xs <->
+    Forall B.is_value ys.
+Proof.
+  induction 1; intros; split; intros;
+    econstructor; eauto;
+      inversion H1.
+  eapply I_expr_value; eauto.
+  eapply IHForall2; eauto.
+  erewrite I_expr_value; eauto.
+  eapply IHForall2; eauto.
+Qed.
+
+Lemma Forall_I_expr_map_value :
+  forall AE BE vs ys,
+    Forall2 (I_expr AE BE) (map A.Value vs) ys ->
+    exists vs',
+      ys = map B.Value vs' /\ Forall2 (I_value AE BE) vs vs'.
+Proof.
+  induction vs; intros;
+    simpl in *; inversion H; subst.
+  exists []. eauto.
+
+  inversion H2. subst.
+  inversion H. subst.
+  eapply IHvs in H8.
+  break_exists. break_and.
+  subst.
+  exists (v' :: x). split.
+  reflexivity.
+  econstructor; eauto.
+Qed.
+
+
+Lemma num_locals_elim' :
+  forall rec cases,
+    B.num_locals (B.ElimBody rec cases) = Init.Nat.max (Init.Nat.max (B.num_locals rec) (S (B.num_locals_list_pair cases))) 1.
+Proof.
+  intros. simpl.
+  unfold B.num_locals_list_pair.
+  unfold B.num_locals_pair.
+  reflexivity.
+Qed.
+
+Lemma num_locals_elim :
+  forall rec cases,
+    B.num_locals (B.ElimBody rec cases) = Init.Nat.max (B.num_locals rec) (S (B.num_locals_list_pair cases)).
+Proof.
+  intros.
+  rewrite num_locals_elim'.
+  rewrite Max.max_l.
+  reflexivity.
+  destruct (B.num_locals rec); destruct (B.num_locals_list_pair cases);
+    simpl;
+    omega.
+Qed.
+
+Lemma unroll_elim_sim : forall AE BE,
+    forall arec brec acase bcase aargs bargs ainfo binfo ae',
+    A.unroll_elim arec acase aargs ainfo = Some ae' ->
+    I_expr AE BE arec brec ->
+    I_expr AE BE acase bcase ->
+    Forall2 (I_value AE BE) aargs bargs ->
+    ainfo = binfo ->
+    exists be',
+        B.unroll_elim brec bcase bargs binfo = Some be' /\
+        I_expr AE BE ae' be'.
+Proof.
+  first_induction aargs; destruct ainfo; intros0 Aunroll IIrec IIcase IIargs IIinfo;
+    try discriminate.
+
+  - invc IIargs.
+    eexists. split. reflexivity.
+    simpl in Aunroll. inject_some. assumption.
+
+  - invc IIargs. simpl. eapply IHaargs; try eassumption; eauto.
+    destruct b; eauto;
+    repeat econstructor; eauto.
+Qed.
+
+
+Lemma firstn_map :
+  forall {A B} n (l : list A) (f : A -> B),
+    firstn n (map f l) = map f (firstn n l).
+Proof.
+  induction n; intros.
+  simpl. reflexivity.
+  destruct l; simpl. reflexivity.
+  f_equal. eauto.
+Qed.
+
 
 Lemma I_sim :
   forall AE BE a a' b,
@@ -439,37 +810,236 @@ Proof.
   destruct a as [ae al ak | ae];
     intros; [ | solve [on (A.sstep _ _ _), inv] ].
 
-  destruct ae; on (A.sstep _ _ _),  inv; on (I _ _ _ _), invc; [ try on (I_expr _ _ _ _ _), invc.. | | ].
-  
-  Focus 12.
-  on (I_expr _ _ _ _), inv.
-  eapply splus_right_sstar_ex.
-  eexists; split.
-  eapply mk_close_dyn_step.
-  rewrite num_locals_close_dyn_free in *.
-  destruct expect; destruct drop; omega.
-  eexists.
-  split.
-  eapply SPlusOne.
-  econstructor.
-  eapply H5.
-  econstructor.
-  eassumption.
-  eassumption.
-
-  (* There are too many different bounds here *)
-  (* TODO: get rid of those that don't matter *)
-  repeat rewrite close_dyn_free_length in *.
-  rewrite num_locals_close_dyn_free in *.
-  destruct drop; destruct expect; try rewrite tl_length;
-    try omega.
-  rewrite close_dyn_free_length.
-
-  (* just a bunch of Forall wrangling *)
-  admit.
+  destruct ae; on (A.sstep _ _ _),  inv; on (I _ _ _ _), invc; [ try on (I_expr _ _ _ _), invc.. | | ].
 
   
-  
+  * simpl in H7.
+    destruct bl; simpl in *; try omega.
+    destruct al; simpl in *; try omega.
+    
+    eexists. split.
+    eapply SPlusOne. econstructor.
+    reflexivity.
+    eapply H6.
+    inversion H10. congruence.
+
+
+  * simpl in H7.
+    edestruct Forall2_nth_error_ex. eassumption.
+    rewrite firstn_nth_error_lt. eassumption.
+    omega. break_and.
+    eexists; split.
+    eapply SPlusOne. econstructor. eauto.
+    eapply H5; eauto.
+    
+  * eexists; split.
+    eapply SPlusOne. econstructor.
+    eapply I_expr_not_value; eauto.
+    simpl in H6.
+    remember H6 as Hle.
+    clear HeqHle.
+    eapply nat_max_le1 in H6.
+    eapply nat_max_le2 in Hle.
+    econstructor; eauto.
+    intros.
+    econstructor; eauto.
+    econstructor; eauto.
+    econstructor; eauto.
+
+
+  * eexists; split.
+    eapply SPlusOne.
+    eapply B.SCallR; eauto.
+    eapply I_expr_value; eauto.
+    eapply I_expr_not_value; eauto.
+    simpl in H6.
+    remember H6 as Hle.
+    clear HeqHle.
+
+    eapply nat_max_le1 in H6.
+    eapply nat_max_le2 in Hle.
+    
+    econstructor; eauto.
+    
+    intros.
+    
+    econstructor; eauto.
+    econstructor; eauto.
+    econstructor; eauto.
+    simpl.
+    rewrite Max.max_0_r.
+    eauto.
+    
+  * inversion H2. subst.
+    inversion H0. subst.
+    inversion H8. subst.
+    assert (n = length vs').
+    {
+      erewrite <- Forall2_length; eauto.
+      rewrite firstn_length.
+      rewrite Min.min_l; eauto.
+    }
+    eexists; split.
+    eapply SPlusOne.
+    eapply B.SMakeCall. eauto.
+    econstructor.
+
+    (* lemma: bodies of functions match *)
+    admit.
+
+    eassumption.
+    simpl.
+
+    omega.
+    simpl. omega.
+    
+    simpl. econstructor.
+    eauto.
+    congruence.
+    
+  * eapply Forall2_app_inv_l in H3.
+    repeat break_exists; repeat break_and.
+    inversion H0. subst.
+    
+    eexists; split.
+    eapply SPlusOne.
+    eapply B.SConstrStep.
+    
+    eapply Forall_I_expr_value; eauto.
+    eapply I_expr_not_value; eauto.
+    econstructor; eauto.
+    intros.
+    econstructor; eauto.
+    econstructor; eauto.
+    eapply Forall2_app; eauto.
+    eapply Forall2_app; eauto.
+    econstructor; eauto.
+    econstructor; eauto.
+    all: simpl in H6; simpl;
+    fold B.num_locals_list in *;
+    rewrite B.num_locals_list_is_maximum in *;
+    rewrite map_app in *;
+    rewrite maximum_app in *;
+    simpl in *;
+    eapply nat_max_le in H6;
+    break_and.
+    eapply nat_max_le in H4;
+    break_and;
+    eapply nat_le_max; eauto.
+    eapply nat_max_le in H3;
+    break_and;
+    eauto.
+
+  *
+
+    eapply Forall_I_expr_map_value in H3.
+    break_exists. break_and.
+    subst bargs.
+
+    eexists; split.
+    eapply SPlusOne.
+    eapply B.SConstrDone.
+    eapply H5.
+    econstructor; eauto.
+    
+  * eexists; split.
+    eapply SPlusOne.
+    econstructor.
+    eapply I_expr_not_value; eauto.
+    econstructor; eauto.
+    intros.
+    econstructor; eauto.
+    econstructor; eauto.
+    econstructor; eauto.
+
+    rewrite num_locals_elim in *.
+    apply nat_max_le in H6.
+    break_and.
+    simpl.
+    omega.
+    
+    rewrite num_locals_elim in *.
+    apply nat_max_le in H6.
+    break_and.
+    simpl.
+    assumption.
+    
+  * 
+    remember H6 as Hnum_locals.
+    clear HeqHnum_locals.
+    rewrite num_locals_elim in H6.
+    apply nat_max_le in H6.
+    break_and.
+    destruct bl; try solve [simpl in *; omega].
+    inversion H12. subst.
+    inversion H13. subst.
+
+
+    eapply Forall2_nth_error_ex in H8; eauto.
+    break_exists. break_and. simpl in H6. subst info.
+    eapply unroll_elim_sim in H9; eauto.
+    break_exists. break_and.
+    
+    eexists; split.
+    eapply SPlusOne.
+    
+    eapply B.SEliminate; eauto.
+    eapply I_expr_value; eauto.
+    rewrite H3.
+    destruct x; reflexivity.
+    econstructor; try eassumption; try solve [simpl in *; omega].
+    
+
+    eapply B.unroll_elim_num_locals in H6.
+    destruct x. simpl in H6.
+    simpl in H4.
+    
+    admit. (* This could be a problem... *)
+
+    
+  * admit.
+
+    
+  * inversion H4. subst.
+
+
+    rewrite firstn_map in H11.
+    eapply Forall_I_expr_map_value in H11.
+    break_exists. break_and. subst.
+    eexists; split.
+    eapply SPlusOne.
+    eapply B.SCloseDone.
+    eapply H5; eauto.
+    econstructor; eauto.
+    rewrite map_length in *.
+    assumption.
+
+    
+  * on (I_expr _ _ _ _), inv.
+    eapply splus_right_sstar_ex.
+    eexists; split.
+    eapply mk_close_dyn_step.
+    rewrite num_locals_close_dyn_free in *.
+    destruct expect; destruct drop; omega.
+    eexists.
+    split.
+    eapply SPlusOne.
+    econstructor.
+    eapply H5.
+    econstructor.
+    eassumption.
+    eassumption.
+
+    (* There are too many different bounds here *)
+    (* TODO: get rid of those that don't matter *)
+    repeat rewrite close_dyn_free_length in *.
+    rewrite num_locals_close_dyn_free in *.
+    destruct drop; destruct expect; try rewrite tl_length;
+      try omega.
+    rewrite close_dyn_free_length.
+
+    (* just a bunch of Forall wrangling *)
+    admit.
   
   
 Admitted.
@@ -522,7 +1092,7 @@ Section Preservation.
     (* fwd eapply compile_cu_Forall; eauto. *)
     (* fwd eapply compile_cu_metas; eauto. *)
 
-    eapply Semantics.forward_simulation_step with
+    eapply Semantics.forward_simulation_plus with
         (match_states := I A B)
         (match_values := match_values A B Ameta).
 
@@ -568,6 +1138,7 @@ Section Preservation.
 
       eexists.
       split.
+      
       i_ctor.
       simpl in H. simpl.
       
@@ -575,7 +1146,12 @@ Section Preservation.
       reflexivity.
 
     - intros0 Astep. intros0 II.
-      eapply I_sim; try eassumption.
+      simpl.
+      eapply I_sim in II; try eassumption.
+      break_exists. break_and.
+      eexists; split. 
+      eapply splus_semantics.
+      eassumption. assumption.
       + eapply compile_cu_compile_list; eauto.
         
   Admitted.
@@ -843,14 +1419,6 @@ Ltac B_plus HS :=
 
 
 
-(* Lemma nth_error_Some_ex : forall A (xs : list A) n, *)
-(*     n < length xs -> *)
-(*     exists x, nth_error xs n = Some x. *)
-(* Proof. *)
-(*   intros0 Hlen. rewrite <- nth_error_Some in Hlen. *)
-(*   destruct (nth_error _ _) eqn:?; try congruence. *)
-(*   eauto. *)
-(* Qed. *)
 
 (*
 Definition count_close_dyn_zero :=
