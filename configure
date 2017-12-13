@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 
-echo NOTE: Skipping building verdi demo and shim_verif because SourceLifted reflection is not yet implementd
-#DIRS=(src demos/verdi/echo shim_verif)
-DIRS=(src demos/sha256 demos/list_max)
+echo NOTE: Skipping building all demos, edit configure file to enable
+#DIRS=(src demos/verdi/echo shim_verif demos/sha256 demos/list_max)
+DIRS=(src)
 NAMESPACE_compcert=compcert
 LOCALDEPS=(compcert)
 DEPS=(StructTact PrettyParsing)
