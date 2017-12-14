@@ -1,26 +1,6 @@
   
 
 
-Lemma unroll_elim_sim : forall AE BE,
-    forall arec brec acase bcase aargs bargs ainfo binfo ae',
-    A.unroll_elim arec acase aargs ainfo = Some ae' ->
-    I_expr AE BE arec brec ->
-    I_expr AE BE acase bcase ->
-    Forall2 (I_expr AE BE) aargs bargs ->
-    ainfo = binfo ->
-    exists be',
-        B.unroll_elim brec bcase bargs binfo = Some be' /\
-        I_expr AE BE ae' be'.
-first_induction aargs; destruct ainfo; intros0 Aunroll IIrec IIcase IIargs IIinfo;
-  try discriminate.
-
-- invc IIargs.
-  eexists. split. reflexivity.
-  simpl in Aunroll. inject_some. assumption.
-
-- invc IIargs. simpl. eapply IHaargs; try eassumption; eauto.
-  destruct b; eauto using ICall.
-Qed.
 
 
 Ltac max_split :=

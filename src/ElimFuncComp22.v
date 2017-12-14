@@ -543,9 +543,9 @@ Qed.
 
  *)
 
+
 Definition slide {A} (n : nat) (l1 l2 : list A) :=
   firstn n l1 ++ skipn n l2.
-
 
 Lemma slide_0_anything :
   forall {A} (l1 l2 l3 : list A),
@@ -555,6 +555,7 @@ Proof.
   simpl. reflexivity.
 Qed.
 
+(*
 Lemma mk_close_extra_step :
   forall BE f aa bb l bk,
     B.sstar BE (B.Run (B.MkClose f aa) l bk)
@@ -575,15 +576,229 @@ Proof.
 
   (* Maybe this is useful? *)
 Admitted.
+*)
+
+Lemma tl_app :
+  forall {A} (a b : list A),
+    a <> nil ->
+    (tl a) ++ b = tl (a ++ b).
+Proof.
+  induction a; intros; simpl; auto.
+  congruence.
+Qed.
+
+Lemma close_dyn_free_S_S_true :
+  forall expect,
+    close_dyn_free true (S (S expect)) = close_dyn_free true (S expect) ++ [B.UpVar (S expect)].
+Proof.
+  intros. unfold close_dyn_free.
+  simpl.
+  simpl.
+  rewrite free_list'_acc.
+  symmetry.
+  rewrite free_list'_acc.
+  rewrite tl_app. f_equal.
+  rewrite app_ass. simpl. reflexivity.
+  destruct (free_list' [] expect); simpl; congruence.
+Qed.
+
+
+Lemma close_dyn_free_S_S_false :
+  forall expect,
+    close_dyn_free false (S (S expect)) = close_dyn_free false (S expect) ++ [B.UpVar expect].
+Proof.
+  intros. unfold close_dyn_free.
+  simpl.
+  rewrite free_list'_acc.
+  reflexivity.
+Qed.
+
+Lemma close_dyn_free_S_S :
+  forall drop expect,
+    close_dyn_free drop (S (S expect)) = close_dyn_free drop (S expect) ++ [B.UpVar (if drop then S expect else expect)].
+Proof.    
+  intros. destruct drop.
+  eapply close_dyn_free_S_S_true.
+  eapply close_dyn_free_S_S_false.
+Qed.
+
+Lemma close_dyn_free_S_O :
+  forall drop,
+    close_dyn_free drop (S O) = close_dyn_free drop O ++ [if drop then B.UpVar O else B.Arg].
+Proof.
+  intros. destruct drop; simpl; auto.
+Qed.
+
+Lemma close_dyn_free_S :
+  forall drop expect,
+    let x := match drop,expect with
+             | true,O => B.UpVar O
+             | false,O => B.Arg
+             | true,S n => B.UpVar expect
+             | false,S n => B.UpVar n
+             end in
+    close_dyn_free drop (S expect) = close_dyn_free drop expect ++ [x].
+Proof.
+  intros.
+  destruct expect;
+    subst x.
+  apply close_dyn_free_S_O.
+  destruct drop;
+    apply close_dyn_free_S_S.
+Qed.
+
+Lemma slide_add_extra_right :
+  forall {A} n (l: list A),
+    n <= length l ->
+    forall l',
+      n <= length l' ->
+      forall extra,
+        (slide n l l') ++ extra = slide n l (l' ++ extra).
+Proof.
+  induction n; intros.
+  unfold slide. simpl. reflexivity.
+  unfold slide.
+  destruct l; simpl in H; try omega.
+  destruct l'; simpl in H0; try omega.
+  simpl.
+  f_equal.
+  assert (n <= length l) by omega.
+  assert (n <= length l') by omega.
+  specialize (IHn l H1 l' H2).
+  eauto.
+Qed.
+
+Lemma length_pos :
+  forall {A} (l : list A),
+    0 <= length l.
+Proof.
+  intros. destruct l; simpl; omega.
+Qed.
+
+Lemma Forall_map_establishes :
+  forall {A B} (P : B -> Prop) (f : A -> B) (l : list A),
+    (forall x, P (f x)) ->
+    Forall P (map f l).
+Proof.
+  induction l; intros.
+  simpl. econstructor.
+  specialize (IHl H).
+  simpl. econstructor.
+  apply H. assumption.
+Qed.
+
+Lemma firstn_nth_error :
+  forall {A} (l : list A) n v,
+    nth_error l n = Some v ->
+    firstn (S n) l = firstn n l ++ [v].
+Proof.
+  induction l; intros.
+  destruct n; simpl in *; congruence.
+  destruct n; simpl in H.
+  inversion H. subst.
+  simpl. reflexivity.
+  simpl. f_equal.
+  rewrite <- IHl; eauto.
+Qed.
+
+Lemma mk_close_dyn_steps :
+  forall expect l,
+    let a := close_dyn_free false expect in
+    let b := map B.Value l in
+    forall AE f bk,
+      (expect <= length l)%nat ->
+      forall extra,
+        B.sstar (compile_list AE) (B.Run (B.MkClose f (slide O b a ++ extra)) l bk)
+                (B.Run (B.MkClose f (slide expect b a ++ extra)) l bk).
+Proof.
+  induction expect; intros. subst a b.
+  unfold slide. simpl.
+  eapply SStarNil.
+  subst a b.
+  assert (expect <= length l) by omega.
+  specialize (IHexpect l).
+  simpl in IHexpect.
+  specialize (IHexpect AE f bk).
+  eapply sstar_then_sstar.
+  rewrite close_dyn_free_S.
+  specialize (IHexpect H0 ([match expect with
+                            | O => B.Arg
+                            | S n => B.UpVar n
+                            end] ++ extra)).
+
+  simpl in *.
+  rewrite <- slide_add_extra_right.
+  rewrite app_ass.
+  simpl.
+  eassumption.
+  eapply length_pos.
+  eapply length_pos.
+  simpl.
+
+  destruct expect; simpl.
+
+  (* first step *)
+  destruct l. simpl in *; omega.
+  eapply SStarCons.
+  replace (B.Arg :: extra) with ([] ++ [B.Arg] ++ extra) by (simpl; reflexivity).
+  eapply B.SCloseStep.
+  constructor.
+  intro. inversion H1.
+  eapply SStarCons.
+  econstructor.
+  simpl. reflexivity.
+  simpl. eapply SStarNil.
+
+
+  (* destruct nth_error here *)
+  destruct (nth_error l (S expect)) eqn:?.
+  Focus 2.
+  apply nth_error_None in Heqo.
+  omega.
+  
+  (* middle step *)
+  eapply SStarCons.
+  unfold slide.
+  rewrite skipn_all.
+  rewrite app_nil_r.
+  replace (B.UpVar expect :: extra) with ([B.UpVar expect] ++ extra) by (reflexivity).
+  eapply B.SCloseStep.
+  eapply Forall_firstn.
+  eapply Forall_map_establishes.
+  intros. econstructor.
+  intro. inversion H1.
+  rewrite free_list'_length.
+  simpl. omega.
+  eapply SStarCons.
+  simpl. econstructor.
+  eassumption.
+
+  
+  unfold slide.
+  rewrite skipn_all by (rewrite free_list'_length;
+                        simpl; omega).
+  rewrite app_nil_r.
+
+  erewrite firstn_nth_error.
+  simpl.
+  instantiate (1 := B.Value v).
+  rewrite app_ass.
+  simpl.
+  eapply SStarNil.
+
+  eapply map_nth_error; eauto.
+
+Qed.
+
 
 Lemma mk_close_dyn_step_false :
   forall expect l,
     let a := close_dyn_free' false expect in
-    let b := firstn expect (map B.Value l) in
+    let b := map B.Value l in
     forall AE f bk,
     (expect <= length l)%nat ->
-    B.sstar (compile_list AE) (B.Run (B.MkClose f (slide O a b)) l bk)
-            (B.Run (B.MkClose f (slide expect a b)) l bk).
+    B.sstar (compile_list AE) (B.Run (B.MkClose f (slide O b a)) l bk)
+            (B.Run (B.MkClose f (slide expect b a)) l bk).
 Proof.
   induction expect; intros. subst a b.
   unfold slide. simpl.
@@ -593,8 +808,9 @@ Proof.
   specialize (IHexpect l).
   simpl in IHexpect.
   specialize (IHexpect AE f bk H0).
-  erewrite slide_0_anything.
   eapply sstar_then_sstar.
+  
+  
 
 Admitted. (* Maybe this will work? *)
   
