@@ -25,14 +25,14 @@ Require Import compcert.lib.Coqlib.
 Require Import compcert.common.Events.
 Require Import compcert.common.Globalenvs.
 Require Import Integers.
-Require Import HighValues.
+Require Import oeuf.HighValues.
 
 Set Implicit Arguments.
 
 Require Import StructTact.StructTactics.
 Require Import StructTact.Util.
 
-Require Import EricTact.
+Require Import oeuf.EricTact.
 
 
 (** * Closures of transitions relations *)

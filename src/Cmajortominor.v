@@ -11,7 +11,7 @@ Require Import compcert.common.Switch.
 (*Require Import compcert.common.Smallstep.*)
 
 Require Import compcert.backend.Cminor.
-Require Import Cmajor.
+Require Import oeuf.Cmajor.
 
 Require Import StructTact.StructTactics.
 Require Import StructTact.Util.
