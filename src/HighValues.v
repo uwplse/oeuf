@@ -19,7 +19,7 @@ Require Import Ring.
 Require Import StructTact.StructTactics.
 Require Import StructTact.Util.
 
-Require Import EricTact.
+Require Import oeuf.EricTact.
 
 (* Computation will be over higher level values, i.e. Constr and Close *)
 (* We will need a way to relate those to lower level values *)
