@@ -1,9 +1,9 @@
-Require Import Common Monads.
-Require Import Metadata.
+Require Import oeuf.Common oeuf.Monads.
+Require Import oeuf.Metadata.
 Require String.
-Require LocalsSources LocalsOnly.
-Require Import ListLemmas.
-Require Import HigherValue.
+Require oeuf.LocalsSources oeuf.LocalsOnly.
+Require Import oeuf.ListLemmas.
+Require Import oeuf.HigherValue.
 
 Require Import Psatz.
 
@@ -275,7 +275,7 @@ Lemma compile_cu_metas : forall A Ameta B Bmeta,
 simpl. inversion 1. auto.
 Qed.
 
-Require Semantics.
+Require oeuf.Semantics.
 
 Section Preservation.
 

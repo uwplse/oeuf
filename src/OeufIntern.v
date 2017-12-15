@@ -1,17 +1,17 @@
-Require Import OeufCompcertCompiler compcert.common.Errors.
-Require Import Common Monads.
-Require Untyped1.
-Require UntypedComp1 TaggedComp SwitchedComp FmajorComp.
-Require Fmajortofflatmajor Fflatmajortoemajor Emajortodmajor Dmajortodflatmajor Dflatmajortocmajor Cmajortominor.
-Require TaggedNumberedComp ElimFuncComp ElimFuncComp2 ElimFuncComp3.
-Require SelfCloseComp ValueFlagComp.
-Require UntypedCompCombined StackCompCombined LocalsCompCombined FlatCompCombined.
-Require CompilationUnit Metadata.
-Require Import CompilerUtil.
+Require Import oeuf.OeufCompcertCompiler compcert.common.Errors.
+Require Import oeuf.Common oeuf.Monads.
+Require oeuf.Untyped1.
+Require oeuf.UntypedComp1 oeuf.TaggedComp oeuf.SwitchedComp oeuf.FmajorComp.
+Require oeuf.Fmajortofflatmajor oeuf.Fflatmajortoemajor oeuf.Emajortodmajor oeuf.Dmajortodflatmajor oeuf.Dflatmajortocmajor oeuf.Cmajortominor.
+Require oeuf.TaggedNumberedComp oeuf.ElimFuncComp oeuf.ElimFuncComp2 oeuf.ElimFuncComp3.
+Require oeuf.SelfCloseComp oeuf.ValueFlagComp.
+Require oeuf.UntypedCompCombined oeuf.StackCompCombined oeuf.LocalsCompCombined oeuf.FlatCompCombined.
+Require oeuf.CompilationUnit oeuf.Metadata.
+Require Import oeuf.CompilerUtil.
 
 Require Import compcert.common.AST.
 Require compcert.backend.SelectLong.
-Require Import Linker.
+Require Import oeuf.Linker.
 
 
 Definition transf_untyped_to_tagged (l : list Untyped1.expr * list Metadata.metadata) :=

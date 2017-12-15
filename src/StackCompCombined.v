@@ -1,18 +1,18 @@
 Require Import compcert.driver.Compiler compcert.common.Errors.
-Require Import Common Monads.
-Require CompilationUnit.
-Require Import Metadata.
-Require Import CompilerUtil.
+Require Import oeuf.Common oeuf.Monads.
+Require oeuf.CompilationUnit.
+Require Import oeuf.Metadata.
+Require Import oeuf.CompilerUtil.
 
-Require ValueFlag StackFlatter2.
+Require oeuf.ValueFlag oeuf.StackFlatter2.
 Require
-    StackMachComp
-    StackContComp
-    StackContComp2
-    StackContComp3
-    StackFlatComp
-    StackFlatterComp
-    StackFlatterComp2
+    oeuf.StackMachComp
+    oeuf.StackContComp
+    oeuf.StackContComp2
+    oeuf.StackContComp3
+    oeuf.StackFlatComp
+    oeuf.StackFlatterComp
+    oeuf.StackFlatterComp2
 .
 
 Definition compile_cont (cu : ValueFlag.prog_type) : res StackCont.prog_type :=

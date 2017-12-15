@@ -28,16 +28,16 @@ Require compcert.cfrontend.Csyntax.
 Require compcert.cfrontend.Ctyping.
 Require compcert.cfrontend.Clight.
 Require compcert.driver.Compiler.
-Require OeufCompcertCompiler.
+Require oeuf.OeufCompcertCompiler.
 Require compcert.cparser.Parser.
 Require compcert.cfrontend.Initializers.
 Require Int31.
 
-Require Oeuf.
-Require OeufIntern.
-Require SourceLifted.
+Require oeuf.Oeuf.
+Require oeuf.OeufIntern.
+Require oeuf.SourceLifted.
 (*Require Echo.*)
-Require Pretty.
+Require oeuf.Pretty.
 
 (* Standard lib *)
 Require Import ExtrOcamlBasic.

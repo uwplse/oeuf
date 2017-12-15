@@ -1,22 +1,22 @@
-Require Import Common.
+Require Import oeuf.Common.
 Require Import Psatz.
 
-Require Import Monads.
-Require Import StuartTact.
-Require Import ListLemmas.
-Require Import Metadata.
-Require Import StepLib.
-Require Utopia String.
-Require HigherValue.
-Require HighestValues.
+Require Import oeuf.Monads.
+Require Import oeuf.StuartTact.
+Require Import oeuf.ListLemmas.
+Require Import oeuf.Metadata.
+Require Import oeuf.StepLib.
+Require oeuf.Utopia String.
+Require oeuf.HigherValue.
+Require oeuf.HighestValues.
 
-Require Untyped8.
-Require Tagged.
+Require oeuf.Untyped8.
+Require oeuf.Tagged.
 
 Module A := Untyped8.
 Module B := Tagged.
 
-Require MatchValues.
+Require oeuf.MatchValues.
 
 
 Section compile.
@@ -622,7 +622,7 @@ Qed exporting.
 
 
 
-Require Import Semantics.
+Require Import oeuf.Semantics.
 
 Section Preservation.
 

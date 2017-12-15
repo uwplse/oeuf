@@ -1,11 +1,11 @@
-Require Import Common.
+Require Import oeuf.Common.
 
-Require Import Utopia.
-Require Import Monads.
-Require Import ListLemmas.
+Require Import oeuf.Utopia.
+Require Import oeuf.Monads.
+Require Import oeuf.ListLemmas.
 Require Import Psatz.
-Require Import StepLib.
-Require HigherValue.
+Require Import oeuf.StepLib.
+Require oeuf.HigherValue.
 
 Definition function_name := nat.
 
@@ -382,7 +382,7 @@ Definition SPlusCons := @StepLib.SPlusCons state.
 
 
 
-Require Import Metadata.
+Require Import oeuf.Metadata.
 
 Definition prog_type : Type := list expr * list metadata.
 Definition valtype := HigherValue.value.

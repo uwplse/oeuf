@@ -12,17 +12,17 @@ Require Import compcert.common.Switch.
 Require Import compcert.common.Errors.
 Require compcert.backend.SelectLong.
 
-Require Import HighValues.
-Require Import TraceSemantics.
+Require Import oeuf.HighValues.
+Require Import oeuf.TraceSemantics.
 
-Require Import Cmajor.
-Require Import Dmajor.
-Require Import Dflatmajor.
+Require Import oeuf.Cmajor.
+Require Import oeuf.Dmajor.
+Require Import oeuf.Dflatmajor.
 
 Require Import StructTact.StructTactics.
 Require Import StructTact.Util.
 
-Require Import EricTact.
+Require Import oeuf.EricTact.
 
 Definition transf_const (c : Dmajor.constant) : Cmajor.constant :=
   match c with

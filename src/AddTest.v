@@ -22,13 +22,13 @@ Require Import StructTact.StructTactics.
 Require Import StructTact.Util.
 
 (*Require Import Fmajortoemajor.*)
-Require Import Emajortodmajor.
-Require Import Dflatmajortocmajor.
-Require Import Cmajortominor.
+Require Import oeuf.Emajortodmajor.
+Require Import oeuf.Dflatmajortocmajor.
+Require Import oeuf.Cmajortominor.
 
 
-Require Import Emajor.
-Require Import Fmajor.
+Require Import oeuf.Emajor.
+Require Import oeuf.Fmajor.
 
 
 (* test add *)

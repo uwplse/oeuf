@@ -1,5 +1,5 @@
-Require Import Cmajor.
-Require Import CminorLib.
+Require Import oeuf.Cmajor.
+Require Import oeuf.CminorLib.
 
 Require Import compcert.common.Memory.
 

@@ -1,12 +1,12 @@
-Require Import Common.
+Require Import oeuf.Common.
 
-Require Import Utopia.
-Require Import Monads.
+Require Import oeuf.Utopia.
+Require Import oeuf.Monads.
 
-Require Import StuartTact.
-Require Import ListLemmas.
-Require Import Metadata.
-Require Import Semantics.
+Require Import oeuf.StuartTact.
+Require Import oeuf.ListLemmas.
+Require Import oeuf.Metadata.
+Require Import oeuf.Semantics.
 
 
 Inductive expr :=

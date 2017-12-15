@@ -1,10 +1,10 @@
-Require Import Common Monads.
-Require Import Metadata.
+Require Import oeuf.Common oeuf.Monads.
+Require Import oeuf.Metadata.
 Require String.
-Require ElimFunc ElimFunc2.
-Require Import ListLemmas.
-Require Import StepLib.
-Require Import HigherValue.
+Require oeuf.ElimFunc oeuf.ElimFunc2.
+Require Import oeuf.ListLemmas.
+Require Import oeuf.StepLib.
+Require Import oeuf.HigherValue.
 
 Require Import Psatz.
 
@@ -1377,7 +1377,7 @@ Qed.
 
 
 
-Require Semantics.
+Require oeuf.Semantics.
 
 Ltac i_ctor := intros; econstructor; eauto.
 Ltac i_lem H := intros; eapply H; eauto.

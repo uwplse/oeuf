@@ -1,12 +1,12 @@
 Require Import compcert.lib.Integers.
 Require Import ZArith.
 
-Require Import Common Monads.
-Require Import Metadata.
+Require Import oeuf.Common oeuf.Monads.
+Require Import oeuf.Metadata.
 Require String.
-Require FlatDestCheck FlatIntTag.
-Require Import ListLemmas.
-Require HighValues HigherValue.
+Require oeuf.FlatDestCheck oeuf.FlatIntTag.
+Require Import oeuf.ListLemmas.
+Require oeuf.HighValues oeuf.HigherValue.
 
 Require Import Psatz.
 
@@ -16,7 +16,7 @@ Module B := FlatIntTag.
 Module V1 := HigherValue.
 Module V2 := HighValues.
 
-Require MatchValues.
+Require oeuf.MatchValues.
 
 Add Printing Constructor A.frame.
 Add Printing Constructor B.frame.
@@ -518,7 +518,7 @@ simpl. inversion 1.
 break_bind_option. inject_some. auto.
 Qed.
 
-Require Semantics.
+Require oeuf.Semantics.
 
 Section Preservation.
 

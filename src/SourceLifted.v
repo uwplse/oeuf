@@ -1,9 +1,9 @@
-Require Import Common.
-Require Import HList.
-Require Import Utopia.
+Require Import oeuf.Common.
+Require Import oeuf.HList.
+Require Import oeuf.Utopia.
 
-Require SourceValues.
-Include SourceValues.
+Require oeuf.SourceValues.
+Include oeuf.SourceValues.
 
 
 (* an eliminator that takes cases with types given by the first index,

@@ -1,11 +1,11 @@
-Require Import MixSemantics.
-Require Import SourceLifted.
+Require Import oeuf.MixSemantics.
+Require Import oeuf.SourceLifted.
 
 
 Require Import StructTact.StructTactics.
 Require Import StructTact.Util.
 
-Require Import EricTact.
+Require Import oeuf.EricTact.
 
 Section Spec.
 

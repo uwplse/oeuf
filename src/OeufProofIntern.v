@@ -1,38 +1,38 @@
-Require Import OeufIntern.
-Require TopLevel.
-Require Import CompilationUnit.
-Require Import HList.
-Require Import StepLib.
-Require Import MixSemantics.
-Require Import CompilerUtil.
+Require Import oeuf.OeufIntern.
+Require oeuf.TopLevel.
+Require Import oeuf.CompilationUnit.
+Require Import oeuf.HList.
+Require Import oeuf.StepLib.
+Require Import oeuf.MixSemantics.
+Require Import oeuf.CompilerUtil.
 
-Require Import SourceLifted.
-Require Import HighValues.
+Require Import oeuf.SourceLifted.
+Require Import oeuf.HighValues.
 
-Require Untyped1.
-Require UntypedComp1.
-Require UntypedCompCombined.
-Require TaggedComp.
-Require TaggedNumberedComp.
-Require ElimFuncComp.
-Require ElimFuncComp2.
-Require ElimFuncComp3.
-Require SwitchedComp.
-Require SelfCloseComp.
-Require StackCompCombined.
-Require LocalsCompCombined.
-Require FlatCompCombined.
-Require FmajorComp.
-Require Fmajortofflatmajor.
-Require Fflatmajortoemajor.
-Require Emajortodmajor.
-Require Dmajortodflatmajor.
-Require Dflatmajortocmajor.
-Require Cmajortominor.
+Require oeuf.Untyped1.
+Require oeuf.UntypedComp1.
+Require oeuf.UntypedCompCombined.
+Require oeuf.TaggedComp.
+Require oeuf.TaggedNumberedComp.
+Require oeuf.ElimFuncComp.
+Require oeuf.ElimFuncComp2.
+Require oeuf.ElimFuncComp3.
+Require oeuf.SwitchedComp.
+Require oeuf.SelfCloseComp.
+Require oeuf.StackCompCombined.
+Require oeuf.LocalsCompCombined.
+Require oeuf.FlatCompCombined.
+Require oeuf.FmajorComp.
+Require oeuf.Fmajortofflatmajor.
+Require oeuf.Fflatmajortoemajor.
+Require oeuf.Emajortodmajor.
+Require oeuf.Dmajortodflatmajor.
+Require oeuf.Dflatmajortocmajor.
+Require oeuf.Cmajortominor.
 
 
-Require Import Cmajor. (* Cminor bridge *)
-Require Import TraceSemantics.
+Require Import oeuf.Cmajor. (* Cminor bridge *)
+Require Import oeuf.TraceSemantics.
 
 Require Import compcert.lib.Coqlib.
 Require Import compcert.ia32.Asm.
@@ -46,10 +46,10 @@ Require Import compcert.driver.Compiler.
 Require Import StructTact.StructTactics.
 Require Import StructTact.Util.
 
-Require Import EricTact.
-Require Import StuartTact.
-Require Import ListLemmas.
-Require Import Monads.  
+Require Import oeuf.EricTact.
+Require Import oeuf.StuartTact.
+Require Import oeuf.ListLemmas.
+Require Import oeuf.Monads.  
 
 
 Lemma transf_oeuf_to_untyped1_genv : forall prog tprog,
@@ -1371,7 +1371,7 @@ r ′ such that f a ∼ r ′, and there exists a Cminor returnstate t ′
 carrying the value r ′ such that the Cminor state s ′ takes zero or
 more steps to reach t ′.*)
 
-Require Import SourceLiftedProofs.
+Require Import oeuf.SourceLiftedProofs.
 
 Inductive value_match (ty : type) (gv : type_denote ty) (hv : HighValues.value) : Prop :=
 | mv :

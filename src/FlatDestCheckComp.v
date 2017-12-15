@@ -1,9 +1,9 @@
-Require Import Common Monads.
-Require Import Metadata.
+Require Import oeuf.Common oeuf.Monads.
+Require Import oeuf.Metadata.
 Require String.
-Require FlatStop FlatDestCheck.
-Require Import ListLemmas.
-Require Import HigherValue.
+Require oeuf.FlatStop oeuf.FlatDestCheck.
+Require Import oeuf.ListLemmas.
+Require Import oeuf.HigherValue.
 
 Require Import Psatz.
 
@@ -397,7 +397,7 @@ simpl. inversion 1.
 break_bind_option. inject_some.  auto.
 Qed.
 
-Require Semantics.
+Require oeuf.Semantics.
 
 Section Preservation.
 

@@ -11,7 +11,7 @@ Require Import compcert.common.Errors.
 Require Import compcert.common.Switch.
 (*Require Import compcert.common.Smallstep.*)
 
-Require Import TraceSemantics.
+Require Import oeuf.TraceSemantics.
 
 Require Import List.
 Import ListNotations.
@@ -22,11 +22,11 @@ Require Import StructTact.StructTactics.
 Require Import StructTact.Util.
 
 
-Require Import EricTact.
+Require Import oeuf.EricTact.
 
-Require Import Emajor.
-Require Import Dmajor.
-Require Import HighValues.
+Require Import oeuf.Emajor.
+Require Import oeuf.Dmajor.
+Require Import oeuf.HighValues.
 
 Fixpoint transf_expr (e : Emajor.expr) : Dmajor.expr :=
   match e with
@@ -77,7 +77,7 @@ Fixpoint transf_stmt (s : Emajor.stmt) : Dmajor.stmt :=
 
 Section collect_locals.
 
-Require Import Monads.
+Require Import oeuf.Monads.
 Open Scope state_monad.
 
 Definition record_local (i : ident) (ls : list ident) : unit * list ident :=

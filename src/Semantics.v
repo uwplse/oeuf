@@ -12,7 +12,7 @@ Global Unset Asymmetric Patterns.
 Require Import StructTact.StructTactics.
 Require Import StructTact.Util.
 
-Require Import EricTact.
+Require Import oeuf.EricTact.
 
 Section CLOSURES.
 

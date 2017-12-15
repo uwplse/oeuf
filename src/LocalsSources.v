@@ -1,12 +1,12 @@
-Require Import Common.
-Require StepLib.
+Require Import oeuf.Common.
+Require oeuf.StepLib.
 Require Import Psatz.
 
-Require Import Utopia.
-Require Import Monads.
+Require Import oeuf.Utopia.
+Require Import oeuf.Monads.
 
-Require Export HigherValue.
-Require Import ListLemmas.
+Require Export oeuf.HigherValue.
+Require Import oeuf.ListLemmas.
 
 Inductive insn :=
 | Arg (dst : nat)
@@ -131,8 +131,8 @@ Definition SPlusCons := @StepLib.SPlusCons state.
 
 
 
-Require Import Metadata.
-Require Semantics.
+Require Import oeuf.Metadata.
+Require oeuf.Semantics.
 
 
 Definition prog_type : Type := env * list metadata.

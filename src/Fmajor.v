@@ -10,7 +10,7 @@ Require Import compcert.common.Events.
 Require Import compcert.common.Switch.
 (*Require Import compcert.common.Smallstep.*)
 
-Require Import TraceSemantics.
+Require Import oeuf.TraceSemantics.
 
 Require Import List.
 Import ListNotations.
@@ -19,7 +19,7 @@ Require Import Arith.
 Require Import StructTact.StructTactics.
 Require Import StructTact.Util.
 
-Require Import HighValues.
+Require Import oeuf.HighValues.
 
 Inductive expr : Type :=
 | Var : ident -> expr
