@@ -1,6 +1,6 @@
 Require Import Arith List.
 Require String.
-Require CompilationUnit.
+Require oeuf.CompilationUnit.
 
 Inductive access :=
 | Public

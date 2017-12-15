@@ -1,6 +1,6 @@
-Require Import Common.
-Require Import Utopia.
-Require Import Metadata.
+Require Import oeuf.Common.
+Require Import oeuf.Utopia.
+Require Import oeuf.Metadata.
 
 Definition function_name := nat.
 

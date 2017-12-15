@@ -3,8 +3,8 @@ Require Import Relations.
 Require Import Wellfounded.
 
 (* Oeuf *)
-Require Import Semantics.
-Require Import TraceSemantics.
+Require Import oeuf.Semantics.
+Require Import oeuf.TraceSemantics.
 
 (* Compcert *)
 (*Require Import compcert.common.Smallstep.*)
@@ -16,7 +16,7 @@ Require Import compcert.lib.Coqlib.
 Require Import StructTact.StructTactics.
 Require Import StructTact.Util.
 
-Require Import EricTact.
+Require Import oeuf.EricTact.
 
 
 Definition trace_semantics := TraceSemantics.semantics.

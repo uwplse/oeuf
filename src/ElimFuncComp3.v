@@ -1,9 +1,9 @@
-Require Import Common Monads.
-Require Import Metadata.
+Require Import oeuf.Common oeuf.Monads.
+Require Import oeuf.Metadata.
 Require String.
-Require ElimFunc2 ElimFunc3.
-Require Import ListLemmas.
-Require Import HigherValue.
+Require oeuf.ElimFunc2 oeuf.ElimFunc3.
+Require Import oeuf.ListLemmas.
+Require Import oeuf.HigherValue.
 
 Require Import Psatz.
 
@@ -677,7 +677,7 @@ Qed.
 
 
 
-Require Semantics.
+Require oeuf.Semantics.
 
 Ltac i_ctor := intros; constructor; eauto.
 Ltac i_lem H := intros; eapply H; eauto.

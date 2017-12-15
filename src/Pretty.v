@@ -1,6 +1,6 @@
 Require Import Program.
-Require Import SourceLifted Utopia List Monads HList CompilationUnit ListLemmas.
-Require Import StuartTact.
+Require Import oeuf.SourceLifted oeuf.Utopia List oeuf.Monads oeuf.HList oeuf.CompilationUnit oeuf.ListLemmas.
+Require Import oeuf.StuartTact.
 Import ListNotations.
 
 From StructTact Require Import StructTactics.

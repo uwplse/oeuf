@@ -1,10 +1,10 @@
-Require Import Common.
-Require StepLib.
+Require Import oeuf.Common.
+Require oeuf.StepLib.
 
-Require Import Utopia.
-Require Import Monads.
-Require Import ListLemmas.
-Require HigherValue.
+Require Import oeuf.Utopia.
+Require Import oeuf.Monads.
+Require Import oeuf.ListLemmas.
+Require oeuf.HigherValue.
 
 
 Definition function_name := nat.
@@ -1154,8 +1154,8 @@ induction e using expr_ind''; intros0 II.
   list_magic_on (free, (free', tt)).
 Qed.
 
-Require Import Metadata.
-Require Semantics.
+Require Import oeuf.Metadata.
+Require oeuf.Semantics.
 
 Definition prog_type : Type := list expr * list metadata * list (list (expr * rec_info)) * list String.string.
 Definition valtype := HigherValue.value.

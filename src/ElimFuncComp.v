@@ -1,10 +1,10 @@
-Require Import Common Monads.
-Require Import Metadata.
+Require Import oeuf.Common oeuf.Monads.
+Require Import oeuf.Metadata.
 Require String.
-Require TaggedNumbered ElimFunc.
-Require Import ListLemmas.
-Require Import StepLib.
-Require Import HigherValue.
+Require oeuf.TaggedNumbered oeuf.ElimFunc.
+Require Import oeuf.ListLemmas.
+Require Import oeuf.StepLib.
+Require Import oeuf.HigherValue.
 
 Require Import Psatz.
 
@@ -971,7 +971,7 @@ intros0 Hae II; try solve [invc Hae; invc II; econstructor; eauto | simpl in *; 
 Qed.
 
 
-Require Import Semantics.
+Require Import oeuf.Semantics.
 
 Section Preservation.
 

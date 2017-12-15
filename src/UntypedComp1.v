@@ -1,23 +1,23 @@
-Require Import Common.
+Require Import oeuf.Common.
 
-Require Import Utopia.
-Require Import Metadata.
+Require Import oeuf.Utopia.
+Require Import oeuf.Metadata.
 Require Import Program.
 
-Require Import HList.
-Require Import CompilationUnit.
-Require Import Semantics.
-Require Import HighestValues.
+Require Import oeuf.HList.
+Require Import oeuf.CompilationUnit.
+Require Import oeuf.Semantics.
+Require Import oeuf.HighestValues.
 
-Require SourceLiftedProofs.
+Require oeuf.SourceLiftedProofs.
 
-Require SourceLifted.
-Require Untyped1.
+Require oeuf.SourceLifted.
+Require oeuf.Untyped1.
 
 Module A := SourceLifted.
 Module B := Untyped1.
 
-Require MatchValues.
+Require oeuf.MatchValues.
 
 
 Notation compile_member := MatchValues.compile_member.

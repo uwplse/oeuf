@@ -1,11 +1,11 @@
-Require Import Common.
+Require Import oeuf.Common.
 
-Require Import Utopia.
-Require Import Monads.
-Require Import ListLemmas.
-Require Import Metadata.
-Require Import HigherValue.
-Require StepLib.
+Require Import oeuf.Utopia.
+Require Import oeuf.Monads.
+Require Import oeuf.ListLemmas.
+Require Import oeuf.Metadata.
+Require Import oeuf.HigherValue.
+Require oeuf.StepLib.
 
 Definition function_name := nat.
 
@@ -232,7 +232,7 @@ first_induction args; destruct rec; intros0 Hlen; simpl in Hlen; try discriminat
 Qed.
 
 
-Require Semantics.
+Require oeuf.Semantics.
 
 Definition prog_type : Type := list expr * list metadata.
 Definition valtype := HigherValue.value.

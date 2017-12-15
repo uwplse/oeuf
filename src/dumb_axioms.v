@@ -1,9 +1,9 @@
-Require dumb_cm.
-Require dumb_oeuf.
-Require Dumb.
-Require Oeuf.
-Require Linker.
-Require OeufIntern.
+Require oeuf.dumb_cm.
+Require oeuf.dumb_oeuf.
+Require oeuf.Dumb.
+Require oeuf.Oeuf.
+Require oeuf.Linker.
+Require oeuf.OeufIntern.
 Require Import BinNums.
 
 (* Here we will list all the axioms we need *)
@@ -13,13 +13,13 @@ Ltac s :=
   try unfold Compiler.apply_total in *;
   try unfold Compiler.apply_partial in *.
 
-Require Import OeufIntern.
+Require Import oeuf.OeufIntern.
 Require Import StructTact.StructTactics.
 Require Import StructTact.Util.
 
-Require Import EricTact.
-Require Import StuartTact.
-Require Import Monads.
+Require Import oeuf.EricTact.
+Require Import oeuf.StuartTact.
+Require Import oeuf.Monads.
 Require Import String.
 
 (*

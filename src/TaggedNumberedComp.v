@@ -1,8 +1,8 @@
-Require Import Common Monads ListLemmas.
-Require Import Metadata.
-Require Tagged TaggedNumbered.
+Require Import oeuf.Common oeuf.Monads oeuf.ListLemmas.
+Require Import oeuf.Metadata.
+Require oeuf.Tagged oeuf.TaggedNumbered.
 Require String.
-Require Import HigherValue.
+Require Import oeuf.HigherValue.
 
 Module A := Tagged.
 Module B := TaggedNumbered.
@@ -625,7 +625,7 @@ Qed.
 
 
 
-Require Import Semantics.
+Require Import oeuf.Semantics.
 
 Section Preservation.
 

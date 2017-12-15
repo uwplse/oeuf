@@ -9,17 +9,17 @@ Require Import compcert.common.Memory.
 Require Import compcert.common.Events.
 Require Import compcert.common.Switch.
 
-Require Import TraceSemantics.
+Require Import oeuf.TraceSemantics.
 
 Require Import compcert.backend.Cminor.
-Require Import HighValues.
+Require Import oeuf.HighValues.
 
 Require Import StructTact.StructTactics.
 Require Import StructTact.Util.
 
-Require Import EricTact.
+Require Import oeuf.EricTact.
 
-Require Import Cmajor.
+Require Import oeuf.Cmajor.
 
 Section GENV.
 

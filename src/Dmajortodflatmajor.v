@@ -13,16 +13,16 @@ Require Import compcert.common.Switch.
 Require Import compcert.common.Errors.
 Require compcert.backend.SelectLong.
 
-Require Import TraceSemantics.
-Require Import OeufMem.
+Require Import oeuf.TraceSemantics.
+Require Import oeuf.OeufMem.
 
-Require Import Dmajor.
-Require Import Dflatmajor.
+Require Import oeuf.Dmajor.
+Require Import oeuf.Dflatmajor.
 
 Require Import StructTact.StructTactics.
 Require Import StructTact.Util.
 
-Require Import EricTact.
+Require Import oeuf.EricTact.
 
 Definition transf_prog (p : Dmajor.program) : Errors.res Dmajor.program :=
   if (list_norepet_dec ident_eq (prog_defs_names p)) then

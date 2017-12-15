@@ -2,15 +2,15 @@ Require Import compcert.lib.Coqlib.
 
 Definition id (x : nat) : nat := x.
 
-Require Pretty CompilationUnit.
-Require Import SourceLifted.
+Require oeuf.Pretty oeuf.CompilationUnit.
+Require Import oeuf.SourceLifted.
 Require OeufPlugin.OeufPlugin.
 Require Import List.
 Import List.ListNotations.
-Import HList.
+Import oeuf.HList.
 Require Import String.
-Require Import Utopia.
-Require Import MatchValues.
+Require Import oeuf.Utopia.
+Require Import oeuf.MatchValues.
 
 Definition N := ADT Tnat.
 Definition id_ty : type := Arrow N N.

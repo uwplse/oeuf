@@ -1,10 +1,10 @@
-Require Import Common Monads.
-Require Import Metadata.
+Require Import oeuf.Common oeuf.Monads.
+Require Import oeuf.Metadata.
 Require String.
-Require SelfClose ValueFlag.
-Require Import ListLemmas.
-Require Import HigherValue.
-Require Import StepLib.
+Require oeuf.SelfClose oeuf.ValueFlag.
+Require Import oeuf.ListLemmas.
+Require Import oeuf.HigherValue.
+Require Import oeuf.StepLib.
 
 Require Import Psatz.
 
@@ -987,7 +987,7 @@ induction av using value_rect_mut with
 intros0 Aev II Apub; invc Aev; invc II; invc Apub; i_ctor.
 Qed.
 
-Require Semantics.
+Require oeuf.Semantics.
 
 Section Preservation.
 

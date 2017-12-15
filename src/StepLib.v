@@ -1,5 +1,5 @@
 Require Import StructTact.StructTactics.
-Require Import StuartTact.
+Require Import oeuf.StuartTact.
 
 
 Section steplib.
@@ -106,7 +106,7 @@ Implicit Arguments sstar [state].
 Implicit Arguments splus [state].
 
 
-Require Semantics.
+Require oeuf.Semantics.
 
 Lemma sstar_semantics : forall genv state step ge s s',
     sstar (step ge) s s' ->

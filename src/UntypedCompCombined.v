@@ -1,21 +1,21 @@
 Require Import compcert.driver.Compiler compcert.common.Errors.
-Require Import Common Monads.
-Require CompilationUnit.
-Require Import Metadata.
-Require Import CompilerUtil.
+Require Import oeuf.Common oeuf.Monads.
+Require oeuf.CompilationUnit.
+Require Import oeuf.Metadata.
+Require Import oeuf.CompilerUtil.
 
 (* Note that we start at Untyped1, not SourceLifted.  The SourceLifted
    semantics have lots of dependent indices and are hard to fit into the
    Semantics.semantics record. *)
-Require Untyped1 Untyped8.
+Require oeuf.Untyped1 oeuf.Untyped8.
 Require
-    UntypedComp2
-    UntypedComp3
-    UntypedComp4
-    UntypedComp5
-    UntypedComp6
-    UntypedComp7
-    UntypedComp8
+    oeuf.UntypedComp2
+    oeuf.UntypedComp3
+    oeuf.UntypedComp4
+    oeuf.UntypedComp5
+    oeuf.UntypedComp6
+    oeuf.UntypedComp7
+    oeuf.UntypedComp8
 .
 
 

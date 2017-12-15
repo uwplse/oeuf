@@ -9,7 +9,7 @@ Require Import compcert.common.Memory.
 
 Require Import StructTact.StructTactics.
 Require Import StructTact.Util.
-Require Import EricTact.
+Require Import oeuf.EricTact.
 
 
 (* linker needs to make each id point to only one thing *)

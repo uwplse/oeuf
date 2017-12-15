@@ -1,11 +1,11 @@
-Require Import Common Monads.
-Require Import Metadata.
-Require Import ListLemmas.
-Require ElimFunc2 ElimFunc3 Switched String.
+Require Import oeuf.Common oeuf.Monads.
+Require Import oeuf.Metadata.
+Require Import oeuf.ListLemmas.
+Require oeuf.ElimFunc2 oeuf.ElimFunc3 oeuf.Switched String.
 Delimit Scope string_scope with string.
 Require Import Psatz.
-Require Import StepLib.
-Require Import HigherValue.
+Require Import oeuf.StepLib.
+Require Import oeuf.HigherValue.
 
 Module A := ElimFunc3.
 Module AS := ElimFunc2.
@@ -1385,7 +1385,7 @@ Lemma compile_cu_metas : forall A Ameta B Bmeta,
 simpl. inversion 1. break_bind_option. break_match; try discriminate. inject_some. auto.
 Qed.
 
-Require Semantics.
+Require oeuf.Semantics.
 
 Section Preservation.
 

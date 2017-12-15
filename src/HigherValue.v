@@ -1,5 +1,5 @@
-Require Import Common.
-Require Import Metadata.
+Require Import oeuf.Common.
+Require Import oeuf.Metadata.
 
 Definition function_name := nat.
 
