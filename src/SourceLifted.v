@@ -9,7 +9,9 @@ Include oeuf.SourceValues.
 (* an eliminator that takes cases with types given by the first index,
    eliminates a target with type given by the second index,
    and produces a result with type given by the third index *)
+(* Extend this if you want to extend Oeuf *)
 Inductive elim : list type -> type -> type -> Type :=
+| EAscii : forall ty, elim [ty] (ADT Tascii) ty
 | ENat : forall ty, elim [ty; Arrow (ADT Tnat) (Arrow ty ty)] (ADT Tnat) ty
 | EBool : forall ty, elim [ty; ty] (ADT Tbool) ty
 | EList : forall tyA ty, elim [ty; Arrow (ADT tyA) (Arrow (ADT (Tlist tyA)) (Arrow ty ty))] (ADT (Tlist tyA)) ty
@@ -227,7 +229,7 @@ Defined.
 
 
 (* denotation functions *)
-
+(* Extend this if you want to extend Oeuf *)
 Definition elim_denote {case_tys target_ty ty} (e : elim case_tys target_ty ty) :
   hlist type_denote case_tys -> type_denote target_ty -> type_denote ty :=
   match e with
@@ -250,6 +252,10 @@ Definition elim_denote {case_tys target_ty ty} (e : elim case_tys target_ty ty) 
               (hhead (htail cases))
               (hhead (htail (htail cases)))
               target
+  | EAscii _ => fun cases target =>
+                  ascii_rect _
+                             (hhead cases)
+                             target
   end.
 
 Definition expr_denote {G L} (g : hlist func_type_denote G) (l : hlist type_denote L) :
@@ -442,8 +448,15 @@ refine match e in elim case_tys_ (ADT target_tyn_) ret_ty_
     | EPositive ret_ty => _
     | EN ret_ty => _
     | EZ ret_ty => _
+    | EAscii ret_ty => _
     end; intros;
 clear e target_tyn ret_ty0 case_tys.
+
+- revert args cases. pattern ctor, arg_tys.
+  refine match ct in constr_type ctor_ arg_tys_ (Tascii) return _ ctor_ arg_tys_ with
+      | CTascii_0 => _
+      end; intros; clear ct arg_tys ctor.
+  + exact (h0 cases).
 
 - revert args cases. pattern ctor, arg_tys.
   refine match ct in constr_type ctor_ arg_tys_ (Tnat) return _ ctor_ arg_tys_ with

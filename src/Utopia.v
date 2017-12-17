@@ -1,5 +1,9 @@
 Require Import ZArith.
+Require Import oeuf.FastAscii.
+Require Export oeuf.FastAscii.
 
+(* All types present in Oeuf *)
+(* In order to add types to Oeuf, extend this datatype *)
 Inductive type_name :=
 | Tnat
 | Tbool
@@ -10,13 +14,14 @@ Inductive type_name :=
 | Tpositive
 | TN
 | TZ
+| Tascii
 .
-
 
 Definition type_name_eq_dec (tn1 tn2 : type_name) : {tn1 = tn2} + {tn1 <> tn2}.
   decide equality.
 Defined.
 
+(* Denotation function for Oeuf types *)
 Fixpoint type_name_denote (tyn : type_name) : Type :=
   match tyn with
   | Tbool => bool
@@ -28,8 +33,10 @@ Fixpoint type_name_denote (tyn : type_name) : Type :=
   | Tpositive => positive
   | TN => N
   | TZ => Z
+  | Tasci => ascii
   end.
 
+(* All constructors in Oeuf *)
 Inductive constr_name :=
 | CS
 | CO
@@ -49,8 +56,11 @@ Inductive constr_name :=
 | CZ0
 | CZpos
 | CZneg
+| Cascii_0
 .
 
+(* Index of each constructor within its type *)
+(* each constructor of the same type must have a unique index within that type *)
 Definition constructor_index ctor : nat :=
     match ctor with
     | CO => 0
@@ -79,8 +89,11 @@ Definition constructor_index ctor : nat :=
     | CZ0 => 0
     | CZpos => 1
     | CZneg => 2
+
+    | Cascii_0 => 0
     end.
 
+(* Number of arguments that constructor takes *)
 Definition constructor_arg_n ctor : nat :=
     match ctor with
     | CO => 0
@@ -109,8 +122,11 @@ Definition constructor_arg_n ctor : nat :=
     | CZ0 => 0
     | CZpos => 1
     | CZneg => 1
+
+    | Cascii_0 => 0
     end.
 
+(* Add a case if a constructor is recursive *)
 Definition ctor_arg_is_recursive ctor pos : bool :=
     match ctor, pos with
     | CS, 0 => true
@@ -120,6 +136,8 @@ Definition ctor_arg_is_recursive ctor pos : bool :=
     | _, _ => false
     end.
 
+(* Redundant definition, could be auto generated *)
+(* Given an Oeuf model fo a type and an index, give the constructor *)
 Definition type_constr ty idx : option constr_name :=
     match ty, idx with
     | Tnat, 0 => Some CO
@@ -149,6 +167,8 @@ Definition type_constr ty idx : option constr_name :=
     | TZ, 1 => Some CZpos
     | TZ, 2 => Some CZneg
 
+    | Tascii, 0 => Some Cascii_0
+                    
     | _, _ => None
     end.
 

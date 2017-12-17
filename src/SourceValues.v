@@ -15,6 +15,8 @@ Definition type_eq_dec (t1 t2 : type) : {t1 = t2} + {t1 <> t2}.
 Defined.
 Hint Resolve type_eq_dec : eq_dec.
 
+(* Why is this not in Utopia? *)
+(* Extend this if you want to extend Oeuf *)
 Inductive constr_type : constr_name -> list type -> type_name -> Type :=
 | CTO            : constr_type CO         []                          Tnat
 | CTS            : constr_type CS         [ADT Tnat]                  Tnat
@@ -42,6 +44,8 @@ Inductive constr_type : constr_name -> list type -> type_name -> Type :=
 | CTZ0           : constr_type CZ0        []                          TZ
 | CTZpos         : constr_type CZpos      [ADT Tpositive]             TZ
 | CTZneg         : constr_type CZneg      [ADT Tpositive]             TZ
+
+| CTascii_0      : constr_type Cascii_0   []                          Tascii
 .
 
 
@@ -64,8 +68,6 @@ End value.
 Implicit Arguments value.
 
 
-
-
 Fixpoint type_denote (ty : type) : Type :=
   match ty with
   | ADT tyn => type_name_denote tyn
@@ -76,6 +78,7 @@ Definition func_type_denote (fty : type * list type * type) : Type :=
     let '(arg_ty, free_tys, ret_ty) := fty in
     hlist type_denote free_tys -> type_denote arg_ty -> type_denote ret_ty.
 
+(* Extend me if you want to extend Oeuf *)
 Definition constr_denote {arg_tys ty c} (ct : constr_type c arg_tys ty) :
   hlist type_denote arg_tys -> type_denote (ADT ty) :=
   match ct with
@@ -105,6 +108,8 @@ Definition constr_denote {arg_tys ty c} (ct : constr_type c arg_tys ty) :
   | CTZ0 => fun h => Z0
   | CTZpos => fun h => Zpos (hhead h)
   | CTZneg => fun h => Zneg (hhead h)
+
+  | CTascii => fun _ => NULL
   end.
 
 Definition value_denote

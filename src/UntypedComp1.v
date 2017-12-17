@@ -356,8 +356,17 @@ refine match e as e_ in A.elim case_tys_ (A.ADT target_tyn_) ret_ty_
     | A.EPositive ret_ty => _
     | A.EN ret_ty => _
     | A.EZ ret_ty => _
+    | A.EAscii ret_ty => _
     end; intros.
 clear e target_tyn ret_ty0 case_tys.
+
+- revert args cases. pattern ctor, arg_tys, ct.
+  refine match ct as ct_ in A.constr_type ctor_ arg_tys_ (Tascii)
+          return _ ctor_ arg_tys_ ct_ with
+      | A.CTascii_0 => _
+      end; intros; clear ct arg_tys ctor.
+  all: unpack_hlist cases case0; unpack_hlist args arg0.
+  all: reflexivity.
 
 - revert args cases. pattern ctor, arg_tys, ct.
   refine match ct as ct_ in A.constr_type ctor_ arg_tys_ (Tnat)

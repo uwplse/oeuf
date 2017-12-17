@@ -7,7 +7,6 @@ Require Import FunctionalExtensionality.
 Require Import oeuf.SourceLifted.
 
 
-
 (* facts about weakening and denotation *)
 
 Lemma weaken_value_denote : forall {G ty} fn_sig func g (v : value G ty),
@@ -201,8 +200,16 @@ refine match e as e_ in elim case_tys_ (ADT target_tyn_) ret_ty_
     | EPositive ret_ty => _
     | EN ret_ty => _
     | EZ ret_ty => _
+    | EAscii ret_ty => _
     end; intros.
 clear e target_tyn ret_ty0 case_tys.
+
+- revert args cases. pattern ctor, arg_tys, ct.
+  refine match ct as ct_ in constr_type ctor_ arg_tys_ (Tascii)
+          return _ ctor_ arg_tys_ ct_ with
+      | CTascii_0 => _
+      end; intros; clear ct arg_tys ctor.
+  all: run_elim_solver g l.
 
 - revert args cases. pattern ctor, arg_tys, ct.
   refine match ct as ct_ in constr_type ctor_ arg_tys_ (Tnat)
