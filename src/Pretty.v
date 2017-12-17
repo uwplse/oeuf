@@ -24,6 +24,7 @@ Module type_name.
     | Tpositive       => atom (symbol.of_string_unsafe "positive")
     | TN              => atom (symbol.of_string_unsafe "N")
     | TZ              => atom (symbol.of_string_unsafe "Z")
+    | Tascii          => atom (symbol.of_string_unsafe "ascii")
     end.
 
   Fixpoint from_tree (t : tree symbol.t) : option type_name :=
@@ -35,6 +36,7 @@ Module type_name.
       else if symbol.eq_dec s (symbol.of_string_unsafe "positive") then Some Tpositive
       else if symbol.eq_dec s (symbol.of_string_unsafe "N") then Some TN
       else if symbol.eq_dec s (symbol.of_string_unsafe "Z") then Some TZ
+      else if symbol.eq_dec s (symbol.of_string_unsafe "ascii") then Some Tascii
       else None
     | node (atom s :: l) =>
       if symbol.eq_dec s (symbol.of_string_unsafe "list")
@@ -139,6 +141,7 @@ Module constr_name.
     | CZ0    => symbol.of_string_unsafe "CZ0"
     | CZpos  => symbol.of_string_unsafe "CZpos"
     | CZneg  => symbol.of_string_unsafe "CZneg"
+    | Cascii_0 => symbol.of_string_unsafe "Cascii_0"
     end.
   Definition from_symbol (s : symbol.t) : option constr_name :=
     if      symbol.eq_dec s (symbol.of_string_unsafe "CS")     then Some CS
@@ -159,6 +162,7 @@ Module constr_name.
     else if symbol.eq_dec s (symbol.of_string_unsafe "CZ0")    then Some CZ0
     else if symbol.eq_dec s (symbol.of_string_unsafe "CZpos")  then Some CZpos
     else if symbol.eq_dec s (symbol.of_string_unsafe "CZneg")  then Some CZneg
+    else if symbol.eq_dec s (symbol.of_string_unsafe "Cascii_0")  then Some Cascii_0
     else None.
 
   Lemma to_from_symbol_id : forall cn, from_symbol (to_symbol cn) = Some cn.
@@ -169,6 +173,8 @@ Module constr_name.
   Proof. destruct cn; auto. Qed.
   Hint Resolve to_symbol_wf.
 End constr_name.
+
+
 
 
 Module constr_type.
@@ -243,6 +249,11 @@ Module constr_type.
         | CZneg, [ADT Tpositive] => Some CTZneg
         | _, _ => None
         end
+      | Tascii =>
+        match c, arg_tys with
+        | Cascii_0, [] => Some CTascii_0
+        | _,_ => None
+        end
       end.
 
   Lemma check_constr_type_correct :
@@ -259,10 +270,19 @@ Module constr_type.
 End constr_type.
 
 
+
+
 Module elim.
   Definition check_elim {case_tys target_tyn ty} :
     option (elim case_tys (ADT target_tyn) ty) :=
       match target_tyn with
+      | Tascii         => match case_tys with
+                        | [ty1] =>
+                          match type_eq_dec ty ty1 with right _ => None
+                          | left pf => match pf with | eq_refl => Some (EAscii _)
+                          end end
+                        | _ => None
+                        end
       | Tnat          => match case_tys with
                         | [ty1; Arrow (ADT Tnat) (Arrow ty2 ty3)] =>
                           match type_eq_dec ty ty1 with right _ => None
@@ -365,7 +385,7 @@ Module elim.
                           | left pf => match pf with | eq_refl => Some (EZ _)
                           end end end end end end
                         | _ => None
-                        end
+                         end
       end.
 
   Lemma check_elim_correct :
@@ -384,6 +404,7 @@ Module elim.
              | EPositive t => _
              | EN t        => _
              | EZ t        => _
+             | EAscii t => _
            end;
       repeat (break_match; try congruence;
       dependent destruction e0; auto).
