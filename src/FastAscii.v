@@ -3,8 +3,7 @@
 (* But much better than Coq's builtin ascii *)
 Inductive ascii :=
 | NULL
-.
-(*| SOH
+| SOH
 | STX
 | ETX
 | EOT
@@ -132,14 +131,13 @@ Inductive ascii :=
 | TILDE
 | DEL
 .
-*)
 
 Definition whitespace (x : ascii) : Prop :=
   match x with
-(*  | SPACE => True
+  | SPACE => True
   | TAB => True
   | CR => True
-  | LF => True*)
+  | LF => True
   | _ => False
   end.
              
@@ -152,10 +150,10 @@ Defined.
 
 Definition is_whitespace (x : ascii) : bool :=
   match x with
-(*  | SPACE => true
+  | SPACE => true
   | TAB => true
   | CR => true
-  | LF => true*)
+  | LF => true
   | _ => false
   end.
 
@@ -170,11 +168,152 @@ Proof.
     intro; simpl in H; inversion H.
 Qed.
 
+Definition is_whitespace_elim (x : ascii) : bool :=
+  @ascii_rect
+    (fun _ => bool)
+    false (* | NULL *)
+    false (* | SOH *)
+    false (* | STX *)
+    false (* | ETX *)
+    false (* | EOT *)
+    false (* | ENQ *)
+    false (* | ACK *)
+    false (* | BEL *)
+    false (* | BS *)
+    true  (* | TAB *)
+    true  (* | LF *)
+    false (* | VT *)
+    false (* | FF *)
+    true  (* | CR *)
+    false (* | SO *)
+    false (* | SI *)
+    false (* | DLE *)
+    false (* | DC1 *)
+    false (* | DC2 *)
+    false (* | DC3 *)
+    false (* | DC4 *)
+    false (* | NAK *)
+    false (* | SYN *)
+    false (* | ETB *)
+    false (* | CAN *)
+    false (* | EM *)
+    false (* | SUB *)
+    false (* | ESC *)
+    false (* | FS *)
+    false (* | GS *)
+    false (* | RS *)
+    false (* | US *)
+    true  (* | SPACE *)
+    false (* | EXCLAMATION *)
+    false (* | DOUBLE_QUOTE *)
+    false (* | HASH *)
+    false (* | DOLLAR *)
+    false (* | PERCENT *)
+    false (* | AMPERSAND *)
+    false (* | SINGLE_QUOTE *)
+    false (* | LEFT_PAREN *)
+    false (* | RIGHT_PAREN *)
+    false (* | ASTERISK *)
+    false (* | PLUS *)
+    false (* | FORWARD_SINGLE_QUOTE *)
+    false (* | HYPHEN *)
+    false (* | PERIOD *)
+    false (* | SLASH *)
+    false (* | NUMERAL_0 *)
+    false (* | NUMERAL_1 *)
+    false (* | NUMERAL_2 *)
+    false (* | NUMERAL_3 *)
+    false (* | NUMERAL_4 *)
+    false (* | NUMERAL_5 *)
+    false (* | NUMERAL_6 *)
+    false (* | NUMERAL_7 *)
+    false (* | NUMERAL_8 *)
+    false (* | NUMERAL_9 *)
+    false (* | COLON *)
+    false (* | SEMICOLON *)
+    false (* | LESS_THAN *)
+    false (* | EQUAL *)
+    false (* | GREATER_THAN *)
+    false (* | QUESTION_MARK *)
+    false (* | AT *)
+    false (* | CAPITAL_A *)
+    false (* | CAPITAL_B *)
+    false (* | CAPITAL_C *)
+    false (* | CAPITAL_D *)
+    false (* | CAPITAL_E *)
+    false (* | CAPITAL_F *)
+    false (* | CAPITAL_G *)
+    false (* | CAPITAL_H *)
+    false (* | CAPITAL_I *)
+    false (* | CAPITAL_J *)
+    false (* | CAPITAL_K *)
+    false (* | CAPITAL_L *)
+    false (* | CAPITAL_M *)
+    false (* | CAPITAL_N *)
+    false (* | CAPITAL_O *)
+    false (* | CAPITAL_P *)
+    false (* | CAPITAL_Q *)
+    false (* | CAPITAL_R *)
+    false (* | CAPITAL_S *)
+    false (* | CAPITAL_T *)
+    false (* | CAPITAL_U *)
+    false (* | CAPITAL_V *)
+    false (* | CAPITAL_W *)
+    false (* | CAPITAL_X *)
+    false (* | CAPITAL_Y *)
+    false (* | CAPITAL_Z *)
+    false (* | LEFT_SQUARE_BRACKET *)
+    false (* | BACKSLASH *)
+    false (* | RIGHT_SQUARE_BRACKET *)
+    false (* | CARROT *)
+    false (* | UNDERSCORE *)
+    false (* | BACKTICK *)
+    false (* | LOWERCASE_A *)
+    false (* | LOWERCASE_B *)
+    false (* | LOWERCASE_C *)
+    false (* | LOWERCASE_D *)
+    false (* | LOWERCASE_E *)
+    false (* | LOWERCASE_F *)
+    false (* | LOWERCASE_G *)
+    false (* | LOWERCASE_H *)
+    false (* | LOWERCASE_I *)
+    false (* | LOWERCASE_J *)
+    false (* | LOWERCASE_K *)
+    false (* | LOWERCASE_L *)
+    false (* | LOWERCASE_M *)
+    false (* | LOWERCASE_N *)
+    false (* | LOWERCASE_O *)
+    false (* | LOWERCASE_P *)
+    false (* | LOWERCASE_Q *)
+    false (* | LOWERCASE_R *)
+    false (* | LOWERCASE_S *)
+    false (* | LOWERCASE_T *)
+    false (* | LOWERCASE_U *)
+    false (* | LOWERCASE_V *)
+    false (* | LOWERCASE_W *)
+    false (* | LOWERCASE_X *)
+    false (* | LOWERCASE_Y *)
+    false (* | LOWERCASE_Z *)
+    false (* | LEFT_CURLY_BRACE *)
+    false (* | PIPE *)
+    false (* | RIGHT_CURLY_BRACE *)
+    false (* | TILDE *)
+    false (* | DEL *)
+    x
+.    
+
+
+Lemma is_whitespace_equiv :
+  forall x,
+    is_whitespace x = is_whitespace_elim x.
+Proof.
+  intros. destruct x; reflexivity.
+Qed.
 
 Definition eq_bool (x y : ascii) : bool :=
   match x,y with
 | NULL, NULL => true
-(*| SOH, SOH => true
+| SOH, SOH => true
 | STX, STX => true
 | ETX, ETX => true
 | EOT, EOT => true
@@ -301,9 +440,10 @@ Definition eq_bool (x y : ascii) : bool :=
 | RIGHT_CURLY_BRACE, RIGHT_CURLY_BRACE => true
 | TILDE, TILDE => true
 | DEL, DEL => true
-| _, _ => false*)
+| _, _ => false
   end.
 
+(* TODO: eq_bool_elim and eq_bool_equiv *)
 
 (* Conversion from normal coq strings *)
 Require Import String.
@@ -312,7 +452,7 @@ Require Import String.
 Definition ascii_to_fast_ascii (a : Ascii.ascii) : ascii :=
   match a with
   | Ascii.Ascii false false false false false false false false => NULL
-(*  | Ascii.Ascii true  false false false false false false false  => SOH
+  | Ascii.Ascii true  false false false false false false false  => SOH
   | Ascii.Ascii  false  true false false false false false false => STX
   | Ascii.Ascii  true  true false false false false false false  => ETX
   | Ascii.Ascii false   false true false false false false false => EOT
@@ -439,8 +579,7 @@ Definition ascii_to_fast_ascii (a : Ascii.ascii) : ascii :=
   | Ascii.Ascii true    false   true  true true true true false  => RIGHT_CURLY_BRACE
   | Ascii.Ascii  false    true   true  true true true true false => TILDE
   | Ascii.Ascii  true    true   true  true true true true false  => DEL
-  | Ascii.Ascii _ _ _ _ _ _ _ true  => NULL*)
-  | Ascii.Ascii _ _ _ _ _ _ _ _ => NULL
+  | Ascii.Ascii _ _ _ _ _ _ _ true  => NULL
   end.
 
 Fixpoint string_to_fast_string (s : string) : list ascii :=
