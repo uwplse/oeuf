@@ -363,10 +363,138 @@ clear e target_tyn ret_ty0 case_tys.
 - revert args cases. pattern ctor, arg_tys, ct.
   refine match ct as ct_ in A.constr_type ctor_ arg_tys_ (Tascii)
           return _ ctor_ arg_tys_ ct_ with
-      | A.CTascii_0 => _
-      end; intros; clear ct arg_tys ctor.
-  all: unpack_hlist cases case0; unpack_hlist args arg0.
-  all: reflexivity.
+         | A.CTascii_0 => _
+         | A.CTascii_1 => _
+         | A.CTascii_2 => _
+         | A.CTascii_3 => _
+         | A.CTascii_4 => _
+         | A.CTascii_5 => _
+         | A.CTascii_6 => _
+         | A.CTascii_7 => _
+         | A.CTascii_8 => _
+         | A.CTascii_9 => _
+         | A.CTascii_10 => _
+         | A.CTascii_11 => _
+         | A.CTascii_12 => _
+         | A.CTascii_13 => _
+         | A.CTascii_14 => _
+         | A.CTascii_15 => _
+         | A.CTascii_16 => _
+         | A.CTascii_17 => _
+         | A.CTascii_18 => _
+         | A.CTascii_19 => _
+         | A.CTascii_20 => _
+         | A.CTascii_21 => _
+         | A.CTascii_22 => _
+         | A.CTascii_23 => _
+         | A.CTascii_24 => _
+         | A.CTascii_25 => _
+         | A.CTascii_26 => _
+         | A.CTascii_27 => _
+         | A.CTascii_28 => _
+         | A.CTascii_29 => _
+         | A.CTascii_30 => _
+         | A.CTascii_31 => _
+         | A.CTascii_32 => _
+         | A.CTascii_33 => _
+         | A.CTascii_34 => _
+         | A.CTascii_35 => _
+         | A.CTascii_36 => _
+         | A.CTascii_37 => _
+         | A.CTascii_38 => _
+         | A.CTascii_39 => _
+         | A.CTascii_40 => _
+         | A.CTascii_41 => _
+         | A.CTascii_42 => _
+         | A.CTascii_43 => _
+         | A.CTascii_44 => _
+         | A.CTascii_45 => _
+         | A.CTascii_46 => _
+         | A.CTascii_47 => _
+         | A.CTascii_48 => _
+         | A.CTascii_49 => _
+         | A.CTascii_50 => _
+         | A.CTascii_51 => _
+         | A.CTascii_52 => _
+         | A.CTascii_53 => _
+         | A.CTascii_54 => _
+         | A.CTascii_55 => _
+         | A.CTascii_56 => _
+         | A.CTascii_57 => _
+         | A.CTascii_58 => _
+         | A.CTascii_59 => _
+         | A.CTascii_60 => _
+         | A.CTascii_61 => _
+         | A.CTascii_62 => _
+         | A.CTascii_63 => _
+         | A.CTascii_64 => _
+         | A.CTascii_65 => _
+         | A.CTascii_66 => _
+         | A.CTascii_67 => _
+         | A.CTascii_68 => _
+         | A.CTascii_69 => _
+         | A.CTascii_70 => _
+         | A.CTascii_71 => _
+         | A.CTascii_72 => _
+         | A.CTascii_73 => _
+         | A.CTascii_74 => _
+         | A.CTascii_75 => _
+         | A.CTascii_76 => _
+         | A.CTascii_77 => _
+         | A.CTascii_78 => _
+         | A.CTascii_79 => _
+         | A.CTascii_80 => _
+         | A.CTascii_81 => _
+         | A.CTascii_82 => _
+         | A.CTascii_83 => _
+         | A.CTascii_84 => _
+         | A.CTascii_85 => _
+         | A.CTascii_86 => _
+         | A.CTascii_87 => _
+         | A.CTascii_88 => _
+         | A.CTascii_89 => _
+         | A.CTascii_90 => _
+         | A.CTascii_91 => _
+         | A.CTascii_92 => _
+         | A.CTascii_93 => _
+         | A.CTascii_94 => _
+         | A.CTascii_95 => _
+         | A.CTascii_96 => _
+         | A.CTascii_97 => _
+         | A.CTascii_98 => _
+         | A.CTascii_99 => _
+         | A.CTascii_100 => _
+         | A.CTascii_101 => _
+         | A.CTascii_102 => _
+         | A.CTascii_103 => _
+         | A.CTascii_104 => _
+         | A.CTascii_105 => _
+         | A.CTascii_106 => _
+         | A.CTascii_107 => _
+         | A.CTascii_108 => _
+         | A.CTascii_109 => _
+         | A.CTascii_110 => _
+         | A.CTascii_111 => _
+         | A.CTascii_112 => _
+         | A.CTascii_113 => _
+         | A.CTascii_114 => _
+         | A.CTascii_115 => _
+         | A.CTascii_116 => _
+         | A.CTascii_117 => _
+         | A.CTascii_118 => _
+         | A.CTascii_119 => _
+         | A.CTascii_120 => _
+         | A.CTascii_121 => _
+         | A.CTascii_122 => _
+         | A.CTascii_123 => _
+         | A.CTascii_124 => _
+         | A.CTascii_125 => _
+         | A.CTascii_126 => _
+         | A.CTascii_127 => _
+         end; intros; clear ct arg_tys ctor.
+  all: admit.
+  (* all: unpack_hlist cases case0; unpack_hlist args arg0. *)
+  (* all: reflexivity. *)
 
 - revert args cases. pattern ctor, arg_tys, ct.
   refine match ct as ct_ in A.constr_type ctor_ arg_tys_ (Tnat)
@@ -449,17 +577,21 @@ clear e target_tyn ret_ty0 case_tys.
   all: unpack_hlist cases case0; unpack_hlist args arg0.
   all: reflexivity.
 
-Qed.
+Admitted.
+(*Qed.*)
 
 
 Lemma ct_is_constr_for_type : forall ctor arg_tys ty,
     A.constr_type ctor arg_tys ty ->
     is_ctor_for_type ty ctor.
-intros0 ct.
-destruct ct.
-
-all: let use n := exists n; reflexivity in
-        use 0 || use 1 || use 2.
+Proof.
+  intros0 ct.
+  destruct ct;
+    match goal with
+    | [ |- is_ctor_for_type _ ?C ] =>
+      let use n := exists n; reflexivity in
+        use (constructor_index C)
+    end.
 Qed.
 
 Lemma ct_constructor_arg_n : forall ctor arg_tys ty,
