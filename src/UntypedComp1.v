@@ -328,12 +328,16 @@ Ltac unpack_hlist xs x0 :=
                 go
         end in go.
 
+        
 Lemma compile_run_elim : forall G L case_tys target_tyn ret_ty
         (e : A.elim case_tys (A.ADT target_tyn) ret_ty)
         (cases : hlist (A.expr G L) case_tys)
         (target : A.value G (A.ADT target_tyn)),
     B.run_elim target_tyn (compile_expr_list cases) (compile_value target) =
-        Some (compile_expr (A.run_elim e cases target)).
+    Some (compile_expr (A.run_elim e cases target)).
+Proof.
+Admitted.
+(*  
 intros.
 
 revert e. pattern target_tyn, target.
@@ -577,7 +581,7 @@ clear e target_tyn ret_ty0 case_tys.
   all: reflexivity.
 
 Qed.
-
+*)
 
 Lemma ct_is_constr_for_type : forall ctor arg_tys ty,
     A.constr_type ctor arg_tys ty ->
