@@ -492,9 +492,8 @@ clear e target_tyn ret_ty0 case_tys.
          | A.CTascii_126 => _
          | A.CTascii_127 => _
          end; intros; clear ct arg_tys ctor.
-  all: admit.
-  (* all: unpack_hlist cases case0; unpack_hlist args arg0. *)
-  (* all: reflexivity. *)
+  all: unpack_hlist cases case0; unpack_hlist args arg0.
+  all: reflexivity.
 
 - revert args cases. pattern ctor, arg_tys, ct.
   refine match ct as ct_ in A.constr_type ctor_ arg_tys_ (Tnat)
@@ -577,8 +576,7 @@ clear e target_tyn ret_ty0 case_tys.
   all: unpack_hlist cases case0; unpack_hlist args arg0.
   all: reflexivity.
 
-Admitted.
-(*Qed.*)
+Qed.
 
 
 Lemma ct_is_constr_for_type : forall ctor arg_tys ty,

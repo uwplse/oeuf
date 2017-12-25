@@ -1069,27 +1069,25 @@ Module elim.
     forall case_tys target_tyn ty (e : elim case_tys (ADT target_tyn) ty),
       check_elim = Some e.
   Proof.
-  Admitted.
-
 
     (* OLD *)
-  (*   unfold check_elim. *)
-  (*   intros. *)
-  (*   refine match e with *)
-  (*            | EBool t    => _ *)
-  (*            | ENat t     => _ *)
-  (*            | EList _ t => _ *)
-  (*            | EUnit t    => _ *)
-  (*            | EPair _ _ t => _ *)
-  (*            | EOption _ t => _ *)
-  (*            | EPositive t => _ *)
-  (*            | EN t        => _ *)
-  (*            | EZ t        => _ *)
-  (*            | EAscii t => _ *)
-  (*          end; *)
-  (*     repeat (break_match; try congruence; *)
-  (*     dependent destruction e0; auto). *)
-  (* Qed. *)
+    unfold check_elim.
+    intros.
+    refine match e with
+             | EBool t    => _
+             | ENat t     => _
+             | EList _ t => _
+             | EUnit t    => _
+             | EPair _ _ t => _
+             | EOption _ t => _
+             | EPositive t => _
+             | EN t        => _
+             | EZ t        => _
+             | EAscii t => _
+           end;
+      repeat (break_match; try congruence;
+      dependent destruction e0; auto).
+  Qed.
 End elim.
 
 
