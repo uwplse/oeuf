@@ -86,6 +86,23 @@ unsigned uint_of_nat(union nat* n) {
     return result;
 }
 
+// Utilities
+
+void print_nat(union nat* n) {
+    switch (n->tag) {
+        case TAG_nat_O:
+            printf("O");
+            break;
+
+        case TAG_nat_S:
+            printf("S (");
+            print_nat(n->S.n);
+            printf(")");
+            break;
+    }
+}
+
+
 
 //// unit ////
 
