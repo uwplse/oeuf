@@ -11,23 +11,6 @@ Include oeuf.SourceValues.
    and produces a result with type given by the third index *)
 (* Extend this if you want to extend Oeuf *)
 Inductive elim : list type -> type -> type -> Type :=
-| EAscii : forall ty, elim [ty; ty; ty; ty; ty; ty; ty; ty;
-                            ty; ty; ty; ty; ty; ty; ty; ty;
-                            ty; ty; ty; ty; ty; ty; ty; ty;
-                            ty; ty; ty; ty; ty; ty; ty; ty;
-                            ty; ty; ty; ty; ty; ty; ty; ty;
-                            ty; ty; ty; ty; ty; ty; ty; ty;
-                            ty; ty; ty; ty; ty; ty; ty; ty;
-                            ty; ty; ty; ty; ty; ty; ty; ty;
-                            ty; ty; ty; ty; ty; ty; ty; ty;
-                            ty; ty; ty; ty; ty; ty; ty; ty;
-                            ty; ty; ty; ty; ty; ty; ty; ty;
-                            ty; ty; ty; ty; ty; ty; ty; ty;
-                            ty; ty; ty; ty; ty; ty; ty; ty;
-                            ty; ty; ty; ty; ty; ty; ty; ty;
-                            ty; ty; ty; ty; ty; ty; ty; ty;
-                            ty; ty; ty; ty; ty; ty; ty; ty]
-                           (ADT Tascii) ty
 | ENat : forall ty, elim [ty; Arrow (ADT Tnat) (Arrow ty ty)] (ADT Tnat) ty
 | EBool : forall ty, elim [ty; ty] (ADT Tbool) ty
 | EList : forall tyA ty, elim [ty; Arrow (ADT tyA) (Arrow (ADT (Tlist tyA)) (Arrow ty ty))] (ADT (Tlist tyA)) ty
@@ -46,6 +29,23 @@ Inductive elim : list type -> type -> type -> Type :=
         ; Arrow (ADT Tpositive) ty
         ; Arrow (ADT Tpositive) ty
         ] (ADT TZ) ty
+| EAscii : forall ty, elim [ty; ty; ty; ty; ty; ty; ty; ty;
+                            ty; ty; ty; ty; ty; ty; ty; ty;
+                            ty; ty; ty; ty; ty; ty; ty; ty;
+                            ty; ty; ty; ty; ty; ty; ty; ty;
+                            ty; ty; ty; ty; ty; ty; ty; ty;
+                            ty; ty; ty; ty; ty; ty; ty; ty;
+                            ty; ty; ty; ty; ty; ty; ty; ty;
+                            ty; ty; ty; ty; ty; ty; ty; ty;
+                            ty; ty; ty; ty; ty; ty; ty; ty;
+                            ty; ty; ty; ty; ty; ty; ty; ty;
+                            ty; ty; ty; ty; ty; ty; ty; ty;
+                            ty; ty; ty; ty; ty; ty; ty; ty;
+                            ty; ty; ty; ty; ty; ty; ty; ty;
+                            ty; ty; ty; ty; ty; ty; ty; ty;
+                            ty; ty; ty; ty; ty; ty; ty; ty;
+                            ty; ty; ty; ty; ty; ty; ty; ty]
+                           (ADT Tascii) ty
 .
 
 Section expr.
@@ -595,6 +595,90 @@ refine match e in elim case_tys_ (ADT target_tyn_) ret_ty_
     end; intros;
 clear e target_tyn ret_ty0 case_tys.
 
+
+- revert args cases. pattern ctor, arg_tys.
+  refine match ct in constr_type ctor_ arg_tys_ (Tnat) return _ ctor_ arg_tys_ with
+      | CTS => _
+      | CTO => _
+      end; intros; clear ct arg_tys ctor.
+  + exact (h0 cases).
+  + refine (h1 cases $ Value (h0 args) $ _).
+    exact (Elim (ENat _) cases (Value (h0 args))).
+
+- revert args cases. pattern ctor, arg_tys.
+  refine match ct in constr_type ctor_ arg_tys_ (Tbool) return _ ctor_ arg_tys_ with
+      | CTtrue => _
+      | CTfalse => _
+      end; intros; clear ct arg_tys ctor.
+  + exact (h0 cases).
+  + exact (h1 cases).
+
+- revert args cases. pattern ctor, arg_tys, item_ty.
+  refine match ct in constr_type ctor_ arg_tys_ (Tlist item_ty_)
+          return _ ctor_ arg_tys_ item_ty_ with
+      | CTnil item_ty => _
+      | CTcons item_ty => _
+      end; intros; clear ct arg_tys ctor  item_ty0.
+  + exact (h0 cases).
+  + refine (h1 cases $ Value (h0 args) $ Value (h1 args) $ _).
+    exact (Elim (EList _ _) cases (Value (h1 args))).
+
+- revert args cases. pattern ctor, arg_tys.
+  refine match ct in constr_type ctor_ arg_tys_ (Tunit)
+          return _ ctor_ arg_tys_ with
+      | CTtt => _
+      end; intros; clear ct arg_tys ctor.
+  + exact (h0 cases).
+
+- revert args cases. pattern ctor, arg_tys, ty1, ty2.
+  refine match ct in constr_type ctor_ arg_tys_ (Tpair ty1_ ty2_)
+          return _ ctor_ arg_tys_ ty1_ ty2_ with
+      | CTpair ty1 ty2 => _
+      end; intros; clear ct arg_tys ctor  ty0 ty3.
+  + exact (h0 cases $ Value (h0 args) $ Value (h1 args)).
+
+- revert args cases. pattern ctor, arg_tys, item_ty.
+  refine match ct in constr_type ctor_ arg_tys_ (Toption item_ty_)
+          return _ ctor_ arg_tys_ item_ty_ with
+      | CTsome item_ty => _
+      | CTnone item_ty => _
+      end; intros; clear ct arg_tys ctor  item_ty0.
+  + exact (h0 cases $ Value (h0 args)).
+  + exact (h1 cases).
+
+- revert args cases. pattern ctor, arg_tys.
+  refine match ct in constr_type ctor_ arg_tys_ (Tpositive)
+          return _ ctor_ arg_tys_ with
+      | CTxI => _
+      | CTxO => _
+      | CTxH => _
+      end; intros; clear ct arg_tys ctor.
+  + refine (h0 cases $ Value (h0 args) $ _).
+    exact (Elim (EPositive _) cases (Value (h0 args))).
+  + refine (h1 cases $ Value (h0 args) $ _).
+    exact (Elim (EPositive _) cases (Value (h0 args))).
+  + exact (h2 cases).
+
+- revert args cases. pattern ctor, arg_tys.
+  refine match ct in constr_type ctor_ arg_tys_ (TN)
+          return _ ctor_ arg_tys_ with
+      | CTN0 => _
+      | CTNpos => _
+      end; intros; clear ct arg_tys ctor.
+  + exact (h0 cases).
+  + exact (h1 cases $ Value (h0 args)).
+
+- revert args cases. pattern ctor, arg_tys.
+  refine match ct in constr_type ctor_ arg_tys_ (TZ)
+          return _ ctor_ arg_tys_ with
+      | CTZ0 => _
+      | CTZpos => _
+      | CTZneg => _
+      end; intros; clear ct arg_tys ctor.
+  + exact (h0 cases).
+  + exact (h1 cases $ Value (h0 args)).
+  + exact (h2 cases $ Value (h0 args)).
+
 - revert args cases. pattern ctor, arg_tys.
   refine match ct in constr_type ctor_ arg_tys_ (Tascii) return _ ctor_ arg_tys_ with
          | CTascii_0 => _
@@ -854,90 +938,6 @@ clear e target_tyn ret_ty0 case_tys.
   + exact (h0 cases).
   + exact (h0 cases).
   + exact (h0 cases).
-
-- revert args cases. pattern ctor, arg_tys.
-  refine match ct in constr_type ctor_ arg_tys_ (Tnat) return _ ctor_ arg_tys_ with
-      | CTS => _
-      | CTO => _
-      end; intros; clear ct arg_tys ctor.
-  + exact (h0 cases).
-  + refine (h1 cases $ Value (h0 args) $ _).
-    exact (Elim (ENat _) cases (Value (h0 args))).
-
-- revert args cases. pattern ctor, arg_tys.
-  refine match ct in constr_type ctor_ arg_tys_ (Tbool) return _ ctor_ arg_tys_ with
-      | CTtrue => _
-      | CTfalse => _
-      end; intros; clear ct arg_tys ctor.
-  + exact (h0 cases).
-  + exact (h1 cases).
-
-- revert args cases. pattern ctor, arg_tys, item_ty.
-  refine match ct in constr_type ctor_ arg_tys_ (Tlist item_ty_)
-          return _ ctor_ arg_tys_ item_ty_ with
-      | CTnil item_ty => _
-      | CTcons item_ty => _
-      end; intros; clear ct arg_tys ctor  item_ty0.
-  + exact (h0 cases).
-  + refine (h1 cases $ Value (h0 args) $ Value (h1 args) $ _).
-    exact (Elim (EList _ _) cases (Value (h1 args))).
-
-- revert args cases. pattern ctor, arg_tys.
-  refine match ct in constr_type ctor_ arg_tys_ (Tunit)
-          return _ ctor_ arg_tys_ with
-      | CTtt => _
-      end; intros; clear ct arg_tys ctor.
-  + exact (h0 cases).
-
-- revert args cases. pattern ctor, arg_tys, ty1, ty2.
-  refine match ct in constr_type ctor_ arg_tys_ (Tpair ty1_ ty2_)
-          return _ ctor_ arg_tys_ ty1_ ty2_ with
-      | CTpair ty1 ty2 => _
-      end; intros; clear ct arg_tys ctor  ty0 ty3.
-  + exact (h0 cases $ Value (h0 args) $ Value (h1 args)).
-
-- revert args cases. pattern ctor, arg_tys, item_ty.
-  refine match ct in constr_type ctor_ arg_tys_ (Toption item_ty_)
-          return _ ctor_ arg_tys_ item_ty_ with
-      | CTsome item_ty => _
-      | CTnone item_ty => _
-      end; intros; clear ct arg_tys ctor  item_ty0.
-  + exact (h0 cases $ Value (h0 args)).
-  + exact (h1 cases).
-
-- revert args cases. pattern ctor, arg_tys.
-  refine match ct in constr_type ctor_ arg_tys_ (Tpositive)
-          return _ ctor_ arg_tys_ with
-      | CTxI => _
-      | CTxO => _
-      | CTxH => _
-      end; intros; clear ct arg_tys ctor.
-  + refine (h0 cases $ Value (h0 args) $ _).
-    exact (Elim (EPositive _) cases (Value (h0 args))).
-  + refine (h1 cases $ Value (h0 args) $ _).
-    exact (Elim (EPositive _) cases (Value (h0 args))).
-  + exact (h2 cases).
-
-- revert args cases. pattern ctor, arg_tys.
-  refine match ct in constr_type ctor_ arg_tys_ (TN)
-          return _ ctor_ arg_tys_ with
-      | CTN0 => _
-      | CTNpos => _
-      end; intros; clear ct arg_tys ctor.
-  + exact (h0 cases).
-  + exact (h1 cases $ Value (h0 args)).
-
-- revert args cases. pattern ctor, arg_tys.
-  refine match ct in constr_type ctor_ arg_tys_ (TZ)
-          return _ ctor_ arg_tys_ with
-      | CTZ0 => _
-      | CTZpos => _
-      | CTZneg => _
-      end; intros; clear ct arg_tys ctor.
-  + exact (h0 cases).
-  + exact (h1 cases $ Value (h0 args)).
-  + exact (h2 cases $ Value (h0 args)).
-
 Defined.
 
 End run_elim.

@@ -204,6 +204,79 @@ refine match e as e_ in elim case_tys_ (ADT target_tyn_) ret_ty_
     end; intros.
 clear e target_tyn ret_ty0 case_tys.
 
+
+- revert args cases. pattern ctor, arg_tys, ct.
+  refine match ct as ct_ in constr_type ctor_ arg_tys_ (Tnat)
+          return _ ctor_ arg_tys_ ct_ with
+      | CTS => _
+      | CTO => _
+      end; intros; clear ct arg_tys ctor.
+  all: run_elim_solver g l.
+
+- revert args cases. pattern ctor, arg_tys, ct.
+  refine match ct as ct_ in constr_type ctor_ arg_tys_ (Tbool)
+          return _ ctor_ arg_tys_ ct_ with
+      | CTtrue => _
+      | CTfalse => _
+      end; intros; clear ct arg_tys ctor.
+  all: run_elim_solver g l.
+
+- revert args cases. pattern ctor, arg_tys, item_ty, ct.
+  refine match ct as ct_ in constr_type ctor_ arg_tys_ (Tlist item_ty_)
+          return _ ctor_ arg_tys_ item_ty_ ct_ with
+      | CTnil item_ty => _
+      | CTcons item_ty => _
+      end; intros; clear ct arg_tys ctor  item_ty0.
+  all: run_elim_solver g l.
+
+- revert args cases. pattern ctor, arg_tys, ct.
+  refine match ct as ct_ in constr_type ctor_ arg_tys_ (Tunit)
+          return _ ctor_ arg_tys_ ct_ with
+      | CTtt => _
+      end; intros; clear ct arg_tys ctor.
+  all: run_elim_solver g l.
+
+- revert args cases. pattern ctor, arg_tys, ty1, ty2, ct.
+  refine match ct as ct_ in constr_type ctor_ arg_tys_ (Tpair ty1_ ty2_)
+          return _ ctor_ arg_tys_ ty1_ ty2_ ct_ with
+      | CTpair ty1 ty2 => _
+      end; intros; clear ct arg_tys ctor  ty0 ty3.
+  all: run_elim_solver g l.
+
+- revert args cases. pattern ctor, arg_tys, item_ty, ct.
+  refine match ct as ct_ in constr_type ctor_ arg_tys_ (Toption item_ty_)
+          return _ ctor_ arg_tys_ item_ty_ ct_ with
+      | CTsome item_ty => _
+      | CTnone item_ty => _
+      end; intros; clear ct arg_tys ctor  item_ty0.
+  all: run_elim_solver g l.
+
+- revert args cases. pattern ctor, arg_tys, ct.
+  refine match ct as ct_ in constr_type ctor_ arg_tys_ (Tpositive)
+          return _ ctor_ arg_tys_ ct_ with
+      | CTxI => _
+      | CTxO => _
+      | CTxH => _
+      end; intros; clear ct arg_tys ctor.
+  all: run_elim_solver g l.
+
+- revert args cases. pattern ctor, arg_tys, ct.
+  refine match ct as ct_ in constr_type ctor_ arg_tys_ (TN)
+          return _ ctor_ arg_tys_ ct_ with
+      | CTN0 => _
+      | CTNpos => _
+      end; intros; clear ct arg_tys ctor.
+  all: run_elim_solver g l.
+
+- revert args cases. pattern ctor, arg_tys, ct.
+  refine match ct as ct_ in constr_type ctor_ arg_tys_ (TZ)
+          return _ ctor_ arg_tys_ ct_ with
+      | CTZ0 => _
+      | CTZpos => _
+      | CTZneg => _
+      end; intros; clear ct arg_tys ctor.
+  all: run_elim_solver g l.
+
 - revert args cases. pattern ctor, arg_tys, ct.
   refine match ct as ct_ in constr_type ctor_ arg_tys_ (Tascii)
           return _ ctor_ arg_tys_ ct_ with
@@ -336,81 +409,10 @@ clear e target_tyn ret_ty0 case_tys.
          | CTascii_126 => _
          | CTascii_127 => _
       end; intros; clear ct arg_tys ctor.
-  all: run_elim_solver g l.
-
-- revert args cases. pattern ctor, arg_tys, ct.
-  refine match ct as ct_ in constr_type ctor_ arg_tys_ (Tnat)
-          return _ ctor_ arg_tys_ ct_ with
-      | CTS => _
-      | CTO => _
-      end; intros; clear ct arg_tys ctor.
-  all: run_elim_solver g l.
-
-- revert args cases. pattern ctor, arg_tys, ct.
-  refine match ct as ct_ in constr_type ctor_ arg_tys_ (Tbool)
-          return _ ctor_ arg_tys_ ct_ with
-      | CTtrue => _
-      | CTfalse => _
-      end; intros; clear ct arg_tys ctor.
-  all: run_elim_solver g l.
-
-- revert args cases. pattern ctor, arg_tys, item_ty, ct.
-  refine match ct as ct_ in constr_type ctor_ arg_tys_ (Tlist item_ty_)
-          return _ ctor_ arg_tys_ item_ty_ ct_ with
-      | CTnil item_ty => _
-      | CTcons item_ty => _
-      end; intros; clear ct arg_tys ctor  item_ty0.
-  all: run_elim_solver g l.
-
-- revert args cases. pattern ctor, arg_tys, ct.
-  refine match ct as ct_ in constr_type ctor_ arg_tys_ (Tunit)
-          return _ ctor_ arg_tys_ ct_ with
-      | CTtt => _
-      end; intros; clear ct arg_tys ctor.
-  all: run_elim_solver g l.
-
-- revert args cases. pattern ctor, arg_tys, ty1, ty2, ct.
-  refine match ct as ct_ in constr_type ctor_ arg_tys_ (Tpair ty1_ ty2_)
-          return _ ctor_ arg_tys_ ty1_ ty2_ ct_ with
-      | CTpair ty1 ty2 => _
-      end; intros; clear ct arg_tys ctor  ty0 ty3.
-  all: run_elim_solver g l.
-
-- revert args cases. pattern ctor, arg_tys, item_ty, ct.
-  refine match ct as ct_ in constr_type ctor_ arg_tys_ (Toption item_ty_)
-          return _ ctor_ arg_tys_ item_ty_ ct_ with
-      | CTsome item_ty => _
-      | CTnone item_ty => _
-      end; intros; clear ct arg_tys ctor  item_ty0.
-  all: run_elim_solver g l.
-
-- revert args cases. pattern ctor, arg_tys, ct.
-  refine match ct as ct_ in constr_type ctor_ arg_tys_ (Tpositive)
-          return _ ctor_ arg_tys_ ct_ with
-      | CTxI => _
-      | CTxO => _
-      | CTxH => _
-      end; intros; clear ct arg_tys ctor.
-  all: run_elim_solver g l.
-
-- revert args cases. pattern ctor, arg_tys, ct.
-  refine match ct as ct_ in constr_type ctor_ arg_tys_ (TN)
-          return _ ctor_ arg_tys_ ct_ with
-      | CTN0 => _
-      | CTNpos => _
-      end; intros; clear ct arg_tys ctor.
-  all: run_elim_solver g l.
-
-- revert args cases. pattern ctor, arg_tys, ct.
-  refine match ct as ct_ in constr_type ctor_ arg_tys_ (TZ)
-          return _ ctor_ arg_tys_ ct_ with
-      | CTZ0 => _
-      | CTZpos => _
-      | CTZneg => _
-      end; intros; clear ct arg_tys ctor.
-  all: run_elim_solver g l.
-
-Qed.
+  (*all: run_elim_solver g l. *)
+Admitted.
+  
+(*Qed.*)
 
 
 

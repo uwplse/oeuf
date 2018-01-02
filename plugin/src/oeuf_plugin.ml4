@@ -211,11 +211,12 @@ let rec constr_assoc c xs =
 let mk ctor cs : Term.constr = Constr.mkApp (ctor (), Array.of_list cs)
 
 
-let pkg_utopia = ["Utopia"]
-let pkg_hlist = ["HList"]
-let pkg_sourcevalues = ["SourceValues"]
-let pkg_sourcelifted = ["SourceLifted"]
-let pkg_compilation_unit = ["CompilationUnit"]
+let pkg_utopia = ["oeuf";"Utopia"]
+let pkg_hlist = ["oeuf";"HList"]
+let pkg_sourcevalues = ["oeuf";"SourceValues"]
+let pkg_sourcelifted = ["oeuf";"SourceLifted"]
+let pkg_compilation_unit = ["oeuf";"CompilationUnit"]
+let pkg_fast_ascii = ["oeuf";"FastAscii"]
 
 let pkg_binnums = ["Coq"; "Numbers"; "BinNums"]
 
@@ -250,7 +251,7 @@ let simple_type_defn pkg name num_params ctors : type_defn =
     ; ctors = List.map (fun (name, num_fields) -> simple_ctor_defn name num_fields) ctors
     }
 
-
+(* extend this if you want to extend Oeuf with a new datatype *)
 let type_defns : type_defn list = [
     (* module, type name, reflected type name, number of params, (constructor, num fields) list *)
     simple_type_defn pkg_datatypes "nat" 0
@@ -261,6 +262,136 @@ let type_defns : type_defn list = [
         [("nil", 0); ("cons", 2)];
     simple_type_defn pkg_datatypes "unit" 0
         [("tt", 0)];
+    simple_type_defn pkg_fast_ascii "ascii" 0
+    [("ascii_0",0);
+    ("ascii_1",0);
+    ("ascii_2",0);
+    ("ascii_3",0);
+    ("ascii_4",0);
+    ("ascii_5",0);
+    ("ascii_6",0);
+    ("ascii_7",0);
+    ("ascii_8",0);
+    ("ascii_9",0);
+    ("ascii_10",0);
+    ("ascii_11",0);
+    ("ascii_12",0);
+    ("ascii_13",0);
+    ("ascii_14",0);
+    ("ascii_15",0);
+    ("ascii_16",0);
+    ("ascii_17",0);
+    ("ascii_18",0);
+    ("ascii_19",0);
+    ("ascii_20",0);
+    ("ascii_21",0);
+    ("ascii_22",0);
+    ("ascii_23",0);
+    ("ascii_24",0);
+    ("ascii_25",0);
+    ("ascii_26",0);
+    ("ascii_27",0);
+    ("ascii_28",0);
+    ("ascii_29",0);
+    ("ascii_30",0);
+    ("ascii_31",0);
+    ("ascii_32",0);
+    ("ascii_33",0);
+    ("ascii_34",0);
+    ("ascii_35",0);
+    ("ascii_36",0);
+    ("ascii_37",0);
+    ("ascii_38",0);
+    ("ascii_39",0);
+    ("ascii_40",0);
+    ("ascii_41",0);
+    ("ascii_42",0);
+    ("ascii_43",0);
+    ("ascii_44",0);
+    ("ascii_45",0);
+    ("ascii_46",0);
+    ("ascii_47",0);
+    ("ascii_48",0);
+    ("ascii_49",0);
+    ("ascii_50",0);
+    ("ascii_51",0);
+    ("ascii_52",0);
+    ("ascii_53",0);
+    ("ascii_54",0);
+    ("ascii_55",0);
+    ("ascii_56",0);
+    ("ascii_57",0);
+    ("ascii_58",0);
+    ("ascii_59",0);
+    ("ascii_60",0);
+    ("ascii_61",0);
+    ("ascii_62",0);
+    ("ascii_63",0);
+    ("ascii_64",0);
+    ("ascii_65",0);
+    ("ascii_66",0);
+    ("ascii_67",0);
+    ("ascii_68",0);
+    ("ascii_69",0);
+    ("ascii_70",0);
+    ("ascii_71",0);
+    ("ascii_72",0);
+    ("ascii_73",0);
+    ("ascii_74",0);
+    ("ascii_75",0);
+    ("ascii_76",0);
+    ("ascii_77",0);
+    ("ascii_78",0);
+    ("ascii_79",0);
+    ("ascii_80",0);
+    ("ascii_81",0);
+    ("ascii_82",0);
+    ("ascii_83",0);
+    ("ascii_84",0);
+    ("ascii_85",0);
+    ("ascii_86",0);
+    ("ascii_87",0);
+    ("ascii_88",0);
+    ("ascii_89",0);
+    ("ascii_90",0);
+    ("ascii_91",0);
+    ("ascii_92",0);
+    ("ascii_93",0);
+    ("ascii_94",0);
+    ("ascii_95",0);
+    ("ascii_96",0);
+    ("ascii_97",0);
+    ("ascii_98",0);
+    ("ascii_99",0);
+    ("ascii_100",0);
+    ("ascii_101",0);
+    ("ascii_102",0);
+    ("ascii_103",0);
+    ("ascii_104",0);
+    ("ascii_105",0);
+    ("ascii_106",0);
+    ("ascii_107",0);
+    ("ascii_108",0);
+    ("ascii_109",0);
+    ("ascii_110",0);
+    ("ascii_111",0);
+    ("ascii_112",0);
+    ("ascii_113",0);
+    ("ascii_114",0);
+    ("ascii_115",0);
+    ("ascii_116",0);
+    ("ascii_117",0);
+    ("ascii_118",0);
+    ("ascii_119",0);
+    ("ascii_120",0);
+    ("ascii_121",0);
+    ("ascii_122",0);
+    ("ascii_123",0);
+    ("ascii_124",0);
+    ("ascii_125",0);
+    ("ascii_126",0);
+    ("ascii_127",0)];
+
 
     { pkg = pkg_datatypes
     ; name = "prod"
