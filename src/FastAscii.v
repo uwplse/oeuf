@@ -2,142 +2,142 @@
 (* lists of these will still be slower than C-style strings *)
 (* But much better than Coq's builtin ascii *)
 Inductive ascii :=
-| NULL
-| SOH
-| STX
-| ETX
-| EOT
-| ENQ
-| ACK
-| BEL
-| BS
-| TAB
-| LF
-| VT
-| FF
-| CR
-| SO
-| SI
-| DLE
-| DC1
-| DC2
-| DC3
-| DC4
-| NAK
-| SYN
-| ETB
-| CAN
-| EM
-| SUB
-| ESC
-| FS
-| GS
-| RS
-| US
-| SPACE
-| EXCLAMATION
-| DOUBLE_QUOTE
-| HASH
-| DOLLAR
-| PERCENT
-| AMPERSAND
-| SINGLE_QUOTE
-| LEFT_PAREN
-| RIGHT_PAREN
-| ASTERISK
-| PLUS
-| FORWARD_SINGLE_QUOTE
-| HYPHEN
-| PERIOD
-| SLASH
-| NUMERAL_0
-| NUMERAL_1
-| NUMERAL_2
-| NUMERAL_3
-| NUMERAL_4
-| NUMERAL_5
-| NUMERAL_6
-| NUMERAL_7
-| NUMERAL_8
-| NUMERAL_9
-| COLON
-| SEMICOLON
-| LESS_THAN
-| EQUAL
-| GREATER_THAN
-| QUESTION_MARK
-| AT
-| CAPITAL_A
-| CAPITAL_B
-| CAPITAL_C
-| CAPITAL_D
-| CAPITAL_E
-| CAPITAL_F
-| CAPITAL_G
-| CAPITAL_H
-| CAPITAL_I
-| CAPITAL_J
-| CAPITAL_K
-| CAPITAL_L
-| CAPITAL_M
-| CAPITAL_N
-| CAPITAL_O
-| CAPITAL_P
-| CAPITAL_Q
-| CAPITAL_R
-| CAPITAL_S
-| CAPITAL_T
-| CAPITAL_U
-| CAPITAL_V
-| CAPITAL_W
-| CAPITAL_X
-| CAPITAL_Y
-| CAPITAL_Z
-| LEFT_SQUARE_BRACKET
-| BACKSLASH
-| RIGHT_SQUARE_BRACKET
-| CARROT
-| UNDERSCORE
-| BACKTICK
-| LOWERCASE_A
-| LOWERCASE_B
-| LOWERCASE_C
-| LOWERCASE_D
-| LOWERCASE_E
-| LOWERCASE_F
-| LOWERCASE_G
-| LOWERCASE_H
-| LOWERCASE_I
-| LOWERCASE_J
-| LOWERCASE_K
-| LOWERCASE_L
-| LOWERCASE_M
-| LOWERCASE_N
-| LOWERCASE_O
-| LOWERCASE_P
-| LOWERCASE_Q
-| LOWERCASE_R
-| LOWERCASE_S
-| LOWERCASE_T
-| LOWERCASE_U
-| LOWERCASE_V
-| LOWERCASE_W
-| LOWERCASE_X
-| LOWERCASE_Y
-| LOWERCASE_Z
-| LEFT_CURLY_BRACE
-| PIPE
-| RIGHT_CURLY_BRACE
-| TILDE
-| DEL
+| ascii_0 (* | NULL*)
+| ascii_1 (* | SOH*)
+| ascii_2 (* | STX*)
+| ascii_3 (* | ETX*)
+| ascii_4 (* | EOT*)
+| ascii_5 (* | ENQ*)
+| ascii_6 (* | ACK*)
+| ascii_7 (* | BEL*)
+| ascii_8 (* | BS*)
+| ascii_9 (* | TAB*)
+| ascii_10 (* | LF*)
+| ascii_11 (* | VT*)
+| ascii_12 (* | FF*)
+| ascii_13 (* | CR*)
+| ascii_14 (* | SO*)
+| ascii_15 (* | SI*)
+| ascii_16 (* | DLE*)
+| ascii_17 (* | DC1*)
+| ascii_18 (* | DC2*)
+| ascii_19 (* | DC3*)
+| ascii_20 (* | DC4*)
+| ascii_21 (* | NAK*)
+| ascii_22 (* | SYN*)
+| ascii_23 (* | ETB*)
+| ascii_24 (* | CAN*)
+| ascii_25 (* | EM*)
+| ascii_26 (* | SUB*)
+| ascii_27 (* | ESC*)
+| ascii_28 (* | FS*)
+| ascii_29 (* | GS*)
+| ascii_30 (* | RS*)
+| ascii_31 (* | US*)
+| ascii_32 (* | SPACE*)
+| ascii_33 (* | EXCLAMATION*)
+| ascii_34 (* | DOUBLE_QUOTE*)
+| ascii_35 (* | HASH*)
+| ascii_36 (* | DOLLAR*)
+| ascii_37 (* | PERCENT*)
+| ascii_38 (* | AMPERSAND*)
+| ascii_39 (* | SINGLE_QUOTE*)
+| ascii_40 (* | LEFT_PAREN*)
+| ascii_41 (* | RIGHT_PAREN*)
+| ascii_42 (* | ASTERISK*)
+| ascii_43 (* | PLUS*)
+| ascii_44 (* | FORWARD_SINGLE_QUOTE*)
+| ascii_45 (* | HYPHEN*)
+| ascii_46 (* | PERIOD*)
+| ascii_47 (* | SLASH*)
+| ascii_48 (* | NUMERAL_0*)
+| ascii_49 (* | NUMERAL_1*)
+| ascii_50 (* | NUMERAL_2*)
+| ascii_51 (* | NUMERAL_3*)
+| ascii_52 (* | NUMERAL_4*)
+| ascii_53 (* | NUMERAL_5*)
+| ascii_54 (* | NUMERAL_6*)
+| ascii_55 (* | NUMERAL_7*)
+| ascii_56 (* | NUMERAL_8*)
+| ascii_57 (* | NUMERAL_9*)
+| ascii_58 (* | COLON*)
+| ascii_59 (* | SEMICOLON*)
+| ascii_60 (* | LESS_THAN*)
+| ascii_61 (* | EQUAL*)
+| ascii_62 (* | GREATER_THAN*)
+| ascii_63 (* | QUESTION_MARK*)
+| ascii_64 (* | AT*)
+| ascii_65 (* | CAPITAL_A*)
+| ascii_66 (* | CAPITAL_B*)
+| ascii_67 (* | CAPITAL_C*)
+| ascii_68 (* | CAPITAL_D*)
+| ascii_69 (* | CAPITAL_E*)
+| ascii_70 (* | CAPITAL_F*)
+| ascii_71 (* | CAPITAL_G*)
+| ascii_72 (* | CAPITAL_H*)
+| ascii_73 (* | CAPITAL_I*)
+| ascii_74 (* | CAPITAL_J*)
+| ascii_75 (* | CAPITAL_K*)
+| ascii_76 (* | CAPITAL_L*)
+| ascii_77 (* | CAPITAL_M*)
+| ascii_78 (* | CAPITAL_N*)
+| ascii_79 (* | CAPITAL_O*)
+| ascii_80 (* | CAPITAL_P*)
+| ascii_81 (* | CAPITAL_Q*)
+| ascii_82 (* | CAPITAL_R*)
+| ascii_83 (* | CAPITAL_S*)
+| ascii_84 (* | CAPITAL_T*)
+| ascii_85 (* | CAPITAL_U*)
+| ascii_86 (* | CAPITAL_V*)
+| ascii_87 (* | CAPITAL_W*)
+| ascii_88 (* | CAPITAL_X*)
+| ascii_89 (* | CAPITAL_Y*)
+| ascii_90 (* | CAPITAL_Z*)
+| ascii_91 (* | LEFT_SQUARE_BRACKET*)
+| ascii_92 (* | BACKSLASH*)
+| ascii_93 (* | RIGHT_SQUARE_BRACKET*)
+| ascii_94 (* | CARROT*)
+| ascii_95 (* | UNDERSCORE*)
+| ascii_96 (* | BACKTICK*)
+| ascii_97 (* | LOWERCASE_A*)
+| ascii_98 (* | LOWERCASE_B*)
+| ascii_99 (* | LOWERCASE_C*)
+| ascii_100 (* | LOWERCASE_D*)
+| ascii_101 (* | LOWERCASE_E*)
+| ascii_102 (* | LOWERCASE_F*)
+| ascii_103 (* | LOWERCASE_G*)
+| ascii_104 (* | LOWERCASE_H*)
+| ascii_105 (* | LOWERCASE_I*)
+| ascii_106 (* | LOWERCASE_J*)
+| ascii_107 (* | LOWERCASE_K*)
+| ascii_108 (* | LOWERCASE_L*)
+| ascii_109 (* | LOWERCASE_M*)
+| ascii_110 (* | LOWERCASE_N*)
+| ascii_111 (* | LOWERCASE_O*)
+| ascii_112 (* | LOWERCASE_P*)
+| ascii_113 (* | LOWERCASE_Q*)
+| ascii_114 (* | LOWERCASE_R*)
+| ascii_115 (* | LOWERCASE_S*)
+| ascii_116 (* | LOWERCASE_T*)
+| ascii_117 (* | LOWERCASE_U*)
+| ascii_118 (* | LOWERCASE_V*)
+| ascii_119 (* | LOWERCASE_W*)
+| ascii_120 (* | LOWERCASE_X*)
+| ascii_121 (* | LOWERCASE_Y*)
+| ascii_122 (* | LOWERCASE_Z*)
+| ascii_123 (* | LEFT_CURLY_BRACE*)
+| ascii_124 (* | PIPE*)
+| ascii_125 (* | RIGHT_CURLY_BRACE*)
+| ascii_126 (* | TILDE*)
+| ascii_127 (* | DEL*)
 .
 
 Definition whitespace (x : ascii) : Prop :=
   match x with
-  | SPACE => True
-  | TAB => True
-  | CR => True
-  | LF => True
+  | ascii_9 => True
+  | ascii_10 => True
+  | ascii_13 => True
+  | ascii_32 => True
   | _ => False
   end.
              
@@ -150,10 +150,10 @@ Defined.
 
 Definition is_whitespace (x : ascii) : bool :=
   match x with
-  | SPACE => true
-  | TAB => true
-  | CR => true
-  | LF => true
+  | ascii_9 => true
+  | ascii_10 => true
+  | ascii_13 => true
+  | ascii_32 => true
   | _ => false
   end.
 
@@ -310,6 +310,7 @@ Proof.
   intros. destruct x; reflexivity.
 Qed.
 
+(*
 Definition eq_bool (x y : ascii) : bool :=
   match x,y with
 | NULL, NULL => true
@@ -442,7 +443,7 @@ Definition eq_bool (x y : ascii) : bool :=
 | DEL, DEL => true
 | _, _ => false
   end.
-
+*)
 (* TODO: eq_bool_elim and eq_bool_equiv *)
 
 (* Conversion from normal coq strings *)
@@ -451,135 +452,135 @@ Require Import String.
 (* Utility function to convert to flatter rep of ascii *)
 Definition ascii_to_fast_ascii (a : Ascii.ascii) : ascii :=
   match a with
-  | Ascii.Ascii false false false false false false false false => NULL
-  | Ascii.Ascii true  false false false false false false false  => SOH
-  | Ascii.Ascii  false  true false false false false false false => STX
-  | Ascii.Ascii  true  true false false false false false false  => ETX
-  | Ascii.Ascii false   false true false false false false false => EOT
-  | Ascii.Ascii true   false true false false false false false  => ENQ
-  | Ascii.Ascii  false   true true false false false false false => ACK
-  | Ascii.Ascii  true   true true false false false false false  => BEL
-  | Ascii.Ascii false  false  false true false false false false => BS
-  | Ascii.Ascii true  false  false true false false false false  => TAB
-  | Ascii.Ascii  false  true  false true false false false false => LF
-  | Ascii.Ascii  true  true  false true false false false false  => VT
-  | Ascii.Ascii false   false  true true false false false false => FF
-  | Ascii.Ascii true   false  true true false false false false  => CR
-  | Ascii.Ascii  false   true  true true false false false false => SO
-  | Ascii.Ascii  true   true  true true false false false false  => SI
-  | Ascii.Ascii false  false false  false true false false false => DLE
-  | Ascii.Ascii true  false false  false true false false false  => DC1
-  | Ascii.Ascii  false  true false  false true false false false => DC2
-  | Ascii.Ascii  true  true false  false true false false false  => DC3
-  | Ascii.Ascii false   false true  false true false false false => DC4
-  | Ascii.Ascii true   false true  false true false false false  => NAK
-  | Ascii.Ascii  false   true true  false true false false false => SYN
-  | Ascii.Ascii  true   true true  false true false false false  => ETB
-  | Ascii.Ascii false  false  false  true true false false false => CAN
-  | Ascii.Ascii true  false  false  true true false false false  => EM
-  | Ascii.Ascii  false  true  false  true true false false false => SUB
-  | Ascii.Ascii  true  true  false  true true false false false  => ESC
-  | Ascii.Ascii false   false  true  true true false false false => FS
-  | Ascii.Ascii true   false  true  true true false false false  => GS
-  | Ascii.Ascii  false   true  true  true true false false false => RS
-  | Ascii.Ascii  true   true  true  true true false false false  => US
-  | Ascii.Ascii false  false  false false false true false false => SPACE
-  | Ascii.Ascii true  false  false false false true false false  => EXCLAMATION
-  | Ascii.Ascii  false  true  false false false true false false => DOUBLE_QUOTE
-  | Ascii.Ascii  true  true  false false false true false false  => HASH
-  | Ascii.Ascii false   false  true false false true false false => DOLLAR
-  | Ascii.Ascii true   false  true false false true false false  => PERCENT
-  | Ascii.Ascii  false   true  true false false true false false => AMPERSAND
-  | Ascii.Ascii  true   true  true false false true false false  => SINGLE_QUOTE
-  | Ascii.Ascii false  false   false true false true false false => LEFT_PAREN
-  | Ascii.Ascii true  false   false true false true false false  => RIGHT_PAREN
-  | Ascii.Ascii  false  true   false true false true false false => ASTERISK
-  | Ascii.Ascii  true  true   false true false true false false  => PLUS
-  | Ascii.Ascii false   false   true true false true false false => FORWARD_SINGLE_QUOTE
-  | Ascii.Ascii true   false   true true false true false false  => HYPHEN
-  | Ascii.Ascii  false   true   true true false true false false => PERIOD
-  | Ascii.Ascii  true   true   true true false true false false  => SLASH
-  | Ascii.Ascii false  false  false  false true true false false => NUMERAL_0
-  | Ascii.Ascii true  false  false  false true true false false  => NUMERAL_1
-  | Ascii.Ascii  false  true  false  false true true false false => NUMERAL_2
-  | Ascii.Ascii  true  true  false  false true true false false  => NUMERAL_3
-  | Ascii.Ascii false   false  true  false true true false false => NUMERAL_4
-  | Ascii.Ascii true   false  true  false true true false false  => NUMERAL_5
-  | Ascii.Ascii  false   true  true  false true true false false => NUMERAL_6
-  | Ascii.Ascii  true   true  true  false true true false false  => NUMERAL_7
-  | Ascii.Ascii false  false   false  true true true false false => NUMERAL_8
-  | Ascii.Ascii true  false   false  true true true false false  => NUMERAL_9
-  | Ascii.Ascii  false  true   false  true true true false false => COLON
-  | Ascii.Ascii  true  true   false  true true true false false  => SEMICOLON
-  | Ascii.Ascii false   false   true  true true true false false => LESS_THAN
-  | Ascii.Ascii true   false   true  true true true false false  => EQUAL
-  | Ascii.Ascii  false   true   true  true true true false false => GREATER_THAN
-  | Ascii.Ascii  true   true   true  true true true false false  => QUESTION_MARK
-  | Ascii.Ascii false   false false false false false true false => AT
-  | Ascii.Ascii true   false false false false false true false  => CAPITAL_A
-  | Ascii.Ascii  false   true false false false false true false => CAPITAL_B
-  | Ascii.Ascii  true   true false false false false true false  => CAPITAL_C
-  | Ascii.Ascii false    false true false false false true false => CAPITAL_D
-  | Ascii.Ascii true    false true false false false true false  => CAPITAL_E
-  | Ascii.Ascii  false    true true false false false true false => CAPITAL_F
-  | Ascii.Ascii  true    true true false false false true false  => CAPITAL_G
-  | Ascii.Ascii false   false  false true false false true false => CAPITAL_H
-  | Ascii.Ascii true   false  false true false false true false  => CAPITAL_I
-  | Ascii.Ascii  false   true  false true false false true false => CAPITAL_J
-  | Ascii.Ascii  true   true  false true false false true false  => CAPITAL_K
-  | Ascii.Ascii false    false  true true false false true false => CAPITAL_L
-  | Ascii.Ascii true    false  true true false false true false  => CAPITAL_M
-  | Ascii.Ascii  false    true  true true false false true false => CAPITAL_N
-  | Ascii.Ascii  true    true  true true false false true false  => CAPITAL_O
-  | Ascii.Ascii false   false false  false true false true false => CAPITAL_P
-  | Ascii.Ascii true   false false  false true false true false  => CAPITAL_Q
-  | Ascii.Ascii  false   true false  false true false true false => CAPITAL_R
-  | Ascii.Ascii  true   true false  false true false true false  => CAPITAL_S
-  | Ascii.Ascii false    false true  false true false true false => CAPITAL_T
-  | Ascii.Ascii true    false true  false true false true false  => CAPITAL_U
-  | Ascii.Ascii  false    true true  false true false true false => CAPITAL_V
-  | Ascii.Ascii  true    true true  false true false true false  => CAPITAL_W
-  | Ascii.Ascii false   false  false  true true false true false => CAPITAL_X
-  | Ascii.Ascii true   false  false  true true false true false  => CAPITAL_Y
-  | Ascii.Ascii  false   true  false  true true false true false => CAPITAL_Z
-  | Ascii.Ascii  true   true  false  true true false true false  => LEFT_SQUARE_BRACKET
-  | Ascii.Ascii false    false  true  true true false true false => BACKSLASH
-  | Ascii.Ascii true    false  true  true true false true false  => RIGHT_SQUARE_BRACKET
-  | Ascii.Ascii  false    true  true  true true false true false => CARROT
-  | Ascii.Ascii  true    true  true  true true false true false  => UNDERSCORE
-  | Ascii.Ascii false   false  false false false true true false => BACKTICK
-  | Ascii.Ascii true   false  false false false true true false  => LOWERCASE_A
-  | Ascii.Ascii  false   true  false false false true true false => LOWERCASE_B
-  | Ascii.Ascii  true   true  false false false true true false  => LOWERCASE_C
-  | Ascii.Ascii false    false  true false false true true false => LOWERCASE_D
-  | Ascii.Ascii true    false  true false false true true false  => LOWERCASE_E
-  | Ascii.Ascii  false    true  true false false true true false => LOWERCASE_F
-  | Ascii.Ascii  true    true  true false false true true false  => LOWERCASE_G
-  | Ascii.Ascii false   false   false true false true true false => LOWERCASE_H
-  | Ascii.Ascii true   false   false true false true true false  => LOWERCASE_I
-  | Ascii.Ascii  false   true   false true false true true false => LOWERCASE_J
-  | Ascii.Ascii  true   true   false true false true true false  => LOWERCASE_K
-  | Ascii.Ascii false    false   true true false true true false => LOWERCASE_L
-  | Ascii.Ascii true    false   true true false true true false  => LOWERCASE_M
-  | Ascii.Ascii  false    true   true true false true true false => LOWERCASE_N
-  | Ascii.Ascii  true    true   true true false true true false  => LOWERCASE_O
-  | Ascii.Ascii false   false  false  false true true true false => LOWERCASE_P
-  | Ascii.Ascii true   false  false  false true true true false  => LOWERCASE_Q
-  | Ascii.Ascii  false   true  false  false true true true false => LOWERCASE_R
-  | Ascii.Ascii  true   true  false  false true true true false  => LOWERCASE_S
-  | Ascii.Ascii false    false  true  false true true true false => LOWERCASE_T
-  | Ascii.Ascii true    false  true  false true true true false  => LOWERCASE_U
-  | Ascii.Ascii  false    true  true  false true true true false => LOWERCASE_V
-  | Ascii.Ascii  true    true  true  false true true true false  => LOWERCASE_W
-  | Ascii.Ascii false   false   false  true true true true false => LOWERCASE_X
-  | Ascii.Ascii true   false   false  true true true true false  => LOWERCASE_Y
-  | Ascii.Ascii  false   true   false  true true true true false => LOWERCASE_Z
-  | Ascii.Ascii  true   true   false  true true true true false  => LEFT_CURLY_BRACE
-  | Ascii.Ascii false    false   true  true true true true false => PIPE
-  | Ascii.Ascii true    false   true  true true true true false  => RIGHT_CURLY_BRACE
-  | Ascii.Ascii  false    true   true  true true true true false => TILDE
-  | Ascii.Ascii  true    true   true  true true true true false  => DEL
-  | Ascii.Ascii _ _ _ _ _ _ _ true  => NULL
+  | Ascii.Ascii false false false false false false false false => ascii_0 (* NULL*)
+  | Ascii.Ascii true  false false false false false false false  => ascii_1 (* SOH*)
+  | Ascii.Ascii  false  true false false false false false false => ascii_2 (* STX*)
+  | Ascii.Ascii  true  true false false false false false false  => ascii_3 (* ETX*)
+  | Ascii.Ascii false   false true false false false false false => ascii_4 (* EOT*)
+  | Ascii.Ascii true   false true false false false false false  => ascii_5 (* ENQ*)
+  | Ascii.Ascii  false   true true false false false false false => ascii_6 (* ACK*)
+  | Ascii.Ascii  true   true true false false false false false  => ascii_7 (* BEL*)
+  | Ascii.Ascii false  false  false true false false false false => ascii_8 (* BS*)
+  | Ascii.Ascii true  false  false true false false false false  => ascii_9 (* TAB*)
+  | Ascii.Ascii  false  true  false true false false false false => ascii_10 (* LF*)
+  | Ascii.Ascii  true  true  false true false false false false  => ascii_11 (* VT*)
+  | Ascii.Ascii false   false  true true false false false false => ascii_12 (* FF*)
+  | Ascii.Ascii true   false  true true false false false false  => ascii_13 (* CR*)
+  | Ascii.Ascii  false   true  true true false false false false => ascii_14 (* SO*)
+  | Ascii.Ascii  true   true  true true false false false false  => ascii_15 (* SI*)
+  | Ascii.Ascii false  false false  false true false false false => ascii_16 (* DLE*)
+  | Ascii.Ascii true  false false  false true false false false  => ascii_17 (* DC1*)
+  | Ascii.Ascii  false  true false  false true false false false => ascii_18 (* DC2*)
+  | Ascii.Ascii  true  true false  false true false false false  => ascii_19 (* DC3*)
+  | Ascii.Ascii false   false true  false true false false false => ascii_20 (* DC4*)
+  | Ascii.Ascii true   false true  false true false false false  => ascii_21 (* NAK*)
+  | Ascii.Ascii  false   true true  false true false false false => ascii_22 (* SYN*)
+  | Ascii.Ascii  true   true true  false true false false false  => ascii_23 (* ETB*)
+  | Ascii.Ascii false  false  false  true true false false false => ascii_24 (* CAN*)
+  | Ascii.Ascii true  false  false  true true false false false  => ascii_25 (* EM*)
+  | Ascii.Ascii  false  true  false  true true false false false => ascii_26 (* SUB*)
+  | Ascii.Ascii  true  true  false  true true false false false  => ascii_27 (* ESC*)
+  | Ascii.Ascii false   false  true  true true false false false => ascii_28 (* FS*)
+  | Ascii.Ascii true   false  true  true true false false false  => ascii_29 (* GS*)
+  | Ascii.Ascii  false   true  true  true true false false false => ascii_30 (* RS*)
+  | Ascii.Ascii  true   true  true  true true false false false  => ascii_31 (* US*)
+  | Ascii.Ascii false  false  false false false true false false => ascii_32 (* SPACE*)
+  | Ascii.Ascii true  false  false false false true false false  => ascii_33 (* EXCLAMATION*)
+  | Ascii.Ascii  false  true  false false false true false false => ascii_34 (* DOUBLE_QUOTE*)
+  | Ascii.Ascii  true  true  false false false true false false  => ascii_35 (* HASH*)
+  | Ascii.Ascii false   false  true false false true false false => ascii_36 (* DOLLAR*)
+  | Ascii.Ascii true   false  true false false true false false  => ascii_37 (* PERCENT*)
+  | Ascii.Ascii  false   true  true false false true false false => ascii_38 (* AMPERSAND*)
+  | Ascii.Ascii  true   true  true false false true false false  => ascii_39 (* SINGLE_QUOTE*)
+  | Ascii.Ascii false  false   false true false true false false => ascii_40 (* LEFT_PAREN*)
+  | Ascii.Ascii true  false   false true false true false false  => ascii_41 (* RIGHT_PAREN*)
+  | Ascii.Ascii  false  true   false true false true false false => ascii_42 (* ASTERISK*)
+  | Ascii.Ascii  true  true   false true false true false false  => ascii_43 (* PLUS*)
+  | Ascii.Ascii false   false   true true false true false false => ascii_44 (* FORWARD_SINGLE_QUOTE*)
+  | Ascii.Ascii true   false   true true false true false false  => ascii_45 (* HYPHEN*)
+  | Ascii.Ascii  false   true   true true false true false false => ascii_46 (* PERIOD*)
+  | Ascii.Ascii  true   true   true true false true false false  => ascii_47 (* SLASH*)
+  | Ascii.Ascii false  false  false  false true true false false => ascii_48 (* NUMERAL_0*)
+  | Ascii.Ascii true  false  false  false true true false false  => ascii_49 (* NUMERAL_1*)
+  | Ascii.Ascii  false  true  false  false true true false false => ascii_50 (* NUMERAL_2*)
+  | Ascii.Ascii  true  true  false  false true true false false  => ascii_51 (* NUMERAL_3*)
+  | Ascii.Ascii false   false  true  false true true false false => ascii_52 (* NUMERAL_4*)
+  | Ascii.Ascii true   false  true  false true true false false  => ascii_53 (* NUMERAL_5*)
+  | Ascii.Ascii  false   true  true  false true true false false => ascii_54 (* NUMERAL_6*)
+  | Ascii.Ascii  true   true  true  false true true false false  => ascii_55 (* NUMERAL_7*)
+  | Ascii.Ascii false  false   false  true true true false false => ascii_56 (* NUMERAL_8*)
+  | Ascii.Ascii true  false   false  true true true false false  => ascii_57 (* NUMERAL_9*)
+  | Ascii.Ascii  false  true   false  true true true false false => ascii_58 (* COLON*)
+  | Ascii.Ascii  true  true   false  true true true false false  => ascii_59 (* SEMICOLON*)
+  | Ascii.Ascii false   false   true  true true true false false => ascii_60 (* LESS_THAN*)
+  | Ascii.Ascii true   false   true  true true true false false  => ascii_61 (* EQUAL*)
+  | Ascii.Ascii  false   true   true  true true true false false => ascii_62 (* GREATER_THAN*)
+  | Ascii.Ascii  true   true   true  true true true false false  => ascii_63 (* QUESTION_MARK*)
+  | Ascii.Ascii false   false false false false false true false => ascii_64 (* AT*)
+  | Ascii.Ascii true   false false false false false true false  => ascii_65 (* CAPITAL_A*)
+  | Ascii.Ascii  false   true false false false false true false => ascii_66 (* CAPITAL_B*)
+  | Ascii.Ascii  true   true false false false false true false  => ascii_67 (* CAPITAL_C*)
+  | Ascii.Ascii false    false true false false false true false => ascii_68 (* CAPITAL_D*)
+  | Ascii.Ascii true    false true false false false true false  => ascii_69 (* CAPITAL_E*)
+  | Ascii.Ascii  false    true true false false false true false => ascii_70 (* CAPITAL_F*)
+  | Ascii.Ascii  true    true true false false false true false  => ascii_71 (* CAPITAL_G*)
+  | Ascii.Ascii false   false  false true false false true false => ascii_72 (* CAPITAL_H*)
+  | Ascii.Ascii true   false  false true false false true false  => ascii_73 (* CAPITAL_I*)
+  | Ascii.Ascii  false   true  false true false false true false => ascii_74 (* CAPITAL_J*)
+  | Ascii.Ascii  true   true  false true false false true false  => ascii_75 (* CAPITAL_K*)
+  | Ascii.Ascii false    false  true true false false true false => ascii_76 (* CAPITAL_L*)
+  | Ascii.Ascii true    false  true true false false true false  => ascii_77 (* CAPITAL_M*)
+  | Ascii.Ascii  false    true  true true false false true false => ascii_78 (* CAPITAL_N*)
+  | Ascii.Ascii  true    true  true true false false true false  => ascii_79 (* CAPITAL_O*)
+  | Ascii.Ascii false   false false  false true false true false => ascii_80 (* CAPITAL_P*)
+  | Ascii.Ascii true   false false  false true false true false  => ascii_81 (* CAPITAL_Q*)
+  | Ascii.Ascii  false   true false  false true false true false => ascii_82 (* CAPITAL_R*)
+  | Ascii.Ascii  true   true false  false true false true false  => ascii_83 (* CAPITAL_S*)
+  | Ascii.Ascii false    false true  false true false true false => ascii_84 (* CAPITAL_T*)
+  | Ascii.Ascii true    false true  false true false true false  => ascii_85 (* CAPITAL_U*)
+  | Ascii.Ascii  false    true true  false true false true false => ascii_86 (* CAPITAL_V*)
+  | Ascii.Ascii  true    true true  false true false true false  => ascii_87 (* CAPITAL_W*)
+  | Ascii.Ascii false   false  false  true true false true false => ascii_88 (* CAPITAL_X*)
+  | Ascii.Ascii true   false  false  true true false true false  => ascii_89 (* CAPITAL_Y*)
+  | Ascii.Ascii  false   true  false  true true false true false => ascii_90 (* CAPITAL_Z*)
+  | Ascii.Ascii  true   true  false  true true false true false  => ascii_91 (* LEFT_SQUARE_BRACKET*)
+  | Ascii.Ascii false    false  true  true true false true false => ascii_92 (* BACKSLASH*)
+  | Ascii.Ascii true    false  true  true true false true false  => ascii_93 (* RIGHT_SQUARE_BRACKET*)
+  | Ascii.Ascii  false    true  true  true true false true false => ascii_94 (* CARROT*)
+  | Ascii.Ascii  true    true  true  true true false true false  => ascii_95 (* UNDERSCORE*)
+  | Ascii.Ascii false   false  false false false true true false => ascii_96 (* BACKTICK*)
+  | Ascii.Ascii true   false  false false false true true false  => ascii_97 (* LOWERCASE_A*)
+  | Ascii.Ascii  false   true  false false false true true false => ascii_98 (* LOWERCASE_B*)
+  | Ascii.Ascii  true   true  false false false true true false  => ascii_99 (* LOWERCASE_C*)
+  | Ascii.Ascii false    false  true false false true true false => ascii_100 (* LOWERCASE_D*)
+  | Ascii.Ascii true    false  true false false true true false  => ascii_101 (* LOWERCASE_E*)
+  | Ascii.Ascii  false    true  true false false true true false => ascii_102 (* LOWERCASE_F*)
+  | Ascii.Ascii  true    true  true false false true true false  => ascii_103 (* LOWERCASE_G*)
+  | Ascii.Ascii false   false   false true false true true false => ascii_104 (* LOWERCASE_H*)
+  | Ascii.Ascii true   false   false true false true true false  => ascii_105 (* LOWERCASE_I*)
+  | Ascii.Ascii  false   true   false true false true true false => ascii_106 (* LOWERCASE_J*)
+  | Ascii.Ascii  true   true   false true false true true false  => ascii_107 (* LOWERCASE_K*)
+  | Ascii.Ascii false    false   true true false true true false => ascii_108 (* LOWERCASE_L*)
+  | Ascii.Ascii true    false   true true false true true false  => ascii_109 (* LOWERCASE_M*)
+  | Ascii.Ascii  false    true   true true false true true false => ascii_110 (* LOWERCASE_N*)
+  | Ascii.Ascii  true    true   true true false true true false  => ascii_111 (* LOWERCASE_O*)
+  | Ascii.Ascii false   false  false  false true true true false => ascii_112 (* LOWERCASE_P*)
+  | Ascii.Ascii true   false  false  false true true true false  => ascii_113 (* LOWERCASE_Q*)
+  | Ascii.Ascii  false   true  false  false true true true false => ascii_114 (* LOWERCASE_R*)
+  | Ascii.Ascii  true   true  false  false true true true false  => ascii_115 (* LOWERCASE_S*)
+  | Ascii.Ascii false    false  true  false true true true false => ascii_116 (* LOWERCASE_T*)
+  | Ascii.Ascii true    false  true  false true true true false  => ascii_117 (* LOWERCASE_U*)
+  | Ascii.Ascii  false    true  true  false true true true false => ascii_118 (* LOWERCASE_V*)
+  | Ascii.Ascii  true    true  true  false true true true false  => ascii_119 (* LOWERCASE_W*)
+  | Ascii.Ascii false   false   false  true true true true false => ascii_120 (* LOWERCASE_X*)
+  | Ascii.Ascii true   false   false  true true true true false  => ascii_121 (* LOWERCASE_Y*)
+  | Ascii.Ascii  false   true   false  true true true true false => ascii_122 (* LOWERCASE_Z*)
+  | Ascii.Ascii  true   true   false  true true true true false  => ascii_123 (* LEFT_CURLY_BRACE*)
+  | Ascii.Ascii false    false   true  true true true true false => ascii_124 (* PIPE*)
+  | Ascii.Ascii true    false   true  true true true true false  => ascii_125 (* RIGHT_CURLY_BRACE*)
+  | Ascii.Ascii  false    true   true  true true true true false => ascii_126 (* TILDE*)
+  | Ascii.Ascii  true    true   true  true true true true false  => ascii_127 (* DEL*)
+  | Ascii.Ascii _ _ _ _ _ _ _ true  => ascii_0 (* NULL*)
   end.
 
 Fixpoint string_to_fast_string (s : string) : list ascii :=
