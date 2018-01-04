@@ -24,9 +24,8 @@ Qed.
 
 (* Core function in terms of eliminators *)
 Definition id_nat_elim (x : nat) :=
-  @nat_rect
-    (fun _ => nat)
-    0
+  nat_rect
+    O
     (fun n' rec_res => S rec_res)
     x.
 
@@ -45,11 +44,12 @@ Check id_nat_cu : compilation_unit.
 
 Print id_nat_cu.
 
+Eval cbv in (types id_nat_cu).
 Eval cbv in (exprs id_nat_cu).
 
 (* Prove that denotation of reflection is same as original *)
 Lemma id_nat_cu_validate :
-  hhead (genv_denote (exprs id_nat_cu)) hnil = id_nat_elim.
+  cu_denote (exprs id_nat_cu) = id_nat_elim.
 Proof.
   reflexivity.
 Qed.
