@@ -1,9 +1,9 @@
-Require Import Common.
+Require Import oeuf.Common.
 
-Require Import HList.
-Require Import Utopia.
-Require Import SourceLifted SourceValues.
-Require Import CompilationUnit.
+Require Import oeuf.HList.
+Require Import oeuf.Utopia.
+Require Import oeuf.SourceLifted oeuf.SourceValues.
+Require Import oeuf.CompilationUnit.
 
 Require Import NArith.
 

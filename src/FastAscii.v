@@ -310,140 +310,2322 @@ Proof.
   intros. destruct x; reflexivity.
 Qed.
 
-(*
+
 Definition eq_bool (x y : ascii) : bool :=
   match x,y with
-| NULL, NULL => true
-| SOH, SOH => true
-| STX, STX => true
-| ETX, ETX => true
-| EOT, EOT => true
-| ENQ, ENQ => true
-| ACK, ACK => true
-| BEL, BEL => true
-| BS, BS => true
-| TAB, TAB => true
-| LF, LF => true
-| VT, VT => true
-| FF, FF => true
-| CR, CR => true
-| SO, SO => true
-| SI, SI => true
-| DLE, DLE => true
-| DC1, DC1 => true
-| DC2, DC2 => true
-| DC3, DC3 => true
-| DC4, DC4 => true
-| NAK, NAK => true
-| SYN, SYN => true
-| ETB, ETB => true
-| CAN, CAN => true
-| EM, EM => true
-| SUB, SUB => true
-| ESC, ESC => true
-| FS, FS => true
-| GS, GS => true
-| RS, RS => true
-| US, US => true
-| SPACE, SPACE => true
-| EXCLAMATION, EXCLAMATION => true
-| DOUBLE_QUOTE, DOUBLE_QUOTE => true
-| HASH, HASH => true
-| DOLLAR, DOLLAR => true
-| PERCENT, PERCENT => true
-| AMPERSAND, AMPERSAND => true
-| SINGLE_QUOTE, SINGLE_QUOTE => true
-| LEFT_PAREN, LEFT_PAREN => true
-| RIGHT_PAREN, RIGHT_PAREN => true
-| ASTERISK, ASTERISK => true
-| PLUS, PLUS => true
-| FORWARD_SINGLE_QUOTE, FORWARD_SINGLE_QUOTE => true
-| HYPHEN, HYPHEN => true
-| PERIOD, PERIOD => true
-| SLASH, SLASH => true
-| NUMERAL_0, NUMERAL_0 => true
-| NUMERAL_1, NUMERAL_1 => true
-| NUMERAL_2, NUMERAL_2 => true
-| NUMERAL_3, NUMERAL_3 => true
-| NUMERAL_4, NUMERAL_4 => true
-| NUMERAL_5, NUMERAL_5 => true
-| NUMERAL_6, NUMERAL_6 => true
-| NUMERAL_7, NUMERAL_7 => true
-| NUMERAL_8, NUMERAL_8 => true
-| NUMERAL_9, NUMERAL_9 => true
-| COLON, COLON => true
-| SEMICOLON, SEMICOLON => true
-| LESS_THAN, LESS_THAN => true
-| EQUAL, EQUAL => true
-| GREATER_THAN, GREATER_THAN => true
-| QUESTION_MARK, QUESTION_MARK => true
-| AT, AT => true
-| CAPITAL_A, CAPITAL_A => true
-| CAPITAL_B, CAPITAL_B => true
-| CAPITAL_C, CAPITAL_C => true
-| CAPITAL_D, CAPITAL_D => true
-| CAPITAL_E, CAPITAL_E => true
-| CAPITAL_F, CAPITAL_F => true
-| CAPITAL_G, CAPITAL_G => true
-| CAPITAL_H, CAPITAL_H => true
-| CAPITAL_I, CAPITAL_I => true
-| CAPITAL_J, CAPITAL_J => true
-| CAPITAL_K, CAPITAL_K => true
-| CAPITAL_L, CAPITAL_L => true
-| CAPITAL_M, CAPITAL_M => true
-| CAPITAL_N, CAPITAL_N => true
-| CAPITAL_O, CAPITAL_O => true
-| CAPITAL_P, CAPITAL_P => true
-| CAPITAL_Q, CAPITAL_Q => true
-| CAPITAL_R, CAPITAL_R => true
-| CAPITAL_S, CAPITAL_S => true
-| CAPITAL_T, CAPITAL_T => true
-| CAPITAL_U, CAPITAL_U => true
-| CAPITAL_V, CAPITAL_V => true
-| CAPITAL_W, CAPITAL_W => true
-| CAPITAL_X, CAPITAL_X => true
-| CAPITAL_Y, CAPITAL_Y => true
-| CAPITAL_Z, CAPITAL_Z => true
-| LEFT_SQUARE_BRACKET, LEFT_SQUARE_BRACKET => true
-| BACKSLASH, BACKSLASH => true
-| RIGHT_SQUARE_BRACKET, RIGHT_SQUARE_BRACKET => true
-| CARROT, CARROT => true
-| UNDERSCORE, UNDERSCORE => true
-| BACKTICK, BACKTICK => true
-| LOWERCASE_A, LOWERCASE_A => true
-| LOWERCASE_B, LOWERCASE_B => true
-| LOWERCASE_C, LOWERCASE_C => true
-| LOWERCASE_D, LOWERCASE_D => true
-| LOWERCASE_E, LOWERCASE_E => true
-| LOWERCASE_F, LOWERCASE_F => true
-| LOWERCASE_G, LOWERCASE_G => true
-| LOWERCASE_H, LOWERCASE_H => true
-| LOWERCASE_I, LOWERCASE_I => true
-| LOWERCASE_J, LOWERCASE_J => true
-| LOWERCASE_K, LOWERCASE_K => true
-| LOWERCASE_L, LOWERCASE_L => true
-| LOWERCASE_M, LOWERCASE_M => true
-| LOWERCASE_N, LOWERCASE_N => true
-| LOWERCASE_O, LOWERCASE_O => true
-| LOWERCASE_P, LOWERCASE_P => true
-| LOWERCASE_Q, LOWERCASE_Q => true
-| LOWERCASE_R, LOWERCASE_R => true
-| LOWERCASE_S, LOWERCASE_S => true
-| LOWERCASE_T, LOWERCASE_T => true
-| LOWERCASE_U, LOWERCASE_U => true
-| LOWERCASE_V, LOWERCASE_V => true
-| LOWERCASE_W, LOWERCASE_W => true
-| LOWERCASE_X, LOWERCASE_X => true
-| LOWERCASE_Y, LOWERCASE_Y => true
-| LOWERCASE_Z, LOWERCASE_Z => true
-| LEFT_CURLY_BRACE, LEFT_CURLY_BRACE => true
-| PIPE, PIPE => true
-| RIGHT_CURLY_BRACE, RIGHT_CURLY_BRACE => true
-| TILDE, TILDE => true
-| DEL, DEL => true
-| _, _ => false
+  | ascii_0, ascii_0 => true
+  | ascii_1, ascii_1 => true
+  | ascii_2, ascii_2 => true
+  | ascii_3, ascii_3 => true
+  | ascii_4, ascii_4 => true
+  | ascii_5, ascii_5 => true
+  | ascii_6, ascii_6 => true
+  | ascii_7, ascii_7 => true
+  | ascii_8, ascii_8 => true
+  | ascii_9, ascii_9 => true
+  | ascii_10, ascii_10 => true
+  | ascii_11, ascii_11 => true
+  | ascii_12, ascii_12 => true
+  | ascii_13, ascii_13 => true
+  | ascii_14, ascii_14 => true
+  | ascii_15, ascii_15 => true
+  | ascii_16, ascii_16 => true
+  | ascii_17, ascii_17 => true
+  | ascii_18, ascii_18 => true
+  | ascii_19, ascii_19 => true
+  | ascii_20, ascii_20 => true
+  | ascii_21, ascii_21 => true
+  | ascii_22, ascii_22 => true
+  | ascii_23, ascii_23 => true
+  | ascii_24, ascii_24 => true
+  | ascii_25, ascii_25 => true
+  | ascii_26, ascii_26 => true
+  | ascii_27, ascii_27 => true
+  | ascii_28, ascii_28 => true
+  | ascii_29, ascii_29 => true
+  | ascii_30, ascii_30 => true
+  | ascii_31, ascii_31 => true
+  | ascii_32, ascii_32 => true
+  | ascii_33, ascii_33 => true
+  | ascii_34, ascii_34 => true
+  | ascii_35, ascii_35 => true
+  | ascii_36, ascii_36 => true
+  | ascii_37, ascii_37 => true
+  | ascii_38, ascii_38 => true
+  | ascii_39, ascii_39 => true
+  | ascii_40, ascii_40 => true
+  | ascii_41, ascii_41 => true
+  | ascii_42, ascii_42 => true
+  | ascii_43, ascii_43 => true
+  | ascii_44, ascii_44 => true
+  | ascii_45, ascii_45 => true
+  | ascii_46, ascii_46 => true
+  | ascii_47, ascii_47 => true
+  | ascii_48, ascii_48 => true
+  | ascii_49, ascii_49 => true
+  | ascii_50, ascii_50 => true
+  | ascii_51, ascii_51 => true
+  | ascii_52, ascii_52 => true
+  | ascii_53, ascii_53 => true
+  | ascii_54, ascii_54 => true
+  | ascii_55, ascii_55 => true
+  | ascii_56, ascii_56 => true
+  | ascii_57, ascii_57 => true
+  | ascii_58, ascii_58 => true
+  | ascii_59, ascii_59 => true
+  | ascii_60, ascii_60 => true
+  | ascii_61, ascii_61 => true
+  | ascii_62, ascii_62 => true
+  | ascii_63, ascii_63 => true
+  | ascii_64, ascii_64 => true
+  | ascii_65, ascii_65 => true
+  | ascii_66, ascii_66 => true
+  | ascii_67, ascii_67 => true
+  | ascii_68, ascii_68 => true
+  | ascii_69, ascii_69 => true
+  | ascii_70, ascii_70 => true
+  | ascii_71, ascii_71 => true
+  | ascii_72, ascii_72 => true
+  | ascii_73, ascii_73 => true
+  | ascii_74, ascii_74 => true
+  | ascii_75, ascii_75 => true
+  | ascii_76, ascii_76 => true
+  | ascii_77, ascii_77 => true
+  | ascii_78, ascii_78 => true
+  | ascii_79, ascii_79 => true
+  | ascii_80, ascii_80 => true
+  | ascii_81, ascii_81 => true
+  | ascii_82, ascii_82 => true
+  | ascii_83, ascii_83 => true
+  | ascii_84, ascii_84 => true
+  | ascii_85, ascii_85 => true
+  | ascii_86, ascii_86 => true
+  | ascii_87, ascii_87 => true
+  | ascii_88, ascii_88 => true
+  | ascii_89, ascii_89 => true
+  | ascii_90, ascii_90 => true
+  | ascii_91, ascii_91 => true
+  | ascii_92, ascii_92 => true
+  | ascii_93, ascii_93 => true
+  | ascii_94, ascii_94 => true
+  | ascii_95, ascii_95 => true
+  | ascii_96, ascii_96 => true
+  | ascii_97, ascii_97 => true
+  | ascii_98, ascii_98 => true
+  | ascii_99, ascii_99 => true
+  | ascii_100, ascii_100 => true
+  | ascii_101, ascii_101 => true
+  | ascii_102, ascii_102 => true
+  | ascii_103, ascii_103 => true
+  | ascii_104, ascii_104 => true
+  | ascii_105, ascii_105 => true
+  | ascii_106, ascii_106 => true
+  | ascii_107, ascii_107 => true
+  | ascii_108, ascii_108 => true
+  | ascii_109, ascii_109 => true
+  | ascii_110, ascii_110 => true
+  | ascii_111, ascii_111 => true
+  | ascii_112, ascii_112 => true
+  | ascii_113, ascii_113 => true
+  | ascii_114, ascii_114 => true
+  | ascii_115, ascii_115 => true
+  | ascii_116, ascii_116 => true
+  | ascii_117, ascii_117 => true
+  | ascii_118, ascii_118 => true
+  | ascii_119, ascii_119 => true
+  | ascii_120, ascii_120 => true
+  | ascii_121, ascii_121 => true
+  | ascii_122, ascii_122 => true
+  | ascii_123, ascii_123 => true
+  | ascii_124, ascii_124 => true
+  | ascii_125, ascii_125 => true
+  | ascii_126, ascii_126 => true
+  | ascii_127, ascii_127 => true
+  | _,_ => false
   end.
-*)
+
+Check @ascii_rect.
+
+Definition eq_bool_elim (x y : ascii) : bool :=
+  @ascii_rect (fun _ => ascii -> bool)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               false true false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               false false true  false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               false false false true  false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               false false false false true  false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               false false false false false true  false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               false false false false false false true  false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               false false false false false false false true
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               false false false false false false false false
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               false false false false false false false false
+               false true false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               false false false false false false false false
+               false false true  false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               false false false false false false false false
+               false false false true  false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               false false false false false false false false
+               false false false false true  false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               false false false false false false false false
+               false false false false false true  false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               false false false false false false false false
+               false false false false false false true  false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               false false false false false false false false
+               false false false false false false false true
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               false false false false false false false false
+               false false false false false false false false
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               false false false false false false false false
+               false false false false false false false false
+               false true  false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               false false false false false false false false
+               false false false false false false false false
+               false false true  false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               false false false false false false false false
+               false false false false false false false false
+               false false false true  false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               false false false false false false false false
+               false false false false false false false false
+               false false false false true  false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false true  false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false true  false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false true
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              (@ascii_rect (fun _ => bool)
+               true  false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false
+               false false false false false false false false)
+              x y
+.
 (* TODO: eq_bool_elim and eq_bool_equiv *)
 
 (* Conversion from normal coq strings *)

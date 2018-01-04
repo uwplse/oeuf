@@ -4,6 +4,7 @@
 DECLARE PLUGIN "oeuf_plugin"
 
 open Names
+open Goptions
 
 (* Much of this code is adapted from template-coq and coq-plugin-utils. *)
 
@@ -1125,8 +1126,10 @@ let define name body ty : Term.constr =
 
     let c = ref None in
     let (evars, env) = Lemmas.get_current_context () in
+    let spa1 = set_bool_option_value ["Printing";"All"] true in
     let body_e = Constrextern.extern_constr true env evars body in
     let ty_e = Constrextern.extern_constr true env evars ty in
+    let spa2 = set_bool_option_value ["Printing";"All"] false in
 
     (*
     Format.eprintf " == defining %s : %s ==\n" name (string_of_constr ty);
@@ -1547,6 +1550,8 @@ VERNAC COMMAND EXTEND Write_to_file
     Format.eprintf "%a -> %s\nsuccessfully written to file\n" pp_constr c data
   ]
 END
+
+
 
 VERNAC COMMAND EXTEND Oeuf_reflect_vernac
 | [ "Oeuf" "Reflect" constr(c) "As" ident(name) ] -> [
