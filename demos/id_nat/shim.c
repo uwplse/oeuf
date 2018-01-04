@@ -23,12 +23,14 @@ int main() {
     
     printf("oeuf input: ");
     print_nat(n_);
+    printf("\n");
 
     //call ID id_nat_elim defined in Coq
     union nat* m_ = OEUF_CALL(id_nat_elim, n_);
 
     printf("oeuf output: ");
     print_nat(m_);
+    printf("\n");
 
     //convert result back to from nat
     int m = 0;
