@@ -2,7 +2,7 @@
 
 echo NOTE: Skipping building all demos, edit configure file to enable
 #DIRS=(src demos/verdi/echo shim_verif demos/sha256 demos/list_max)
-DIRS=(src)
+DIRS=(src demos/id_nat)
 NAMESPACE_compcert=compcert
 NAMESPACE_src=oeuf
 LOCALDEPS=(compcert)
