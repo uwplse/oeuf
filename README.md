@@ -1,7 +1,6 @@
 # Œuf
 Gallina frontend for CompCert
 
-
 ## Layout
 
 The Œuf compiler is in `src/`.  For each IR "Foo" listed in the report, the
@@ -75,16 +74,17 @@ is also recommended that you create a `_CoqProject` file there as well:
 Any files you open in emacs from the `compcert` subdirectory should now work.
 
 ## Œuf Workflow
-
-* Write a Gallina expressions `foo` and `bar`
-* Use the reflection tactics of `SourceLang.v` to construct a deeply embedded 
-  representation of these expressions `foo_reflect` and `bar_reflect`. (Currently 
-  the reflection only works if the program is first fully inlined (delta reduced).) 
+* Build Œuf, get out executable `OeufDriver.native`.
+* Remember where Œuf directory is located, call that `$DIR`
+* Write a Gallina function `foo`.
+* Rewrite your Gallina function to use eliminators instead of pattern matching or recursion `foo'`.
+* Prove that `foo` is equivalent to `foo'`.
+* Use the reflection commands to construct a deeply embedded 
+  representation of this expression `foo_cu`. For example: `Oeuf Reflect foo As foo_cu`.
 * Check that each reflection is correct by proving it denotes to the original 
   program with `reflexivity`.
-* Extract the reflections by importing the plugin and the pretty printer and
-  running `Oeuf Eval compute Then Write To File "foobar.oeuf" (Pretty.compilation_unit.print (CompilationUnit.Compilation_unit _ (hcons foo_reflect (hcons bar_reflect hnil)) ["foo"; "bar"])).` Note that the list of strings given at the end of the command specifies the assembly-level symbol names corresponding to each expression.
-* Ensure that there is a shim for foo at `shims/foobar_shim.c`. This shim may refer to extracted expressions by the symbol names chosen above.
-* Run `./occ.sh foobar` to compile foo and bar together with their shim.
-* The resulting executable is placed in `./a.out` and is ready to run!
+* Extract the reflection  `Oeuf Eval compute Then Write To File "foo.oeuf" (Pretty.compilation_unit.print foo_cu)`. This generates file `foo.oeuf`.
+* Write a shim for your code, call it `foo_shim.c`.
+* Compile to assembly with `./OeufDriver.native foo.oeuf foo_shim.c -o foo -I $DIR -stdlib $DIR/compcert/runtime`
+* The generated executable is `foo`.
 
