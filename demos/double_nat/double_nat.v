@@ -6,6 +6,9 @@ Import ListNotations.
 
 Require Import Oeuf.
 
+(* Today we're developing the double_nat program *)
+(* This program will take a natural number, and double it *)
+
 (* Our core coq function *)
 Fixpoint double_nat (x : nat) :=
     match x with
