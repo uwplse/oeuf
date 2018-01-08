@@ -15,13 +15,6 @@ which evaluates a Gallina expression to a Coq string, converts it to an OCaml
 string, and writes to the given file. This plugin is **installed** during 
 normal compilation of Œuf.
 
-See `oeuf-fib.s` for an example of the compiler's output.  This is compiled
-from the definition of `fib` in `src/SourceLang.v`.  To run it, first compile
-with `gcc -m32 oeuf-fib.s shim.c`.
-
-There is a test suite in `test/`. Each test has a corresponding shim template in
-`shim_templates/`. The test suite is executed by the script `test.sh`. This 
-script is called at the end of the normal compilation process.
 
 ## Build Instructions
 
