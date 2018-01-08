@@ -1,5 +1,5 @@
 # Œuf
-Gallina frontend for CompCert
+Gallina frontend for CompCert. Uses Coq 8.5
 
 ## Layout
 
