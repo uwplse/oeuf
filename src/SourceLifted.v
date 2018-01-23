@@ -29,7 +29,7 @@ Inductive elim : list type -> type -> type -> Type :=
         ; Arrow (ADT Tpositive) ty
         ; Arrow (ADT Tpositive) ty
         ] (ADT TZ) ty
-| EAscii : forall ty, elim [ty; ty; ty; ty; ty; ty; ty; ty;
+(*| EAscii : forall ty, elim [ty; ty; ty; ty; ty; ty; ty; ty;
                             ty; ty; ty; ty; ty; ty; ty; ty;
                             ty; ty; ty; ty; ty; ty; ty; ty;
                             ty; ty; ty; ty; ty; ty; ty; ty;
@@ -45,7 +45,19 @@ Inductive elim : list type -> type -> type -> Type :=
                             ty; ty; ty; ty; ty; ty; ty; ty;
                             ty; ty; ty; ty; ty; ty; ty; ty;
                             ty; ty; ty; ty; ty; ty; ty; ty]
-                           (ADT Tascii) ty
+                           (ADT Tascii) ty*)
+| EAscii : forall ty, elim [Arrow (ADT Tbool)
+                               (Arrow (ADT Tbool)
+                                  (Arrow (ADT Tbool)
+                                     (Arrow (ADT Tbool)
+                                        (Arrow (ADT Tbool)
+                                           (Arrow (ADT Tbool)
+                                              (Arrow (ADT Tbool)
+                                                 (Arrow (ADT Tbool)
+                                                    ty)))))))]
+                            (ADT Tascii) ty
+                                                        
+                                                                                            
 .
 
 Section expr.
@@ -242,7 +254,7 @@ refine (
 - simpl. exact (weaken_body _ (gget_weaken _ mb')).
 Defined.
 
-
+Check Ascii.ascii_rect.
 
 (* denotation functions *)
 (* Extend this if you want to extend Oeuf *)
@@ -269,6 +281,11 @@ Definition elim_denote {case_tys target_ty ty} (e : elim case_tys target_ty ty) 
               (hhead (htail (htail cases)))
               target
   | EAscii _ => fun cases target =>
+          Ascii.ascii_rect _
+              (hhead cases)
+              target
+              
+  (*  | EAscii _ => fun cases target =>
           @ascii_rect _
               (hhead cases)                     
               (hhead (htail cases))
@@ -398,7 +415,7 @@ Definition elim_denote {case_tys target_ty ty} (e : elim case_tys target_ty ty) 
               (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
               (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
               (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
-              target
+              target*)
   end.
 
 Definition expr_denote {G L} (g : hlist func_type_denote G) (l : hlist type_denote L) :
@@ -564,6 +581,12 @@ Local Notation "f $ a" := (App f a) (at level 50, left associativity, only parsi
 Local Notation "'h0' x" := (hhead x) (only parsing, at level 0).
 Local Notation "'h1' x" := (hhead (htail x)) (only parsing, at level 0).
 Local Notation "'h2' x" := (hhead (htail (htail x))) (only parsing, at level 0).
+Local Notation "'h3' x" := (hhead (htail (htail (htail x)))) (only parsing, at level 0).
+Local Notation "'h4' x" := (hhead (htail (htail (htail (htail x))))) (only parsing, at level 0).
+Local Notation "'h5' x" := (hhead (htail (htail (htail (htail (htail x)))))) (only parsing, at level 0).
+Local Notation "'h6' x" := (hhead (htail (htail (htail (htail (htail (htail x))))))) (only parsing, at level 0).
+Local Notation "'h7' x" := (hhead (htail (htail (htail (htail (htail (htail (htail x)))))))) (only parsing, at level 0).
+Local Notation "'h8' x" := (hhead (htail (htail (htail (htail (htail (htail (htail (htail x))))))))) (only parsing, at level 0).
 
 Definition run_elim {G L case_tys target_tyn ret_ty}
         (e : elim case_tys (ADT target_tyn) ret_ty)
@@ -592,6 +615,7 @@ refine match e in elim case_tys_ (ADT target_tyn_) ret_ty_
     | EN ret_ty => _
     | EZ ret_ty => _
     | EAscii ret_ty => _
+    (*| EAscii ret_ty => _*)
     end; intros;
 clear e target_tyn ret_ty0 case_tys.
 
@@ -679,6 +703,16 @@ clear e target_tyn ret_ty0 case_tys.
   + exact (h1 cases $ Value (h0 args)).
   + exact (h2 cases $ Value (h0 args)).
 
+- revert args cases. pattern ctor, arg_tys.
+  refine match ct in constr_type ctor_ arg_tys_ (Tascii)
+          return _ ctor_ arg_tys_ with
+      | CTAscii => _
+      end; intros; clear ct arg_tys ctor.
+  + exact (h0 cases $ Value (h0 args) $ Value (h1 args) $ Value (h2 args) $ Value (h3 args)
+              $ Value (h4 args) $ Value (h5 args) $ Value (h6 args) $ Value (h7 args)).
+
+
+(*    
 - revert args cases. pattern ctor, arg_tys.
   refine match ct in constr_type ctor_ arg_tys_ (Tascii) return _ ctor_ arg_tys_ with
          | CTascii_0 => _
@@ -937,7 +971,7 @@ clear e target_tyn ret_ty0 case_tys.
   + exact (h0 cases).
   + exact (h0 cases).
   + exact (h0 cases).
-  + exact (h0 cases).
+  + exact (h0 cases).*)
 Defined.
 
 End run_elim.
