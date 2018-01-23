@@ -2,6 +2,8 @@ Require Import ZArith.
 Require Import oeuf.FastAscii.
 Require Export oeuf.FastAscii.
 
+Require Import Ascii.
+
 (* All types present in Oeuf *)
 (* In order to add types to Oeuf, extend this datatype *)
 Inductive type_name :=
@@ -14,7 +16,8 @@ Inductive type_name :=
 | Tpositive
 | TN
 | TZ
-| Tascii
+(*| Tascii (* FastAscii *)*)
+| Tascii (* Coq's builtin ascii *)    
 .
 
 Definition type_name_eq_dec (tn1 tn2 : type_name) : {tn1 = tn2} + {tn1 <> tn2}.
@@ -33,7 +36,8 @@ Fixpoint type_name_denote (tyn : type_name) : Type :=
   | Tpositive => positive
   | TN => N
   | TZ => Z
-  | Tasci => ascii
+(*  | Tascii => FastAscii.ascii*)
+  | Tascii => Ascii.ascii
   end.
 
 (* All constructors in Oeuf *)
@@ -56,7 +60,7 @@ Inductive constr_name :=
 | CZ0
 | CZpos
 | CZneg
-| Cascii_0
+(*| Cascii_0
 | Cascii_1
 | Cascii_2
 | Cascii_3
@@ -183,7 +187,8 @@ Inductive constr_name :=
 | Cascii_124
 | Cascii_125
 | Cascii_126
-| Cascii_127
+| Cascii_127*)
+| CAscii
 .
 
 (* Index of each constructor within its type *)
@@ -217,7 +222,7 @@ Definition constructor_index ctor : nat :=
     | CZpos => 1
     | CZneg => 2
 
-    | Cascii_0 => 0
+(*    | Cascii_0 => 0
     | Cascii_1 => 1
     | Cascii_2 => 2
     | Cascii_3 => 3
@@ -344,7 +349,8 @@ Definition constructor_index ctor : nat :=
     | Cascii_124 => 124
     | Cascii_125 => 125
     | Cascii_126 => 126
-    | Cascii_127 => 127
+    | Cascii_127 => 127*)
+    | Cdascii => 0
     end.
 
 (* Number of arguments that constructor takes *)
@@ -377,7 +383,7 @@ Definition constructor_arg_n ctor : nat :=
     | CZpos => 1
     | CZneg => 1
 
-    | Cascii_0 => 0
+(*    | Cascii_0 => 0
     | Cascii_1 => 0
     | Cascii_2 => 0
     | Cascii_3 => 0
@@ -504,9 +510,9 @@ Definition constructor_arg_n ctor : nat :=
     | Cascii_124 => 0
     | Cascii_125 => 0
     | Cascii_126 => 0
-    | Cascii_127 => 0
+    | Cascii_127 => 0*)
                       
-                 
+    | Cdascii => 8
     end.
 
 (* Add a case if a constructor is recursive *)
@@ -550,7 +556,7 @@ Definition type_constr ty idx : option constr_name :=
     | TZ, 1 => Some CZpos
     | TZ, 2 => Some CZneg
 
-    | Tascii, 0 => Some Cascii_0
+(*    | Tascii, 0 => Some Cascii_0
     | Tascii, 1 => Some Cascii_1
     | Tascii, 2 => Some Cascii_2
     | Tascii, 3 => Some Cascii_3
@@ -677,8 +683,10 @@ Definition type_constr ty idx : option constr_name :=
     | Tascii, 124 => Some Cascii_124
     | Tascii, 125 => Some Cascii_125
     | Tascii, 126 => Some Cascii_126
-    | Tascii, 127 => Some Cascii_127
+    | Tascii, 127 => Some Cascii_127*)
 
+    | Tascii, 0 => Some CAscii
+                          
     | _, _ => None
     end.
 
@@ -710,3 +718,4 @@ Lemma ctor_for_type_constr_index : forall ty ctor,
 inversion 1.  erewrite <- type_constr_index; eassumption.
 Qed.
 
+  

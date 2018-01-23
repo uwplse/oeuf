@@ -336,8 +336,6 @@ Lemma compile_run_elim : forall G L case_tys target_tyn ret_ty
     B.run_elim target_tyn (compile_expr_list cases) (compile_value target) =
     Some (compile_expr (A.run_elim e cases target)).
 Proof.
-Admitted.
-(*  
 intros.
 
 revert e. pattern target_tyn, target.
@@ -364,7 +362,7 @@ refine match e as e_ in A.elim case_tys_ (A.ADT target_tyn_) ret_ty_
     end; intros.
 clear e target_tyn ret_ty0 case_tys.
 
-- revert args cases. pattern ctor, arg_tys, ct.
+(*- revert args cases. pattern ctor, arg_tys, ct.
   refine match ct as ct_ in A.constr_type ctor_ arg_tys_ (Tascii)
           return _ ctor_ arg_tys_ ct_ with
          | A.CTascii_0 => _
@@ -497,7 +495,7 @@ clear e target_tyn ret_ty0 case_tys.
          | A.CTascii_127 => _
          end; intros; clear ct arg_tys ctor.
   all: unpack_hlist cases case0; unpack_hlist args arg0.
-  all: reflexivity.
+  all: reflexivity.*)
 
 - revert args cases. pattern ctor, arg_tys, ct.
   refine match ct as ct_ in A.constr_type ctor_ arg_tys_ (Tnat)
@@ -580,8 +578,16 @@ clear e target_tyn ret_ty0 case_tys.
   all: unpack_hlist cases case0; unpack_hlist args arg0.
   all: reflexivity.
 
+- revert args cases. pattern ctor, arg_tys, ct.
+  refine match ct as ct_ in A.constr_type ctor_ arg_tys_ (Tascii)
+               return _ ctor_ arg_tys_ ct_ with
+         | A.CTAscii => _
+      end; intros; clear ct arg_tys ctor.
+  all: unpack_hlist cases case0; unpack_hlist args arg0.
+  all: reflexivity.
+
 Qed.
-*)
+
 
 Lemma ct_is_constr_for_type : forall ctor arg_tys ty,
     A.constr_type ctor arg_tys ty ->

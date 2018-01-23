@@ -45,7 +45,9 @@ Inductive constr_type : constr_name -> list type -> type_name -> Type :=
 | CTZpos         : constr_type CZpos      [ADT Tpositive]             TZ
 | CTZneg         : constr_type CZneg      [ADT Tpositive]             TZ
 
-| CTascii_0      : constr_type Cascii_0   []                          Tascii
+| CTAscii       : constr_type CAscii      [ADT Tbool; ADT Tbool; ADT Tbool; ADT Tbool;ADT Tbool; ADT Tbool; ADT Tbool; ADT Tbool]   Tascii
+
+(*| CTascii_0      : constr_type Cascii_0   []                          Tascii
 | CTascii_1      : constr_type Cascii_1   []                          Tascii
 | CTascii_2      : constr_type Cascii_2   []                          Tascii
 | CTascii_3      : constr_type Cascii_3   []                          Tascii
@@ -172,7 +174,7 @@ Inductive constr_type : constr_name -> list type -> type_name -> Type :=
 | CTascii_124      : constr_type Cascii_124   []                          Tascii
 | CTascii_125      : constr_type Cascii_125   []                          Tascii
 | CTascii_126      : constr_type Cascii_126   []                          Tascii
-| CTascii_127      : constr_type Cascii_127   []                          Tascii
+| CTascii_127      : constr_type Cascii_127   []                          Tascii*)
 
 .
 
@@ -206,6 +208,7 @@ Definition func_type_denote (fty : type * list type * type) : Type :=
     let '(arg_ty, free_tys, ret_ty) := fty in
     hlist type_denote free_tys -> type_denote arg_ty -> type_denote ret_ty.
 
+
 (* Extend me if you want to extend Oeuf *)
 Definition constr_denote {arg_tys ty c} (ct : constr_type c arg_tys ty) :
   hlist type_denote arg_tys -> type_denote (ADT ty) :=
@@ -237,7 +240,16 @@ Definition constr_denote {arg_tys ty c} (ct : constr_type c arg_tys ty) :
   | CTZpos => fun h => Zpos (hhead h)
   | CTZneg => fun h => Zneg (hhead h)
 
-  | CTascii_0 => fun _ => ascii_0
+  | CTAscii => fun h => Ascii.Ascii ((hhead h) : bool)
+                                     (hhead (htail h))
+                                     (hhead (htail (htail h)))
+                                     (hhead (htail (htail (htail h))))
+                                     (hhead (htail (htail (htail (htail h)))))
+                                     (hhead (htail (htail (htail (htail (htail h))))))
+                                     (hhead (htail (htail (htail (htail (htail (htail h)))))))
+                                     (hhead (htail (htail (htail (htail (htail (htail (htail h))))))))
+
+(*  | CTascii_0 => fun _ => ascii_0
   | CTascii_1 => fun _ => ascii_1
   | CTascii_2 => fun _ => ascii_2
   | CTascii_3 => fun _ => ascii_3
@@ -364,7 +376,7 @@ Definition constr_denote {arg_tys ty c} (ct : constr_type c arg_tys ty) :
   | CTascii_124 => fun _ => ascii_124
   | CTascii_125 => fun _ => ascii_125
   | CTascii_126 => fun _ => ascii_126
-  | CTascii_127 => fun _ => ascii_127
+  | CTascii_127 => fun _ => ascii_127*)
   end.
 
 Definition value_denote

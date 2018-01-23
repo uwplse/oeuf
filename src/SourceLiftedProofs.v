@@ -280,6 +280,15 @@ clear e target_tyn ret_ty0 case_tys.
 - revert args cases. pattern ctor, arg_tys, ct.
   refine match ct as ct_ in constr_type ctor_ arg_tys_ (Tascii)
           return _ ctor_ arg_tys_ ct_ with
+      | CTAscii => _
+      end; intros; clear ct arg_tys ctor.
+  all: run_elim_solver g l.
+
+
+(*
+- revert args cases. pattern ctor, arg_tys, ct.
+  refine match ct as ct_ in constr_type ctor_ arg_tys_ (Tascii)
+          return _ ctor_ arg_tys_ ct_ with
          | CTascii_0 => _
          | CTascii_1 => _
          | CTascii_2 => _
@@ -409,10 +418,9 @@ clear e target_tyn ret_ty0 case_tys.
          | CTascii_126 => _
          | CTascii_127 => _
       end; intros; clear ct arg_tys ctor.
-  (*all: run_elim_solver g l. *)
-Admitted.
+  (*all: run_elim_solver g l. *)*)
   
-(*Qed.*)
+Qed.
 
 
 

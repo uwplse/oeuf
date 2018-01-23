@@ -24,7 +24,8 @@ Module type_name.
     | Tpositive       => atom (symbol.of_string_unsafe "positive")
     | TN              => atom (symbol.of_string_unsafe "N")
     | TZ              => atom (symbol.of_string_unsafe "Z")
-    | Tascii          => atom (symbol.of_string_unsafe "ascii")
+    | Tascii         => atom (symbol.of_string_unsafe "Ascii.ascii")
+    (*| Tascii          => atom (symbol.of_string_unsafe "ascii")*)
     end.
 
   Fixpoint from_tree (t : tree symbol.t) : option type_name :=
@@ -36,7 +37,8 @@ Module type_name.
       else if symbol.eq_dec s (symbol.of_string_unsafe "positive") then Some Tpositive
       else if symbol.eq_dec s (symbol.of_string_unsafe "N") then Some TN
       else if symbol.eq_dec s (symbol.of_string_unsafe "Z") then Some TZ
-      else if symbol.eq_dec s (symbol.of_string_unsafe "ascii") then Some Tascii
+      else if symbol.eq_dec s (symbol.of_string_unsafe "Ascii.ascii") then Some Tascii
+      (* else if symbol.eq_dec s (symbol.of_string_unsafe "ascii") then Some Tascii *)
       else None
     | node (atom s :: l) =>
       if symbol.eq_dec s (symbol.of_string_unsafe "list")
@@ -141,7 +143,8 @@ Module constr_name.
     | CZ0    => symbol.of_string_unsafe "CZ0"
     | CZpos  => symbol.of_string_unsafe "CZpos"
     | CZneg  => symbol.of_string_unsafe "CZneg"
-    | Cascii_0 => symbol.of_string_unsafe "Cascii_0"
+    | CAscii => symbol.of_string_unsafe "CAscii"
+(*    | Cascii_0 => symbol.of_string_unsafe "Cascii_0"
     | Cascii_1 => symbol.of_string_unsafe "Cascii_1"
     | Cascii_2 => symbol.of_string_unsafe "Cascii_2"
     | Cascii_3 => symbol.of_string_unsafe "Cascii_3"
@@ -268,7 +271,7 @@ Module constr_name.
     | Cascii_124 => symbol.of_string_unsafe "Cascii_124"
     | Cascii_125 => symbol.of_string_unsafe "Cascii_125"
     | Cascii_126 => symbol.of_string_unsafe "Cascii_126"
-    | Cascii_127 => symbol.of_string_unsafe "Cascii_127"
+    | Cascii_127 => symbol.of_string_unsafe "Cascii_127"*)
     end.
   
   Definition from_symbol (s : symbol.t) : option constr_name :=
@@ -290,8 +293,8 @@ Module constr_name.
     else if symbol.eq_dec s (symbol.of_string_unsafe "CZ0")    then Some CZ0
     else if symbol.eq_dec s (symbol.of_string_unsafe "CZpos")  then Some CZpos
     else if symbol.eq_dec s (symbol.of_string_unsafe "CZneg")  then Some CZneg
-    else if symbol.eq_dec s (symbol.of_string_unsafe "Cascii_0")  then Some Cascii_0
-    else if symbol.eq_dec s (symbol.of_string_unsafe "Cascii_0")  then Some Cascii_0
+    else if symbol.eq_dec s (symbol.of_string_unsafe "CAscii")  then Some CAscii
+(*  else if symbol.eq_dec s (symbol.of_string_unsafe "Cascii_0")  then Some Cascii_0
     else if symbol.eq_dec s (symbol.of_string_unsafe "Cascii_1")  then Some Cascii_1
     else if symbol.eq_dec s (symbol.of_string_unsafe "Cascii_2")  then Some Cascii_2
     else if symbol.eq_dec s (symbol.of_string_unsafe "Cascii_3")  then Some Cascii_3
@@ -418,7 +421,7 @@ Module constr_name.
     else if symbol.eq_dec s (symbol.of_string_unsafe "Cascii_124")  then Some Cascii_124
     else if symbol.eq_dec s (symbol.of_string_unsafe "Cascii_125")  then Some Cascii_125
     else if symbol.eq_dec s (symbol.of_string_unsafe "Cascii_126")  then Some Cascii_126
-    else if symbol.eq_dec s (symbol.of_string_unsafe "Cascii_127")  then Some Cascii_127
+    else if symbol.eq_dec s (symbol.of_string_unsafe "Cascii_127")  then Some Cascii_127*)
     else None.
 
   
@@ -507,6 +510,14 @@ Module constr_type.
         | _, _ => None
         end
       | Tascii =>
+        match c, arg_tys with
+        | CAscii, [ADT Tbool; ADT Tbool;
+                      ADT Tbool; ADT Tbool;
+                        ADT Tbool; ADT Tbool;
+                          ADT Tbool; ADT Tbool] => Some CTAscii
+        | _,_ => None
+        end
+(*      | Tascii =>
         match c, arg_tys with
         | Cascii_0, [] => Some CTascii_0
         | Cascii_1, [] => Some CTascii_1
@@ -637,7 +648,7 @@ Module constr_type.
         | Cascii_126, [] => Some CTascii_126
         | Cascii_127, [] => Some CTascii_127
         | _,_ => None
-        end
+        end*)
       end.
 
   Lemma check_constr_type_correct :
@@ -660,7 +671,7 @@ Module elim.
   Definition check_elim {case_tys target_tyn ty} :
     option (elim case_tys (ADT target_tyn) ty) :=
       match target_tyn with
-      | Tascii         => match case_tys with
+(*      | Tascii         => match case_tys with
                           | [ty0;ty1;ty2;ty3;ty4;ty5;ty6;ty7;
                              ty8;ty9;ty10;ty11;ty12;ty13;ty14;ty15;
                              ty16;ty17;ty18;ty19;ty20;ty21;ty22;ty23;
@@ -959,7 +970,22 @@ Module elim.
                           end end end end end end end end end end end
                           end end end
                         | _ => None
-                        end
+                        end*)
+      | Tascii       => match case_tys with
+                           [Arrow (ADT Tbool)
+                              (Arrow (ADT Tbool)
+                              (Arrow (ADT Tbool)
+                              (Arrow (ADT Tbool)
+                              (Arrow (ADT Tbool)
+                              (Arrow (ADT Tbool)
+                              (Arrow (ADT Tbool)
+                                     (Arrow (ADT Tbool)
+                                            ty1)))))))] =>
+                           match type_eq_dec ty ty1 with right _ => None
+                           | left pf => match pf with | eq_refl => Some (EAscii _)
+                           end end
+                         | _ => None                                                                        
+                          end
       | Tnat          => match case_tys with
                         | [ty1; Arrow (ADT Tnat) (Arrow ty2 ty3)] =>
                           match type_eq_dec ty ty1 with right _ => None
