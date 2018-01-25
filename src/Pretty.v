@@ -24,7 +24,7 @@ Module type_name.
     | Tpositive       => atom (symbol.of_string_unsafe "positive")
     | TN              => atom (symbol.of_string_unsafe "N")
     | TZ              => atom (symbol.of_string_unsafe "Z")
-    | Tascii         => atom (symbol.of_string_unsafe "Ascii.ascii")
+    | Tascii         => atom (symbol.of_string_unsafe "ascii")
     (*| Tascii          => atom (symbol.of_string_unsafe "ascii")*)
     end.
 
@@ -37,7 +37,7 @@ Module type_name.
       else if symbol.eq_dec s (symbol.of_string_unsafe "positive") then Some Tpositive
       else if symbol.eq_dec s (symbol.of_string_unsafe "N") then Some TN
       else if symbol.eq_dec s (symbol.of_string_unsafe "Z") then Some TZ
-      else if symbol.eq_dec s (symbol.of_string_unsafe "Ascii.ascii") then Some Tascii
+      else if symbol.eq_dec s (symbol.of_string_unsafe "ascii") then Some Tascii
       (* else if symbol.eq_dec s (symbol.of_string_unsafe "ascii") then Some Tascii *)
       else None
     | node (atom s :: l) =>
@@ -1096,7 +1096,6 @@ Module elim.
       check_elim = Some e.
   Proof.
 
-    (* OLD *)
     unfold check_elim.
     intros.
     refine match e with

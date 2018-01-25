@@ -217,7 +217,7 @@ let pkg_hlist = ["oeuf";"HList"]
 let pkg_sourcevalues = ["oeuf";"SourceValues"]
 let pkg_sourcelifted = ["oeuf";"SourceLifted"]
 let pkg_compilation_unit = ["oeuf";"CompilationUnit"]
-let pkg_fast_ascii = ["oeuf";"FastAscii"]
+(*let pkg_fast_ascii = ["oeuf";"FastAscii"]*)
 
 let pkg_binnums = ["Coq"; "Numbers"; "BinNums"]
 
@@ -263,7 +263,7 @@ let type_defns : type_defn list = [
         [("nil", 0); ("cons", 2)];
     simple_type_defn pkg_datatypes "unit" 0
         [("tt", 0)];
-    simple_type_defn pkg_fast_ascii "ascii" 0
+(*    simple_type_defn pkg_fast_ascii "ascii" 0
     [("ascii_0",0);
     ("ascii_1",0);
     ("ascii_2",0);
@@ -391,7 +391,7 @@ let type_defns : type_defn list = [
     ("ascii_124",0);
     ("ascii_125",0);
     ("ascii_126",0);
-    ("ascii_127",0)];
+    ("ascii_127",0)];*)
 
 
     { pkg = pkg_datatypes
@@ -417,7 +417,9 @@ let type_defns : type_defn list = [
     simple_type_defn pkg_binnums "N" 0
         [("N0", 0); ("Npos", 1)];
     simple_type_defn pkg_binnums "Z" 0
-        [("Z0", 0); ("Zpos", 1); ("Zneg", 1)]
+        [("Z0", 0); ("Zpos", 1); ("Zneg", 1)];
+    simple_type_defn pkg_ascii "ascii" 0
+        [("Ascii", 8)]
 ]
 
 
