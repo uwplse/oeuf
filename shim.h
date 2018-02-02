@@ -513,4 +513,7 @@ void* vcall(void* f, ...) {
 
 #define VCALL(f, ...)   (vcall((f), __VA_ARGS__, NULL))
 
-#define OEUF_CALL(f, ...)   (VCALL(make_closure(f), __VA_ARGS__))
+//commented out for word_freq demo, compcert can't handle reasoning about vararg functions
+//#define OEUF_CALL(f, ...)   (VCALL(make_closure(f), __VA_ARGS__))
+
+#define OEUF_CALL(f,a) (call(make_closure(f),a))
