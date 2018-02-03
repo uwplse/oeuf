@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+
+#DIRS=(src)
+#DEPS=(PrettyParsing oeuf StructTact)
+#NAMESPACE_oeuf=oeuf
+#CANARIES=()
+#source scripts/coqproject.sh
+
+# exit on error
+set -e
+
+# determine physical directory of this script
+src="${BASH_SOURCE[0]}"
+while [ -L "$src" ]; do
+  dir="$(cd -P "$(dirname "$src")" && pwd)"
+  src="$(readlink "$src")"
+  [[ $src != /* ]] && src="$dir/$src"
+done
+readonly MYDIR="$(cd -P "$(dirname "$src")" && pwd)"
+
+cat > _CoqProject.prelim <<EOF
+-Q $MYDIR/../PrettyParsing/./ PrettyParsing
+-R $MYDIR/../oeuf/src/./ oeuf
+-R $MYDIR/../oeuf/compcert/./ compcert
+-Q $MYDIR/../StructTact/./ StructTact
+-Q src/ ""
+
+src/Freq.v
+src/FreqProof.v
+src/OeufDefs.v
+src/string_of_nat.v
+EOF
+
+##Build coq in 2 different stages
+
+cat > _CoqProject.shim_proofs <<EOF
+-Q $MYDIR/../PrettyParsing/./ PrettyParsing
+-R $MYDIR/../oeuf/src/./ oeuf
+-R $MYDIR/../oeuf/compcert/./ compcert
+-Q $MYDIR/../StructTact/./ StructTact
+-Q src/ ""
+
+src/ShimProof.v
+src/word_freq_cm.v
+src/word_freq_oeuf.v
+EOF
+
+cat > _CoqProject <<EOF
+-Q $MYDIR/../PrettyParsing/./ PrettyParsing
+-R $MYDIR/../oeuf/src/./ oeuf
+-R $MYDIR/../oeuf/compcert/./ compcert
+-Q $MYDIR/../StructTact/./ StructTact
+-Q src/ ""
+
+src/Freq.v
+src/FreqProof.v
+src/OeufDefs.v
+src/string_of_nat.v
+src/ShimProof.v
+src/word_freq_cm.v
+src/word_freq_oeuf.v
+EOF

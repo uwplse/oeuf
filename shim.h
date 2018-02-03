@@ -488,11 +488,13 @@ struct closure {
     void* upvars[];
 };
 
-struct closure* make_closure(oeuf_function* f) {
-    struct closure* c = malloc(sizeof(struct closure));
-    c->f = f;
-    return c;
-}
+#define make_closure(f) ((struct closure* c = malloc(sizeof(struct closure)), c->f = f, c))
+
+/* struct closure* make_closure(oeuf_function* f) { */
+/*     struct closure* c = malloc(sizeof(struct closure)); */
+/*     c->f = f; */
+/*     return c; */
+/* } */
 
 void* call(void* f, void* a) {
     return (((struct closure*)f)->f)(f, a);
