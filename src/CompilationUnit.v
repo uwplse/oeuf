@@ -8,7 +8,8 @@ Record compilation_unit :=
   CompilationUnit {
       types : list (type * list type * type);
       exprs : genv types;
-      names : list string (* invariant: no duplicates and same length as types *)
+      names : list string; (* invariant: no duplicates and same length as types *)
+      nfrees : list nat (* invariant: same length as types *)
   }.
 
 Definition singleton {ty} (e : body_expr [] ty) (name : string) : compilation_unit :=
@@ -16,6 +17,11 @@ Definition singleton {ty} (e : body_expr [] ty) (name : string) : compilation_un
 
 
 Definition init_metadata j :=
-    let go name := Metadata name Public in
-    (exprs j, map go (names j)).
+    let fix go names nfrees :=
+        match names, nfrees with
+        | name :: names,
+          nfree :: nfrees => Metadata name Public nfree :: go names nfrees
+        | _, _ => []
+        end in
+    (exprs j, go (names j) (nfrees j)).
 
