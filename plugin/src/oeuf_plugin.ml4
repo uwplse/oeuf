@@ -743,6 +743,10 @@ let t_string = init_once (fun () -> resolve_symbol pkg_string "string")
 let c_string = init_once (fun () -> resolve_symbol pkg_string "String")
 let c_empty_string = init_once (fun () -> resolve_symbol pkg_string "EmptyString")
 
+let t_nat = init_once (fun () -> resolve_symbol pkg_datatypes "nat")
+let c_o = init_once (fun () -> resolve_symbol pkg_datatypes "O")
+let c_s = init_once (fun () -> resolve_symbol pkg_datatypes "S")
+
 
 
 
@@ -1341,6 +1345,12 @@ let collect_block_names (funcs : func list) =
 let collect_names blocks =
     List.concat (List.map collect_block_names blocks)
 
+let collect_block_nfrees (funcs : func list) =
+    List.map (fun (f : func) -> List.length f.free_tys) funcs
+
+let collect_nfrees blocks =
+    List.concat (List.map collect_block_nfrees blocks)
+
 let emit_bool b : Term.constr =
     if b then c_true ()
     else c_false ()
@@ -1374,12 +1384,25 @@ let rec emit_string_list ss : Term.constr =
                 emit_string s;
                 emit_string_list ss]
 
+let rec emit_nat n : Term.constr =
+    if n == 0 then c_o ()
+        else mk c_s [emit_nat (n - 1)]
+
+let rec emit_nat_list ns : Term.constr =
+    match ns with
+    | [] -> mk c_nil [t_nat ()]
+    | n :: ns ->
+            mk c_cons [t_nat ();
+                emit_nat n;
+                emit_nat_list ns]
+
 let define_cu gctx cu_name blocks : unit =
     let last = gctx.last_refl () in
     let types = last.sigs in
     let exprs = last.genv in
     let names = emit_string_list (List.rev (collect_names blocks)) in
-    let cu = mk c_compilation_unit [types; exprs; names] in
+    let nfrees = emit_nat_list (List.rev (collect_nfrees blocks)) in
+    let cu = mk c_compilation_unit [types; exprs; names; nfrees] in
     let _ = define cu_name cu (t_compilation_unit ()) in
     ()
 

@@ -10,7 +10,8 @@ Definition access_eq_dec (x y : access) : { x = y } + { x <> y } :=
 
 Record metadata := Metadata { 
     m_name : String.string;
-    m_access : access
+    m_access : access;
+    m_nfree : nat
 }.
 
 
