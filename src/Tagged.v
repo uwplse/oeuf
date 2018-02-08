@@ -353,7 +353,9 @@ Inductive nfree_ok_state nfrees : state -> Prop :=
 | NfosRun : forall e l k,
         nfree_ok nfrees e ->
         Forall (nfree_ok_value nfrees) l ->
-        (forall v, nfree_ok_state nfrees (k v)) ->
+        (forall v,
+            nfree_ok_value nfrees v ->
+            nfree_ok_state nfrees (k v)) ->
         nfree_ok_state nfrees (Run e l k)
 | NfosStop : forall v, nfree_ok_state nfrees (Stop v). 
 
@@ -417,7 +419,7 @@ all: try solve [left; constructor].
     solve [left; eauto | right; inversion 1; eauto].
 Defined.
 
-Definition check_nfree_ok_prog : forall nfrees exprs,
+Definition check_nfree_ok_list : forall nfrees exprs,
     { Forall (nfree_ok nfrees) exprs } +
     { ~ Forall (nfree_ok nfrees) exprs }.
 induction exprs.
@@ -428,3 +430,150 @@ destruct (check_nfree_ok nfrees e), IHexprs.
 all: try solve [left; eauto | right; inversion 1; eauto].
 Defined.
 
+
+
+Lemma nfree_ok_value_list_Forall : forall nfrees es,
+    nfree_ok_value_list nfrees es ->
+    Forall (nfree_ok_value nfrees) es.
+induction es; intro HH; simpl in *.
+- constructor.
+- break_and. constructor; eauto.
+Qed.
+
+Lemma nfree_ok_value_list_Forall' : forall nfrees es,
+    Forall (nfree_ok_value nfrees) es ->
+    nfree_ok_value_list nfrees es.
+induction es; intro HH; simpl in *.
+- constructor.
+- on (Forall _ _), invc. constructor; eauto.
+Qed.
+
+Lemma nfree_ok_list_Forall : forall nfrees es,
+    nfree_ok_list nfrees es ->
+    Forall (nfree_ok nfrees) es.
+induction es; intro HH; simpl in *.
+- constructor.
+- break_and. constructor; eauto.
+Qed.
+
+Lemma nfree_ok_list_Forall' : forall nfrees es,
+    Forall (nfree_ok nfrees) es ->
+    nfree_ok_list nfrees es.
+induction es; intro HH; simpl in *.
+- constructor.
+- on (Forall _ _), invc. constructor; eauto.
+Qed.
+
+Lemma nfree_ok_list_pair_Forall : forall nfrees es,
+    nfree_ok_list_pair nfrees es ->
+    Forall (nfree_ok_pair nfrees) es.
+induction es; intro HH; simpl in *.
+- constructor.
+- break_and. constructor; eauto.
+Qed.
+
+Lemma nfree_ok_list_pair_Forall' : forall nfrees es,
+    Forall (nfree_ok_pair nfrees) es ->
+    nfree_ok_list_pair nfrees es.
+induction es; intro HH; simpl in *.
+- constructor.
+- on (Forall _ _), invc. constructor; eauto.
+Qed.
+
+Lemma nfree_ok_list_map_value : forall nfrees vs,
+    Forall (nfree_ok nfrees) (map Value vs) ->
+    Forall (nfree_ok_value nfrees) vs.
+induction vs; intros.
+- constructor.
+- on >Forall, invc. constructor; eauto.
+Qed.
+
+Ltac i_ctor := intros; econstructor; simpl; eauto.
+Ltac i_lem H := intros; eapply H; simpl; eauto.
+
+Lemma unroll_elim_nfree_ok : forall nfrees case args rec mk_rec e,
+    nfree_ok nfrees case ->
+    Forall (nfree_ok_value nfrees) args ->
+    (forall e, nfree_ok nfrees e -> nfree_ok nfrees (mk_rec e)) ->
+    unroll_elim case args rec mk_rec = Some e ->
+    nfree_ok nfrees e.
+first_induction args; destruct rec; intros0 Hcase Hargs Hmk_rec Hunroll; try discriminate;
+simpl in *.
+  { inject_some. auto. }
+
+on >Forall, invc.
+remember (if b then _ else _) as case'.
+eapply IHargs with (case := case'); eauto.
+subst case'. destruct b; simpl; eauto.
+Qed.
+
+Lemma step_nfree_ok : forall E nfrees s s',
+    Forall (nfree_ok nfrees) E ->
+    nfree_ok_state nfrees s ->
+    sstep E s s' ->
+    nfree_ok_state nfrees s'.
+intros0 Hnf II STEP.
+invc STEP; invc II.
+
+- (* SArg *)
+  on _, eapply_. i_lem Forall_nth_error.
+
+- (* SUpVar *)
+  on _, eapply_. i_lem Forall_nth_error.
+
+- (* SCloseStep *)
+  simpl in *. refold_nfree_ok nfrees. break_and.
+  on _, eapply_lem nfree_ok_list_Forall.  on _, invc_using Forall_3part_inv.
+  i_ctor. i_ctor.
+  simpl. refold_nfree_ok nfrees. split.
+  + rewrite app_length in *. simpl in *. assumption.
+  + eapply nfree_ok_list_Forall'. i_lem Forall_app.
+
+- (* SCloseDone *)
+  on _, eapply_.
+  simpl in *. refold_nfree_ok nfrees. refold_nfree_ok_value nfrees. break_and.
+  subst es.
+  split.  { rewrite map_length in *. auto. }
+  eapply nfree_ok_value_list_Forall', nfree_ok_list_map_value, nfree_ok_list_Forall. auto.
+
+- (* SConstrStep *)
+  simpl in *. refold_nfree_ok nfrees. break_and.
+  on _, eapply_lem nfree_ok_list_Forall.  on _, invc_using Forall_3part_inv.
+  i_ctor. i_ctor.
+  simpl. refold_nfree_ok nfrees.
+  eapply nfree_ok_list_Forall'. i_lem Forall_app.
+
+- (* SConstrDone *)
+  on _, eapply_.
+  simpl in *. refold_nfree_ok nfrees. refold_nfree_ok_value nfrees. break_and.
+  subst es.
+  eapply nfree_ok_value_list_Forall', nfree_ok_list_map_value, nfree_ok_list_Forall. auto.
+
+- (* SCallL *)
+  simpl in *. break_and.
+  i_ctor. i_ctor.
+
+- (* SCallR *)
+  simpl in *. break_and.
+  i_ctor. i_ctor.
+
+- (* SMakeCall *)
+  simpl in *. refold_nfree_ok_value nfrees. break_and.
+  i_ctor.
+  + i_lem Forall_nth_error.
+  + i_ctor. i_lem nfree_ok_value_list_Forall.
+
+- (* SElimStep *)
+  simpl in *. refold_nfree_ok nfrees. break_and.
+  i_ctor. i_ctor.
+
+- (* SEliminate *)
+  simpl in *. refold_nfree_ok nfrees. refold_nfree_ok_value nfrees. break_and.
+  on _, eapply_lem nfree_ok_list_pair_Forall.
+  fwd eapply Forall_nth_error with (xs := cases); eauto. simpl in *.
+  i_ctor.
+  eapply unroll_elim_nfree_ok; [ | | | eauto ]; eauto.
+  + i_lem nfree_ok_value_list_Forall.
+  + intros. simpl. refold_nfree_ok nfrees. eauto using nfree_ok_list_pair_Forall'.
+
+Qed.

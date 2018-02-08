@@ -71,9 +71,11 @@ Inductive public_value (M : list metadata) : value -> Prop :=
 | PvConstr : forall tag args,
         Forall (public_value M) args ->
         public_value M (Constr tag args)
-| PvClose : forall fname free,
-        public_fname M fname ->
+| PvClose : forall fname free m,
+        nth_error M fname = Some m ->
+        m_access m = Public ->
         Forall (public_value M) free ->
+        length free = m_nfree m ->
         public_value M (Close fname free).
 
 

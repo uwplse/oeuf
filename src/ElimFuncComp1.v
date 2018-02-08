@@ -209,7 +209,7 @@ Fixpoint compile_cu' base exprs metas :=
     match exprs, metas with
     | [], [] => pure []
     | e :: exprs, m :: metas =>
-            compile base (m_nfree m) 0 e >>= fun e' =>
+            compile base (S (m_nfree m)) 0 e >>= fun e' =>
             compile_cu' base exprs metas >>= fun es' =>
             pure (e' :: es')
     | _, _ => pure []
@@ -240,13 +240,26 @@ Fixpoint process_elims elims n : list B.expr * list metadata :=
             (e :: exprs, Metadata name Private nfree :: metas)
     end.
 
+Section compile_cu.
+Open Scope option_monad.
+
 Definition compile_cu (cu : list A.expr * list metadata) :
         option (list B.expr * list metadata) :=
     let '(exprs, metas) := cu in
+    match eq_nat_dec (length exprs) (length metas) with
+    | left Heq => Some Heq
+    | right _ => None
+    end >>= fun Hlen =>
     let nfrees := map m_nfree metas in
+    match A.check_nfree_ok_list nfrees exprs with
+    | left Hnfree => Some Hnfree
+    | right _ => None
+    end >>= fun Hnfree =>
     let '(exprs'_base, elims) := compile_cu' (length exprs) exprs metas [] in
     let (exprs'_elims, metas_elims) := process_elims elims 0 in
     Some (exprs'_base ++ exprs'_elims, metas ++ metas_elims).
+
+End compile_cu.
 
 
 Inductive I_expr (BE : B.env) nfree : nat -> A.expr -> B.expr -> Prop :=
@@ -1036,124 +1049,271 @@ simpl in *.
 
 Qed.
 
-(* TODO *)
 
-Lemma compile_cu_env_ok : forall A Ameta Aelims Aelim_names B Bmeta,
-    compile_cu (A, Ameta, Aelims, Aelim_names) = Some (B, Bmeta) ->
-    env_ok A B Aelims.
-intros. simpl in *. break_match; try discriminatB. inject_somB.
-unfold env_ok, compile_env. reflexivity.
+
+Inductive I' AE BE NFREES : A.state -> B.state -> Prop :=
+| I'_intro : forall a b,
+        I AE BE a b ->
+        A.nfree_ok_state NFREES a ->
+        I' AE BE NFREES a b.
+
+Check I_sim.
+
+Definition env_ok AE BE NFREES :=
+    Forall3 (fun a b nfree => I_expr BE (S nfree) 0 a b) AE (firstn (length AE) BE) NFREES /\
+    Forall (A.nfree_ok NFREES) AE.
+
+Theorem I'_sim : forall AE BE NFREES a a' b,
+    env_ok AE BE NFREES ->
+    I' AE BE NFREES a b ->
+    A.sstep AE a a' ->
+    exists b',
+        B.splus BE b b' /\
+        I' AE BE NFREES a' b'.
+intros0 Henv II Astep.
+unfold env_ok in *. break_and.
+set (BE0 := firstn (length AE) BE).
+set (BE1 := skipn (length AE) BE).
+replace (firstn (length AE) BE) with BE0 in * by reflexivity.
+replace BE with (BE0 ++ BE1) in * by eapply firstn_skipn.
+
+intros. on >I', invc.
+fwd eapply I_sim; eauto. break_exists; break_and.
+eexists; split; eauto. constructor; eauto.
+eapply A.step_nfree_ok; try eassumption.
 Qed.
 
-Lemma compile_cu_length : forall A Ameta Aelims Aelim_names B Bmeta,
-    compile_cu (A, Ameta, Aelims, Aelim_names) = Some (B, Bmeta) ->
+
+
+Check compile_I_expr.
+
+Lemma compile_cu'_state_monotonic : forall base exprs metas s exprs' s',
+    compile_cu' base exprs metas s = (exprs', s') ->
+    exists s1, s' = s ++ s1.
+induction exprs; destruct metas; intros; simpl in *; break_bind_state;
+try solve [exists []; eauto using app_nil_r].
+
+on _, eapply_lem compile_state_monotonic.
+on _, eapply_lem IHexprs.
+break_exists. subst.
+eexists. rewrite app_assoc. reflexivity.
+Qed.
+
+Lemma compile_cu'_I_expr : forall BE0 aes ms s bes s',
+    length aes = length ms ->
+    compile_cu' (length BE0) aes ms s = (bes, s') ->
+    Forall3 (fun ae be nfree => I_expr (BE0 ++ map fst s') (S nfree) 0 ae be)
+        aes bes (map m_nfree ms).
+induction aes; destruct ms; intros0 Hlen Hcomp; try discriminate; simpl in *; break_bind_state.
+  { constructor. }
+
+rename a into ae, x into be, x0 into bes.
+on _, eapply_lem compile_I_expr.
+fwd eapply compile_cu'_state_monotonic as HH; eauto.  destruct HH as [ssuffix ?H].
+on _, eapply_lem IHaes; [ | lia].
+i_ctor.
+subst s'. rewrite map_app, app_assoc. i_lem I_expr_weaken.
+Qed.
+
+Lemma compile_cu'_length : forall base exprs metas s exprs' s',
+    length exprs = length metas ->
+    compile_cu' base exprs metas s = (exprs', s') ->
+    length exprs' = length exprs.
+induction exprs; destruct metas; intros; simpl in *; try discriminate; break_bind_state.
+- reflexivity.
+- simpl. f_equal. on _, eapply_lem IHexprs; eauto.
+Qed.
+
+Lemma process_elims_fst : forall elims n,
+    fst (process_elims elims n) = map fst elims.
+induction elims; intros.
+- reflexivity.
+- simpl. do 2 break_match; try discriminate.
+  simpl. f_equal. erewrite <- IHelims. on _, fun H => rewrite H. reflexivity.
+Qed.
+
+Theorem compile_cu_env_ok : forall A Ameta B Bmeta,
+    compile_cu (A, Ameta) = Some (B, Bmeta) ->
+    env_ok A B (map m_nfree Ameta).
+intros. simpl in *. break_bind_option. do 4 (break_match; try discriminate).
+do 3 inject_some.
+rename l into B0, l0 into B1_B1meta, l1 into B1, l2 into B1meta.
+rename Heqp into Hcomp.
+
+fwd eapply compile_cu'_length as Hlen; eauto.
+  rewrite <- Hlen in Hcomp.
+
+fwd eapply compile_cu'_I_expr; [ | eauto | ]; [ congruence | ].
+
+replace (map fst B1_B1meta) with B1 in *; cycle 1.
+  { erewrite <- process_elims_fst. on _, fun H => rewrite H. reflexivity. }
+
+unfold env_ok.
+rewrite firstn_app by lia. rewrite firstn_all by lia.
+split; eauto.
+Qed.
+
+
+Lemma process_elims_private : forall elims n exprs metas,
+    process_elims elims n = (exprs, metas) ->
+    Forall (fun m => m_access m = Private) metas.
+induction elims; intros0 Hproc; simpl in *.
+- inject_pair. constructor.
+- do 2 break_match; try discriminate. inject_pair.
+  econstructor; eauto.
+Qed.
+
+Lemma compile_cu_meta_split : forall A Ameta B Bmeta,
+    compile_cu (A, Ameta) = Some (B, Bmeta) ->
+    exists Bnew_meta,
+        Forall (fun m => m_access m = Private) Bnew_meta /\
+        Bmeta = Ameta ++ Bnew_meta.
+intros0 Hcomp. unfold compile_cu in Hcomp. break_bind_option.
+do 4 (break_match; try discriminate).  do 3 inject_some.
+rename l into B0, l0 into B1_B1meta, l1 into B1, l2 into B1meta.
+exists B1meta. split; eauto using process_elims_private.
+Qed.
+
+Lemma compile_cu_a_length : forall A Ameta B Bmeta,
+    compile_cu (A, Ameta) = Some (B, Bmeta) ->
     length A = length Ameta.
-intros. simpl in *. break_match; try discriminatB. auto.
+intros0 Hcomp. unfold compile_cu in Hcomp. break_bind_option.
+assumption.
 Qed.
 
-Lemma public_fname_Ameta : forall A Ameta Aelims Aelim_names B Bmeta fname,
-    compile_cu (A, Ameta, Aelims, Aelim_names) = Some (B, Bmeta) ->
-    public_fname Bmeta fname ->
-    public_fname Ameta fnamB.
-intros0 Hcomp Hb; simpl in *. break_match; try discriminatB. inject_somB.
-unfold public_fname in Hb. destruct Hb as (m & Hnth & Hacc).
-destruct (lt_dec fname (length Ameta)).
-- rewrite nth_error_app1 in Hnth by auto. eexists; eauto.
-- rewrite nth_error_app2 in Hnth by omega.
-  fwd eapply map_nth_error' as HH; eauto. destruct HH as (? & ? & ?).
-  contradict Hacc. subst m. simpl. discriminatB.
+Lemma compile_cu_fname_meta : forall A Ameta B Bmeta fname m,
+    compile_cu (A, Ameta) = Some (B, Bmeta) ->
+    nth_error Bmeta fname = Some m ->
+    m_access m = Public ->
+    nth_error Ameta fname = Some m.
+intros0 Hcomp Hnth Hpub.
+
+fwd eapply compile_cu_meta_split as HH; eauto.
+  destruct HH as (Bnew_meta & ? & ?).  subst Bmeta.
+
+destruct (lt_dec fname (length Ameta)); cycle 1.
+  { exfalso. on _, rewrite_fwd nth_error_app2; [ | lia ].
+    fwd i_lem Forall_nth_error. cbv beta in *. congruence. }
+
+on _, rewrite_fwd nth_error_app1; [ | lia ].
+auto.
 Qed.
 
-Lemma public_value_Ameta : forall A Ameta Aelims Aelim_names B Bmeta v,
-    compile_cu (A, Ameta, Aelims, Aelim_names) = Some (B, Bmeta) ->
+Lemma compile_cu_fname_meta' : forall A Ameta B Bmeta fname m,
+    compile_cu (A, Ameta) = Some (B, Bmeta) ->
+    nth_error Ameta fname = Some m ->
+    nth_error Bmeta fname = Some m.
+intros0 Hcomp Hnth.
+
+fwd eapply compile_cu_meta_split as HH; eauto.
+  destruct HH as (Bnew_meta & ? & ?).  subst Bmeta.
+
+rewrite nth_error_app1; eauto.
+rewrite <- nth_error_Some. congruence.
+Qed.
+
+Lemma compile_cu_public_value : forall A Ameta B Bmeta v,
+    compile_cu (A, Ameta) = Some (B, Bmeta) ->
     public_value Bmeta v ->
     public_value Ameta v.
-intros0 Hcomp. revert v.
-induction v using value_rect_mut with
-    (Pl := fun v =>
-        Forall (public_value Bmeta) v ->
-        Forall (public_value Ameta) v);
-intros0 Hb; invc Hb; econstructor; eauto using public_fname_Ameta.
+induction v using value_ind'; intros0 Hcomp Hpub; invc Hpub.
+- i_ctor. list_magic_on (args, tt).
+- i_ctor.
+  + i_lem compile_cu_fname_meta.
+  + list_magic_on (free, tt).
 Qed.
 
-Lemma public_fname_Bmeta : forall A Ameta Aelims Aelim_names B Bmeta fname,
-    compile_cu (A, Ameta, Aelims, Aelim_names) = Some (B, Bmeta) ->
-    public_fname Ameta fname ->
-    public_fname Bmeta fnamB.
-intros0 Hcomp Ha; simpl in *. break_match; try discriminatB. inject_somB.
-unfold public_fname in Ha. destruct Ha as (m & Hnth & Hacc).
-eexists. split; eauto. erewrite nth_error_app1; eauto.
-- rewrite <- nth_error_SomB. congruencB.
-Qed.
-
-Lemma public_value_Bmeta : forall A Ameta Aelims Aelim_names B Bmeta v,
-    compile_cu (A, Ameta, Aelims, Aelim_names) = Some (B, Bmeta) ->
+Lemma compile_cu_public_value' : forall A Ameta B Bmeta v,
+    compile_cu (A, Ameta) = Some (B, Bmeta) ->
     public_value Ameta v ->
     public_value Bmeta v.
-intros0 Hcomp. revert v.
-induction v using value_rect_mut with
-    (Pl := fun v =>
-        Forall (public_value Ameta) v ->
-        Forall (public_value Bmeta) v);
-intros0 Ha; invc Ha; econstructor; eauto using public_fname_Bmeta.
+induction v using value_ind'; intros0 Hcomp Hpub; invc Hpub.
+- i_ctor. list_magic_on (args, tt).
+- i_ctor.
+  + i_lem compile_cu_fname_meta'.
+  + list_magic_on (free, tt).
 Qed.
 
-Lemma public_fname_nth_error_ex : forall {A} (E : list A) Meta fname,
-    length E = length Meta ->
-    public_fname Meta fname ->
-    exists body, nth_error E fname = Some body.
-intros0 Hlen Hpf.
-destruct Hpf as (? & ? & ?).
-eapply length_nth_error_Some; try eassumption; eauto.
+Lemma env_ok_nth_error : forall A B NFREES fname abody bbody nfree,
+    env_ok A B NFREES ->
+    nth_error A fname = Some abody ->
+    nth_error B fname = Some bbody ->
+    nth_error NFREES fname = Some nfree ->
+    I_expr B (S nfree) 0 abody bbody /\ A.nfree_ok NFREES abody.
+intros0 Henv Ha Hb Hnf.
+invc Henv.
+fwd i_lem Forall3_nth_error.
+  { rewrite firstn_nth_error_lt; eauto.
+    rewrite <- nth_error_Some. congruence. }
+cbv beta in *.
+fwd i_lem Forall_nth_error.
+auto.
 Qed.
+
+Lemma public_value_nfree_ok : forall Ameta v,
+    public_value Ameta v ->
+    A.nfree_ok_value (map m_nfree Ameta) v.
+induction v using value_ind'; intros0 Hpub; invc Hpub.
+- simpl. A.refold_nfree_ok_value (map m_nfree Ameta).
+  eapply A.nfree_ok_value_list_Forall'.
+  list_magic_on (args, tt).
+- simpl. A.refold_nfree_ok_value (map m_nfree Ameta).
+  split.
+  + erewrite map_nth_error; [ | eauto ]. congruence.
+  + eapply A.nfree_ok_value_list_Forall'.
+    list_magic_on (free, tt).
+Qed.
+
 
 
 Require Import Semantics.
 
 Section Preservation.
 
-    Variable aprog : A.prog_typB.
-    Variable bprog : B.prog_typB.
+    Variable aprog : A.prog_type.
+    Variable bprog : B.prog_type.
 
     Hypothesis Hcomp : compile_cu aprog = Some bprog.
-    Hypothesis Helims : Forall (A.elims_match (snd (fst aprog))) (A.initial_env aprog).
 
     Theorem fsim : Semantics.forward_simulation (A.semantics aprog) (B.semantics bprog).
-    destruct aprog as [[[A Ameta] Aelims] Aelim_names], bprog as [B Bmeta].
+    destruct aprog as [A Ameta], bprog as [B Bmeta].
     fwd eapply compile_cu_env_ok; eauto.
-    fwd eapply compile_cu_length; eauto.
 
+    set (NFREES := map m_nfree Ameta).
     eapply Semantics.forward_simulation_plus with
-        (match_states := I' A B Aelims)
+        (match_states := I' A B NFREES)
         (match_values := @eq value).
 
     - simpl. intros0 Bcall Hf Ha. invc Bcall. unfold fst, snd in *.
-      on (public_value _ (Close _ _)), invc.
-      fwd eapply public_fname_Ameta; eauto.
-      fwd eapply public_fname_nth_error_ex as HH; eauto.  destruct HH as [abody ?].
-      fwd eapply env_ok_nth_error as HH; eauto.  destruct HH as (body' & ? & ?).
-      assert (body' = body) by congruencB. subst body'.
+      fwd eapply compile_cu_public_value with (v := Close fname free); eauto.
+      fwd eapply compile_cu_public_value with (v := av2); eauto.
+      on (public_value Ameta (Close _ _)), invc.
+      fwd i_lem compile_cu_a_length.
+      fwd eapply length_nth_error_Some with (xs := Ameta) (ys := A) as HH; eauto.
+        destruct HH as [abody Habody].
+      fwd i_lem env_ok_nth_error.
+        { erewrite map_nth_error; [ | eauto ]. eauto. }
+        break_and.
 
-      eexists. split. 1: econstructor. 1: econstructor. 4: eauto. all: eauto.
-      + eapply compile_I_expr; eauto.
-        eapply Forall_nth_error; eauto.
-      + intros. econstructor; eauto.
-      + econstructor; eauto.
-        * eapply Forall_nth_error; eauto.
-        * intros. econstructor.
-      + econstructor; eauto.
-        * eapply public_value_Ameta; eauto. econstructor; eauto.
-        * eapply public_value_Ameta; eauto.
+      eexists. split.
+      + econstructor.
+        -- eapply IRun with (bextra := []) (nfree := S (length free)).
+           4: reflexivity. 3: reflexivity. 2: i_ctor.
+           simpl. replace (length free) with (m_nfree m). eassumption.
+        -- i_ctor.
+           ++ econstructor; [eauto using public_value_nfree_ok | ].
+              list_magic_on (free, tt). i_lem public_value_nfree_ok.
+           ++ i_ctor.
+      + i_ctor. i_ctor.
 
     - simpl. intros0 II Afinal. invc Afinal. invc II. on >I, invc.
 
       eexists. split. 2: reflexivity.
       econstructor; eauto.
-      + unfold fst, snd in *. eauto using public_value_Bmeta.
+      + unfold fst, snd in *. eauto using compile_cu_public_value'.
 
     - intros0 Astep. intros0 II.
       eapply splus_semantics_sim, I'_sim; eauto.
-      + rewrite A.elims_match_list_Forall. auto.
 
     Defined.
 
