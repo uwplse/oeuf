@@ -262,3 +262,169 @@ Definition semantics (prog : prog_type) : Semantics.semantics :=
                  (sstep)
                  (final_state prog)
                  (initial_env prog).
+
+
+
+
+
+Definition nfree_ok_value nfrees : value -> Prop :=
+    let fix go v :=
+        let fix go_list vs :=
+            match vs with
+            | [] => True
+            | v :: vs => go v /\ go_list vs
+            end in
+        match v with
+        | Constr _ args => go_list args
+        | Close fname free =>
+                nth_error nfrees fname = Some (length free) /\
+                go_list free
+        end in go.
+
+Definition nfree_ok_value_list nfrees :=
+    let go := nfree_ok_value nfrees in
+    let fix go_list vs :=
+        match vs with
+        | [] => True
+        | v :: vs => go v /\ go_list vs
+        end in go_list.
+
+Ltac refold_nfree_ok_value nfrees :=
+    fold (nfree_ok_value_list nfrees) in *.
+
+Definition nfree_ok nfrees : expr -> Prop :=
+    let fix go e :=
+        let fix go_list es :=
+            match es with
+            | [] => True
+            | e :: es => go e /\ go_list es
+            end in
+        let fix go_pair p :=
+            let '(e, _) := p in
+            go e in
+        let fix go_list_pair ps :=
+            match ps with
+            | [] => True
+            | p :: ps => go_pair p /\ go_list_pair ps
+            end in
+        match e with
+        | Value v => nfree_ok_value nfrees v
+        | Arg => True
+        | UpVar _ => True
+        | Call f a => go f /\ go a
+        | MkConstr _ args => go_list args
+        | Elim cases target =>
+                go_list_pair cases /\
+                go target
+        | MkClose fname free =>
+                nth_error nfrees fname = Some (length free) /\
+                go_list free
+        end in go.
+
+Definition nfree_ok_list nfrees :=
+    let go := nfree_ok nfrees in
+    let fix go_list es :=
+        match es with
+        | [] => True
+        | e :: es => go e /\ go_list es
+        end in go_list.
+
+Definition nfree_ok_pair nfrees : (expr * rec_info) -> Prop :=
+    let go := nfree_ok nfrees in
+    let fix go_pair p :=
+        let '(e, r) := p in
+        go e in go_pair.
+
+Definition nfree_ok_list_pair nfrees :=
+    let go_pair := nfree_ok_pair nfrees in
+    let fix go_list_pair ps :=
+        match ps with
+        | [] => True
+        | p :: ps => go_pair p /\ go_list_pair ps
+        end in go_list_pair.
+
+Ltac refold_nfree_ok nfrees :=
+    fold (nfree_ok_list nfrees) in *;
+    fold (nfree_ok_pair nfrees) in *;
+    fold (nfree_ok_list_pair nfrees) in *.
+
+
+Inductive nfree_ok_state nfrees : state -> Prop :=
+| NfosRun : forall e l k,
+        nfree_ok nfrees e ->
+        Forall (nfree_ok_value nfrees) l ->
+        (forall v, nfree_ok_state nfrees (k v)) ->
+        nfree_ok_state nfrees (Run e l k)
+| NfosStop : forall v, nfree_ok_state nfrees (Stop v). 
+
+
+Definition check_nfree_ok_value : forall nfrees v,
+    { nfree_ok_value nfrees v } + { ~ nfree_ok_value nfrees v }.
+intros ? ?.
+induction v using value_rect_mut with
+    (Pl := fun vs =>
+        { nfree_ok_value_list nfrees vs } +
+        { ~ nfree_ok_value_list nfrees vs }).
+all: try solve [left; constructor].
+
+- (* Constr *) simpl. refold_nfree_ok_value nfrees. assumption.
+- (* Close *)
+  destruct (nth_error nfrees fname) as [nfree | ] eqn:?; cycle 1.
+    { right. inversion 1.  congruence. }
+  destruct (eq_nat_dec (length free) nfree), IHv;
+    simpl; refold_nfree_ok_value nfrees; try subst nfree;
+    try solve [left; eauto | right; inversion 1; eauto + congruence].
+
+- (* cons *)
+  destruct IHv, IHv0; simpl; refold_nfree_ok_value nfrees;
+    solve [left; eauto | right; inversion 1; eauto].
+Defined.
+
+Definition check_nfree_ok : forall nfrees e,
+    { nfree_ok nfrees e } + { ~ nfree_ok nfrees e }.
+intros ? ?.
+induction e using expr_rect_mut with
+    (Pl := fun es =>
+        { nfree_ok_list nfrees es } +
+        { ~ nfree_ok_list nfrees es })
+    (Pp := fun p =>
+        { nfree_ok_pair nfrees p } +
+        { ~ nfree_ok_pair nfrees p })
+    (Plp := fun ps =>
+        { nfree_ok_list_pair nfrees ps } +
+        { ~ nfree_ok_list_pair nfrees ps }).
+all: try solve [left; constructor].
+
+- (* Value *) simpl. eapply check_nfree_ok_value.
+- (* Call *)
+  destruct IHe1, IHe2; simpl; solve [left; eauto | right; inversion 1; eauto].
+- (* MkConstr *) destruct IHe; simpl; left + right; eassumption.
+- (* ElimN *)
+  destruct IHe, IHe0; simpl; refold_nfree_ok nfrees;
+    solve [left; eauto | right; inversion 1; eauto].
+- (* MkClose *)
+  destruct (nth_error nfrees f) as [nfree | ] eqn:?; cycle 1.
+    { right. inversion 1.  congruence. }
+  destruct (eq_nat_dec (length free) nfree), IHe;
+    simpl; refold_nfree_ok_value nfrees; try subst nfree;
+    try solve [left; eauto | right; inversion 1; eauto + congruence].
+
+(* list, pair, etc *)
+- destruct IHe, IHe0; simpl; refold_nfree_ok nfrees;
+    solve [left; eauto | right; inversion 1; eauto].
+- destruct IHe; simpl; left + right; eassumption.
+- destruct IHe, IHe0; simpl; refold_nfree_ok nfrees;
+    solve [left; eauto | right; inversion 1; eauto].
+Defined.
+
+Definition check_nfree_ok_prog : forall nfrees exprs,
+    { Forall (nfree_ok nfrees) exprs } +
+    { ~ Forall (nfree_ok nfrees) exprs }.
+induction exprs.
+{ left. constructor. }
+
+rename a into e.
+destruct (check_nfree_ok nfrees e), IHexprs.
+all: try solve [left; eauto | right; inversion 1; eauto].
+Defined.
+
