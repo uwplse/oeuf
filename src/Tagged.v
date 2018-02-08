@@ -156,6 +156,31 @@ Definition expr_rect_mut
         | MkClose f free => HClose f free (go_list free)
         end in go e.
 
+Definition expr_rect_mut'
+        (P : expr -> Type)
+        (Pl : list expr -> Type)
+        (Pp : expr * rec_info -> Type)
+        (Plp : list (expr * rec_info) -> Type)
+    HValue HArg HUpVar HCall HConstr HElim HClose Hnil Hcons Hpair Hnil_p Hcons_p
+    : (forall e, P e) * (forall es, Pl es) * (forall p, Pp p) * (forall ps, Plp ps) :=
+    let go := expr_rect_mut P Pl Pp Plp
+        HValue HArg HUpVar HCall HConstr HElim HClose Hnil Hcons Hpair Hnil_p Hcons_p
+    in
+    let fix go_list es :=
+        match es as es_ return Pl es_ with
+        | [] => Hnil
+        | e :: es => Hcons e es (go e) (go_list es)
+        end in
+    let go_pair p :=
+        let '(e, r) := p in
+        Hpair e r (go e) in
+    let fix go_pair_list ps :=
+        match ps as ps_ return Plp ps_ with
+        | [] => Hnil_p
+        | p :: ps => Hcons_p p ps (go_pair p) (go_pair_list ps)
+        end in
+    (go, go_list, go_pair, go_pair_list).
+
 (* Useful wrapper for `expr_rect_mut with (Pl := Forall P)` *)
 Definition expr_ind' (P : expr -> Prop) (Pp : (expr * rec_info) -> Prop)
     (HValue :   forall v, P (Value v))
