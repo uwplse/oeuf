@@ -28,23 +28,6 @@ Add Printing Constructor A.frame.
 Add Printing Constructor B.function.
 
 
-Fixpoint count_up' acc n :=
-    match n with
-    | 0 => acc
-    | S n' => count_up' (n' :: acc) n'
-    end.
-
-Definition count_up n := count_up' [] n.
-
-Fixpoint numbered' {A} n (xs : list A) :=
-    match xs with
-    | [] => []
-    | x :: xs => (n, x) :: numbered' (S n) xs
-    end.
-
-Definition numbered {A} (xs : list A) := numbered' 0 xs.
-
-
 (* types of identifiers we might need for the compiled program *)
 
 Notation id_key := MatchValues.id_key.
@@ -543,101 +526,6 @@ induction xs; intros Hnth.
     eapply Hnth; simpl; eauto.
 Qed.
 
-Lemma count_up'_nth_error : forall acc n i,
-    (forall i', i' < length acc -> nth_error acc i' = Some (n + i')) ->
-    i < n + length acc ->
-    nth_error (count_up' acc n) i = Some i.
-first_induction n; intros0 Hacc Hlt; simpl in *.
-- eauto.
-- eapply IHn; cycle 1.
-    { simpl. omega. }
-  intros.  destruct i'.
-  + simpl. f_equal. omega.
-  + simpl. replace (n + S i') with (S (n + i')) by omega.
-    eapply Hacc. simpl in *. omega.
-Qed.
-
-Lemma count_up_nth_error : forall n i,
-    i < n ->
-    nth_error (count_up n) i = Some i.
-intros. eapply count_up'_nth_error.
-- intros. simpl in *. omega.
-- simpl. omega.
-Qed.
-
-Lemma numbered'_length : forall A (xs : list A) base,
-    length (numbered' base xs) = length xs.
-induction xs; intros; simpl in *; eauto.
-Qed.
-
-Lemma numbered_length : forall A (xs : list A),
-    length (numbered xs) = length xs.
-intros. eapply numbered'_length; eauto.
-Qed.
-
-Lemma count_up'_length : forall acc n,
-    length (count_up' acc n) = n + length acc.
-first_induction n; intros; simpl in *; eauto.
-rewrite IHn. simpl. omega.
-Qed.
-
-Lemma count_up_length : forall n,
-    length (count_up n) = n.
-intros. unfold count_up. rewrite count_up'_length. simpl. omega.
-Qed.
-
-Lemma numbered'_nth_error : forall A (xs : list A) base n x,
-    nth_error xs n = Some x ->
-    nth_error (numbered' base xs) n = Some (base + n, x).
-induction xs; intros0 Hnth; simpl in *.
-- destruct n; discriminate.
-- destruct n; simpl in *.
-  + inject_some. replace (base + 0) with base by omega. reflexivity.
-  + replace (base + S n) with (S base + n) by omega. eapply IHxs. eauto.
-Qed.
-
-Lemma numbered_nth_error : forall A (xs : list A) n x,
-    nth_error xs n = Some x ->
-    nth_error (numbered xs) n = Some (n, x).
-intros. eapply numbered'_nth_error. eauto.
-Qed.
-
-Lemma numbered_count_up : forall A (xs : list A),
-    Forall2 (fun a b => fst a = b) (numbered xs) (count_up (length xs)).
-intros.
-eapply nth_error_Forall2.
-- rewrite numbered_length, count_up_length. reflexivity.
-- intros.
-  assert (i < length xs). { 
-    rewrite <- numbered_length. rewrite <- nth_error_Some. congruence.
-  }
-  assert (exists x', nth_error xs i = Some x'). {
-    rewrite <- nth_error_Some in *. destruct (nth_error xs i); try congruence. eauto.
-  }
-  break_exists.
-  erewrite numbered_nth_error in *; eauto. inject_some.
-  rewrite count_up_nth_error in *; eauto. inject_some.
-  reflexivity.
-Qed.
-
-Lemma numbered_count_up_eq : forall A (xs : list A),
-    map fst (numbered xs) = count_up (length xs).
-intros.
-rewrite <- map_id with (xs := count_up _).
-eapply Forall2_map_eq. eauto using numbered_count_up.
-Qed.
-
-Lemma count_up_norepet : forall n,
-    list_norepet (count_up n).
-intro.
-eapply nth_error_unique_list_norepet. intros.
-assert (n1 < length (count_up n)) by (rewrite <- nth_error_Some; congruence).
-assert (n2 < length (count_up n)) by (rewrite <- nth_error_Some; congruence).
-rewrite count_up_length in *.
-rewrite count_up_nth_error in * by auto.
-congruence.
-Qed.
-
 Lemma list_disjoint_append_r : forall A (xs ys1 ys2 : list A),
     list_disjoint xs ys1 ->
     list_disjoint xs ys2 ->
@@ -676,51 +564,20 @@ f_equal.
 rewrite Hiff; try eassumption. reflexivity.
 Qed.
 
+Lemma count_up_norepet : forall n,
+    list_norepet (count_up n).
+intro.
+eapply nth_error_unique_list_norepet. intros.
+assert (n1 < length (count_up n)) by (rewrite <- nth_error_Some; congruence).
+assert (n2 < length (count_up n)) by (rewrite <- nth_error_Some; congruence).
+rewrite count_up_length in *.
+rewrite count_up_nth_error in * by auto.
+congruence.
+Qed.
+
 Lemma numbered_fst_norepet : forall A (xs : list A),
     list_norepet (map fst (numbered xs)).
 intros. rewrite numbered_count_up_eq. eapply count_up_norepet.
-Qed.
-
-Lemma numbered'_nth_error_fst : forall A (xs : list A) n i x,
-    nth_error (numbered' n xs) i = Some x ->
-    fst x = n + i.
-induction xs; intros0 Hnth; simpl in *.
-- destruct i; discriminate Hnth.
-- destruct i; simpl in *.
-  + inject_some. simpl. omega.
-  + replace (n + S i) with (S n + i) by omega.
-    eauto.
-Qed.
-
-Lemma numbered_nth_error_fst : forall A (xs : list A) i x,
-    nth_error (numbered xs) i = Some x ->
-    fst x = i.
-intros. change i with (0 + i).  eapply numbered'_nth_error_fst; eauto.
-Qed.
-
-Lemma numbered'_nth_error_snd : forall A (xs : list A) n i x,
-    nth_error (numbered' n xs) i = Some x ->
-    nth_error xs i = Some (snd x).
-induction xs; intros0 Hnth; simpl in *.
-- destruct i; discriminate Hnth.
-- destruct i; simpl in *.
-  + inject_some. simpl. reflexivity.
-  + replace (n + S i) with (S n + i) by omega.
-    eauto.
-Qed.
-
-Lemma numbered_nth_error_snd : forall A (xs : list A) i x,
-    nth_error (numbered xs) i = Some x ->
-    nth_error xs i = Some (snd x).
-intros. change i with (0 + i).  eapply numbered'_nth_error_snd; eauto.
-Qed.
-
-Lemma numbered_nth_error_fst_snd : forall A (xs : list A) i x,
-    nth_error (numbered xs) i = Some x ->
-    nth_error xs (fst x) = Some (snd x).
-intros.
-erewrite numbered_nth_error_fst;
-  eauto using numbered_nth_error_snd.
 Qed.
 
 

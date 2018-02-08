@@ -30,63 +30,6 @@ Fixpoint locals_list' n acc :=
 Definition locals_list n := locals_list' n [].
 
 
-(* Increment all variable references by `n`. *)
-
-Definition shift n :=
-    let fix go e :=
-        let fix go_list es :=
-            match es with
-            | [] => []
-            | e :: es => go e :: go_list es
-            end in
-        let go_pair p :=
-            let '(e, r) := p in
-            (go e, r) in
-        let fix go_list_pair ps :=
-            match ps with
-            | [] => []
-            | p :: ps => go_pair p :: go_list_pair ps
-            end in
-
-        match e with
-        | A.Value v => A.Value v
-        | A.Arg => A.UpVar n
-        | A.UpVar n' => A.UpVar (n + n')
-        | A.Call f a => A.Call (go f) (go a)
-        | A.MkConstr tag args => A.MkConstr tag (go_list args)
-        | A.Elim cases target => A.Elim (go_list_pair cases) (go target)
-        | A.MkClose fname free => A.MkClose fname (go_list free)
-        end
-    in go.
-
-Definition shift_list n :=
-    let go := shift n in
-    let fix go_list es :=
-        match es with
-        | [] => []
-        | e :: es => go e :: go_list es
-        end in go_list.
-
-Definition shift_pair n :=
-    let go := shift n in
-    let fix go_pair (p : A.expr * A.rec_info) :=
-        let '(e, r) := p in
-        (go e, r) in go_pair.
-
-Definition shift_list_pair n :=
-    let go_pair := shift_pair n in
-    let fix go_list_pair es :=
-        match es with
-        | [] => []
-        | e :: es => go_pair e :: go_list_pair es
-        end in go_list_pair.
-
-Ltac refold_shift n :=
-    fold (shift_list n) in *;
-    fold (shift_pair n) in *;
-    fold (shift_list_pair n) in *.
-
-
 
 Section compile.
 
@@ -129,7 +72,7 @@ Definition compile base nfree : nat -> A.expr -> state _ B.expr :=
         | A.MkConstr tag args => B.MkConstr tag <$> go_list depth args
         | A.Elim cases target =>
                 go_list_pair (S depth) cases >>= fun cases' =>
-                record (B.Elim cases' B.Arg) (S depth + nfree) >>= fun n =>
+                record (B.Elim cases' B.Arg) (depth + nfree) >>= fun n =>
                 go depth target >>= fun target' =>
                 let func := B.MkClose (base + n) (locals_list (depth + nfree)) in
                 pure (B.Call func target')
@@ -174,7 +117,7 @@ Lemma unfold_compile base nfree depth e :
     | A.MkConstr tag args => B.MkConstr tag <$> compile_list base nfree depth args
     | A.Elim cases target =>
             compile_list_pair base nfree (S depth) cases >>= fun cases' =>
-            record (B.Elim cases' B.Arg) (S depth + nfree) >>= fun n =>
+            record (B.Elim cases' B.Arg) (depth + nfree) >>= fun n =>
             compile base nfree depth target >>= fun target' =>
             let func := B.MkClose (base + n) (locals_list (depth + nfree)) in
             pure (B.Call func target')
