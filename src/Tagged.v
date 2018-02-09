@@ -578,6 +578,20 @@ invc STEP; invc II.
 
 Qed.
 
+Lemma public_value_nfree_ok : forall Ameta v,
+    public_value Ameta v ->
+    nfree_ok_value (map m_nfree Ameta) v.
+induction v using value_ind'; intros0 Hpub; invc Hpub.
+- simpl. refold_nfree_ok_value (map m_nfree Ameta).
+  eapply nfree_ok_value_list_Forall'.
+  list_magic_on (args, tt).
+- simpl. refold_nfree_ok_value (map m_nfree Ameta).
+  split.
+  + erewrite map_nth_error; [ | eauto ]. congruence.
+  + eapply nfree_ok_value_list_Forall'.
+    list_magic_on (free, tt).
+Qed.
+
 
 
 
@@ -829,6 +843,17 @@ all: try solve [eassumption | left; constructor].
     solve [left; eauto | right; inversion 1; eauto].
 - destruct IHe, IHe0; simpl; refold_elim_cases_no_arg;
     solve [left; eauto | right; inversion 1; eauto].
+Defined.
+
+Definition check_elim_cases_no_arg_list : forall exprs,
+    { Forall (elim_cases_no_arg) exprs } +
+    { ~ Forall (elim_cases_no_arg) exprs }.
+induction exprs.
+{ left. constructor. }
+
+rename a into e.
+destruct (check_elim_cases_no_arg e), IHexprs.
+all: try solve [left; eauto | right; inversion 1; eauto].
 Defined.
 
 Lemma elim_cases_no_arg_list_Forall : forall es,

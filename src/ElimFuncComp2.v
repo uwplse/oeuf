@@ -110,6 +110,15 @@ Definition compile_cu (cu : list A.expr * list metadata) :
     | left Heq => Some Heq
     | right _ => None
     end >>= fun Hlen =>
+    let nfrees := map m_nfree metas in
+    match A.check_nfree_ok_list nfrees exprs with
+    | left Hnfree => Some Hnfree
+    | right _ => None
+    end >>= fun Hnfree =>
+    match A.check_elim_cases_no_arg_list exprs with
+    | left Harg => Some Harg
+    | right _ => None
+    end >>= fun Harg =>
     compile_cu' (map m_nfree metas) exprs >>= fun exprs' =>
     Some (exprs', metas).
 
@@ -415,6 +424,18 @@ induction xs; intros0 Hfa Hnth; invc Hfa; destruct i; try discriminate.
 - simpl in *. eauto.
 Qed.
 
+Lemma Forall3_nth_error_ex2 : forall A B C (P : A -> B -> C -> Prop) xs ys zs i y,
+    Forall3 P xs ys zs ->
+    nth_error ys i = Some y ->
+    exists x z,
+        nth_error xs i = Some x /\
+        nth_error zs i = Some z /\
+        P x y z.
+first_induction ys; intros0 Hfa Hnth; invc Hfa; destruct i; try discriminate.
+- simpl in *. inject_some. eauto.
+- simpl in *. eauto.
+Qed.
+
 Lemma free_list'_length : forall n acc,
     length (free_list' n acc) = n + length acc.
 induction n; intros; simpl.
@@ -574,7 +595,6 @@ Theorem I_sim : forall AE BE NFREES a a' b,
     Forall3 (fun ae be nfree => forall lfree,
         length lfree = nfree ->
         I_expr BE lfree ae be) AE BE NFREES ->
-    Forall A.elim_cases_no_arg AE ->
     A.elim_cases_no_arg_state a ->
     A.nfree_ok_state NFREES a ->
     I AE BE a b ->
@@ -583,7 +603,7 @@ Theorem I_sim : forall AE BE NFREES a a' b,
         B.splus BE b b' /\
         I AE BE a' b'.
 destruct a as [ae al ak | v];
-intros0 Henv Henv_na Hna Hnfree II Astep; inv Astep.
+intros0 Henv Hna Hnfree II Astep; inv Astep.
 all: invc II.
 all: try on (I_expr _ _ _ be), invc.
 
@@ -896,6 +916,122 @@ all: try on (I_expr _ _ _ be), invc.
 Qed.
 
   
+
+Inductive I' AE BE NFREES : A.state -> B.state -> Prop :=
+| I'_intro : forall a b,
+        I AE BE a b ->
+        A.elim_cases_no_arg_state a ->
+        A.nfree_ok_state NFREES a ->
+        I' AE BE NFREES a b.
+
+Definition env_ok AE BE NFREES :=
+    Forall3 (fun ae be nfree => forall lfree,
+        length lfree = nfree ->
+        I_expr BE lfree ae be) AE BE NFREES /\
+    Forall A.elim_cases_no_arg AE /\
+    Forall (A.nfree_ok NFREES) AE.
+
+Theorem I'_sim : forall AE BE NFREES a a' b,
+    env_ok AE BE NFREES ->
+    I' AE BE NFREES a b ->
+    A.sstep AE a a' ->
+    exists b',
+        B.splus BE b b' /\
+        I' AE BE NFREES a' b'.
+intros0 Henv II Astep.
+unfold env_ok in *. break_and.
+
+intros. on >I', invc.
+fwd eapply I_sim; eauto. break_exists; break_and.
+eexists; split; eauto. constructor; eauto.
+- i_lem A.step_elim_cases_no_arg.
+- i_lem A.step_nfree_ok.
+Qed.
+
     
 
 
+
+Require Semantics.
+
+Lemma compile_cu_env_ok : forall A Ameta B Bmeta,
+    compile_cu (A, Ameta) = Some (B, Bmeta) ->
+    env_ok A B (map m_nfree Ameta).
+intros0 Hcomp.
+fwd i_lem compile_cu_I_expr.
+unfold compile_cu in Hcomp. break_bind_option.
+do 3 break_match; try discriminate. inject_some.
+unfold env_ok. split; [|split]; eauto.
+Qed.
+
+Lemma compile_cu_meta_eq : forall A Ameta B Bmeta,
+    compile_cu (A, Ameta) = Some (B, Bmeta) ->
+    Ameta = Bmeta.
+intros0 Hcomp. unfold compile_cu in Hcomp. break_bind_option. inject_some.
+reflexivity.
+Qed.
+
+
+Section Preservation.
+
+  Variable prog : A.prog_type.
+  Variable tprog : B.prog_type.
+
+  Hypothesis TRANSF : compile_cu prog = Some tprog.
+
+  Theorem fsim :
+    Semantics.forward_simulation (A.semantics prog) (B.semantics tprog).
+  Proof.
+    destruct prog as [A Ameta], tprog as [B Bmeta].
+    set (NFREES := map m_nfree Ameta).
+    fwd i_lem compile_cu_env_ok.
+    fwd i_lem compile_cu_meta_eq. subst Bmeta.
+
+    eapply Semantics.forward_simulation_plus with
+        (match_states := I' A B NFREES)
+        (match_values := @eq value).
+
+    - simpl. intros. on >B.is_callstate, invc. compute [fst snd] in *.
+      unfold env_ok in *. break_and.
+    (*
+      fwd eapply Forall2_nth_error_ex' with (xs := A) (ys := B) as HH; eauto.
+        destruct HH as (abody & ? & ?).
+      destruct (expr_value_I_expr A B ae ?? ** ) as (? & ? & ?).
+      fwd eapply expr_value_I_expr_list with (AE := A) (BE := B) as HH; eauto.
+        destruct HH as (? & ? & ?).
+        *)
+      fwd i_lem Forall3_nth_error_ex2 as HH. destruct HH as (abody & nfree & ? & ? & ?).
+      on (public_value _ (Close _ _)), inv.
+      erewrite map_nth_error in * by eauto. inject_some.
+
+      eexists. split. 1: econstructor; eauto.
+      + i_ctor. i_ctor.
+      + i_ctor. 2: i_ctor. i_lem Forall_nth_error.
+      + i_ctor.
+        -- i_lem Forall_nth_error.
+        -- i_ctor. 1: i_lem A.public_value_nfree_ok.
+           list_magic_on (free, tt). i_lem A.public_value_nfree_ok.
+        -- i_ctor.
+      + i_ctor.
+
+    - intros0 II Afinal. invc Afinal. invc II. on >I, invc.
+      eexists; split; i_ctor.
+
+    - intros0 Astep. intros0 II.
+      eapply splus_semantics_sim, I'_sim; eauto.
+    Defined.
+
+    Lemma match_val_eq :
+      Semantics.fsim_match_val _ _ fsim = eq.
+    Proof.
+      unfold fsim. simpl.
+      unfold Semantics.fsim_match_val.
+      break_match. repeat (break_match_hyp; try congruence).
+      try unfold forward_simulation_step in *.
+      try unfold forward_simulation_plus in *.
+      try unfold forward_simulation_star in *.
+      try unfold forward_simulation_star_wf in *.
+      inv Heqf. admit. (*reflexivity.*)
+    Admitted. (* ??? *)
+
+End Preservation.
