@@ -1184,20 +1184,6 @@ fwd i_lem Forall_nth_error.
 auto.
 Qed.
 
-Lemma public_value_nfree_ok : forall Ameta v,
-    public_value Ameta v ->
-    A.nfree_ok_value (map m_nfree Ameta) v.
-induction v using value_ind'; intros0 Hpub; invc Hpub.
-- simpl. A.refold_nfree_ok_value (map m_nfree Ameta).
-  eapply A.nfree_ok_value_list_Forall'.
-  list_magic_on (args, tt).
-- simpl. A.refold_nfree_ok_value (map m_nfree Ameta).
-  split.
-  + erewrite map_nth_error; [ | eauto ]. congruence.
-  + eapply A.nfree_ok_value_list_Forall'.
-    list_magic_on (free, tt).
-Qed.
-
 
 
 Require Import Semantics.
