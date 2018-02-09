@@ -11,6 +11,8 @@ Require Import Semantics.
 Require Import HigherValue.
 Require Import StepLib.
 
+Require Import Psatz.
+
 Require Tagged.
 Require ElimFunc2.
 
@@ -126,10 +128,10 @@ Ltac refold_simple_compile :=
     Elim cases arg       ~ Elim (MkClose fname (free_list ...)) cases arg
     Elim cases arg_v     ~ Elim (Value (Close fname locals)) cases arg_v
         (unroll:)              (unroll:)
-    Elim case arg2       ~ Call (MkClose fname (free_list ...)) arg2
+    Elim case arg2       ~ Call (Value (Close fname locals)) arg2
     Elim case arg2_v     ~ Call (Value (Close fname locals)) arg2_v
         (unroll:)              (call + unroll:)
-    Elim case arg2       ~ Call (MkClose fname (free_list ...)) arg2
+    Elim case arg2       ~ Call (Value (Close fname locals)) arg2
 
    We handle all of these cases in `I_expr` (instead of in `I`) because after
    unrolling, they may occur nested under many `Call`s.
@@ -179,7 +181,7 @@ Inductive I_expr (BE : B.env) (lfree : list value): A.expr -> B.expr -> Prop :=
         nth_error BE bfname = Some (B.Elim (loop_expr bfname lfree) bcases B.Arg) ->
         I_expr BE lfree
             (A.Elim acases atarget)
-            (B.Call (loop_expr bfname lfree) btarget)
+            (B.Call (loop_value_expr bfname lfree) btarget)
 
 | IElim3 : forall target acases bfname bcases,
         Forall2 (fun ap bp => I_expr BE lfree (fst ap) (fst bp) /\
@@ -196,6 +198,13 @@ Inductive I (AE : A.env) (BE : B.env) : A.state -> B.state -> Prop :=
         (forall v,
             I AE BE (ak v) (bk v)) ->
         I AE BE (A.Run ae (larg :: lfree) ak) (B.Run be (larg :: lfree) bk)
+
+| ISplitArg : forall aarg barg lfree ae ak be bk,
+        I_expr BE lfree ae be ->
+        (forall v,
+            I AE BE (ak v) (bk v)) ->
+        A.no_arg ae ->
+        I AE BE (A.Run ae (aarg :: lfree) ak) (B.Run be (barg :: lfree) bk)
 
 | IStop : forall v,
         I AE BE (A.Stop v) (B.Stop v).
@@ -341,6 +350,59 @@ Qed.
 
 
 
+Ltac B_start HS :=
+    match goal with
+    | [ |- context [ ?pred ?E ?s _ ] ] =>
+            lazymatch pred with
+            | B.sstep => idtac
+            | B.sstar => idtac
+            | B.splus => idtac
+            | _ => fail "unrecognized predicate:" pred
+            end;
+            let S_ := fresh "S" in
+            let S0 := fresh "S" in
+            set (S0 := s);
+            change s with S0;
+            assert (HS : B.sstar E S0 S0) by (eapply B.SStarNil)
+    end.
+
+Ltac B_step HS :=
+    let S_ := fresh "S" in
+    let S2 := fresh "S" in
+    let HS' := fresh HS "'" in
+    let go E s0 s1 Brel solver :=
+        rename HS into HS';
+        evar (S2 : B.state);
+        assert (HS : Brel E s0 S2);
+        [ solver; unfold S2
+        | clear HS' ] in
+    match type of HS with
+    | B.sstar ?E ?s0 ?s1 => go E s0 s1 B.splus
+            ltac:(eapply sstar_then_splus with (1 := HS');
+                  eapply B.SPlusOne)
+    | B.splus ?E ?s0 ?s1 => go E s0 s1 B.splus
+            ltac:(eapply splus_snoc with (1 := HS'))
+    end.
+
+Ltac B_star HS :=
+    let S_ := fresh "S" in
+    let S2 := fresh "S" in
+    let HS' := fresh HS "'" in
+    let go E s0 s1 Brel solver :=
+        rename HS into HS';
+        evar (S2 : B.state);
+        assert (HS : Brel E s0 S2);
+        [ solver; unfold S2
+        | clear HS' ] in
+    match type of HS with
+    | B.sstar ?E ?s0 ?s1 => go E s0 s1 B.sstar
+            ltac:(eapply sstar_then_sstar with (1 := HS'))
+    | B.splus ?E ?s0 ?s1 => go E s0 s1 B.splus
+            ltac:(eapply splus_then_sstar with (1 := HS'))
+    end.
+
+
+
 Lemma Forall3_nth_error_ex1 : forall A B C (P : A -> B -> C -> Prop) xs ys zs i x,
     Forall3 P xs ys zs ->
     nth_error xs i = Some x ->
@@ -353,94 +415,485 @@ induction xs; intros0 Hfa Hnth; invc Hfa; destruct i; try discriminate.
 - simpl in *. eauto.
 Qed.
 
+Lemma free_list'_length : forall n acc,
+    length (free_list' n acc) = n + length acc.
+induction n; intros; simpl.
+- reflexivity.
+- rewrite IHn. simpl. omega.
+Qed.
+
+Lemma free_list_length : forall n,
+    length (free_list n) = n.
+intros. unfold free_list. rewrite free_list'_length. simpl. omega.
+Qed.
+
+Lemma free_list'_prefix : forall n acc,
+    exists prefix,
+        length prefix = n /\
+        free_list' n acc = prefix ++ acc.
+induction n; intros; simpl.
+- exists []. split; eauto.
+- specialize (IHn (B.UpVar n :: acc)). break_exists. break_and.
+  exists (x ++ [B.UpVar n]). split.
+  + rewrite app_length. simpl. omega.
+  + rewrite <- app_assoc. simpl. auto.
+Qed.
+
+Lemma free_list'_nth_error : forall n acc i,
+    i < n ->
+    nth_error (free_list' n acc) i = Some (B.UpVar i).
+induction n; intros0 Hlt; simpl in *.
+- omega.
+- destruct (eq_nat_dec i n).
+  + subst.
+    fwd eapply free_list'_prefix with (n := n) (acc := B.UpVar n :: acc).
+      break_exists. break_and.  on _, fun H => rewrite H.
+    change (?a ++ ?b :: ?c) with (a ++ [b] ++ c).
+    rewrite app_assoc. 
+    rewrite nth_error_app1 by (rewrite app_length; simpl; omega).
+    rewrite nth_error_app2 by omega.
+    replace (n - length x) with 0 by omega.
+    reflexivity.
+  + rewrite IHn; eauto. omega.
+Qed.
+
+Lemma free_list_nth_error : forall n i,
+    i < n ->
+    nth_error (free_list n) i = Some (B.UpVar i).
+intros. unfold free_list. rewrite free_list'_nth_error; eauto.
+Qed.
+
+Lemma crunch_MkClose_free_list' : forall BE fname larg lfree k j i es,
+    j <= length lfree ->
+    i = length lfree - j ->
+    sliding i (map B.Value lfree) (free_list (length lfree)) es ->
+    B.sstar BE
+        (B.Run (B.MkClose fname es) (larg :: lfree) k)
+        (B.Run (B.MkClose fname (map B.Value lfree)) (larg :: lfree) k).
+induction j; intros0 Hj Hi Hsl.
+
+  { replace i with (length lfree) in Hsl by omega.
+    erewrite <- map_length in Hsl at 1.
+    fwd eapply sliding_all_eq; eauto.
+      { rewrite map_length, free_list_length. omega. }
+    subst. eapply B.SStarNil. }
+
+assert (length es = length lfree).
+  { erewrite <- map_length with (l := lfree).  eapply sliding_length; [ | eauto].
+    rewrite map_length, free_list_length. reflexivity. }
+assert (i < length lfree) by omega.
+assert (i < length es) by omega.
+
+destruct (nth_error es i) eqn:Hnth; cycle 1.
+  { contradict Hnth. rewrite nth_error_Some. auto. }
+destruct (nth_error lfree i) eqn:Hnth'; cycle 1.
+  { contradict Hnth'. rewrite nth_error_Some. auto. }
+
+fwd eapply nth_error_split' with (xs := es) as Hes; eauto.
+  rewrite Hes.
+
+assert (e = B.UpVar i).
+  { unfold sliding in Hsl. destruct Hsl.
+    replace i with (i + 0) in Hnth by omega. rewrite <- skipn_nth_error in Hnth.
+    on (skipn _ _ = _), fun H => rewrite H in Hnth. rewrite skipn_nth_error in Hnth.
+    replace (i + 0) with i in Hnth by omega. rewrite free_list_nth_error in Hnth by auto.
+    inject_some. congruence. }
+  subst e.
+
+B_start HS.
+
+B_step HS.
+  { eapply B.SCloseStep.
+    + unfold sliding in Hsl. break_and.
+      on (firstn _ _ = _), fun H => rewrite H.
+      eapply Forall_firstn. eapply Forall_map_intro.
+      eapply Forall_forall. intros. constructor.
+    + inversion 1.
+  }
+
+B_step HS.
+  { i_lem B.SUpVar. }
+
+B_star HS.
+  { eapply IHj.
+    - omega.
+    - reflexivity.
+    - replace (length lfree - j) with (S i) by omega.  eapply sliding_next; eauto.
+      eapply map_nth_error. auto.
+  }
+
+eapply splus_sstar.  exact HS.
+Qed.
+
+Lemma crunch_MkClose_free_list : forall BE fname larg lfree k,
+    B.sstar BE
+        (B.Run (B.MkClose fname (free_list (length lfree))) (larg :: lfree) k)
+        (B.Run (B.MkClose fname (map B.Value lfree)) (larg :: lfree) k).
+intros. eapply crunch_MkClose_free_list' with (i := 0) (j := length lfree).
+- eauto.
+- omega.
+- eapply sliding_zero.
+Qed.
+
+Lemma unroll_elim_length : forall case args rec mk_rec e',
+    A.unroll_elim case args rec mk_rec = Some e' ->
+    length args = length rec.
+first_induction args; destruct rec; intros0 Hunroll; try discriminate; simpl in *.
+- reflexivity.
+- f_equal. eauto.
+Qed.
+
+Lemma unroll_elim_ok : forall case args rec mk_rec,
+    length args = length rec ->
+    exists e', B.unroll_elim case args rec mk_rec = Some e'.
+first_induction args; destruct rec; intros0 Hlen; try discriminate; simpl in *.
+- eauto.
+- remember (if b then _ else _) as case'.
+  specialize (IHargs case' rec mk_rec ltac:(lia)). eauto.
+Qed.
+
+Lemma unroll_elim_sim : forall BE lfree,
+    forall acase bcase args rec amk_rec bmk_rec ae' be',
+    I_expr BE lfree acase bcase ->
+    (forall ae be,
+        I_expr BE lfree ae be ->
+        I_expr BE lfree (amk_rec ae) (bmk_rec be)) ->
+    A.unroll_elim acase args rec amk_rec = Some ae' ->
+    B.unroll_elim bcase args rec bmk_rec = Some be' ->
+    I_expr BE lfree ae' be'.
+first_induction args; intros0 Hcase Hmk_rec Aunroll Bunroll;
+destruct rec; try discriminate; simpl in *.
+  { inject_some. assumption. }
+
+rename a into arg.
+eapply IHargs with (3 := Aunroll) (4 := Bunroll); try eassumption.
+destruct b; eauto using ICall, IValue.
+Qed.
+
 Theorem I_sim : forall AE BE NFREES a a' b,
     Forall3 (fun ae be nfree => forall lfree,
         length lfree = nfree ->
         I_expr BE lfree ae be) AE BE NFREES ->
+    Forall A.elim_cases_no_arg AE ->
+    A.elim_cases_no_arg_state a ->
     A.nfree_ok_state NFREES a ->
     I AE BE a b ->
     A.sstep AE a a' ->
     exists b',
-        B.sstep BE b b' /\
+        B.splus BE b b' /\
         I AE BE a' b'.
 destruct a as [ae al ak | v];
-intros0 Henv Hnfree II Astep; inv Astep.
+intros0 Henv Henv_na Hna Hnfree II Astep; inv Astep.
 all: invc II.
 all: try on (I_expr _ _ _ be), invc.
 
-- (* SArg *)
-  eexists. split. i_lem B.SArg.
+(* SArg *)
+- eexists. split. eapply SPlusOne. i_lem B.SArg.
+  auto.
+- on >A.no_arg, invc.
+
+(* SUpVar *)
+- eexists. split. eapply SPlusOne. i_lem B.SUpVar.
+  auto.
+- eexists. split. eapply SPlusOne. i_lem B.SUpVar.
   auto.
 
-- (* SUpVar *)
-  eexists. split. i_lem B.SUpVar.
-  auto.
-
-- (* SCloseStep *)
-  on _, invc_using Forall2_3part_inv.
-  eexists. split. i_lem B.SCloseStep.
+(* SCloseStep *)
+- on _, invc_using Forall2_3part_inv.
+  eexists. split. eapply SPlusOne. i_lem B.SCloseStep.
   + list_magic_on (vs, (ys1, tt)).
   + i_ctor. i_ctor. i_ctor. i_lem Forall2_app. i_ctor. i_ctor.
 
-- (* SCloseDone *)
-  fwd i_lem I_expr_map_value. subst.
-  eexists. split. i_lem B.SCloseDone.
+- on _, invc_using Forall2_3part_inv.
+  eexists. split. eapply SPlusOne. i_lem B.SCloseStep.
+  + list_magic_on (vs, (ys1, tt)).
+  + simpl in *. A.refold_no_arg.
+    on _, eapply_lem A.no_arg_list_Forall. on _, invc_using Forall_3part_inv.
+    i_ctor. i_lem ISplitArg. i_ctor. i_lem Forall2_app. i_ctor. i_ctor.
+    A.refold_no_arg. eapply A.no_arg_list_Forall'. i_lem Forall_app. i_ctor.
+
+(* SCloseDone *)
+- fwd i_lem I_expr_map_value. subst.
+  eexists. split. eapply SPlusOne. i_lem B.SCloseDone.
+  auto.
+- fwd i_lem I_expr_map_value. subst.
+  eexists. split. eapply SPlusOne. i_lem B.SCloseDone.
   auto.
 
-- (* SConstrStep *)
-  on _, invc_using Forall2_3part_inv.
-  eexists. split. i_lem B.SConstrStep.
+(* SConstrStep *)
+- on _, invc_using Forall2_3part_inv.
+  eexists. split. eapply SPlusOne. i_lem B.SConstrStep.
   + list_magic_on (vs, (ys1, tt)).
   + i_ctor. i_ctor. i_ctor. i_lem Forall2_app. i_ctor. i_ctor.
 
-- (* SCloseDone *)
-  fwd i_lem I_expr_map_value. subst.
-  eexists. split. i_lem B.SConstrDone.
+- on _, invc_using Forall2_3part_inv.
+  eexists. split. eapply SPlusOne. i_lem B.SConstrStep.
+  + list_magic_on (vs, (ys1, tt)).
+  + simpl in *. A.refold_no_arg.
+    on _, eapply_lem A.no_arg_list_Forall. on _, invc_using Forall_3part_inv.
+    i_ctor. i_lem ISplitArg. i_ctor. i_lem Forall2_app. i_ctor. i_ctor.
+    A.refold_no_arg. eapply A.no_arg_list_Forall'. i_lem Forall_app. i_ctor.
+
+(* SConstrDone *)
+- fwd i_lem I_expr_map_value. subst.
+  eexists. split. eapply SPlusOne. i_lem B.SConstrDone.
+  auto.
+- fwd i_lem I_expr_map_value. subst.
+  eexists. split. eapply SPlusOne. i_lem B.SConstrDone.
   auto.
 
-- (* SCallL *)
-  eexists. split. i_lem B.SCallL.
+(* SCallL *)
+- eexists. split. eapply SPlusOne. i_lem B.SCallL.
+  i_ctor. i_ctor. i_ctor. i_ctor.
+- simpl in *. break_and.
+  eexists. split. eapply SPlusOne. i_lem B.SCallL.
   i_ctor. i_ctor. i_ctor. i_ctor.
 
-- (* SCallR *)
-  eexists. split. i_lem B.SCallR.
+(* SCallR *)
+- eexists. split. eapply SPlusOne. i_lem B.SCallR.
+  i_ctor. i_ctor. i_ctor. i_ctor.
+- simpl in *. break_and.
+  eexists. split. eapply SPlusOne. i_lem B.SCallR.
   i_ctor. i_ctor. i_ctor. i_ctor.
 
-- (* SMakeCall *)
-  on (I_expr _ _ _ bf), invc.
+(* SMakeCall *)
+- on (I_expr _ _ _ bf), invc.
   on (I_expr _ _ _ ba), invc.
   fwd eapply Forall3_nth_error_ex1 with (ys := BE) as HH; eauto.
     destruct HH as (bbody & nfree & ? & ? & ?).
   invc Hnfree. simpl in *. A.refold_nfree_ok_value NFREES. break_and.
 
-  eexists. split. i_lem B.SMakeCall.
+  eexists. split. eapply SPlusOne. i_lem B.SMakeCall.
+  i_ctor. on _, fun H => eapply H. congruence.
+- on (I_expr _ _ _ bf), invc.
+  on (I_expr _ _ _ ba), invc.
+  fwd eapply Forall3_nth_error_ex1 with (ys := BE) as HH; eauto.
+    destruct HH as (bbody & nfree & ? & ? & ?).
+  invc Hnfree. simpl in *. A.refold_nfree_ok_value NFREES. break_and.
+
+  eexists. split. eapply SPlusOne. i_lem B.SMakeCall.
   i_ctor. on _, fun H => eapply H. congruence.
 
-- (* SElimStep (IElim0) *)
-  admit.
 
-- (* SElimStep (IElim1) *)
-  on (~ A.is_value (A.Value _)), contradict. i_ctor.
+(* SElimStep - IRun *)
+- B_start HS.
+  B_step HS.  { unfold loop_expr in S0. i_lem B.SElimStepLoop. inversion 1. }
+  B_star HS.  { i_lem crunch_MkClose_free_list. }
+  B_step HS.  { i_lem B.SCloseDone. }
+  B_step HS.  { i_lem B.SElimStep. i_ctor. }
+  eexists. split. exact HS.
 
-- (* SElimStep (IElim2) *)
-  admit.
+  i_ctor. i_ctor. i_lem IElim1.
 
-- (* SElimStep (IElim3) *)
-  on (~ A.is_value (A.Value _)), contradict. i_ctor.
+- on (~ A.is_value (A.Value _)), contradict. i_ctor.
 
-- (* SEliminate (IElim0) *)
-  admit.
+- B_start HS.
+  B_step HS.  { i_lem B.SCallR. i_ctor. }
+  eexists. split. exact HS.
 
-- (* SEliminate (IElim1) *)
-  admit.
+  i_ctor. i_ctor. i_lem IElim3.
 
-- (* SEliminate (IElim2) *)
-  admit.
+- on (~ A.is_value (A.Value _)), contradict. i_ctor.
 
-- (* SEliminate (IElim3) *)
-  admit.
+(* SElimStep - ISplitArg *)
+- simpl in *. A.refold_no_arg. break_and.
+  B_start HS.
+  B_step HS.  { unfold loop_expr in S0. i_lem B.SElimStepLoop. inversion 1. }
+  B_star HS.  { i_lem crunch_MkClose_free_list. }
+  B_step HS.  { i_lem B.SCloseDone. }
+  B_step HS.  { i_lem B.SElimStep. i_ctor. }
+  eexists. split. exact HS.
 
-Admitted.
+  i_ctor. i_ctor. i_lem IElim1.
+
+- on (~ A.is_value (A.Value _)), contradict. i_ctor.
+
+- simpl in *. A.refold_no_arg. break_and.
+  B_start HS.
+  B_step HS.  { i_lem B.SCallR. i_ctor. }
+  eexists. split. exact HS.
+
+  i_ctor. i_ctor. i_lem IElim3.
+
+- on (~ A.is_value (A.Value _)), contradict. i_ctor.
+
+
+(* SEliminate - IRun *)
+- on (I_expr _ _ _ btarget), invc.
+  fwd eapply length_nth_error_Some with (xs := cases) (ys := bcases) as HH;
+    eauto using Forall2_length. destruct HH as [[bcase brec] Hbcase].
+  fwd eapply Forall2_nth_error with (xs := cases) (ys := bcases); eauto.
+    cbv beta in *. break_and. simpl in *. subst brec.
+  fwd i_lem unroll_elim_length.
+  fwd i_lem unroll_elim_ok as HH. destruct HH as [be' Hbe'].
+
+  B_start HS.
+  B_step HS.  { unfold loop_expr in S0. i_lem B.SElimStepLoop. inversion 1. }
+  B_star HS.  { i_lem crunch_MkClose_free_list. }
+  B_step HS.  { i_lem B.SCloseDone. }
+  B_step HS.  { i_lem B.SEliminate. i_ctor. }
+  eexists. split. exact HS.
+
+  i_ctor.  i_lem unroll_elim_sim. cbv beta. i_lem IElim2.
+
+- fwd eapply length_nth_error_Some with (xs := cases) (ys := bcases) as HH;
+    eauto using Forall2_length. destruct HH as [[bcase brec] Hbcase].
+  fwd eapply Forall2_nth_error with (xs := cases) (ys := bcases); eauto.
+    cbv beta in *. break_and. simpl in *. subst brec.
+  fwd i_lem unroll_elim_length.
+  fwd i_lem unroll_elim_ok as HH. destruct HH as [be' Hbe'].
+
+  B_start HS.
+  B_step HS.  { i_lem B.SEliminate. i_ctor. }
+  eexists. split. exact HS.
+
+  i_ctor.  i_lem unroll_elim_sim. cbv beta. i_lem IElim2.
+
+- on (I_expr _ _ _ btarget), invc.
+  fwd eapply length_nth_error_Some with (xs := cases) (ys := bcases) as HH;
+    eauto using Forall2_length. destruct HH as [[bcase brec] Hbcase].
+  fwd eapply Forall2_nth_error with (xs := cases) (ys := bcases); eauto.
+    cbv beta in *. break_and. simpl in *. subst brec.
+  fwd i_lem unroll_elim_length.
+  fwd i_lem unroll_elim_ok as HH. destruct HH as [be' Hbe'].
+
+  B_start HS.
+  B_step HS.  { i_lem B.SMakeCall. }
+  B_step HS.  { i_lem B.SElimStepLoop. inversion 1. }
+  B_star HS.  { i_lem crunch_MkClose_free_list. }
+  B_step HS.  { i_lem B.SCloseDone. }
+  B_step HS.  { i_lem B.SElimStep. i_ctor. inversion 1. }
+  B_step HS.  { i_lem B.SArg. }
+  B_step HS.  { i_lem B.SEliminate. i_ctor. }
+  eexists. split. exact HS.
+
+  i_ctor.  i_lem unroll_elim_sim. cbv beta. i_lem IElim2.
+
+  on >A.elim_cases_no_arg_state, invc.
+  simpl in *. A.refold_elim_cases_no_arg. break_and.
+  i_lem A.unroll_elim_no_arg.
+  + on _, eapply_lem A.no_arg_list_pair_Forall.
+    fwd eapply Forall_nth_error with (P := A.no_arg_pair); eauto.
+  + i_ctor.
+
+- fwd eapply length_nth_error_Some with (xs := cases) (ys := bcases) as HH;
+    eauto using Forall2_length. destruct HH as [[bcase brec] Hbcase].
+  fwd eapply Forall2_nth_error with (xs := cases) (ys := bcases); eauto.
+    cbv beta in *. break_and. simpl in *. subst brec.
+  fwd i_lem unroll_elim_length.
+  fwd i_lem unroll_elim_ok as HH. destruct HH as [be' Hbe'].
+
+  B_start HS.
+  B_step HS.  { i_lem B.SMakeCall. }
+  B_step HS.  { i_lem B.SElimStepLoop. inversion 1. }
+  B_star HS.  { i_lem crunch_MkClose_free_list. }
+  B_step HS.  { i_lem B.SCloseDone. }
+  B_step HS.  { i_lem B.SElimStep. i_ctor. inversion 1. }
+  B_step HS.  { i_lem B.SArg. }
+  B_step HS.  { i_lem B.SEliminate. i_ctor. }
+  eexists. split. exact HS.
+
+  i_ctor.  i_lem unroll_elim_sim. cbv beta. i_lem IElim2.
+
+  on >A.elim_cases_no_arg_state, invc.
+  simpl in *. A.refold_elim_cases_no_arg. break_and.
+  i_lem A.unroll_elim_no_arg.
+  + on _, eapply_lem A.no_arg_list_pair_Forall.
+    fwd eapply Forall_nth_error with (P := A.no_arg_pair); eauto.
+  + i_ctor.
+
+
+(* SEliminate - ISplitArg *)
+- simpl in *. A.refold_no_arg. break_and.
+  on (I_expr _ _ _ btarget), invc.
+  fwd eapply length_nth_error_Some with (xs := cases) (ys := bcases) as HH;
+    eauto using Forall2_length. destruct HH as [[bcase brec] Hbcase].
+  fwd eapply Forall2_nth_error with (xs := cases) (ys := bcases); eauto.
+    cbv beta in *. break_and. simpl in *. subst brec.
+  fwd i_lem unroll_elim_length.
+  fwd i_lem unroll_elim_ok as HH. destruct HH as [be' Hbe'].
+
+  B_start HS.
+  B_step HS.  { unfold loop_expr in S0. i_lem B.SElimStepLoop. inversion 1. }
+  B_star HS.  { i_lem crunch_MkClose_free_list. }
+  B_step HS.  { i_lem B.SCloseDone. }
+  B_step HS.  { i_lem B.SEliminate. i_ctor. }
+  eexists. split. exact HS.
+
+  i_ctor.  i_lem unroll_elim_sim. cbv beta. i_lem IElim2.
+  i_lem A.unroll_elim_no_arg.
+  + on _, eapply_lem A.no_arg_list_pair_Forall.
+    fwd eapply Forall_nth_error with (P := A.no_arg_pair); eauto.
+  + i_ctor.
+
+- simpl in *. A.refold_no_arg. break_and.
+  fwd eapply length_nth_error_Some with (xs := cases) (ys := bcases) as HH;
+    eauto using Forall2_length. destruct HH as [[bcase brec] Hbcase].
+  fwd eapply Forall2_nth_error with (xs := cases) (ys := bcases); eauto.
+    cbv beta in *. break_and. simpl in *. subst brec.
+  fwd i_lem unroll_elim_length.
+  fwd i_lem unroll_elim_ok as HH. destruct HH as [be' Hbe'].
+
+  B_start HS.
+  B_step HS.  { i_lem B.SEliminate. i_ctor. }
+  eexists. split. exact HS.
+
+  i_ctor.  i_lem unroll_elim_sim. cbv beta. i_lem IElim2.
+  i_lem A.unroll_elim_no_arg.
+  + on _, eapply_lem A.no_arg_list_pair_Forall.
+    fwd eapply Forall_nth_error with (P := A.no_arg_pair); eauto.
+  + i_ctor.
+
+- simpl in *. A.refold_no_arg. break_and.
+  on (I_expr _ _ _ btarget), invc.
+  fwd eapply length_nth_error_Some with (xs := cases) (ys := bcases) as HH;
+    eauto using Forall2_length. destruct HH as [[bcase brec] Hbcase].
+  fwd eapply Forall2_nth_error with (xs := cases) (ys := bcases); eauto.
+    cbv beta in *. break_and. simpl in *. subst brec.
+  fwd i_lem unroll_elim_length.
+  fwd i_lem unroll_elim_ok as HH. destruct HH as [be' Hbe'].
+
+  B_start HS.
+  B_step HS.  { i_lem B.SMakeCall. }
+  B_step HS.  { i_lem B.SElimStepLoop. inversion 1. }
+  B_star HS.  { i_lem crunch_MkClose_free_list. }
+  B_step HS.  { i_lem B.SCloseDone. }
+  B_step HS.  { i_lem B.SElimStep. i_ctor. inversion 1. }
+  B_step HS.  { i_lem B.SArg. }
+  B_step HS.  { i_lem B.SEliminate. i_ctor. }
+  eexists. split. exact HS.
+
+  i_ctor.  i_lem unroll_elim_sim. cbv beta. i_lem IElim2.
+  i_lem A.unroll_elim_no_arg.
+  + on _, eapply_lem A.no_arg_list_pair_Forall.
+    fwd eapply Forall_nth_error with (P := A.no_arg_pair); eauto.
+  + i_ctor.
+
+- simpl in *. A.refold_no_arg. break_and.
+  fwd eapply length_nth_error_Some with (xs := cases) (ys := bcases) as HH;
+    eauto using Forall2_length. destruct HH as [[bcase brec] Hbcase].
+  fwd eapply Forall2_nth_error with (xs := cases) (ys := bcases); eauto.
+    cbv beta in *. break_and. simpl in *. subst brec.
+  fwd i_lem unroll_elim_length.
+  fwd i_lem unroll_elim_ok as HH. destruct HH as [be' Hbe'].
+
+  B_start HS.
+  B_step HS.  { i_lem B.SMakeCall. }
+  B_step HS.  { i_lem B.SElimStepLoop. inversion 1. }
+  B_star HS.  { i_lem crunch_MkClose_free_list. }
+  B_step HS.  { i_lem B.SCloseDone. }
+  B_step HS.  { i_lem B.SElimStep. i_ctor. inversion 1. }
+  B_step HS.  { i_lem B.SArg. }
+  B_step HS.  { i_lem B.SEliminate. i_ctor. }
+  eexists. split. exact HS.
+
+  i_ctor.  i_lem unroll_elim_sim. cbv beta. i_lem IElim2.
+  i_lem A.unroll_elim_no_arg.
+  + on _, eapply_lem A.no_arg_list_pair_Forall.
+    fwd eapply Forall_nth_error with (P := A.no_arg_pair); eauto.
+  + i_ctor.
+
+Qed.
 
   
     

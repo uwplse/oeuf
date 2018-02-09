@@ -583,6 +583,15 @@ induction xs; intros0 Hnth; simpl in *.
   + eapply IHxs; eauto.
 Qed.
 
+Lemma nth_error_split' : forall A i (xs : list A) x,
+    nth_error xs i = Some x ->
+    xs = firstn i xs ++ [x] ++ skipn (S i) xs.
+induction i; intros0 Hnth; simpl in *.
+- break_match; try discriminate. congruence.
+- break_match; try discriminate. simpl.
+  erewrite <- IHi; eauto.
+Qed.
+
 
 
 

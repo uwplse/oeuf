@@ -658,15 +658,6 @@ destruct i; intros0 Hnth; simpl.
 - eapply B.SUpVar. auto.
 Qed.
 
-Lemma nth_error_split : forall A i (xs : list A) x,
-    nth_error xs i = Some x ->
-    xs = firstn i xs ++ [x] ++ skipn (S i) xs.
-induction i; intros0 Hnth; simpl in *.
-- break_match; try discriminate. congruence.
-- break_match; try discriminate. simpl.
-  erewrite <- IHi; eauto.
-Qed.
-
 Lemma crunch_MkClose_locals_list' : forall BE fname l k j i es,
     j <= length l ->
     i = length l - j ->
@@ -693,7 +684,7 @@ destruct (nth_error es i) eqn:Hnth; cycle 1.
 destruct (nth_error l i) eqn:Hnth'; cycle 1.
   { contradict Hnth'. rewrite nth_error_Some. auto. }
 
-fwd eapply nth_error_split with (xs := es) as Hes; eauto.
+fwd eapply nth_error_split' with (xs := es) as Hes; eauto.
   rewrite Hes.
 (*
 fwd eapply sliding_next; [ | eassumption | | ]; try eassumption.
