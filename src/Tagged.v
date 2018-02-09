@@ -577,3 +577,335 @@ invc STEP; invc II.
   + intros. simpl. refold_nfree_ok nfrees. eauto using nfree_ok_list_pair_Forall'.
 
 Qed.
+
+
+
+
+
+Definition no_arg : expr -> Prop :=
+    let fix go e :=
+        let fix go_list es :=
+            match es with
+            | [] => True
+            | e :: es => go e /\ go_list es
+            end in
+        let fix go_pair p :=
+            let '(e, _) := p in
+            go e in
+        let fix go_list_pair ps :=
+            match ps with
+            | [] => True
+            | p :: ps => go_pair p /\ go_list_pair ps
+            end in
+        match e with
+        | Value v => True
+        | Arg => False
+        | UpVar _ => True
+        | Call f a => go f /\ go a
+        | MkConstr _ args => go_list args
+        | Elim cases target =>
+                go_list_pair cases /\
+                go target
+        | MkClose fname free =>
+                go_list free
+        end in go.
+
+Definition no_arg_list :=
+    let go := no_arg in
+    let fix go_list es :=
+        match es with
+        | [] => True
+        | e :: es => go e /\ go_list es
+        end in go_list.
+
+Definition no_arg_pair : (expr * rec_info) -> Prop :=
+    let go := no_arg in
+    let fix go_pair p :=
+        let '(e, r) := p in
+        go e in go_pair.
+
+Definition no_arg_list_pair :=
+    let go_pair := no_arg_pair in
+    let fix go_list_pair ps :=
+        match ps with
+        | [] => True
+        | p :: ps => go_pair p /\ go_list_pair ps
+        end in go_list_pair.
+
+Ltac refold_no_arg :=
+    fold (no_arg_list) in *;
+    fold (no_arg_pair) in *;
+    fold (no_arg_list_pair) in *.
+
+
+Lemma no_arg_list_Forall : forall es,
+    no_arg_list es ->
+    Forall (no_arg) es.
+induction es; intro HH; simpl in *.
+- constructor.
+- break_and. constructor; eauto.
+Qed.
+
+Lemma no_arg_list_Forall' : forall es,
+    Forall (no_arg) es ->
+    no_arg_list es.
+induction es; intro HH; simpl in *.
+- constructor.
+- on (Forall _ _), invc. constructor; eauto.
+Qed.
+
+Lemma no_arg_list_pair_Forall : forall es,
+    no_arg_list_pair es ->
+    Forall (no_arg_pair) es.
+induction es; intro HH; simpl in *.
+- constructor.
+- break_and. constructor; eauto.
+Qed.
+
+Lemma no_arg_list_pair_Forall' : forall es,
+    Forall (no_arg_pair) es ->
+    no_arg_list_pair es.
+induction es; intro HH; simpl in *.
+- constructor.
+- on (Forall _ _), invc. constructor; eauto.
+Qed.
+
+Definition check_no_arg : forall e,
+    { no_arg e } + { ~ no_arg e }.
+intros ?.
+induction e using expr_rect_mut with
+    (Pl := fun es =>
+        { no_arg_list es } +
+        { ~ no_arg_list es })
+    (Pp := fun p =>
+        { no_arg_pair p } +
+        { ~ no_arg_pair p })
+    (Plp := fun ps =>
+        { no_arg_list_pair ps } +
+        { ~ no_arg_list_pair ps }).
+all: try solve [eassumption | left; constructor].
+
+- (* Arg *) right. inversion 1.
+- (* Call *)
+  destruct IHe1, IHe2; simpl; solve [left; eauto | right; inversion 1; eauto].
+- (* Elim *)
+  destruct IHe, IHe0; simpl; refold_no_arg;
+    solve [left; eauto | right; inversion 1; eauto].
+
+(* list, pair, etc *)
+- destruct IHe, IHe0; simpl; refold_no_arg;
+    solve [left; eauto | right; inversion 1; eauto].
+- destruct IHe, IHe0; simpl; refold_no_arg;
+    solve [left; eauto | right; inversion 1; eauto].
+Defined.
+
+Definition check_no_arg_list : forall exprs,
+    { Forall (no_arg) exprs } +
+    { ~ Forall (no_arg) exprs }.
+induction exprs.
+{ left. constructor. }
+
+rename a into e.
+destruct (check_no_arg e), IHexprs.
+all: try solve [left; eauto | right; inversion 1; eauto].
+Defined.
+
+Definition check_no_arg_list_pair : forall ps,
+    { no_arg_list_pair ps } +
+    { ~ no_arg_list_pair ps }.
+induction ps.
+{ left. constructor. }
+
+destruct a as [e r].
+destruct (check_no_arg e), IHps.
+all: try solve [right; inversion 1; eauto].
+left. simpl. auto.
+Defined.
+
+Lemma unroll_elim_no_arg :
+    forall case args rec mk_rec e',
+    no_arg case ->
+    (forall e, no_arg e -> no_arg (mk_rec e)) ->
+    unroll_elim case args rec mk_rec = Some e' ->
+    no_arg e'.
+first_induction args; destruct rec; intros0 Hcase Hmk_rec Hunroll; try discriminate.
+  { simpl in *. congruence. }
+simpl in *.  remember (if b then _ else _) as case'.
+i_lem (IHargs case').
+subst case'. destruct b; simpl; eauto.
+split; eauto. i_lem Hmk_rec.
+Qed.
+
+
+
+Definition elim_cases_no_arg : expr -> Prop :=
+    let fix go e :=
+        let fix go_list es :=
+            match es with
+            | [] => True
+            | e :: es => go e /\ go_list es
+            end in
+        let fix go_pair p :=
+            let '(e, _) := p in
+            go e in
+        let fix go_list_pair ps :=
+            match ps with
+            | [] => True
+            | p :: ps => go_pair p /\ go_list_pair ps
+            end in
+        match e with
+        | Value v => True
+        | Arg => True
+        | UpVar _ => True
+        | Call f a => go f /\ go a
+        | MkConstr _ args => go_list args
+        | Elim cases target =>
+                no_arg_list_pair cases /\
+                go_list_pair cases /\
+                go target
+        | MkClose fname free =>
+                go_list free
+        end in go.
+
+Definition elim_cases_no_arg_list :=
+    let go := elim_cases_no_arg in
+    let fix go_list es :=
+        match es with
+        | [] => True
+        | e :: es => go e /\ go_list es
+        end in go_list.
+
+Definition elim_cases_no_arg_pair : (expr * rec_info) -> Prop :=
+    let go := elim_cases_no_arg in
+    let fix go_pair p :=
+        let '(e, r) := p in
+        go e in go_pair.
+
+Definition elim_cases_no_arg_list_pair :=
+    let go_pair := elim_cases_no_arg_pair in
+    let fix go_list_pair ps :=
+        match ps with
+        | [] => True
+        | p :: ps => go_pair p /\ go_list_pair ps
+        end in go_list_pair.
+
+Ltac refold_elim_cases_no_arg :=
+    fold (elim_cases_no_arg_list) in *;
+    fold (elim_cases_no_arg_pair) in *;
+    fold (elim_cases_no_arg_list_pair) in *.
+
+Inductive elim_cases_no_arg_state : state -> Prop :=
+| EcnasRun : forall e l k,
+        elim_cases_no_arg e ->
+        (forall v, elim_cases_no_arg_state (k v)) ->
+        elim_cases_no_arg_state (Run e l k)
+| EcnasStop : forall v, elim_cases_no_arg_state (Stop v). 
+
+
+Definition check_elim_cases_no_arg : forall e,
+    { elim_cases_no_arg e } + { ~ elim_cases_no_arg e }.
+intros ?.
+induction e using expr_rect_mut with
+    (Pl := fun es =>
+        { elim_cases_no_arg_list es } +
+        { ~ elim_cases_no_arg_list es })
+    (Pp := fun p =>
+        { elim_cases_no_arg_pair p } +
+        { ~ elim_cases_no_arg_pair p })
+    (Plp := fun ps =>
+        { elim_cases_no_arg_list_pair ps } +
+        { ~ elim_cases_no_arg_list_pair ps }).
+all: try solve [eassumption | left; constructor].
+
+- (* Call *)
+  destruct IHe1, IHe2; simpl; solve [left; eauto | right; inversion 1; eauto].
+- (* Elim *)
+  destruct (check_no_arg_list_pair cases); [ | right; inversion 1; auto].
+  destruct IHe, IHe0; simpl; refold_elim_cases_no_arg;
+    try solve [left; eauto | right; intro; break_and; auto].
+
+(* list, pair, etc *)
+- destruct IHe, IHe0; simpl; refold_elim_cases_no_arg;
+    solve [left; eauto | right; inversion 1; eauto].
+- destruct IHe, IHe0; simpl; refold_elim_cases_no_arg;
+    solve [left; eauto | right; inversion 1; eauto].
+Defined.
+
+Lemma elim_cases_no_arg_list_Forall : forall es,
+    elim_cases_no_arg_list es <->
+    Forall (elim_cases_no_arg) es.
+induction es; split; intro HH.
+- constructor.
+- constructor.
+- invc HH. constructor; tauto.
+- invc HH. constructor; tauto.
+Qed.
+
+Lemma elim_cases_no_arg_list_pair_Forall : forall es,
+    elim_cases_no_arg_list_pair es <->
+    Forall (elim_cases_no_arg_pair) es.
+induction es; split; intro HH.
+- constructor.
+- constructor.
+- invc HH. constructor; tauto.
+- invc HH. constructor; tauto.
+Qed.
+
+Lemma unroll_elim_cases_no_arg :
+    forall case args rec mk_rec e',
+    elim_cases_no_arg case ->
+    (forall e, elim_cases_no_arg e -> elim_cases_no_arg (mk_rec e)) ->
+    unroll_elim case args rec mk_rec = Some e' ->
+    elim_cases_no_arg e'.
+first_induction args; destruct rec; intros0 Hcase Hmk_rec Hunroll; try discriminate.
+  { simpl in *. congruence. }
+simpl in *.  remember (if b then _ else _) as case'.
+i_lem (IHargs case').
+subst case'. destruct b; simpl; eauto.
+split; eauto. i_lem Hmk_rec.
+Qed.
+
+
+Lemma step_elim_cases_no_arg : forall E s s',
+    Forall elim_cases_no_arg E ->
+    elim_cases_no_arg_state s ->
+    sstep E s s' ->
+    elim_cases_no_arg_state s'.
+intros0 Henv II STEP.
+invc STEP; invc II;
+eauto.
+
+- (* SCloseStep *)
+  simpl in *. refold_elim_cases_no_arg.
+  on _, rewrite_fwd elim_cases_no_arg_list_Forall. on _, invc_using Forall_3part_inv.
+  i_ctor. i_ctor. refold_elim_cases_no_arg.
+  rewrite elim_cases_no_arg_list_Forall. i_lem Forall_app. i_ctor.
+
+- (* SConstrStep *)
+  simpl in *. refold_elim_cases_no_arg.
+  on _, rewrite_fwd elim_cases_no_arg_list_Forall. on _, invc_using Forall_3part_inv.
+  i_ctor. i_ctor. refold_elim_cases_no_arg.
+  rewrite elim_cases_no_arg_list_Forall. i_lem Forall_app. i_ctor.
+
+- (* SCallL *)
+  simpl in *. refold_elim_cases_no_arg. break_and.
+  i_ctor. i_ctor.
+
+- (* SCallR *)
+  simpl in *. refold_elim_cases_no_arg. break_and.
+  i_ctor. i_ctor.
+
+- (* SMakeCall *)
+  i_ctor. i_lem Forall_nth_error.
+
+- (* SElimStep *)
+  simpl in *. refold_elim_cases_no_arg. break_and.
+  i_ctor. i_ctor.
+
+- (* SEliminate *)
+  simpl in *. refold_elim_cases_no_arg. break_and.
+  i_ctor. i_lem unroll_elim_cases_no_arg.
+  + on _, rewrite_fwd elim_cases_no_arg_list_pair_Forall.
+    fwd eapply Forall_nth_error with (xs := cases); eauto.
+  + i_ctor.
+Qed.
