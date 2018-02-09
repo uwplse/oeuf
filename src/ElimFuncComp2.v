@@ -6,6 +6,7 @@ Require Import Program.
 Require Import Monads.
 
 Require Import ListLemmas.
+Require Import Forall3.
 Require Import Semantics.
 Require Import HigherValue.
 Require Import StepLib.
@@ -103,6 +104,10 @@ Definition compile_cu' nfrees es :=
 Definition compile_cu (cu : list A.expr * list metadata) :
         option (list B.expr * list metadata) :=
     let '(exprs, metas) := cu in
+    match eq_nat_dec (length exprs) (length metas) with
+    | left Heq => Some Heq
+    | right _ => None
+    end >>= fun Hlen =>
     compile_cu' (map m_nfree metas) exprs >>= fun exprs' =>
     Some (exprs', metas).
 
@@ -186,11 +191,11 @@ Inductive I_expr (BE : B.env) (lfree : list value): A.expr -> B.expr -> Prop :=
 .
 
 Inductive I (AE : A.env) (BE : B.env) : A.state -> B.state -> Prop :=
-| IRun : forall l ae ak be bk,
-        I_expr BE l ae be ->
+| IRun : forall larg lfree ae ak be bk,
+        I_expr BE lfree ae be ->
         (forall v,
             I AE BE (ak v) (bk v)) ->
-        I AE BE (A.Run ae l ak) (B.Run be l bk)
+        I AE BE (A.Run ae (larg :: lfree) ak) (B.Run be (larg :: lfree) bk)
 
 | IStop : forall v,
         I AE BE (A.Stop v) (B.Stop v).
@@ -201,20 +206,20 @@ Ltac i_ctor := intros; econstructor; simpl; eauto.
 Ltac i_lem H := intros; eapply H; simpl; eauto.
 
 
-Lemma simple_compile_I_expr : forall BE l ae be,
+Lemma simple_compile_I_expr : forall BE lfree ae be,
     simple_compile ae = Some be ->
-    I_expr BE l ae be.
+    I_expr BE lfree ae be.
 intros ? ?.
 mut_induction ae using A.expr_rect_mut' with
     (Pl := fun aes => forall bes,
         simple_compile_list aes = Some bes ->
-        Forall2 (I_expr BE l) aes bes)
+        Forall2 (I_expr BE lfree) aes bes)
     (Pp := fun ap => forall bp,
         simple_compile_pair ap = Some bp ->
-        I_expr BE l (fst ap) (fst bp) /\ snd ap = snd bp)
+        I_expr BE lfree (fst ap) (fst bp) /\ snd ap = snd bp)
     (Plp := fun aps => forall bps,
         simple_compile_list_pair aps = Some bps ->
-        Forall2 (fun ap bp => I_expr BE l (fst ap) (fst bp) /\ snd ap = snd bp) aps bps);
+        Forall2 (fun ap bp => I_expr BE lfree (fst ap) (fst bp) /\ snd ap = snd bp) aps bps);
 [ intros0 Hcomp; simpl in *; refold_simple_compile; break_bind_option; inject_some.. | ].
 
 - (* Value *) i_ctor.
@@ -236,11 +241,11 @@ mut_induction ae using A.expr_rect_mut' with
 - finish_mut_induction simple_compile_I_expr using list pair list_pair.
 Qed exporting.
 
-Theorem compile_I_expr : forall BE NFREES l fname ae be,
+Theorem compile_I_expr : forall BE NFREES lfree fname ae be,
     compile fname NFREES ae = Some be ->
     nth_error BE fname = Some be ->
-    nth_error NFREES fname = Some (length l) ->
-    I_expr BE l ae be.
+    nth_error NFREES fname = Some (length lfree) ->
+    I_expr BE lfree ae be.
 destruct ae; intros0 Hcomp Hbe Hnfree; try solve [i_lem simple_compile_I_expr].
 destruct ae; try solve [i_lem simple_compile_I_expr].
 simpl in Hcomp. break_bind_option. inject_some.
@@ -250,41 +255,82 @@ Qed.
 
 
 
+Lemma compile_cu'_length : forall nfrees aes bes,
+    compile_cu' nfrees aes = Some bes ->
+    length bes = length aes.
+intros0 Hcomp. unfold compile_cu' in Hcomp.
+fwd eapply map_partial_length; eauto.
+on _, rewrite_fwd numbered_length.
+auto.
+Qed.
 
-Lemma I_expr_value : forall BE l a b,
-    I_expr BE l a b ->
+Lemma compile_cu'_I_expr : forall nfrees aes bes,
+    compile_cu' nfrees aes = Some bes ->
+    length nfrees = length aes ->
+    Forall3 (fun a b nfree =>
+        forall lfree, length lfree = nfree ->
+        I_expr bes lfree a b) aes bes nfrees.
+intros0 Hcomp Hlen.
+fwd i_lem compile_cu'_length.
+eapply nth_error_Forall3; try congruence.
+intros i ae be nfree Hae Hbe Hnfree lfree Hlfree.
+
+eapply numbered_nth_error in Hae.
+
+unfold compile_cu' in Hcomp.
+on _, eapply_lem map_partial_Forall2.
+fwd i_lem Forall2_nth_error. cbv beta in *. simpl in *.
+fwd i_lem compile_I_expr.  { rewrite Hnfree. eauto. }
+auto.
+Qed.
+
+Theorem compile_cu_I_expr : forall A Ameta B Bmeta,
+    compile_cu (A, Ameta) = Some (B, Bmeta) ->
+    Forall3 (fun a b nfree =>
+        forall lfree, length lfree = nfree ->
+        I_expr B lfree a b) A B (map m_nfree Ameta).
+intros0 Hcomp. unfold compile_cu in Hcomp. break_bind_option. inject_some.
+i_lem compile_cu'_I_expr.
+rewrite map_length. eauto.
+Qed.
+
+
+
+
+Lemma I_expr_value : forall BE lfree a b,
+    I_expr BE lfree a b ->
     A.is_value a ->
     B.is_value b.
 intros0 II Aval. invc Aval. invc II. constructor.
 Qed.
 Hint Resolve I_expr_value.
 
-Lemma I_expr_value' : forall BE l a b,
-    I_expr BE l a b ->
+Lemma I_expr_value' : forall BE lfree a b,
+    I_expr BE lfree a b ->
     B.is_value b ->
     A.is_value a.
 intros0 II Bval. invc Bval. invc II. constructor.
 Qed.
 Hint Resolve I_expr_value'.
 
-Lemma I_expr_not_value : forall BE l a b,
-    I_expr BE l a b ->
+Lemma I_expr_not_value : forall BE lfree a b,
+    I_expr BE lfree a b ->
     ~ A.is_value a ->
     ~ B.is_value b.
 intros0 II Aval. contradict Aval. eauto using I_expr_value'.
 Qed.
 Hint Resolve I_expr_not_value.
 
-Lemma I_expr_not_value' : forall BE l a b,
-    I_expr BE l a b ->
+Lemma I_expr_not_value' : forall BE lfree a b,
+    I_expr BE lfree a b ->
     ~ B.is_value b ->
     ~ A.is_value a.
 intros0 II Bval. contradict Bval. eauto using I_expr_value.
 Qed.
 Hint Resolve I_expr_not_value'.
 
-Lemma I_expr_map_value : forall BE l vs bes,
-    Forall2 (I_expr BE l) (map A.Value vs) bes ->
+Lemma I_expr_map_value : forall BE lfree vs bes,
+    Forall2 (I_expr BE lfree) (map A.Value vs) bes ->
     bes = map B.Value vs.
 induction vs; intros0 II; invc II.
 - reflexivity.
@@ -295,17 +341,30 @@ Qed.
 
 
 
-Theorem I_sim : forall AE BE a a' b,
-    Forall2 (fun ae be => forall l,
-        (* TODO: premise *)
-        I_expr BE l ae be) AE BE ->
+Lemma Forall3_nth_error_ex1 : forall A B C (P : A -> B -> C -> Prop) xs ys zs i x,
+    Forall3 P xs ys zs ->
+    nth_error xs i = Some x ->
+    exists y z,
+        nth_error ys i = Some y /\
+        nth_error zs i = Some z /\
+        P x y z.
+induction xs; intros0 Hfa Hnth; invc Hfa; destruct i; try discriminate.
+- simpl in *. inject_some. eauto.
+- simpl in *. eauto.
+Qed.
+
+Theorem I_sim : forall AE BE NFREES a a' b,
+    Forall3 (fun ae be nfree => forall lfree,
+        length lfree = nfree ->
+        I_expr BE lfree ae be) AE BE NFREES ->
+    A.nfree_ok_state NFREES a ->
     I AE BE a b ->
     A.sstep AE a a' ->
     exists b',
         B.sstep BE b b' /\
         I AE BE a' b'.
 destruct a as [ae al ak | v];
-intros0 Henv II Astep; inv Astep.
+intros0 Henv Hnfree II Astep; inv Astep.
 all: invc II.
 all: try on (I_expr _ _ _ be), invc.
 
@@ -350,11 +409,12 @@ all: try on (I_expr _ _ _ be), invc.
 - (* SMakeCall *)
   on (I_expr _ _ _ bf), invc.
   on (I_expr _ _ _ ba), invc.
-  fwd eapply Forall2_nth_error_ex with (ys := BE) as HH; eauto.
-    destruct HH as (bbody & ? & ?).
+  fwd eapply Forall3_nth_error_ex1 with (ys := BE) as HH; eauto.
+    destruct HH as (bbody & nfree & ? & ? & ?).
+  invc Hnfree. simpl in *. A.refold_nfree_ok_value NFREES. break_and.
 
   eexists. split. i_lem B.SMakeCall.
-  i_ctor.
+  i_ctor. on _, fun H => eapply H. congruence.
 
 - (* SElimStep (IElim0) *)
   admit.
