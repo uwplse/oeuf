@@ -134,14 +134,14 @@ Notation "f <*> x" := (seq (@bind_state_option _) (@ret_state_option _) f x)
 Ltac break_bind_state_option :=
     unfold seq, fmap in *;
     repeat match goal with
-    | [ H : @bind_state_option ?A ?B ?S ?x_ ?k_ ?s_ = (_, _) |- _ ] =>
+    | [ H : @bind_state_option ?A ?B ?S ?x_ ?k_ ?s_ = Some (_, _) |- _ ] =>
             (* unfold the top-level bind_state_option, then destruct *)
             let orig := constr:(@bind_state_option A B S x_ k_ s_) in
             let bind := eval unfold bind_state_option
                     in (fun x k s => @bind_state_option A B S x k s) in
             let repl := eval cbv beta in (bind x_ k_ s_) in
             change orig with repl in H;
-            destruct (x_ s_) as [?x ?s] eqn:?
+            destruct (x_ s_) as [[?x ?s] | ] eqn:?; [ | discriminate ]
     | [ H : ret_state_option _ _ = Some (_, _) |- _ ] => invc H
     | [ H : ret_state_option _ _ = None |- _ ] => invc H
     | [ H : fail_state_option _ = Some (_, _) |- _ ] => invc H

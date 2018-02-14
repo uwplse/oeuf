@@ -298,14 +298,6 @@ Qed.
 
 
 
-Lemma nth_error_app_Some : forall A (xs ys : list A) n x,
-    nth_error xs n = Some x ->
-    nth_error (xs ++ ys) n = Some x.
-intros. rewrite nth_error_app1; eauto.
-eapply nth_error_Some. congruence.
-Qed.
-
-
 Lemma I_expr_weaken : forall BE BE' nfree depth ae be,
     I_expr BE nfree depth ae be ->
     I_expr (BE ++ BE') nfree depth ae be.
