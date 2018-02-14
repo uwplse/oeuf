@@ -165,6 +165,39 @@ End compile.
 Ltac refold_compile base nfree :=
     fold (compile_list base nfree) in *.
 
+
+Fixpoint process_recorded recs n : list B.expr * list metadata :=
+    match recs with
+    | [] => ([], [])
+    | (e, nfree) :: recs =>
+            let '(exprs, metas) := process_recorded recs (S n) in
+            let name := String.append "__oeuf_elim_case" (nat_to_string n) in
+            (e :: exprs, Metadata name Private nfree :: metas)
+    end.
+
+Section compile_cu.
+Open Scope option_monad.
+
+Definition compile_cu (cu : list A.expr * list metadata) :
+        option (list B.expr * list metadata) :=
+    let '(exprs, metas) := cu in
+    match eq_nat_dec (length exprs) (length metas) with
+    | left Heq => Some Heq
+    | right _ => None
+    end >>= fun Hlen =>
+    let nfrees := map m_nfree metas in
+    match A.check_nfree_ok_list nfrees exprs with
+    | left Hnfree => Some Hnfree
+    | right _ => None
+    end >>= fun Hnfree =>
+    compile_cu' (length exprs) exprs metas [] >>= fun result =>
+    let '(exprs'_base, recs) := result in
+    let (exprs'_recs, metas_recs) := process_recorded recs 0 in
+    Some (exprs'_base ++ exprs'_recs, metas ++ metas_recs).
+
+End compile_cu.
+
+
 (*
 Section compile_cu.
 Open Scope option_monad.
@@ -762,15 +795,15 @@ eapply IHrec. destruct a.
 Qed.
 
 Theorem I_sim : forall AE BE0 BE1 NFREES a a' b,
-    Forall3 (fun a b nfree => I_expr (BE0 ++ BE1) (S nfree) [] a b) AE BE0 NFREES ->
-    (*A.nfree_ok_state NFREES a ->*)
+    Forall3 (fun a b nfree => I_expr (BE0 ++ BE1) nfree [] a b) AE BE0 NFREES ->
+    A.nfree_ok_state NFREES a ->
     I AE (BE0 ++ BE1) a b ->
     A.sstep AE a a' ->
     exists b',
         B.splus (BE0 ++ BE1) b b' /\
         I AE (BE0 ++ BE1) a' b'.
 destruct a as [ae al ak | v];
-intros0 Henv II Astep; inv Astep.
+intros0 Henv Hnfree II Astep; inv Astep.
 all: invc II.
 all: try on (I_expr _ _ _ _ be), invc.
 
@@ -872,11 +905,9 @@ all: try on (I_expr _ _ _ _ be), invc.
 
   eexists. split. eapply B.SPlusOne; i_lem B.SMakeCall.
   + i_lem nth_error_app_Some.
-  + (* on entry to a new function body, we are no longer under any Elims *)
-    eapply IRun with (bextra := []); eauto.
-    admit.
-    (*invc Hnfree. simpl in *. A.refold_nfree_ok_value NFREES. break_and.
-    congruence.*)
+  + eapply IRun with (bextra := []); eauto.
+    invc Hnfree. simpl in *. A.refold_nfree_ok_value NFREES. break_and.
+    congruence.
 
 - (* SMakeCall - ICallLoop *)
   on (I_expr _ _ _ _ ba), invc.
@@ -889,7 +920,9 @@ all: try on (I_expr _ _ _ _ be), invc.
   B_step HS. { eapply B.SMakeCall. i_lem nth_error_app_Some. }
   eexists. split. exact HS.
   i_ctor.
-  f_equal. admit. (* nfree *)
+
+  invc Hnfree. simpl in *. A.refold_nfree_ok_value NFREES. break_and.
+  congruence.
 
 - (* SElimStepLoop *)
   eexists. split. eapply B.SPlusOne; i_lem B.SElimStepLoop.
@@ -930,10 +963,9 @@ all: try on (I_expr _ _ _ _ be), invc.
   eapply IRun with (bextra := [Constr tag args; loop]) (nfree := length l); eauto.
   i_lem unroll_elim_sim.
 
-Admitted.
+Qed.
 
 
-(*
 
 Inductive I' AE BE NFREES : A.state -> B.state -> Prop :=
 | I'_intro : forall a b,
@@ -941,10 +973,8 @@ Inductive I' AE BE NFREES : A.state -> B.state -> Prop :=
         A.nfree_ok_state NFREES a ->
         I' AE BE NFREES a b.
 
-Check I_sim.
-
 Definition env_ok AE BE NFREES :=
-    Forall3 (fun a b nfree => I_expr BE (S nfree) 0 a b) AE (firstn (length AE) BE) NFREES /\
+    Forall3 (fun a b nfree => I_expr BE nfree [] a b) AE (firstn (length AE) BE) NFREES /\
     Forall (A.nfree_ok NFREES) AE.
 
 Theorem I'_sim : forall AE BE NFREES a a' b,
@@ -969,13 +999,12 @@ Qed.
 
 
 
-Check compile_I_expr.
-
 Lemma compile_cu'_state_monotonic : forall base exprs metas s exprs' s',
-    compile_cu' base exprs metas s = (exprs', s') ->
+    compile_cu' base exprs metas s = Some (exprs', s') ->
     exists s1, s' = s ++ s1.
-induction exprs; destruct metas; intros; simpl in *; break_bind_state;
-try solve [exists []; eauto using app_nil_r].
+induction exprs; destruct metas; intros; simpl in *;
+  try discriminate; break_bind_state_option.
+  { exists []. eauto using app_nil_r. }
 
 on _, eapply_lem compile_state_monotonic.
 on _, eapply_lem IHexprs.
@@ -985,10 +1014,11 @@ Qed.
 
 Lemma compile_cu'_I_expr : forall BE0 aes ms s bes s',
     length aes = length ms ->
-    compile_cu' (length BE0) aes ms s = (bes, s') ->
-    Forall3 (fun ae be nfree => I_expr (BE0 ++ map fst s') (S nfree) 0 ae be)
+    compile_cu' (length BE0) aes ms s = Some (bes, s') ->
+    Forall3 (fun ae be nfree => I_expr (BE0 ++ map fst s') nfree [] ae be)
         aes bes (map m_nfree ms).
-induction aes; destruct ms; intros0 Hlen Hcomp; try discriminate; simpl in *; break_bind_state.
+induction aes; destruct ms; intros0 Hlen Hcomp; simpl in *;
+  try discriminate; break_bind_state_option.
   { constructor. }
 
 rename a into ae, x into be, x0 into bes.
@@ -1001,28 +1031,29 @@ Qed.
 
 Lemma compile_cu'_length : forall base exprs metas s exprs' s',
     length exprs = length metas ->
-    compile_cu' base exprs metas s = (exprs', s') ->
+    compile_cu' base exprs metas s = Some (exprs', s') ->
     length exprs' = length exprs.
-induction exprs; destruct metas; intros; simpl in *; try discriminate; break_bind_state.
+induction exprs; destruct metas; intros; simpl in *;
+  try discriminate; break_bind_state_option.
 - reflexivity.
 - simpl. f_equal. on _, eapply_lem IHexprs; eauto.
 Qed.
 
-Lemma process_elims_fst : forall elims n,
-    fst (process_elims elims n) = map fst elims.
-induction elims; intros.
+Lemma process_recorded_fst : forall recs n,
+    fst (process_recorded recs n) = map fst recs.
+induction recs; intros.
 - reflexivity.
 - simpl. do 2 break_match; try discriminate.
-  simpl. f_equal. erewrite <- IHelims. on _, fun H => rewrite H. reflexivity.
+  simpl. f_equal. erewrite <- IHrecs. on _, fun H => rewrite H. reflexivity.
 Qed.
 
 Theorem compile_cu_env_ok : forall A Ameta B Bmeta,
     compile_cu (A, Ameta) = Some (B, Bmeta) ->
     env_ok A B (map m_nfree Ameta).
-intros. simpl in *. break_bind_option. do 4 (break_match; try discriminate).
-do 3 inject_some.
+intros. simpl in *. repeat (break_bind_option || break_match; try discriminate).
+inject_some.
 rename l into B0, l0 into B1_B1meta, l1 into B1, l2 into B1meta.
-rename Heqp into Hcomp.
+rename Heqo1 into Hcomp.
 
 fwd eapply compile_cu'_length as Hlen; eauto.
   rewrite <- Hlen in Hcomp.
@@ -1030,7 +1061,7 @@ fwd eapply compile_cu'_length as Hlen; eauto.
 fwd eapply compile_cu'_I_expr; [ | eauto | ]; [ congruence | ].
 
 replace (map fst B1_B1meta) with B1 in *; cycle 1.
-  { erewrite <- process_elims_fst. on _, fun H => rewrite H. reflexivity. }
+  { erewrite <- process_recorded_fst. on _, fun H => rewrite H. reflexivity. }
 
 unfold env_ok.
 rewrite firstn_app by lia. rewrite firstn_all by lia.
@@ -1038,10 +1069,10 @@ split; eauto.
 Qed.
 
 
-Lemma process_elims_private : forall elims n exprs metas,
-    process_elims elims n = (exprs, metas) ->
+Lemma process_recorded_private : forall recs n exprs metas,
+    process_recorded recs n = (exprs, metas) ->
     Forall (fun m => m_access m = Private) metas.
-induction elims; intros0 Hproc; simpl in *.
+induction recs; intros0 Hproc; simpl in *.
 - inject_pair. constructor.
 - do 2 break_match; try discriminate. inject_pair.
   econstructor; eauto.
@@ -1055,7 +1086,7 @@ Lemma compile_cu_meta_split : forall A Ameta B Bmeta,
 intros0 Hcomp. unfold compile_cu in Hcomp. break_bind_option.
 do 4 (break_match; try discriminate).  do 3 inject_some.
 rename l into B0, l0 into B1_B1meta, l1 into B1, l2 into B1meta.
-exists B1meta. split; eauto using process_elims_private.
+exists B1meta. split; eauto using process_recorded_private.
 Qed.
 
 Lemma compile_cu_a_length : forall A Ameta B Bmeta,
@@ -1123,7 +1154,7 @@ Lemma env_ok_nth_error : forall A B NFREES fname abody bbody nfree,
     nth_error A fname = Some abody ->
     nth_error B fname = Some bbody ->
     nth_error NFREES fname = Some nfree ->
-    I_expr B (S nfree) 0 abody bbody /\ A.nfree_ok NFREES abody.
+    I_expr B nfree [] abody bbody /\ A.nfree_ok NFREES abody.
 intros0 Henv Ha Hb Hnf.
 invc Henv.
 fwd i_lem Forall3_nth_error.
@@ -1167,12 +1198,12 @@ Section Preservation.
 
       eexists. split.
       + econstructor.
-        -- eapply IRun with (bextra := []) (nfree := S (length free)).
+        -- eapply IRun with (bextra := []) (nfree := length free).
            4: reflexivity. 3: reflexivity. 2: i_ctor.
            simpl. replace (length free) with (m_nfree m). eassumption.
         -- i_ctor.
-           ++ econstructor; [eauto using public_value_nfree_ok | ].
-              list_magic_on (free, tt). i_lem public_value_nfree_ok.
+           ++ econstructor. 1: eauto using A.public_value_nfree_ok.
+              list_magic_on (free, tt). i_lem A.public_value_nfree_ok.
            ++ i_ctor.
       + i_ctor. i_ctor.
 
@@ -1201,4 +1232,3 @@ Section Preservation.
     Qed.
 
 End Preservation.
-*)

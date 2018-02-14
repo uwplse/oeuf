@@ -1213,8 +1213,8 @@ Section Preservation.
            4: reflexivity. 3: reflexivity. 2: i_ctor.
            simpl. replace (length free) with (m_nfree m). eassumption.
         -- i_ctor.
-           ++ econstructor; [eauto using public_value_nfree_ok | ].
-              list_magic_on (free, tt). i_lem public_value_nfree_ok.
+           ++ econstructor; [eauto using A.public_value_nfree_ok | ].
+              list_magic_on (free, tt). i_lem A.public_value_nfree_ok.
            ++ i_ctor.
       + i_ctor. i_ctor.
 
