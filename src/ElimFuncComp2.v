@@ -412,30 +412,6 @@ Ltac B_star HS :=
 
 
 
-Lemma Forall3_nth_error_ex1 : forall A B C (P : A -> B -> C -> Prop) xs ys zs i x,
-    Forall3 P xs ys zs ->
-    nth_error xs i = Some x ->
-    exists y z,
-        nth_error ys i = Some y /\
-        nth_error zs i = Some z /\
-        P x y z.
-induction xs; intros0 Hfa Hnth; invc Hfa; destruct i; try discriminate.
-- simpl in *. inject_some. eauto.
-- simpl in *. eauto.
-Qed.
-
-Lemma Forall3_nth_error_ex2 : forall A B C (P : A -> B -> C -> Prop) xs ys zs i y,
-    Forall3 P xs ys zs ->
-    nth_error ys i = Some y ->
-    exists x z,
-        nth_error xs i = Some x /\
-        nth_error zs i = Some z /\
-        P x y z.
-first_induction ys; intros0 Hfa Hnth; invc Hfa; destruct i; try discriminate.
-- simpl in *. inject_some. eauto.
-- simpl in *. eauto.
-Qed.
-
 Lemma free_list'_length : forall n acc,
     length (free_list' n acc) = n + length acc.
 induction n; intros; simpl.

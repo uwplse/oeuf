@@ -6,6 +6,7 @@ Require Import Psatz.
 Require Import StructTact.Assoc.
 
 Require Import Monads.
+Require Import Forall3.
 
 
 (* nat <= *)
@@ -1463,4 +1464,41 @@ intros.
 erewrite numbered_nth_error_fst;
   eauto using numbered_nth_error_snd.
 Qed.
+
+
+
+
+(* unsorted *)
+
+Lemma nth_error_app_Some : forall A (xs ys : list A) n x,
+    nth_error xs n = Some x ->
+    nth_error (xs ++ ys) n = Some x.
+intros. rewrite nth_error_app1; eauto.
+eapply nth_error_Some. congruence.
+Qed.
+
+Lemma Forall3_nth_error_ex1 : forall A B C (P : A -> B -> C -> Prop) xs ys zs i x,
+    Forall3 P xs ys zs ->
+    nth_error xs i = Some x ->
+    exists y z,
+        nth_error ys i = Some y /\
+        nth_error zs i = Some z /\
+        P x y z.
+induction xs; intros0 Hfa Hnth; invc Hfa; destruct i; try discriminate.
+- simpl in *. inject_some. eauto.
+- simpl in *. eauto.
+Qed.
+
+Lemma Forall3_nth_error_ex2 : forall A B C (P : A -> B -> C -> Prop) xs ys zs i y,
+    Forall3 P xs ys zs ->
+    nth_error ys i = Some y ->
+    exists x z,
+        nth_error xs i = Some x /\
+        nth_error zs i = Some z /\
+        P x y z.
+first_induction ys; intros0 Hfa Hnth; invc Hfa; destruct i; try discriminate.
+- simpl in *. inject_some. eauto.
+- simpl in *. eauto.
+Qed.
+
 
