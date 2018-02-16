@@ -234,3 +234,273 @@ destruct ys + destruct y; try solve [right; discriminate | left; eauto].
 
 - (* cons *) destruct (IHx e), (IHx0 ys); left + right; congruence.
 Defined.
+
+
+
+
+(* nfree_ok *)
+
+Definition nfree_ok_value nfrees : value -> Prop :=
+    let fix go v :=
+        let fix go_list vs :=
+            match vs with
+            | [] => True
+            | v :: vs => go v /\ go_list vs
+            end in
+        match v with
+        | Constr _ args => go_list args
+        | Close fname free =>
+                nth_error nfrees fname = Some (length free) /\
+                go_list free
+        end in go.
+
+Definition nfree_ok_value_list nfrees :=
+    let go := nfree_ok_value nfrees in
+    let fix go_list vs :=
+        match vs with
+        | [] => True
+        | v :: vs => go v /\ go_list vs
+        end in go_list.
+
+Ltac refold_nfree_ok_value nfrees :=
+    fold (nfree_ok_value_list nfrees) in *.
+
+Definition nfree_ok nfrees : expr -> Prop :=
+    let fix go e :=
+        let fix go_list es :=
+            match es with
+            | [] => True
+            | e :: es => go e /\ go_list es
+            end in
+        match e with
+        | Value v => nfree_ok_value nfrees v
+        | Arg => True
+        | Self => True
+        | Deref e _ => go e
+        | Call f a => go f /\ go a
+        | MkConstr _ args => go_list args
+        | Elim loop cases target =>
+                go loop /\
+                go_list cases /\
+                go target
+        | MkClose fname free =>
+                nth_error nfrees fname = Some (length free) /\
+                go_list free
+        end in go.
+
+Definition nfree_ok_list nfrees :=
+    let go := nfree_ok nfrees in
+    let fix go_list es :=
+        match es with
+        | [] => True
+        | e :: es => go e /\ go_list es
+        end in go_list.
+
+Ltac refold_nfree_ok nfrees :=
+    fold (nfree_ok_list nfrees) in *.
+
+
+Inductive nfree_ok_state nfrees : state -> Prop :=
+| NfosRun : forall e a s k,
+        nfree_ok nfrees e ->
+        nfree_ok_value nfrees a ->
+        nfree_ok_value nfrees s ->
+        (forall v,
+            nfree_ok_value nfrees v ->
+            nfree_ok_state nfrees (k v)) ->
+        nfree_ok_state nfrees (Run e a s k)
+| NfosStop : forall v, nfree_ok_state nfrees (Stop v). 
+
+
+Definition check_nfree_ok_value : forall nfrees v,
+    { nfree_ok_value nfrees v } + { ~ nfree_ok_value nfrees v }.
+intros ? ?.
+induction v using value_rect_mut with
+    (Pl := fun vs =>
+        { nfree_ok_value_list nfrees vs } +
+        { ~ nfree_ok_value_list nfrees vs }).
+all: try solve [left; constructor].
+
+- (* Constr *) simpl. refold_nfree_ok_value nfrees. assumption.
+- (* Close *)
+  destruct (nth_error nfrees fname) as [nfree | ] eqn:?; cycle 1.
+    { right. inversion 1.  congruence. }
+  destruct (eq_nat_dec (length free) nfree), IHv;
+    simpl; refold_nfree_ok_value nfrees; try subst nfree;
+    try solve [left; eauto | right; inversion 1; eauto + congruence].
+
+- (* cons *)
+  destruct IHv, IHv0; simpl; refold_nfree_ok_value nfrees;
+    solve [left; eauto | right; inversion 1; eauto].
+Defined.
+
+Definition check_nfree_ok : forall nfrees e,
+    { nfree_ok nfrees e } + { ~ nfree_ok nfrees e }.
+intros ? ?.
+induction e using expr_rect_mut with
+    (Pl := fun es =>
+        { nfree_ok_list nfrees es } +
+        { ~ nfree_ok_list nfrees es }).
+all: try solve [left; constructor | eauto].
+
+- (* Value *) simpl. eapply check_nfree_ok_value.
+- (* Call *)
+  destruct IHe1, IHe2; simpl; solve [left; eauto | right; inversion 1; eauto].
+- (* ElimN *)
+  destruct IHe1, IHe2, IHe3; simpl; refold_nfree_ok nfrees;
+    solve [left; eauto | tauto].
+- (* MkClose *)
+  destruct (nth_error nfrees f) as [nfree | ] eqn:?; cycle 1.
+    { right. inversion 1.  congruence. }
+  destruct (eq_nat_dec (length free) nfree), IHe;
+    simpl; refold_nfree_ok_value nfrees; try subst nfree;
+    try solve [left; eauto | right; inversion 1; eauto + congruence].
+
+(* list cons *)
+- destruct IHe, IHe0; simpl; refold_nfree_ok nfrees;
+    solve [left; eauto | right; inversion 1; eauto].
+Defined.
+
+Definition check_nfree_ok_list : forall nfrees exprs,
+    { Forall (nfree_ok nfrees) exprs } +
+    { ~ Forall (nfree_ok nfrees) exprs }.
+induction exprs.
+{ left. constructor. }
+
+rename a into e.
+destruct (check_nfree_ok nfrees e), IHexprs.
+all: try solve [left; eauto | right; inversion 1; eauto].
+Defined.
+
+
+
+Lemma nfree_ok_value_list_Forall : forall nfrees es,
+    nfree_ok_value_list nfrees es <->
+    Forall (nfree_ok_value nfrees) es.
+induction es; split; intro HH; simpl in *.
+- constructor.
+- constructor.
+- invc HH. constructor; tauto.
+- invc HH. constructor; tauto.
+Qed.
+
+Lemma nfree_ok_list_Forall : forall nfrees es,
+    nfree_ok_list nfrees es <->
+    Forall (nfree_ok nfrees) es.
+induction es; split; intro HH; simpl in *.
+- constructor.
+- constructor.
+- invc HH. constructor; tauto.
+- invc HH. constructor; tauto.
+Qed.
+
+Lemma nfree_ok_list_map_value : forall nfrees vs,
+    Forall (nfree_ok nfrees) (map Value vs) ->
+    Forall (nfree_ok_value nfrees) vs.
+induction vs; intros.
+- constructor.
+- on >Forall, invc. constructor; eauto.
+Qed.
+
+Ltac i_ctor := intros; econstructor; simpl; eauto.
+Ltac i_lem H := intros; eapply H; simpl; eauto.
+
+Lemma step_nfree_ok : forall E nfrees s s',
+    Forall (nfree_ok nfrees) E ->
+    nfree_ok_state nfrees s ->
+    sstep E s s' ->
+    nfree_ok_state nfrees s'.
+intros0 Hnf II STEP.
+invc STEP; invc II.
+
+- (* SArg *)
+  eauto.
+
+- (* SSelf *)
+  eauto.
+
+- (* SDerefStep *)
+  simpl in *.  i_ctor. i_ctor.
+
+- (* SDerefinateConstr *)
+  on _, eapply_.
+  simpl in *. refold_nfree_ok_value nfrees.
+  on _, rewrite_fwd nfree_ok_value_list_Forall.
+  eapply Forall_nth_error; [ | eauto ]; eauto.
+
+- (* SDerefinateClose *)
+  on _, eapply_.
+  simpl in *. refold_nfree_ok_value nfrees. break_and.
+  on _, rewrite_fwd nfree_ok_value_list_Forall.
+  eapply Forall_nth_error; [ | eauto ]; eauto.
+
+- (* SCloseStep *)
+  simpl in *. refold_nfree_ok nfrees. break_and.
+  on _, rewrite_fwd nfree_ok_list_Forall.  on _, invc_using Forall_3part_inv.
+  i_ctor. i_ctor.
+  simpl. refold_nfree_ok nfrees. split.
+  + rewrite app_length in *. simpl in *. assumption.
+  + rewrite nfree_ok_list_Forall. i_lem Forall_app.
+
+- (* SCloseDone *)
+  on _, eapply_.
+  simpl in *. refold_nfree_ok nfrees. refold_nfree_ok_value nfrees. break_and.
+  subst es.
+  split.  { rewrite map_length in *. auto. }
+  eapply nfree_ok_value_list_Forall, nfree_ok_list_map_value, nfree_ok_list_Forall. auto.
+
+- (* SConstrStep *)
+  simpl in *. refold_nfree_ok nfrees. break_and.
+  on _, rewrite_fwd nfree_ok_list_Forall.  on _, invc_using Forall_3part_inv.
+  i_ctor. i_ctor.
+  simpl. refold_nfree_ok nfrees.
+  eapply nfree_ok_list_Forall. i_lem Forall_app.
+
+- (* SConstrDone *)
+  on _, eapply_.
+  simpl in *. refold_nfree_ok nfrees. refold_nfree_ok_value nfrees. break_and.
+  subst es.
+  eapply nfree_ok_value_list_Forall, nfree_ok_list_map_value, nfree_ok_list_Forall. auto.
+
+- (* SCallL *)
+  simpl in *. break_and.
+  i_ctor. i_ctor.
+
+- (* SCallR *)
+  simpl in *. break_and.
+  i_ctor. i_ctor.
+
+- (* SMakeCall *)
+  simpl in *. refold_nfree_ok_value nfrees. break_and.
+  i_ctor.  i_lem Forall_nth_error.
+
+- (* SElimStepLoop *)
+  simpl in *. refold_nfree_ok nfrees. break_and.
+  i_ctor. i_ctor.
+
+- (* SElimStep *)
+  simpl in *. refold_nfree_ok nfrees. break_and.
+  i_ctor. i_ctor.
+
+- (* SEliminate *)
+  simpl in *. refold_nfree_ok nfrees. refold_nfree_ok_value nfrees. break_and.
+  on _, rewrite_fwd nfree_ok_list_Forall.
+  fwd eapply Forall_nth_error with (xs := cases); eauto. simpl in *.
+  i_ctor.
+
+Qed.
+
+Lemma public_value_nfree_ok : forall Ameta v,
+    public_value Ameta v ->
+    nfree_ok_value (map m_nfree Ameta) v.
+induction v using value_ind'; intros0 Hpub; invc Hpub.
+- simpl. refold_nfree_ok_value (map m_nfree Ameta).
+  eapply nfree_ok_value_list_Forall.
+  list_magic_on (args, tt).
+- simpl. refold_nfree_ok_value (map m_nfree Ameta).
+  split.
+  + erewrite map_nth_error; [ | eauto ]. congruence.
+  + eapply nfree_ok_value_list_Forall.
+    list_magic_on (free, tt).
+Qed.
+
