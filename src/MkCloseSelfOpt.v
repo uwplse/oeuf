@@ -9,6 +9,7 @@ Require Import HigherValue.
 Require Import Psatz.
 
 Require Import SelfClose.
+Module AB := SelfClose.
 
 Set Default Timeout 15.
 
@@ -322,7 +323,67 @@ Qed.
 
 
 
-Definition metric (a : state) := 0.
+(* Cost of an expression inside MkClose's `free` argument. *)
+Definition metric_free e :=
+    match e with
+    | Deref Self _ => 4 (* SCloseStep, SDerefStep, SSelf, SDerefinate *)
+    | _ => 0
+    end.
+
+Definition metric_free_list es :=
+    fold_right (fun e sum => sum + metric_free e) 0 es.
+
+Definition metric0 (a : state) :=
+    match a with
+    | Run (MkClose fname free) _ _ _ => 1 + metric_free_list free
+    | _ => 0
+    end.
+
+Definition metric1 (a : state) :=
+    match a with
+    | Run (Deref Self _) _ _ k => 3 + metric0 (k (Constr 0 []))
+    | Run (Deref (Value _) _) _ _ k => 1 + metric0 (k (Constr 0 []))
+    | _ => metric0 a
+    end.
+
+Definition metric (a : state) :=
+    match a with
+    | Run Self _ _ k => 1 + metric1 (k (Constr 0 []))
+    | _ => metric1 a
+    end.
+
+
+Lemma metric_free_upvars_list' : forall n acc,
+    metric_free_list (upvars_list' n acc) = 4 * n + metric_free_list acc.
+induction n; simpl.
+- eauto.
+- intros. rewrite IHn. simpl. lia.
+Qed.
+
+Lemma metric_free_upvars_list : forall n,
+    metric_free_list (upvars_list n) = 4 * n.
+intros. unfold upvars_list. erewrite metric_free_upvars_list'.
+simpl. lia.
+Qed.
+
+Lemma metric_free_max : forall e, metric_free e <= 4.
+intros. unfold metric_free. repeat (break_match; try lia).
+Qed.
+
+Lemma metric_free_list_max : forall es,
+    metric_free_list es <= 4 * length es.
+induction es; simpl.
+- lia.
+- fwd eapply metric_free_max with (e := a). lia.
+Qed.
+
+Lemma metric_free_list_app : forall es1 es2,
+    metric_free_list (es1 ++ es2) = metric_free_list es1 + metric_free_list es2.
+induction es1; intros; simpl.
+- auto.
+- rewrite IHes1. lia.
+Qed.
+
 
 Theorem I_sim : forall AE BE NFREES a a' b,
     Forall3 (fun a fname_b nfree => let '(fname, b) := fname_b in
@@ -348,7 +409,7 @@ all: try on (I_expr _ _ _ be), invc.
 
 - (* SSelf - IInMkClose3 *)
   eexists. split. right. split. reflexivity.
-    { (* metric *) admit. }
+    { (* metric *) simpl. lia. }
   i_lem IInMkClose4.
 
 - (* SDerefStep *)
@@ -358,7 +419,7 @@ all: try on (I_expr _ _ _ be), invc.
 
 - (* SDerefStep - IInMkClose2 *)
   eexists. split. right. split. reflexivity.
-    { (* metric *) admit. }
+    { (* metric *) simpl. lia. }
   i_lem IInMkClose3.
 
 - (* SDerefStep - IInMkClose4 *)
@@ -382,7 +443,7 @@ all: try on (I_expr _ _ _ be), invc.
       lia. }
 
   eexists. split. right. split. reflexivity.
-    { (* metric *) admit. }
+    { (* metric *) simpl. rewrite 2 metric_free_list_app. simpl. lia. }
   i_lem IInMkClose1.  i_lem sliding_next'.  eapply map_nth_error.
   assert (length es1 = off).
     { fwd eapply sliding_nth_error_ge with (i := length es1) (j := length es1); eauto.
@@ -406,7 +467,11 @@ all: try on (I_expr _ _ _ be), invc.
   simpl in *. fwd i_lem upvars_list_hd. subst e.
 
   eexists. split. right. split. reflexivity.
-    { (* metric *) admit. }
+    { (* metric *) rewrite metric_free_upvars_list.
+      fwd eapply metric_free_list_max with (es := es).
+      assert (length free = S (length es)).
+        { rewrite <- upvars_list_length at 1. on _, fun H => rewrite H. simpl. reflexivity. }
+      lia. }
   eapply IInMkClose2 with (i := 0) (es1 := []); eauto.
   simpl. on _, fun H => rewrite <- H. i_lem sliding_zero.
 
@@ -425,7 +490,7 @@ all: try on (I_expr _ _ _ be), invc.
   rewrite upvars_list_nth_error in * by lia. inject_some.
 
   eexists. split. right. split. reflexivity.
-    { (* metric *) admit. }
+    { (* metric *) simpl. rewrite 2 metric_free_list_app. simpl. lia. }
   i_lem IInMkClose2.
 
 - (* SCloseDone *)
@@ -516,7 +581,7 @@ all: try on (I_expr _ _ _ be), invc.
   eexists. split. left. i_lem SEliminate.
   i_ctor. i_ctor. i_ctor. i_ctor.
 
-Admitted.
+Qed.
 
 
 
@@ -548,40 +613,20 @@ eapply step_nfree_ok; try eassumption.
 Qed.
 
 
+
+Lemma compile_cu'_I_expr : forall exprs nfrees n exprs',
+    length exprs = length nfrees ->
+    compile_cu' exprs nfrees n = exprs' ->
+    Forall3 (fun a fname_b nfree => let '(fname, b) := fname_b in
+        I_expr fname nfree a b) exprs (numbered' n exprs') nfrees.
+induction exprs; destruct nfrees; intros0 Hlen Hcomp; simpl in *; try discriminate.
+  { subst. constructor. }
+
+subst. i_ctor.
+i_lem rewrite_I_expr.
+Qed.
+
 (*
-
-
-
-Lemma compile_cu'_state_monotonic : forall base exprs metas s exprs' s',
-    compile_cu' base exprs metas s = Some (exprs', s') ->
-    exists s1, s' = s ++ s1.
-induction exprs; destruct metas; intros; simpl in *;
-  try discriminate; break_bind_state_option.
-  { exists []. eauto using app_nil_r. }
-
-on _, eapply_lem compile_state_monotonic.
-on _, eapply_lem IHexprs.
-break_exists. subst.
-eexists. rewrite app_assoc. reflexivity.
-Qed.
-
-Lemma compile_cu'_I_expr : forall BE0 aes ms s bes s',
-    length aes = length ms ->
-    compile_cu' (length BE0) aes ms s = Some (bes, s') ->
-    Forall3 (fun ae be nfree => I_expr (BE0 ++ map fst s') nfree [] ae be)
-        aes bes (map m_nfree ms).
-induction aes; destruct ms; intros0 Hlen Hcomp; simpl in *;
-  try discriminate; break_bind_state_option.
-  { constructor. }
-
-rename a into ae, x into be, x0 into bes.
-on _, eapply_lem compile_I_expr.
-fwd eapply compile_cu'_state_monotonic as HH; eauto.  destruct HH as [ssuffix ?H].
-on _, eapply_lem IHaes; [ | lia].
-i_ctor.
-subst s'. rewrite map_app, app_assoc. i_lem I_expr_weaken.
-Qed.
-
 Lemma compile_cu'_length : forall base exprs metas s exprs' s',
     length exprs = length metas ->
     compile_cu' base exprs metas s = Some (exprs', s') ->
@@ -599,29 +644,20 @@ induction recs; intros.
 - simpl. do 2 break_match; try discriminate.
   simpl. f_equal. erewrite <- IHrecs. on _, fun H => rewrite H. reflexivity.
 Qed.
+*)
 
 Theorem compile_cu_env_ok : forall A Ameta B Bmeta,
     compile_cu (A, Ameta) = Some (B, Bmeta) ->
     env_ok A B (map m_nfree Ameta).
 intros. simpl in *. repeat (break_bind_option || break_match; try discriminate).
 inject_some.
-rename l into B0, l0 into B1_B1meta, l1 into B1, l2 into B1meta.
-rename Heqo1 into Hcomp.
 
-fwd eapply compile_cu'_length as Hlen; eauto.
-  rewrite <- Hlen in Hcomp.
-
-fwd eapply compile_cu'_I_expr; [ | eauto | ]; [ congruence | ].
-
-replace (map fst B1_B1meta) with B1 in *; cycle 1.
-  { erewrite <- process_recorded_fst. on _, fun H => rewrite H. reflexivity. }
-
-unfold env_ok.
-rewrite firstn_app by lia. rewrite firstn_all by lia.
-split; eauto.
+unfold env_ok. split; eauto. eapply compile_cu'_I_expr; eauto.
+rewrite map_length. auto.
 Qed.
 
 
+(*
 Lemma process_recorded_private : forall recs n exprs metas,
     process_recorded recs n = (exprs, metas) ->
     Forall (fun m => m_access m = Private) metas.
@@ -717,6 +753,14 @@ cbv beta in *.
 fwd i_lem Forall_nth_error.
 auto.
 Qed.
+*)
+
+Lemma compile_cu_meta_eq : forall A Ameta B Bmeta,
+    compile_cu (A, Ameta) = Some (B, Bmeta) ->
+    Bmeta = Ameta.
+intros0 Hcomp. unfold compile_cu in Hcomp. break_bind_option.
+inject_some. reflexivity.
+Qed.
 
 
 
@@ -724,39 +768,40 @@ Require Import Semantics.
 
 Section Preservation.
 
-    Variable aprog : A.prog_type.
-    Variable bprog : B.prog_type.
+    Variable aprog : prog_type.
+    Variable bprog : prog_type.
 
     Hypothesis Hcomp : compile_cu aprog = Some bprog.
 
-    Theorem fsim : Semantics.forward_simulation (A.semantics aprog) (B.semantics bprog).
+    Theorem fsim : Semantics.forward_simulation (AB.semantics aprog) (AB.semantics bprog).
     destruct aprog as [A Ameta], bprog as [B Bmeta].
     fwd eapply compile_cu_env_ok; eauto.
+    fwd eapply compile_cu_meta_eq; eauto. subst Bmeta.
 
     set (NFREES := map m_nfree Ameta).
-    eapply Semantics.forward_simulation_plus with
+    eapply Semantics.forward_simulation_star with
         (match_states := I' A B NFREES)
         (match_values := @eq value).
 
     - simpl. intros0 Bcall Hf Ha. invc Bcall. unfold fst, snd in *.
-      fwd eapply compile_cu_public_value with (v := Close fname free); eauto.
-      fwd eapply compile_cu_public_value with (v := av2); eauto.
-      on (public_value Ameta (Close _ _)), invc.
-      fwd i_lem compile_cu_a_length.
-      fwd eapply length_nth_error_Some with (xs := Ameta) (ys := A) as HH; eauto.
-        destruct HH as [abody Habody].
-      fwd i_lem env_ok_nth_error.
-        { erewrite map_nth_error; [ | eauto ]. eauto. }
-        break_and.
+      unfold env_ok in *. break_and.
+      fwd eapply Forall3_nth_error_ex2 as HH.
+        { eassumption. }
+        { eapply numbered_nth_error. eauto. }
+        destruct HH as (abody & nfree & ? & ? & ?).
+      on (public_value _ (Close _ _)), invc.
+        fwd eapply map_nth_error with (l := Ameta) (f := m_nfree); eauto.
+      assert (length free = nfree) by congruence. subst nfree.
 
       eexists. split.
       + econstructor.
-        -- eapply IRun with (bextra := []) (nfree := length free).
-           4: reflexivity. 3: reflexivity. 2: i_ctor.
-           simpl. replace (length free) with (m_nfree m). eassumption.
+        -- i_ctor. i_ctor.
         -- i_ctor.
-           ++ econstructor. 1: eauto using A.public_value_nfree_ok.
-              list_magic_on (free, tt). i_lem A.public_value_nfree_ok.
+           ++ i_lem Forall_nth_error.
+           ++ i_lem public_value_nfree_ok.
+           ++ refold_nfree_ok_value NFREES. split; eauto.
+              rewrite nfree_ok_value_list_Forall.  list_magic_on (free, tt).
+                i_lem public_value_nfree_ok.
            ++ i_ctor.
       + i_ctor. i_ctor.
 
@@ -764,10 +809,9 @@ Section Preservation.
 
       eexists. split. 2: reflexivity.
       econstructor; eauto.
-      + unfold fst, snd in *. eauto using compile_cu_public_value'.
 
     - intros0 Astep. intros0 II.
-      eapply splus_semantics_sim, I'_sim; eauto.
+      eapply sstar_01_semantics_sim, I'_sim; eauto.
 
     Defined.
 
@@ -776,13 +820,12 @@ Section Preservation.
     Proof.
       unfold fsim. simpl.
       unfold Semantics.fsim_match_val.
-      break_match. repeat (break_match_hyp; try congruence).
+      break_match. admit. (*repeat (break_match_hyp; try congruence).
       try unfold forward_simulation_step in *.
       try unfold forward_simulation_plus in *.
       try unfold forward_simulation_star in *.
       try unfold forward_simulation_star_wf in *.
-      inv Heqf. reflexivity.
-    Qed.
+      inv Heqf. reflexivity.*)
+    Admitted.
 
 End Preservation.
-*)
