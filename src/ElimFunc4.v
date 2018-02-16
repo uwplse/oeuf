@@ -9,11 +9,6 @@ Require StepLib.
 
 Definition function_name := nat.
 
-(* List containing a flag for each argument, `true` if Elim should recurse on
-   that argument, `false` if it shouldn't.  The length gives the number of
-   arguments. *)
-Definition rec_info := list bool.
-
 Inductive expr :=
 | Value (v : value)
 | Arg

@@ -954,6 +954,78 @@ rewrite <- firstn_skipn with (n := length xs1) (l := xs3).
 congruence.
 Qed.
 
+Lemma sliding_predicate_all : forall A (P : A -> Prop) i xs ys zs,
+    sliding i xs ys zs ->
+    Forall P xs ->
+    Forall (fun y => ~ P y) ys ->
+    Forall P zs ->
+    i >= length ys.
+intros0 Hsld Hxs Hys Hzs.
+destruct (lt_dec i (length ys)); try lia.
+destruct Hsld as [Hpre Hsuf].
+
+assert (length (skipn i ys) > 0).
+  { rewrite skipn_length. lia. }
+assert (length (skipn i zs) > 0) by congruence.
+assert (HH : i < length zs).
+  { rewrite skipn_length in *. lia. }
+  rewrite <- nth_error_Some in HH.
+  destruct (nth_error zs i) eqn:?; try congruence.
+  clear HH.
+
+assert (nth_error ys i = Some a).
+  { replace i with (i + 0) by lia. rewrite <- skipn_nth_error.
+    rewrite <- Hsuf.
+    rewrite skipn_nth_error. replace (i + 0) with i by lia.
+    assumption. }
+
+fwd eapply Forall_nth_error with (xs := ys); eauto.
+fwd eapply Forall_nth_error with (xs := zs); eauto.
+simpl in *. contradiction.
+Qed.
+
+
+Lemma sliding_predicate_i : forall A (P : A -> Prop) i xs ys zs1 z2 zs3,
+    sliding i xs ys (zs1 ++ [z2] ++ zs3) ->
+    Forall P xs ->
+    Forall (fun y => ~ P y) ys ->
+    Forall P zs1 ->
+    ~ P z2 ->
+    i = length zs1.
+intros0 Hsld Hxs Hys Hzs1 Hz2.
+
+destruct (lt_eq_lt_dec (length zs1) i) as [[? | ?] | ?]; try lia.
+
+- (* i > length zs1 *) exfalso.
+  fwd eapply sliding_nth_error_lt as HH; eauto.
+  rewrite nth_error_app2 in HH by lia.
+  replace (_ - _) with 0 in HH by lia. simpl in HH. symmetry in HH.
+  fwd eapply Forall_nth_error with (P := P); [ | eassumption | ]; auto.
+
+- (* i < length zs1 *) exfalso.
+  fwd eapply sliding_nth_error_ge as HH; [ | eauto | ]; eauto.
+  rewrite nth_error_app1 in HH by lia.
+  destruct (nth_error _ _) eqn:Heq; cycle 1.
+    { rewrite <- nth_error_Some in *. congruence. }
+  symmetry in HH.
+  eapply Forall_nth_error in Heq; eauto.
+  eapply Forall_nth_error in HH; eauto. simpl in *.
+  auto.
+Qed.
+
+Lemma sliding_predicate_nth : forall A (P : A -> Prop) i xs ys zs1 z2 zs3,
+    sliding i xs ys (zs1 ++ [z2] ++ zs3) ->
+    Forall P xs ->
+    Forall (fun y => ~ P y) ys ->
+    Forall P zs1 ->
+    ~ P z2 ->
+    nth_error ys i = Some z2.
+intros. fwd eapply sliding_predicate_i; eauto.
+erewrite <- sliding_nth_error_ge by eauto.
+subst i. rewrite nth_error_app2 by lia.
+replace (_ - _) with 0 by lia. simpl. reflexivity.
+Qed.
+
 
 
 (* distinctness and disjointness *)

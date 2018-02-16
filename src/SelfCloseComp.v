@@ -1,14 +1,16 @@
 Require Import Common Monads.
 Require Import Metadata.
 Require String.
-Require Switched SelfClose.
 Require Import ListLemmas.
 Require Import StepLib.
 Require Import HigherValue.
 
 Require Import Psatz.
 
-Module A := Switched.
+Require ElimFunc4.
+Require SelfClose.
+
+Module A := ElimFunc4.
 Module B := SelfClose.
 
 
@@ -27,7 +29,7 @@ Definition compile :=
         | A.Deref e off => B.Deref (go e) off
         | A.Call f a => B.Call (go f) (go a)
         | A.MkConstr tag args => B.MkConstr tag (go_list args)
-        | A.Switch cases => B.Switch (go_list cases)
+        | A.Elim loop cases target => B.Elim (go loop) (go_list cases) (go target)
         | A.MkClose fname free => B.MkClose fname (go_list free)
         end in go.
 
@@ -82,9 +84,11 @@ Inductive I_expr : A.expr -> B.expr -> Prop :=
 | IConstr : forall tag aargs bargs,
         Forall2 I_expr aargs bargs ->
         I_expr (A.MkConstr tag aargs) (B.MkConstr tag bargs)
-| IElimBody : forall acases bcases,
+| IElim : forall aloop bloop acases bcases atarget btarget,
+        I_expr aloop bloop ->
         Forall2 I_expr acases bcases ->
-        I_expr (A.Switch acases) (B.Switch bcases)
+        I_expr atarget btarget ->
+        I_expr (A.Elim aloop acases atarget) (B.Elim bloop bcases btarget)
 | IClose : forall fname afree bfree,
         Forall2 (I_expr) afree bfree ->
         I_expr (A.MkClose fname afree) (B.MkClose fname bfree)
@@ -146,6 +150,16 @@ intros. list_magic_on (aes, (bes, tt)).
 Qed.
 Hint Resolve Forall_I_expr_value.
 
+Lemma I_expr_map_value : forall vs bes,
+    Forall2 I_expr (map A.Value vs) bes ->
+    bes = map B.Value vs.
+induction vs; intros0 II; invc II.
+- reflexivity.
+- simpl. f_equal.
+  + on >I_expr, invc. reflexivity.
+  + apply IHvs. eauto.
+Qed.
+
 
 Theorem compile_I_expr : forall ae be,
     compile ae = be ->
@@ -158,24 +172,6 @@ intros0 Hcomp;
 simpl in Hcomp; refold_compile; try rewrite <- Hcomp in *;
 try solve [eauto | constructor; eauto].
 Qed.
-
-Lemma unwrap_list_I_expr :
-  forall a b vs,
-    A.unwrap_list a = Some vs ->
-    Forall2 I_expr a b ->
-    B.unwrap_list b = Some vs.                                   
-Proof.
-  induction a; intros; simpl; on (Forall2 _ _ _), invc;
-    unfold A.unwrap_list in *; simpl in *;
-      unfold B.unwrap_list in *; simpl in *;
-        try (on (Some _ = Some _), invc); auto.
-  repeat break_match_hyp; simpl; try congruence.
-  try (on (Some _ = Some _), invc); auto.
-  on (I_expr _ _), invc; simpl in *; try congruence.
-  try (on (Some _ = Some _), invc); auto.
-  erewrite IHa; eauto.
-Qed.
-Hint Resolve unwrap_list_I_expr.
 
 Ltac i_ctor := intros; constructor; eauto.
 Ltac i_lem H := intros; eapply H; eauto.
@@ -193,56 +189,59 @@ intros0 Henv II Astep; [ | solve [invc Astep] ].
 
 inv Astep; invc II; try on (I_expr _ _), invc.
 
-- eexists. split. eapply B.SPlusOne, B.SArg.
-  simpl in *. on (Some _ = Some _), invc.
-  eauto.
+- (* SArg *)
+  eexists. split. eapply B.SPlusOne, B.SArg.
+  simpl in *. inject_some. eauto.
 
-- eexists. split.
+- (* SUpVar *)
+  eexists. split.
     { eapply B.SPlusCons. eapply B.SDerefStep. inversion 1.
       eapply B.SPlusCons. eapply B.SSelf.
       eapply B.SPlusOne.  eapply B.SDerefinateClose; eauto. }
-  on _, eapply_; eauto.
-- eexists. split. eapply B.SPlusOne, B.SDerefStep; eauto.
-  i_ctor. i_ctor. i_ctor. i_ctor.
-  
-- on (I_expr (A.Value (Constr _ _)) _), invc.
-
-  eexists. split. eapply B.SPlusOne, B.SDerefinateConstr; eauto.
-  on _, eapply_; eauto.
-
-- on (I_expr (A.Value (Close _ _)) _), invc.
-
-  eexists. split. eapply B.SPlusOne, B.SDerefinateClose; eauto.
-  on _, eapply_; eauto.
-
-- on _, invc_using Forall2_3part_inv.
-  eexists. split. eapply B.SPlusOne, B.SConstrStep; eauto.
-  i_ctor. i_ctor. i_ctor.
-  repeat eapply Forall2_app; eauto.
-  repeat (econstructor; eauto).
-
-- eexists. split. eapply B.SPlusOne, B.SConstrDone; eauto.
   eauto.
 
-- on _, invc_using Forall2_3part_inv.
+- (* SDerefStep *)
+  eexists. split. eapply B.SPlusOne, B.SDerefStep; eauto.
+  i_ctor. i_ctor. i_ctor. i_ctor.
 
+- (* SDerefinate *)
+  on (I_expr (A.Value (Constr _ _)) _), invc.
+
+  eexists. split. eapply B.SPlusOne, B.SDerefinateConstr; eauto.
+  eauto.
+
+- (* SCloseStep *)
+  on _, invc_using Forall2_3part_inv.
   eexists. split. eapply B.SPlusOne, B.SCloseStep; eauto.
-  i_ctor. i_ctor. i_ctor. eauto using Forall2_app.
+  i_ctor. i_ctor. i_ctor.
+  i_lem Forall2_app. i_lem Forall2_app. i_ctor. i_ctor.
 
-  repeat eapply Forall2_app; eauto.
-  repeat (econstructor; eauto).
+- (* SCloseDone *)
+  fwd i_lem I_expr_map_value. subst.
+  eexists. split. eapply B.SPlusOne, B.SCloseDone; eauto.
+  eauto.
 
-- eexists. split. eapply B.SPlusOne, B.SCloseDone; eauto.
-  on _, eapply_; eauto.
-  all: constructor; eauto.
+- (* SConstrStep *)
+  on _, invc_using Forall2_3part_inv.
+  eexists. split. eapply B.SPlusOne, B.SConstrStep; eauto.
+  i_ctor. i_ctor. i_ctor.
+  i_lem Forall2_app. i_lem Forall2_app. i_ctor. i_ctor.
 
-- eexists. split. eapply B.SPlusOne, B.SCallL; eauto.
+- (* SConstrDone *)
+  fwd i_lem I_expr_map_value. subst.
+  eexists. split. eapply B.SPlusOne, B.SConstrDone; eauto.
+  eauto.
+
+- (* SCallL *)
+  eexists. split. eapply B.SPlusOne, B.SCallL; eauto.
   i_ctor. i_ctor. i_ctor. i_ctor.
 
-- eexists. split. eapply B.SPlusOne, B.SCallR; eauto.
+- (* SCallR *)
+  eexists. split. eapply B.SPlusOne, B.SCallR; eauto.
   i_ctor. i_ctor. i_ctor. i_ctor.
-  
-- on (I_expr (A.Value (Close _ _)) _), invc.
+
+- (* SMakeCall *)
+  on (I_expr (A.Value (Close _ _)) _), invc.
 
   fwd eapply Forall2_nth_error_ex with (xs := AE) (ys := compile_list AE); eauto.
     { eapply compile_list_Forall. reflexivity. }
@@ -253,16 +252,21 @@ inv Astep; invc II; try on (I_expr _ _), invc.
   try eapply B.SMakeCall; eauto using compile_I_expr.
   i_ctor.
   eauto using compile_I_expr.
-  
 
-- fwd eapply Forall2_nth_error_ex with (xs := cases); eauto.
-  break_exists. break_and.
+- (* SElimStepLoop *)
+  eexists. split. eapply B.SPlusOne. i_lem B.SElimStepLoop.
+  i_ctor. i_ctor. i_ctor. i_ctor.
 
-  eexists. split.
-  eapply B.SPlusOne.
-  on (_ :: _ = _ :: _ ), invc.
-  eapply B.SSwitchinate; eauto.
-  i_ctor.
+- (* SElimStep *)
+  eexists. split. eapply B.SPlusOne. i_lem B.SElimStep.
+  i_ctor. i_ctor. i_ctor. i_ctor.
+
+- (* SEliminate *)
+  fwd i_lem Forall2_nth_error_ex as HH. destruct HH as (bcase & ? & ?).
+  on (I_expr (A.Value _) _), invc.
+
+  eexists. split. eapply B.SPlusOne. i_lem B.SEliminate.
+  i_ctor. i_ctor; i_ctor.
 Qed.  
 
 Lemma compile_cu_Forall : forall A Ameta B Bmeta,
