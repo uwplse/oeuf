@@ -85,6 +85,10 @@ Definition compile_cu (cu : list expr * list metadata) :
     | right _ => None
     end >>= fun Hlen =>
     let nfrees := map m_nfree metas in
+    match check_nfree_ok_list nfrees exprs with
+    | left Hnfree => Some Hnfree
+    | right _ => None
+    end >>= fun Hnfree =>
     Some (compile_cu' exprs nfrees 0, metas).
 
 End compile_cu.
@@ -324,12 +328,13 @@ Theorem I_sim : forall AE BE NFREES a a' b,
     Forall3 (fun a fname_b nfree => let '(fname, b) := fname_b in
         I_expr fname nfree a b) AE (numbered BE) NFREES ->
     I AE BE a b ->
+    nfree_ok_state NFREES a ->
     sstep AE a a' ->
     exists b',
         (sstep BE b b' \/ (b' = b /\ metric a' < metric a)) /\
         I AE BE a' b'.
 destruct a as [ae al ak | v];
-intros0 Henv II Astep; inv Astep.
+intros0 Henv II Hnfree Astep; inv Astep.
 all: invc II.
 all: try on (I_expr _ _ _ be), invc.
 
@@ -489,7 +494,9 @@ all: try on (I_expr _ _ _ be), invc.
   simpl in *. subst fname'.
 
   assert (length free = nfree).
-    { (* nfree_ok *) admit. }
+    { on >nfree_ok_state, invc. simpl in *.
+      refold_nfree_ok_value NFREES.  break_and.
+      congruence. }
 
   eexists. split. left. i_lem SMakeCall.
   i_ctor. congruence.
@@ -512,38 +519,36 @@ all: try on (I_expr _ _ _ be), invc.
 Admitted.
 
 
-(* TODO
 
-
-Inductive I' AE BE NFREES : A.state -> B.state -> Prop :=
+Inductive I' AE BE NFREES : state -> state -> Prop :=
 | I'_intro : forall a b,
         I AE BE a b ->
-        A.nfree_ok_state NFREES a ->
+        nfree_ok_state NFREES a ->
         I' AE BE NFREES a b.
 
 Definition env_ok AE BE NFREES :=
-    Forall3 (fun a b nfree => I_expr BE nfree [] a b) AE (firstn (length AE) BE) NFREES /\
-    Forall (A.nfree_ok NFREES) AE.
+    Forall3 (fun a fname_b nfree => let '(fname, b) := fname_b in
+        I_expr fname nfree a b) AE (numbered BE) NFREES /\
+    Forall (nfree_ok NFREES) AE.
 
 Theorem I'_sim : forall AE BE NFREES a a' b,
     env_ok AE BE NFREES ->
     I' AE BE NFREES a b ->
-    A.sstep AE a a' ->
+    sstep AE a a' ->
     exists b',
-        B.splus BE b b' /\
+        (sstep BE b b' \/ (b' = b /\ metric a' < metric a)) /\
         I' AE BE NFREES a' b'.
 intros0 Henv II Astep.
 unfold env_ok in *. break_and.
-set (BE0 := firstn (length AE) BE).
-set (BE1 := skipn (length AE) BE).
-replace (firstn (length AE) BE) with BE0 in * by reflexivity.
-replace BE with (BE0 ++ BE1) in * by eapply firstn_skipn.
 
 intros. on >I', invc.
 fwd eapply I_sim; eauto. break_exists; break_and.
 eexists; split; eauto. constructor; eauto.
-eapply A.step_nfree_ok; try eassumption.
+eapply step_nfree_ok; try eassumption.
 Qed.
+
+
+(*
 
 
 
