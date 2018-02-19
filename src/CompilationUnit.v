@@ -13,7 +13,7 @@ Record compilation_unit :=
   }.
 
 Definition singleton {ty} (e : body_expr [] ty) (name : string) : compilation_unit :=
-  CompilationUnit [ty] (GenvCons e GenvNil) [name].
+  CompilationUnit [ty] (GenvCons e GenvNil) [name] [0].
 
 
 Definition init_metadata j :=
