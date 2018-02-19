@@ -1574,3 +1574,12 @@ first_induction ys; intros0 Hfa Hnth; invc Hfa; destruct i; try discriminate.
 Qed.
 
 
+Lemma map_inj : forall {A B} (f : A -> B) xs ys,
+    (forall x y, f x = f y -> x = y) ->
+    map f xs = map f ys -> xs = ys.
+induction xs; destruct ys; intros0 Hinj Hmap; simpl in *; try discriminate.
+- reflexivity.
+- invc Hmap. erewrite Hinj with (x := a); eauto.
+  erewrite IHxs; eauto.
+Qed.
+

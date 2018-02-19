@@ -97,11 +97,11 @@ Inductive sstep (E : env) : state -> state -> Prop :=
         ~ is_value target ->
         sstep E (Run (Elim loop cases target) a s k)
                 (Run target a s (fun v => Run (Elim loop cases (Value v)) a s k))
-| SEliminate : forall loop0 target0 cases tag args a s k case,
+| SEliminate : forall loop0 target0 cases tag args s k case,
         is_value loop0 ->
         is_value target0 ->
         nth_error cases tag = Some case ->
-        sstep E (Run (Elim loop0 cases target0) a s k)
+        sstep E (Run (Elim loop0 cases target0) (Constr tag args) s k)
                 (Run case (Constr tag args) s k)
 .
 
