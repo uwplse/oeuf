@@ -4,7 +4,7 @@ Require CompilationUnit.
 Require Import Metadata.
 Require Import CompilerUtil.
 
-Require ValueFlag StackFlatter2.
+Require Switched2 StackFlatter2.
 Require
     StackMachComp
     StackContComp
@@ -15,14 +15,14 @@ Require
     StackFlatterComp2
 .
 
-Definition compile_cont (cu : ValueFlag.prog_type) : res StackCont.prog_type :=
+Definition compile_cont (cu : Switched2.prog_type) : res StackCont.prog_type :=
   OK cu
   @@@ StackMachComp.compile_cu
   @@ StackContComp.compile_cu.
 
 Section FSIMcont.
 
-  Variable a : ValueFlag.prog_type.
+  Variable a : Switched2.prog_type.
   Variable b : StackCont.prog_type.
   Hypothesis TRANSF : compile_cont a = OK b.
 
@@ -32,7 +32,7 @@ Section FSIMcont.
     unfold compile_cont in TRANSF. break_result_chain. eauto.
   Qed.
   
-  Definition fsim_cont : Semantics.forward_simulation (ValueFlag.semantics a) (StackCont.semantics b).
+  Definition fsim_cont : Semantics.forward_simulation (Switched2.semantics a) (StackCont.semantics b).
     destruct compile_cont_succ.
     eapply Semantics.compose_forward_simulation;
       try eapply StackMachComp.fsim; eauto;
@@ -57,14 +57,14 @@ Section FSIMcont.
 
 End FSIMcont.
 
-Definition compile_cont2 (cu : ValueFlag.prog_type) : res StackCont2.prog_type :=
+Definition compile_cont2 (cu : Switched2.prog_type) : res StackCont2.prog_type :=
   OK cu
   @@@ compile_cont
   @@ StackContComp2.compile_cu.
 
 Section FSIMcont2.
 
-  Variable a : ValueFlag.prog_type.
+  Variable a : Switched2.prog_type.
   Variable b : StackCont2.prog_type.
   Hypothesis TRANSF : compile_cont2 a = OK b.
 
@@ -74,7 +74,7 @@ Section FSIMcont2.
     unfold compile_cont2 in TRANSF. break_result_chain. eauto.
   Qed.
   
-  Definition fsim_cont2 : Semantics.forward_simulation (ValueFlag.semantics a) (StackCont2.semantics b).
+  Definition fsim_cont2 : Semantics.forward_simulation (Switched2.semantics a) (StackCont2.semantics b).
     destruct compile_cont2_succ.
     eapply Semantics.compose_forward_simulation;
       try eapply fsim_cont; eauto;
@@ -99,14 +99,14 @@ Section FSIMcont2.
 
 End FSIMcont2.
 
-Definition compile_cont3 (cu : ValueFlag.prog_type) : res StackCont3.prog_type :=
+Definition compile_cont3 (cu : Switched2.prog_type) : res StackCont3.prog_type :=
   OK cu
   @@@ compile_cont2
   @@ StackContComp3.compile_cu.
 
 Section FSIMcont3.
 
-  Variable a : ValueFlag.prog_type.
+  Variable a : Switched2.prog_type.
   Variable b : StackCont3.prog_type.
   Hypothesis TRANSF : compile_cont3 a = OK b.
 
@@ -116,7 +116,7 @@ Section FSIMcont3.
     unfold compile_cont3 in TRANSF. break_result_chain. eauto.
   Qed.
   
-  Definition fsim_cont3 : Semantics.forward_simulation (ValueFlag.semantics a) (StackCont3.semantics b).
+  Definition fsim_cont3 : Semantics.forward_simulation (Switched2.semantics a) (StackCont3.semantics b).
     destruct compile_cont3_succ.
     eapply Semantics.compose_forward_simulation;
       try eapply fsim_cont2; eauto;
@@ -141,14 +141,14 @@ Section FSIMcont3.
 
 End FSIMcont3.
 
-Definition compile_flat (cu : ValueFlag.prog_type) : res StackFlat.prog_type :=
+Definition compile_flat (cu : Switched2.prog_type) : res StackFlat.prog_type :=
   OK cu
   @@@ compile_cont3
   @@ StackFlatComp.compile_cu.
 
 Section FSIMflat.
 
-  Variable a : ValueFlag.prog_type.
+  Variable a : Switched2.prog_type.
   Variable b : StackFlat.prog_type.
   Hypothesis TRANSF : compile_flat a = OK b.
 
@@ -158,7 +158,7 @@ Section FSIMflat.
     unfold compile_flat in TRANSF. break_result_chain. eauto.
   Qed.
   
-  Definition fsim_flat : Semantics.forward_simulation (ValueFlag.semantics a) (StackFlat.semantics b).
+  Definition fsim_flat : Semantics.forward_simulation (Switched2.semantics a) (StackFlat.semantics b).
     destruct compile_flat_succ.
     eapply Semantics.compose_forward_simulation;
       try eapply fsim_cont3; eauto;
@@ -183,14 +183,14 @@ Section FSIMflat.
 
 End FSIMflat.
 
-Definition compile_flatter (cu : ValueFlag.prog_type) : res StackFlatter.prog_type :=
+Definition compile_flatter (cu : Switched2.prog_type) : res StackFlatter.prog_type :=
   OK cu
   @@@ compile_flat
   @@ StackFlatterComp.compile_cu.
 
 Section FSIMflatter.
 
-  Variable a : ValueFlag.prog_type.
+  Variable a : Switched2.prog_type.
   Variable b : StackFlatter.prog_type.
   Hypothesis TRANSF : compile_flatter a = OK b.
 
@@ -200,7 +200,7 @@ Section FSIMflatter.
     unfold compile_flatter in TRANSF. break_result_chain. eauto.
   Qed.
   
-  Definition fsim_flatter : Semantics.forward_simulation (ValueFlag.semantics a) (StackFlatter.semantics b).
+  Definition fsim_flatter : Semantics.forward_simulation (Switched2.semantics a) (StackFlatter.semantics b).
     destruct compile_flatter_succ.
     eapply Semantics.compose_forward_simulation;
       try eapply fsim_flat; eauto;
@@ -225,14 +225,14 @@ Section FSIMflatter.
 
 End FSIMflatter.
 
-Definition compile_flatter2 (cu : ValueFlag.prog_type) : res StackFlatter2.prog_type :=
+Definition compile_flatter2 (cu : Switched2.prog_type) : res StackFlatter2.prog_type :=
   OK cu
   @@@ compile_flatter
   @@ StackFlatterComp2.compile_cu.
 
 Section FSIMflatter2.
 
-  Variable a : ValueFlag.prog_type.
+  Variable a : Switched2.prog_type.
   Variable b : StackFlatter2.prog_type.
   Hypothesis TRANSF : compile_flatter2 a = OK b.
 
@@ -242,7 +242,7 @@ Section FSIMflatter2.
     unfold compile_flatter2 in TRANSF. break_result_chain. eauto.
   Qed.
   
-  Definition fsim_flatter2 : Semantics.forward_simulation (ValueFlag.semantics a) (StackFlatter2.semantics b).
+  Definition fsim_flatter2 : Semantics.forward_simulation (Switched2.semantics a) (StackFlatter2.semantics b).
     destruct compile_flatter2_succ.
     eapply Semantics.compose_forward_simulation;
       try eapply fsim_flatter; eauto;
@@ -271,7 +271,7 @@ End FSIMflatter2.
 
 
 
-Module A := ValueFlag.
+Module A := Switched2.
 Module B := StackFlatter2.
 
 Definition compile_cu (cu : A.env * list metadata) : res (B.env * list metadata) :=
