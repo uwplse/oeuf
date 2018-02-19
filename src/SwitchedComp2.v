@@ -34,7 +34,7 @@ Definition compile : A.expr -> option B.expr :=
         | A.Deref e n => B.Deref <$> go e <*> Some n
         | A.Call f a => B.Call <$> go f <*> go a
         | A.MkConstr tag args => B.MkConstr tag <$> go_list args
-        | A.Elim A.Self cases A.Arg => B.Elim <$> go_list cases
+        | A.Elim A.Self cases A.Arg => B.Switch <$> go_list cases
         | A.Elim _ _ _ => None
         | A.MkClose f free => B.MkClose f <$> go_list free
         end in go.
@@ -77,7 +77,7 @@ Inductive I_expr : A.expr -> B.expr -> Prop :=
         I_expr (A.MkConstr tag aargs) (B.MkConstr tag bargs)
 | IElim : forall acases bcases,
         Forall2 I_expr acases bcases ->
-        I_expr (A.Elim A.Self acases A.Arg) (B.Elim bcases)
+        I_expr (A.Elim A.Self acases A.Arg) (B.Switch bcases)
 | IMkClose : forall fname' aargs bargs,
         Forall2 I_expr aargs bargs ->
         I_expr (A.MkClose fname' aargs) (B.MkClose fname' bargs)
@@ -95,14 +95,14 @@ Inductive I (AE : A.env) (BE : B.env) : A.state -> B.state -> Prop :=
         I AE BE
             (A.Run A.Self a s (fun v =>
                 A.Run (A.Elim (A.Value v) acases A.Arg) a s ak))
-            (B.Run (B.Elim bcases) a s bk)
+            (B.Run (B.Switch bcases) a s bk)
 
 | IInElim1 : forall a s acases bcases ak bk,
         Forall2 I_expr acases bcases ->
         (forall v, I AE BE (ak v) (bk v)) ->
         I AE BE
             (A.Run (A.Elim (A.Value s) acases A.Arg) a s ak)
-            (B.Run (B.Elim bcases) a s bk)
+            (B.Run (B.Switch bcases) a s bk)
 
 | IInElim2 : forall a s acases bcases ak bk,
         Forall2 I_expr acases bcases ->
@@ -110,14 +110,14 @@ Inductive I (AE : A.env) (BE : B.env) : A.state -> B.state -> Prop :=
         I AE BE
             (A.Run A.Arg a s (fun v =>
                 A.Run (A.Elim (A.Value s) acases (A.Value v)) a s ak))
-            (B.Run (B.Elim bcases) a s bk)
+            (B.Run (B.Switch bcases) a s bk)
 
 | IInElim3 : forall a s acases bcases ak bk,
         Forall2 I_expr acases bcases ->
         (forall v, I AE BE (ak v) (bk v)) ->
         I AE BE
             (A.Run (A.Elim (A.Value s) acases (A.Value a)) a s ak)
-            (B.Run (B.Elim bcases) a s bk)
+            (B.Run (B.Switch bcases) a s bk)
 
 | IStop : forall v,
         I AE BE (A.Stop v) (B.Stop v).
@@ -333,7 +333,7 @@ all: try on (I_expr _ be), invc.
 - (* SEliminate - IInElim3 *)
   fwd i_lem Forall2_nth_error_ex as HH.  destruct HH as (bcase & ? & ?).
 
-  eexists. split. left. i_lem B.SEliminate.
+  eexists. split. left. i_lem B.SSwitchinate.
   i_ctor.
 Qed.
 

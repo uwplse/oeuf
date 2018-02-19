@@ -1,13 +1,13 @@
 Require Import Common Monads.
 Require Import Metadata.
 Require String.
-Require ValueFlag StackMach.
+Require Switched2 StackMach.
 Require Import ListLemmas.
 Require Import HigherValue.
 
 Require Import Psatz.
 
-Module A := ValueFlag.
+Module A := Switched2.
 Module B := StackMach.
 
 
@@ -183,34 +183,6 @@ intros. eapply I_expr_not_value; eauto.
 Qed.
 Hint Resolve I_expr_not_value'.
 
-Lemma A_unwrap_list_is_value : forall es vs,
-    A.unwrap_list es = Some vs ->
-    Forall A.is_value es.
-induction es; intros; unfold A.unwrap_list in *; simpl in *.
-- constructor.
-- repeat (break_match; try discriminate). inject_some. constructor; eauto.
-  destruct a; try discriminate. constructor.
-Qed.
-
-Lemma A_unwrap_list_map_value : forall es vs,
-    A.unwrap_list es = Some vs ->
-    es = map A.Value vs.
-induction es; destruct vs; unfold A.unwrap_list; intros; simpl in *;
-repeat (break_match; try discriminate); try discriminate.
-- reflexivity.
-- inject_some. f_equal; eauto.
-  destruct a; try discriminate; simpl in *. congruence.
-Qed.
-
-Lemma A_unwrap_list_map_value_eq : forall vs vs',
-    A.unwrap_list (map A.Value vs) = Some vs' ->
-    vs = vs'.
-induction vs; destruct vs'; unfold A.unwrap_list; intros; simpl in *;
-repeat (break_match; try discriminate); try discriminate.
-- reflexivity.
-- inject_some. f_equal; eauto.
-Qed.
-
 Lemma A_map_value_is_value : forall vs,
     Forall A.is_value (map A.Value vs).
 induction vs; simpl; constructor; eauto.  constructor.
@@ -286,33 +258,6 @@ all: try solve [exfalso; eauto].
   eexists. split. eapply B.SDerefinateClose; eauto.
   on _, eapply_.
 
-- (* ConstrStep *)
-  assert (Forall (fun e => ~ A.is_value e) es0) by eauto.
-  fwd eapply annoying_list_lemma; eauto.  break_and.
-  subst es0.  on (Forall2 _ (_ :: _) _), invc.  simpl in *.
-
-  eexists. split. eapply B.SBlock.
-  i_ctor. i_ctor.
-    change (A.Value v :: es) with (map A.Value [v] ++ es).
-      rewrite app_assoc. rewrite <- map_app.
-    replace (_ + S _) with (length (vs0 ++ [v]) + length es); cycle 1.
-      { rewrite app_length. simpl. lia. }
-    simpl. rw_stk. change (v :: rev vs0) with (rev [v] ++ rev vs0). rewrite <- rev_app_distr.
-  i_ctor.
-
-- (* ConstrDone *)
-  assert (Forall (fun e => ~ A.is_value e) es0) by eauto.
-  fwd eapply A_unwrap_list_is_value as HH; eauto.  invc_using Forall_app_inv HH.
-  destruct es0; cycle 1.
-    { repeat on (Forall _ (_ :: _)), invc. exfalso. eauto. }
-  on (Forall2 _ [] _), invc.
-  simpl in *.  rewrite Nat.add_0_r in *.  rewrite app_nil_r in *.
-  fwd eapply A_unwrap_list_map_value_eq; eauto. subst vs0.
-
-  eexists. split. eapply B.SConstrDone.
-    { rw_stk. rewrite rev_length. reflexivity. }
-  rw_stk. rewrite rev_involutive.  on _, eapply_.
-
 - (* CloseStep *)
   assert (Forall (fun e => ~ A.is_value e) es0) by eauto.
   fwd eapply annoying_list_lemma; eauto.  break_and.
@@ -329,16 +274,47 @@ all: try solve [exfalso; eauto].
 
 - (* CloseDone *)
   assert (Forall (fun e => ~ A.is_value e) es0) by eauto.
-  fwd eapply A_unwrap_list_is_value as HH; eauto.  invc_using Forall_app_inv HH.
+  fwd eapply A_map_value_is_value with (vs := vs) as HH; eauto.
+  on (_ = map A.Value vs), fun H => rewrite <- H in *.
+  on _, invc_using Forall_app_inv.
   destruct es0; cycle 1.
     { repeat on (Forall _ (_ :: _)), invc. exfalso. eauto. }
   on (Forall2 _ [] _), invc.
   simpl in *.  rewrite Nat.add_0_r in *.  rewrite app_nil_r in *.
-  fwd eapply A_unwrap_list_map_value_eq; eauto. subst vs0.
+  fwd eapply map_inj; try eassumption.  { injection 1. eauto. } subst vs0.
 
   eexists. split. eapply B.SCloseDone.
     { rw_stk. rewrite rev_length. reflexivity. }
-  rw_stk. rewrite rev_involutive.  on _, eapply_.
+  rw_stk. rewrite rev_involutive.  eauto.
+
+- (* ConstrStep *)
+  assert (Forall (fun e => ~ A.is_value e) es0) by eauto.
+  fwd eapply annoying_list_lemma; eauto.  break_and.
+  subst es0.  on (Forall2 _ (_ :: _) _), invc.  simpl in *.
+
+  eexists. split. eapply B.SBlock.
+  i_ctor. i_ctor.
+    change (A.Value v :: es) with (map A.Value [v] ++ es).
+      rewrite app_assoc. rewrite <- map_app.
+    replace (_ + S _) with (length (vs0 ++ [v]) + length es); cycle 1.
+      { rewrite app_length. simpl. lia. }
+    simpl. rw_stk. change (v :: rev vs0) with (rev [v] ++ rev vs0). rewrite <- rev_app_distr.
+  i_ctor.
+
+- (* ConstrDone *)
+  assert (Forall (fun e => ~ A.is_value e) es0) by eauto.
+  fwd eapply A_map_value_is_value with (vs := vs) as HH; eauto.
+  on (_ = map A.Value vs), fun H => rewrite <- H in *.
+  on _, invc_using Forall_app_inv.
+  destruct es0; cycle 1.
+    { repeat on (Forall _ (_ :: _)), invc. exfalso. eauto. }
+  on (Forall2 _ [] _), invc.
+  simpl in *.  rewrite Nat.add_0_r in *.  rewrite app_nil_r in *.
+  fwd eapply map_inj; try eassumption.  { injection 1. eauto. } subst vs0.
+
+  eexists. split. eapply B.SConstrDone.
+    { rw_stk. rewrite rev_length. reflexivity. }
+  rw_stk. rewrite rev_involutive.  eauto.
 
 - (* CallL *)
   eexists. split. eapply B.SBlock.

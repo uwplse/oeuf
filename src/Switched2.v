@@ -16,7 +16,7 @@ Inductive expr :=
 | Deref : expr -> nat -> expr
 | Call : expr -> expr -> expr
 | MkConstr (tag : nat) (args : list expr)
-| Elim (cases : list expr)
+| Switch (cases : list expr)
 | MkClose (f : function_name) (free : list expr)
 .
 
@@ -88,9 +88,9 @@ Inductive sstep (E : env) : state -> state -> Prop :=
         sstep E (Run (Call (Value (Close fname free)) (Value arg)) a s k)
                 (Run body arg (Close fname free) k)
 
-| SEliminate : forall cases tag args a s k case,
+| SSwitchinate : forall cases tag args s k case,
         nth_error cases tag = Some case ->
-        sstep E (Run (Elim cases) a s k)
+        sstep E (Run (Switch cases) (Constr tag args) s k)
                 (Run case (Constr tag args) s k)
 .
 
@@ -151,7 +151,7 @@ Definition expr_rect_mut
     (HDeref :   forall e n, P e -> P (Deref e n))
     (HCall :    forall f a, P f -> P a -> P (Call f a))
     (HConstr :  forall tag args, Pl args -> P (MkConstr tag args))
-    (HElim :    forall cases, Pl cases -> P (Elim cases))
+    (HSwitch :  forall cases, Pl cases -> P (Switch cases))
     (HClose :   forall f free, Pl free -> P (MkClose f free))
     (Hnil :     Pl [])
     (Hcons :    forall e es, P e -> Pl es -> Pl (e :: es))
@@ -169,17 +169,17 @@ Definition expr_rect_mut
         | Deref e n => HDeref e n (go e)
         | Call f a => HCall f a (go f) (go a)
         | MkConstr tag args => HConstr tag args (go_list args)
-        | Elim cases => HElim cases (go_list cases)
+        | Switch cases => HSwitch cases (go_list cases)
         | MkClose f free => HClose f free (go_list free)
         end in go e.
 
 Definition expr_rect_mut'
         (P : expr -> Type)
         (Pl : list expr -> Type)
-    HValue HArg HSelf HDeref HCall HConstr HElim HClose Hnil Hcons
+    HValue HArg HSelf HDeref HCall HConstr HSwitch HClose Hnil Hcons
     : (forall e, P e) * (forall es, Pl es) :=
     let go := expr_rect_mut P Pl
-        HValue HArg HSelf HDeref HCall HConstr HElim HClose Hnil Hcons
+        HValue HArg HSelf HDeref HCall HConstr HSwitch HClose Hnil Hcons
     in
     let fix go_list es :=
         match es as es_ return Pl es_ with
@@ -196,8 +196,186 @@ Definition expr_ind' (P : expr -> Prop)
     (HDeref :   forall e n, P e -> P (Deref e n))
     (HCall :    forall f a, P f -> P a -> P (Call f a))
     (HConstr :  forall c args, Forall P args -> P (MkConstr c args))
-    (HElim :    forall cases, Forall P cases -> P (Elim cases))
+    (HSwitch :  forall cases, Forall P cases -> P (Switch cases))
     (HClose :   forall f free, Forall P free -> P (MkClose f free))
     (e : expr) : P e :=
     ltac:(refine (@expr_rect_mut P (Forall P)
-        HValue HArg HSelf HDeref HCall HConstr HElim HClose _ _ e); eauto).
+        HValue HArg HSelf HDeref HCall HConstr HSwitch HClose _ _ e); eauto).
+
+
+
+
+
+Definition is_value_dec e : { is_value e } + { ~ is_value e }.
+destruct e; try solve [left; constructor | right; inversion 1].
+Defined.
+
+
+Definition cases_arent_values : expr -> Prop :=
+    let fix go e :=
+        let fix go_list es :=
+            match es with
+            | [] => True
+            | e :: es => go e /\ go_list es
+            end in
+        match e with
+        | Value _ => True
+        | Arg => True
+        | Self => True
+        | Deref e _ => go e
+        | Call f a => go f /\ go a
+        | MkConstr _ args => go_list args
+        | Switch cases =>
+                Forall (fun e => ~ is_value e) cases /\
+                go_list cases
+        | MkClose _ free => go_list free
+        end in go.
+
+Definition cases_arent_values_list : list expr -> Prop :=
+    let go := cases_arent_values in
+    let fix go_list es :=
+        match es with
+        | [] => True
+        | e :: es => go e /\ go_list es
+        end in go_list.
+
+Ltac refold_cases_arent_values :=
+    fold cases_arent_values_list in *.
+
+Lemma cases_arent_values_list_is_Forall : forall es,
+    cases_arent_values_list es <-> Forall cases_arent_values es.
+induction es; simpl; split; inversion 1; constructor; firstorder eauto.
+Qed.
+
+Inductive cases_arent_values_state : state -> Prop :=
+| CavsRun : forall e a s k,
+        cases_arent_values e ->
+        (forall v, cases_arent_values_state (k v)) ->
+        cases_arent_values_state (Run e a s k)
+| CavsStop : forall v,
+        cases_arent_values_state (Stop v)
+.
+
+
+Ltac i_ctor := intros; constructor; simpl; eauto.
+Ltac i_lem H := intros; eapply H; simpl; eauto.
+
+Lemma step_cases_arent_values : forall E s s',
+    Forall cases_arent_values E ->
+    cases_arent_values_state s ->
+    sstep E s s' ->
+    cases_arent_values_state s'.
+intros0 Henv Hcases Hstep; invc Hstep; invc Hcases;
+simpl in *; refold_cases_arent_values.
+
+- eauto.
+
+- eauto.
+
+- i_ctor. i_ctor.
+
+- eauto.
+
+- eauto.
+
+- rewrite cases_arent_values_list_is_Forall in *.
+  on _, invc_using Forall_app_inv.
+  on (Forall _ (_ :: _)), invc.
+
+  i_ctor. i_ctor. refold_cases_arent_values.
+
+  rewrite cases_arent_values_list_is_Forall.
+  i_lem Forall_app. i_ctor.
+
+- eauto.
+
+- rewrite cases_arent_values_list_is_Forall in *.
+  on _, invc_using Forall_app_inv.
+  on (Forall _ (_ :: _)), invc.
+
+  i_ctor. i_ctor. refold_cases_arent_values.
+
+  rewrite cases_arent_values_list_is_Forall.
+  i_lem Forall_app. i_ctor.
+
+- eauto.
+
+- break_and. i_ctor. i_ctor.
+
+- break_and. i_ctor. i_ctor.
+
+- i_ctor. i_lem Forall_nth_error.
+
+- break_and. i_ctor.
+  rewrite cases_arent_values_list_is_Forall in *.
+  i_lem Forall_nth_error.
+
+Qed.
+
+Lemma splus_cases_arent_values : forall E s s',
+    Forall cases_arent_values E ->
+    cases_arent_values_state s ->
+    splus E s s' ->
+    cases_arent_values_state s'.
+induction 3; eauto using step_cases_arent_values.
+Qed.
+
+
+
+Definition no_values : expr -> Prop :=
+    let fix go e :=
+        let fix go_list es :=
+            match es with
+            | [] => True
+            | e :: es => go e /\ go_list es
+            end in
+        match e with
+        | Value _ => False
+        | Arg => True
+        | Self => True
+        | Deref e _ => go e
+        | Call f a => go f /\ go a
+        | MkConstr _ args => go_list args
+        | Switch cases => go_list cases
+        | MkClose _ free => go_list free
+        end in go.
+
+Definition no_values_list : list expr -> Prop :=
+    let go := no_values in
+    let fix go_list es :=
+        match es with
+        | [] => True
+        | e :: es => go e /\ go_list es
+        end in go_list.
+
+Ltac refold_no_values :=
+    fold no_values_list in *.
+
+Lemma no_values_list_is_Forall : forall es,
+    no_values_list es <-> Forall no_values es.
+induction es; simpl; split; inversion 1; constructor; firstorder eauto.
+Qed.
+
+Definition no_values_dec e : { no_values e } + { ~ no_values e }.
+induction e using expr_rect_mut with
+    (Pl := fun es => { no_values_list es } + { ~ no_values_list es });
+simpl in *; refold_no_values;
+try solve [ assumption | left; constructor | right; inversion 1 ].
+
+- destruct IHe1; [ | right; inversion 1; intuition ].
+  destruct IHe2; [ | right; inversion 1; intuition ].
+  left. constructor; auto.
+
+- destruct IHe; [ | right; inversion 1; intuition ].
+  destruct IHe0; [ | right; inversion 1; intuition ].
+  left. constructor; auto.
+Defined.
+
+Definition no_values_list_dec es : { no_values_list es } + { ~ no_values_list es }.
+induction es.
+- left. constructor.
+- simpl; refold_no_values.  rename a into e.
+  destruct (no_values_dec e); [ | right; intuition ].
+  destruct IHes; [ | right; intuition ].
+  left. auto.
+Defined.
