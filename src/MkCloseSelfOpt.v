@@ -626,26 +626,6 @@ subst. i_ctor.
 i_lem rewrite_I_expr.
 Qed.
 
-(*
-Lemma compile_cu'_length : forall base exprs metas s exprs' s',
-    length exprs = length metas ->
-    compile_cu' base exprs metas s = Some (exprs', s') ->
-    length exprs' = length exprs.
-induction exprs; destruct metas; intros; simpl in *;
-  try discriminate; break_bind_state_option.
-- reflexivity.
-- simpl. f_equal. on _, eapply_lem IHexprs; eauto.
-Qed.
-
-Lemma process_recorded_fst : forall recs n,
-    fst (process_recorded recs n) = map fst recs.
-induction recs; intros.
-- reflexivity.
-- simpl. do 2 break_match; try discriminate.
-  simpl. f_equal. erewrite <- IHrecs. on _, fun H => rewrite H. reflexivity.
-Qed.
-*)
-
 Theorem compile_cu_env_ok : forall A Ameta B Bmeta,
     compile_cu (A, Ameta) = Some (B, Bmeta) ->
     env_ok A B (map m_nfree Ameta).
@@ -655,105 +635,6 @@ inject_some.
 unfold env_ok. split; eauto. eapply compile_cu'_I_expr; eauto.
 rewrite map_length. auto.
 Qed.
-
-
-(*
-Lemma process_recorded_private : forall recs n exprs metas,
-    process_recorded recs n = (exprs, metas) ->
-    Forall (fun m => m_access m = Private) metas.
-induction recs; intros0 Hproc; simpl in *.
-- inject_pair. constructor.
-- do 2 break_match; try discriminate. inject_pair.
-  econstructor; eauto.
-Qed.
-
-Lemma compile_cu_meta_split : forall A Ameta B Bmeta,
-    compile_cu (A, Ameta) = Some (B, Bmeta) ->
-    exists Bnew_meta,
-        Forall (fun m => m_access m = Private) Bnew_meta /\
-        Bmeta = Ameta ++ Bnew_meta.
-intros0 Hcomp. unfold compile_cu in Hcomp. break_bind_option.
-do 4 (break_match; try discriminate).  do 3 inject_some.
-rename l into B0, l0 into B1_B1meta, l1 into B1, l2 into B1meta.
-exists B1meta. split; eauto using process_recorded_private.
-Qed.
-
-Lemma compile_cu_a_length : forall A Ameta B Bmeta,
-    compile_cu (A, Ameta) = Some (B, Bmeta) ->
-    length A = length Ameta.
-intros0 Hcomp. unfold compile_cu in Hcomp. break_bind_option.
-assumption.
-Qed.
-
-Lemma compile_cu_fname_meta : forall A Ameta B Bmeta fname m,
-    compile_cu (A, Ameta) = Some (B, Bmeta) ->
-    nth_error Bmeta fname = Some m ->
-    m_access m = Public ->
-    nth_error Ameta fname = Some m.
-intros0 Hcomp Hnth Hpub.
-
-fwd eapply compile_cu_meta_split as HH; eauto.
-  destruct HH as (Bnew_meta & ? & ?).  subst Bmeta.
-
-destruct (lt_dec fname (length Ameta)); cycle 1.
-  { exfalso. on _, rewrite_fwd nth_error_app2; [ | lia ].
-    fwd i_lem Forall_nth_error. cbv beta in *. congruence. }
-
-on _, rewrite_fwd nth_error_app1; [ | lia ].
-auto.
-Qed.
-
-Lemma compile_cu_fname_meta' : forall A Ameta B Bmeta fname m,
-    compile_cu (A, Ameta) = Some (B, Bmeta) ->
-    nth_error Ameta fname = Some m ->
-    nth_error Bmeta fname = Some m.
-intros0 Hcomp Hnth.
-
-fwd eapply compile_cu_meta_split as HH; eauto.
-  destruct HH as (Bnew_meta & ? & ?).  subst Bmeta.
-
-rewrite nth_error_app1; eauto.
-rewrite <- nth_error_Some. congruence.
-Qed.
-
-Lemma compile_cu_public_value : forall A Ameta B Bmeta v,
-    compile_cu (A, Ameta) = Some (B, Bmeta) ->
-    public_value Bmeta v ->
-    public_value Ameta v.
-induction v using value_ind'; intros0 Hcomp Hpub; invc Hpub.
-- i_ctor. list_magic_on (args, tt).
-- i_ctor.
-  + i_lem compile_cu_fname_meta.
-  + list_magic_on (free, tt).
-Qed.
-
-Lemma compile_cu_public_value' : forall A Ameta B Bmeta v,
-    compile_cu (A, Ameta) = Some (B, Bmeta) ->
-    public_value Ameta v ->
-    public_value Bmeta v.
-induction v using value_ind'; intros0 Hcomp Hpub; invc Hpub.
-- i_ctor. list_magic_on (args, tt).
-- i_ctor.
-  + i_lem compile_cu_fname_meta'.
-  + list_magic_on (free, tt).
-Qed.
-
-Lemma env_ok_nth_error : forall A B NFREES fname abody bbody nfree,
-    env_ok A B NFREES ->
-    nth_error A fname = Some abody ->
-    nth_error B fname = Some bbody ->
-    nth_error NFREES fname = Some nfree ->
-    I_expr B nfree [] abody bbody /\ A.nfree_ok NFREES abody.
-intros0 Henv Ha Hb Hnf.
-invc Henv.
-fwd i_lem Forall3_nth_error.
-  { rewrite firstn_nth_error_lt; eauto.
-    rewrite <- nth_error_Some. congruence. }
-cbv beta in *.
-fwd i_lem Forall_nth_error.
-auto.
-Qed.
-*)
 
 Lemma compile_cu_meta_eq : forall A Ameta B Bmeta,
     compile_cu (A, Ameta) = Some (B, Bmeta) ->
