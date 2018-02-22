@@ -103,7 +103,9 @@ Definition transf_fundef (f : Fflatmajor.fundef) : Emajor.fundef :=
   AST.transf_fundef transf_function f.
 
 Definition transf_program (p : Fflatmajor.program) : Emajor.program :=
-  AST.transform_program transf_fundef p.
+  Emajor.MkProgram
+    (AST.transform_program transf_fundef p)
+    (Fflatmajor.p_meta p).
 
 
 Lemma transf_switch :
@@ -607,8 +609,8 @@ Proof.
   * eexists; split.
     unfold tge. unfold transf_program.    
     eapply plus_one. econstructor; eauto.
-    erewrite Genv.find_symbol_transf; eauto.
-    erewrite Genv.find_funct_ptr_transf; eauto.
+    simpl. erewrite Genv.find_symbol_transf; eauto.
+    simpl. erewrite Genv.find_funct_ptr_transf; eauto.
     simpl. reflexivity. simpl. find_rewrite. reflexivity.
     econstructor; eauto.
     econstructor; eauto.
@@ -626,8 +628,8 @@ Proof.
     unfold tge.
     unfold transf_program.
     econstructor; eauto.
-    erewrite Genv.find_symbol_transf; eauto.
-    erewrite Genv.find_funct_ptr_transf; eauto.
+    simpl. erewrite Genv.find_symbol_transf; eauto.
+    simpl. erewrite Genv.find_funct_ptr_transf; eauto.
     econstructor; eauto.
 
   (* Sswitch *)
@@ -686,6 +688,7 @@ Proof.
   invp match_states.
   invp match_cont.
   econstructor.
+  unfold transf_program. simpl.
   eauto using transf_public_value.
 Qed.
 
@@ -699,7 +702,7 @@ Proof.
   unfold transf_program in *.
   eapply Genv.find_funct_ptr_rev_transf in H1; eauto.
   break_exists. break_and.
-  erewrite Genv.find_symbol_transf in H0; eauto.
+  simpl in *. erewrite Genv.find_symbol_transf in H0; eauto.
   destruct x; simpl in *; try congruence. inv H5.
   assert (length (Fflatmajor.fn_params f) = 2%nat).
   destruct f; simpl in *; eauto.

@@ -67,7 +67,9 @@ Definition transf_fundef (fd : Fmajor.fundef) : Fflatmajor.fundef :=
   AST.transf_fundef transf_function fd.
 
 Definition transf_program (p : Fmajor.program) : Fflatmajor.program :=
-  AST.transform_program transf_fundef p.
+  Fflatmajor.MkProgram
+    (AST.transform_program transf_fundef (Fmajor.p_ast p))
+    (Fmajor.p_meta p).
 
 
 Lemma plus_left_e :
@@ -195,7 +197,7 @@ Proof.
   intros.
   unfold ge in *. unfold tge in *.
   subst tprog. unfold transf_program.
-  erewrite Genv.find_symbol_transf; eauto.
+  simpl. erewrite Genv.find_symbol_transf; eauto.
 Qed.
 
 Lemma find_funct_ptr_transf :
@@ -206,7 +208,7 @@ Proof.
   intros.
   unfold ge in *. unfold tge in *.
   subst tprog. unfold transf_program.
-  erewrite Genv.find_funct_ptr_transf; eauto.
+  simpl. erewrite Genv.find_funct_ptr_transf; eauto.
   reflexivity.
 Qed.
 
@@ -436,7 +438,7 @@ Proof.
   inv H.
   unfold transf_program in *.
   eapply Genv.find_funct_ptr_rev_transf in H1. break_exists. break_and.
-  erewrite Genv.find_symbol_transf in H0; eauto.
+  simpl in *. erewrite Genv.find_symbol_transf in H0; eauto.
   destruct x; simpl in *; try congruence. on (Internal _ = Internal _), invc.
   eexists; split; try econstructor; eauto.
   - econstructor; eauto. 

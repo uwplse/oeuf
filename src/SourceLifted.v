@@ -891,3 +891,10 @@ Inductive is_callstate {G} (g : genv G) : forall {ty1 ty2},
 Inductive final_state {G} : forall {ty}, state G ty -> value G ty -> Prop :=
 | FinalState : forall ty (v : value G ty),
         final_state (Stop v) v.
+
+
+(* misc *)
+
+Definition g_nfree (g : type * list type * type) : nat :=
+    let '(_, free_tys, _) := g in
+    length free_tys.

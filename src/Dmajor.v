@@ -62,13 +62,17 @@ Definition var (id : ident) := Evar id.
 Notation "A + B" := (Eadd A B).
 Definition load (a : expr) := Eload Mint32 a.
 Notation "A <- B" := (Sassign A B) (at level 70).
-Notation "A ; B" := (Sseq A B) (at level 50).
+Notation "A ;; B" := (Sseq A B) (at level 50).
 Definition alloc (dst : ident) (sz : Z) := Salloc dst (const sz).
 Definition store (addr : expr) (payload : expr) := Sstore Mint32 addr payload.
 
 
 Definition fundef := AST.fundef function.
-Definition program := AST.program fundef unit.
+
+Record program := MkProgram {
+    p_ast :> AST.program fundef unit;
+    p_meta : meta_map
+}.
 
 Definition funsig (fd: function) := fn_sig fd.
 
@@ -264,8 +268,8 @@ Inductive is_callstate (p : program) : value -> value -> state -> Prop :=
       Genv.find_funct_ptr (Genv.globalenv p) fnb = Some (Internal fn) ->
       Genv.find_symbol (Genv.globalenv p) fname = Some fnb ->
       length (fn_params fn) = 2%nat ->
-      public_value p (Close fname vs) ->
-      public_value p arg ->
+      public_value p (p_meta p) (Close fname vs) ->
+      public_value p (p_meta p) arg ->
       is_callstate p (Close fname vs) arg (Callstate fn ((Vptr fb fofs) :: argptr :: nil) Kstop m).
 
 
@@ -273,7 +277,7 @@ Inductive is_callstate (p : program) : value -> value -> state -> Prop :=
 Inductive final_state (p : program): state -> value -> Prop :=
 | final_state_intro: forall v m v',
     value_inject (Genv.globalenv p) m v v' ->
-    public_value p v ->
+    public_value p (p_meta p) v ->
     final_state p (Returnstate v' Kstop m) v.
 
 

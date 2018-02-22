@@ -57,14 +57,16 @@ Definition transf_function (f : Cmajor.function) : Cminor.function :=
 Definition transf_fundef (fd : Cmajor.fundef) : Cminor.fundef :=
   AST.transf_fundef transf_function fd.
 
-Definition transf_prog (prog : Cmajor.program) : Cminor.program :=
-  AST.transform_program transf_fundef prog.
+Definition transf_prog (prog : Cmajor.program) : Cminor_program :=
+  MkCminorProgram
+    (AST.transform_program transf_fundef prog)
+    (Cmajor.p_meta prog).
 
 
 Section PRESERVATION.
 
 Variable prog: Cmajor.program.
-Variable tprog: Cminor.program.
+Variable tprog: Cminor_program.
 Let ge := Genv.globalenv prog.
 Let tge := Genv.globalenv tprog.
 Hypothesis TRANSF : transf_prog prog = tprog.
@@ -427,7 +429,7 @@ Lemma init_mem_transf :
 Proof.
   intros.
   eapply Genv.init_mem_transf in H.
-  unfold transf_prog in TRANSF. rewrite TRANSF in H.
+  unfold transf_prog in TRANSF. rewrite <- TRANSF.
   exists m. split; eauto.
   eapply Mem.extends_refl.
 Qed.
@@ -454,6 +456,8 @@ Proof.
   eapply HighValues.value_inject_swap_ge; try eassumption.
   intros. eapply Hft in H3. eauto.
   intros. rewrite Hst. eauto.
+
+  destruct prog. simpl.
   eauto using HighValues.transf_public_value.
 Qed.
 
@@ -491,8 +495,9 @@ Proof.
   unfold transf_prog in TRANSF.
   erewrite HighValues.genv_next_transf in *; eauto.
 
-  rewrite <- TRANSF in *.  eauto using HighValues.transf_public_value'.
-  rewrite <- TRANSF in *.  eauto using HighValues.transf_public_value'.
+  rewrite <- TRANSF. simpl. reflexivity.
+  rewrite <- TRANSF in *. simpl in *.  eauto using HighValues.transf_public_value'.
+  rewrite <- TRANSF in *. simpl in *.  eauto using HighValues.transf_public_value'.
 Qed.
 
 Theorem fsim :

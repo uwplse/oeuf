@@ -7,6 +7,7 @@ Require Import Utopia.
 Require Import Monads.
 
 Require Export HighValues.
+Require Import AllValues.
 Require Import ListLemmas.
 
 Inductive expr :=
@@ -145,16 +146,20 @@ Require Import Metadata.
 Require Semantics.
 
 Definition prog_type : Type := env * list metadata.
-Definition valtype := value.
+Definition val_level := VlHigh.
+Definition valtype := value_type val_level.
 
 Inductive fit_public_value (M : list metadata) : value -> Prop :=
 | PvConstr : forall tag args,
         Forall (fit_public_value M) args ->
         fit_public_value M (Constr tag args)
-| PvClose : forall fname free,
-        public_fname M (pred (Pos.to_nat fname)) ->
+| PvClose : forall fname free m,
+        nth_error M (pred (Pos.to_nat fname)) = Some m ->
+        m_access m = Public ->
         Forall (fit_public_value M) free ->
-        fit_public_value M (Close fname free).
+        length free = m_nfree m ->
+        fit_public_value M (Close fname free)
+.
 
 Inductive is_callstate (prog : prog_type) : valtype -> valtype -> state -> Prop :=
 | IsCallstate : forall fname free av body ret,
@@ -175,7 +180,7 @@ Inductive final_state (prog : prog_type) : state -> valtype -> Prop :=
 Definition initial_env (prog : prog_type) : env := fst prog.
 
 Definition semantics (prog : prog_type) : Semantics.semantics :=
-  @Semantics.Semantics_gen state env valtype
+  @Semantics.Semantics_gen state env val_level
                  (is_callstate prog)
                  (sstep)
                  (final_state prog)

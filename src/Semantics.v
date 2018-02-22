@@ -14,6 +14,8 @@ Require Import StructTact.Util.
 
 Require Import EricTact.
 
+Require Import AllValues.
+
 Section CLOSURES.
 
 Variable genv: Type.
@@ -469,7 +471,8 @@ End CLOSURES.
 Record semantics : Type := Semantics_gen {
   state: Type;
   genvtype: Type;
-  valtype : Type;
+  val_level : value_level;
+  valtype := value_type val_level;
   is_callstate : valtype -> valtype -> state -> Prop;
   step : genvtype -> state -> state -> Prop;
   (* initial_state: vtype -> vtype -> state -> Prop;*)
@@ -510,9 +513,13 @@ Record forward_simulation (L1 L2: semantics) : Type :=
       forall i s2, fsim_match_states i s1 s2 ->
       exists i', exists s2',
          (Plus L2 s2 s2' \/ (Star L2 s2 s2' /\ fsim_order i' i))
-      /\ fsim_match_states i' s1' s2'
+      /\ fsim_match_states i' s1' s2';
 (*    fsim_public_preserved:
       forall id, Senv.public_symbol (symbolenv L2) id = Senv.public_symbol (symbolenv L1) id *)
+    fsim_val_level_le : value_level_le (val_level L1) (val_level L2);
+    fsim_match_val_canon : forall v1 v2,
+        fsim_match_val v1 v2 <->
+        value_match (val_level L1) (val_level L2) v1 v2
     }.
 
 (** An alternate form of the simulation diagram *)
@@ -559,6 +566,14 @@ Hypothesis match_final_states:
   final_state L1 s1 v ->
   exists v',
     final_state L2 s2 v' /\ match_values v v'.
+
+Hypothesis fsim_val_level_le :
+    value_level_le (val_level L1) (val_level L2).
+
+Hypothesis match_val_canon :
+    forall v1 v2,
+    match_values v1 v2 <->
+    value_match (val_level L1) (val_level L2) v1 v2.
 
 (** Simulation when one transition in the first program
     corresponds to zero, one or several transitions in the second program.
@@ -818,6 +833,19 @@ Proof.
   exists (i2, i1'); exists s2; split.
   right; split. apply star_refl. red. right. auto.
   exists s3; auto.
+
+(* value level ordering *)
+  eauto using value_level_le_trans, fsim_val_level_le.
+(* match values canonicalization *)
+  intros. split; intro HH.
+  - destruct HH as (? & ? & ?).
+    eapply value_match_compose; eapply fsim_match_val_canon; eauto.
+  - unfold ff_match_values.
+    destruct (value_match_decompose _ (val_level L2) _ _ _
+            HH (fsim_val_level_le _ _ S12) (fsim_val_level_le _ _ S23))
+        as (? & ? & ?).
+    eexists; split; eapply fsim_match_val_canon; eauto.
+
 (* symbols *)
   (*  intros. transitivity (Senv.public_symbol (symbolenv L2) id); apply fsim_public_preserved; auto. *)
 Defined.

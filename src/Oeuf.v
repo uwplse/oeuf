@@ -1,11 +1,11 @@
 Require Import OeufCompcertCompiler compcert.common.Errors.
 Require Import Common Monads.
 Require Untyped1.
-Require UntypedComp1 TaggedComp SwitchedComp FmajorComp.
-Require Fmajortofflatmajor Fflatmajortoemajor Emajortodmajor Dmajortodflatmajor Dflatmajortocmajor Cmajortominor.
-Require TaggedNumberedComp ElimFuncComp ElimFuncComp2 ElimFuncComp3.
-Require SelfCloseComp ValueFlagComp.
-Require UntypedCompCombined StackCompCombined LocalsCompCombined FlatCompCombined.
+Require UntypedComp1.
+Require FmajorComp Fmajortofflatmajor Fflatmajortoemajor Emajortodmajor
+    Dmajortodflatmajor Dflatmajortocmajor Cmajortominor.
+Require UntypedCompCombined ElimFuncCompCombined StackCompCombined
+    LocalsCompCombined FlatCompCombined.
 Require CompilationUnit Metadata.
 Require Import CompilerUtil.
 

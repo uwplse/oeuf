@@ -45,7 +45,11 @@ Record function : Type := mkfunction {
 }.
 
 Definition fundef := AST.fundef function.
-Definition program := AST.program fundef unit.
+
+Record program := MkProgram {
+    p_ast :> AST.program fundef unit;
+    p_meta : meta_map
+}.
 
 Definition genv := Genv.t fundef unit.
 
@@ -195,15 +199,15 @@ Inductive is_callstate (p : program) : value -> value -> state -> Prop :=
       Genv.find_symbol (Genv.globalenv p) fname = Some bcode ->
       Genv.find_funct_ptr (Genv.globalenv p) bcode = Some (Internal fn) ->
       length (fn_params fn) = 2%nat ->
-      public_value p (Close fname vs) ->
-      public_value p av ->
+      public_value p (p_meta p) (Close fname vs) ->
+      public_value p (p_meta p) av ->
       is_callstate p (Close fname vs) av
                    (State (fst (fn_body fn)) (Kreturn (snd (fn_body fn)) Kstop)
                           (set_params ((Close fname vs) :: av :: nil) (fn_params fn))).
 
 Inductive final_state (p : program) : state -> value -> Prop :=
   | final_state_intro: forall v,
-      public_value p v ->
+      public_value p (p_meta p) v ->
       final_state p (Returnstate v Kstop) v.
 
 Definition semantics (p: program) :=

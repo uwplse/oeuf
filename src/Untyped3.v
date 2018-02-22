@@ -4,6 +4,7 @@ Require Import Utopia.
 Require Import Metadata.
 Require Import Semantics.
 Require Import HighestValues.
+Require Import AllValues.
 Require Import OpaqueOps.
 
 Require Export Untyped1.
@@ -127,7 +128,8 @@ Inductive sstep (g : list expr) : state -> state -> Prop :=
 
 Definition env := list expr.
 Definition prog_type : Type := list expr * list metadata.
-Definition valtype := value.
+Definition val_level := VlHighest.
+Definition valtype := value_type val_level.
 
 Definition initial_env (prog : prog_type) : env := fst prog.
 
@@ -144,7 +146,7 @@ Inductive final_state (prog : prog_type) : state -> valtype -> Prop :=
         final_state prog (Stop v) v.
 
 Definition semantics (prog : prog_type) : Semantics.semantics :=
-  @Semantics_gen state env valtype
+  @Semantics_gen state env val_level
                  (is_callstate prog)
                  (sstep)
                  (final_state prog)

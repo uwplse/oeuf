@@ -6,6 +6,7 @@ Require Import Utopia.
 Require Import Monads.
 
 Require Export HigherValue.
+Require Import AllValues.
 
 Inductive insn :=
 | Block (code : list insn)
@@ -98,7 +99,8 @@ Require Import Metadata.
 Require Semantics.
 
 Definition prog_type : Type := env * list metadata.
-Definition valtype := value.
+Definition val_level := VlHigher.
+Definition valtype := value_type val_level.
 
 Inductive is_callstate (prog : prog_type) : valtype -> valtype -> state -> Prop :=
 | IsCallstate : forall fname free av body,
@@ -119,7 +121,7 @@ Inductive final_state (prog : prog_type) : state -> valtype -> Prop :=
 Definition initial_env (prog : prog_type) : env := fst prog.
 
 Definition semantics (prog : prog_type) : Semantics.semantics :=
-  @Semantics.Semantics_gen state env valtype
+  @Semantics.Semantics_gen state env val_level
                  (is_callstate prog)
                  (sstep)
                  (final_state prog)

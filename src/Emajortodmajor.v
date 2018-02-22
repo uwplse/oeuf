@@ -28,6 +28,8 @@ Require Import Emajor.
 Require Import Dmajor.
 Require Import HighValues.
 
+Local Open Scope error_monad_scope.
+
 Fixpoint transf_expr (e : Emajor.expr) : Dmajor.expr :=
   match e with
   | Var id => Dmajor.Evar id
@@ -39,7 +41,7 @@ Fixpoint store_args (id : ident) (l : list Emajor.expr) (z : Z) : Dmajor.stmt :=
   match l with
   | nil => Dmajor.Sskip
   | e :: es =>
-    store ((var id) + (const z)) (transf_expr e);
+    store ((var id) + (const z)) (transf_expr e);;
       store_args id es (z + 4)%Z
   end.
 
@@ -51,25 +53,25 @@ Fixpoint transf_stmt (s : Emajor.stmt) : Dmajor.stmt :=
   | Emajor.Sseq s1 s2 =>
     let s1' := transf_stmt s1 in
     let s2' := transf_stmt s2 in
-    s1' ; s2'
+    s1' ;; s2'
   | Emajor.Scall id efun earg =>
     Dmajor.Scall (Some id) EMsig (load (transf_expr efun)) (((transf_expr efun)) :: (transf_expr earg) :: nil)
   | Emajor.Sswitch targid target cases default =>
     let targ := transf_expr target in
-    Dmajor.Sassign targid targ ;
+    Dmajor.Sassign targid targ ;;
     Dmajor.Sswitch false (load (Dmajor.Evar targid)) cases default
   | Emajor.SmakeConstr id tag args =>
   (* In order to translate a constructor *)
     (* First we allocate enough space *)
     let sz := (4 + 4 * (Z.of_nat (length args)))%Z in
-    alloc id sz;
+    alloc id sz;;
   (* then we store each in turn: the tag, and the arguments *)
-     store (var id) (Econst (Ointconst tag));
+     store (var id) (Econst (Ointconst tag));;
      store_args id args 4%Z
   | Emajor.SmakeClose id fname args =>
     let sz := (4 + 4 * (Z.of_nat (length args)))%Z in
-    alloc id sz;
-      store (var id) (Econst (Oaddrsymbol fname Int.zero));
+    alloc id sz;;
+      store (var id) (Econst (Oaddrsymbol fname Int.zero));;
       store_args id args 4%Z
   | Emajor.Sexit n => Dmajor.Sexit n
   | Emajor.Sreturn exp => Dmajor.Sreturn (Some (transf_expr exp))
@@ -182,7 +184,8 @@ Definition transf_fundef (fd : Emajor.fundef) : res Dmajor.fundef :=
   AST.transf_partial_fundef transf_function fd.
 
 Definition transf_prog (p : Emajor.program) : res Dmajor.program :=
-  AST.transform_partial_program transf_fundef p.
+  do ast' <- AST.transform_partial_program transf_fundef p ;
+  OK (Dmajor.MkProgram ast' (Emajor.p_meta p)).
 
 Section PRESERVATION.
 
@@ -442,6 +445,7 @@ Proof.
   intros. unfold tge.
   unfold ge.
   unfold transf_prog in *.
+  monadInv TRANSF.
   eapply Genv.find_symbol_transf_partial; eauto.
 Qed.
 
@@ -478,7 +482,7 @@ Lemma symbols_transf :
     Genv.find_symbol tge fname = Some b.
 Proof.
   intros. subst ge. subst tge.
-  unfold transf_prog.
+  monadInv TRANSF.
   erewrite Genv.find_symbol_transf_partial; eauto.
 Qed.
 
@@ -489,7 +493,7 @@ Lemma functions_transf :
       Genv.find_funct_ptr tge fblock = Some fn' /\ transf_fundef fn = OK fn'.
 Proof.
   intros. subst ge. subst tge.
-  unfold transf_prog in *.
+  monadInv TRANSF.
   eapply Genv.find_funct_ptr_transf_partial; eauto.
 Qed.
 
@@ -1020,7 +1024,7 @@ Lemma SmakeClose_name :
         0 <= x <= Z.of_nat (length l) ->
         Int.unsigned (Int.repr (4 + 4 * x)) = (4 + 4 * x)%Z) ->
     exists st st' st'' st''' m' m'' m''' m'''',
-      step tge ((State f ((alloc id sz; store (var id) (Econst (Oaddrsymbol fname Int.zero))); store_args id l 4) k' e' m)) E0 st /\
+      step tge ((State f ((alloc id sz;; store (var id) (Econst (Oaddrsymbol fname Int.zero)));; store_args id l 4) k' e' m)) E0 st /\
       step tge st E0 st' /\
       step tge st' E0 st'' /\
       step tge st'' E0 (State f (store (var id) (Econst (Oaddrsymbol fname Int.zero))) (Kseq (store_args id l 4) k') (PTree.set id (Vptr (Mem.nextblock m) Int.zero) e') m'') /\
@@ -1146,7 +1150,7 @@ Lemma SmakeConstr_name :
         0 <= x <= Z.of_nat (length l) ->
         Int.unsigned (Int.repr (4 + 4 * x)) = (4 + 4 * x)%Z) ->
     exists st st' st'' st''' m' m'' m''' m'''',
-      step tge ((State f ((alloc id sz; store (var id) (Econst (Ointconst tag))); store_args id l 4) k' e' m)) E0 st /\
+      step tge ((State f ((alloc id sz;; store (var id) (Econst (Ointconst tag)));; store_args id l 4) k' e' m)) E0 st /\
       step tge st E0 st' /\
       step tge st' E0 st'' /\
       step tge st'' E0 (State f (store (var id) (Econst (Ointconst tag))) (Kseq (store_args id l 4) k') (PTree.set id (Vptr (Mem.nextblock m) Int.zero) e') m'') /\
@@ -1594,7 +1598,7 @@ Proof.
   invp match_states.
   invp match_cont.
   econstructor. eassumption.
-  - eauto using transf_partial_public_value.
+  - monadInv TRANSF. eauto using transf_partial_public_value.
 Qed.
 
 Lemma callstate_match :
@@ -1604,11 +1608,13 @@ Lemma callstate_match :
       match_states st st' /\ Emajor.is_callstate prog fv av st.
 Proof.
   intros. inv H.
-  unfold transf_prog in *.
+  monadInv TRANSF. simpl in *.
+  assert (Htprog : transform_partial_program transf_fundef prog = @OK (AST.program _ _) tprog).
+    { rewrite <- H9. simpl. eauto. }
   eapply Genv.find_funct_ptr_rev_transf_partial in H3; eauto.
   break_exists. break_and. copy H5.
   erewrite Genv.find_symbol_transf_partial in H4; eauto.
-  destruct x; simpl in H8; unfold bind in H8; simpl in H8; try congruence.
+  destruct x0; simpl in H8; unfold bind in H8; simpl in H8; try congruence.
   break_match_hyp; try congruence. invc H5.
   eexists; split; econstructor; eauto.
   congruence.
@@ -1616,8 +1622,12 @@ Proof.
   - econstructor; eauto.
   - destruct f; destruct fn; unfold transf_function in *; simpl in *.
     repeat break_match_hyp; congruence.
-  - eauto using transf_partial_public_value'.
-  - eauto using transf_partial_public_value'.
+  - replace (p_meta tprog) with (Emajor.p_meta prog) in *; cycle 1.
+      { rewrite <- H9. reflexivity. }
+    eauto using transf_partial_public_value'.
+  - replace (p_meta tprog) with (Emajor.p_meta prog) in *; cycle 1.
+      { rewrite <- H9. reflexivity. }
+    eauto using transf_partial_public_value'.
 Qed.
 
 Theorem fsim :
