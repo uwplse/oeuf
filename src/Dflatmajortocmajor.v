@@ -24,6 +24,8 @@ Require Import StructTact.Util.
 
 Require Import EricTact.
 
+Local Open Scope error_monad_scope.
+
 Definition transf_const (c : Dmajor.constant) : Cmajor.constant :=
   match c with
   | Ointconst i => Cmajor.Ointconst i
@@ -83,7 +85,8 @@ Axiom register_ident_as_malloc_is_id : forall p, register_ident_as_malloc p = p.
 Extract Inlined Constant register_ident_as_malloc => "Camlcoq.register_ident_as_malloc".
 
 Definition transf_prog_malloc (prog : Dmajor.program) (malloc_id : ident) : res Cmajor.program :=
-  transform_partial_program (transf_fundef malloc_id) prog.
+  do ast' <- transform_partial_program (transf_fundef malloc_id) prog ;
+  OK (Cmajor.MkProgram ast' (Dmajor.p_meta prog)).
 
 Lemma malloc_eq_dec :
   forall ef,
@@ -266,8 +269,9 @@ Lemma find_symbol_transf :
 Proof.
   intros.
   unfold ge, tge in *.
-  unfold transf_prog in *. unfold transf_prog_malloc in *.
+  unfold transf_prog in *.
   repeat (break_match_hyp; try congruence). inv malloc_id_found.
+  monadInv TRANSF.
   erewrite Genv.find_symbol_transf_partial; eauto.
 Qed.
 
@@ -314,6 +318,7 @@ Proof.
   unfold transf_prog_malloc in *.
   repeat (break_match_hyp; try congruence).
   inv malloc_id_found.
+  monadInv TRANSF.
   eapply Genv.find_funct_ptr_transf_partial in H; eauto.
 Qed.
 
@@ -339,6 +344,7 @@ Proof.
   unfold transf_prog in *. unfold transf_prog_malloc in *.
   repeat (break_match_hyp; try congruence).
   inv malloc_id_found.
+  monadInv TRANSF.
   erewrite transform_partial_program_public; eauto.
 Qed.  
 
@@ -429,7 +435,7 @@ Lemma transf_prog_malloc_public : forall p malloc_id p',
     prog_public p = prog_public p'.
 clear.
 intros ? ? ? Htransf.
-unfold transf_prog_malloc in Htransf.
+monadInv Htransf.
 symmetry. eapply transform_partial_program_public; eauto.
 Qed.
 
@@ -455,27 +461,35 @@ Proof.
   unfold transf_prog in H10.
   break_match_hyp; try congruence.
   rewrite malloc_id_found in *.
-  eapply Genv.find_funct_ptr_rev_transf_partial in H3; eauto.
+  eapply Genv.find_funct_ptr_rev_transf_partial in H3; eauto; cycle 1.
+    { monadInv H10. eauto. }
   break_exists. break_and.
-  erewrite Genv.find_symbol_transf_partial in H4; eauto.
+  erewrite Genv.find_symbol_transf_partial in H4; eauto; cycle 1.
+    { monadInv H10. eauto. }
+
+  assert (Hmeta : p_meta prog = Cmajor.p_meta tprog).
+    { monadInv H10. simpl in *. reflexivity. }
 
   assert (Hffp : forall b f,
              Genv.find_funct_ptr (Genv.globalenv tprog) b = Some f ->
              exists f', Genv.find_funct_ptr (Genv.globalenv prog) b = Some f').
   {
     intros. 
-    eapply Genv.find_funct_ptr_rev_transf_partial in H10; eauto.
+    monadInv H10. simpl in *.
+    eapply Genv.find_funct_ptr_rev_transf_partial in EQ; eauto.
     break_exists. break_and. eauto.
   }
   assert (Hfs : forall fname b,
              Genv.find_symbol (Genv.globalenv tprog) fname = Some b ->
              Genv.find_symbol (Genv.globalenv prog) fname = Some b).
   {
-    intros. erewrite Genv.find_symbol_transf_partial in H12; eauto.
+    intros.  monadInv H10. simpl in *.
+    erewrite Genv.find_symbol_transf_partial in H12; eauto.
   }
 
   assert (global_blocks_valid (Genv.globalenv prog) (Mem.nextblock m)).
   {
+    monadInv H10. simpl in *.
     unfold global_blocks_valid in *.
     unfold transf_prog in *.
     repeat (break_match_hyp; try congruence).
@@ -491,9 +505,11 @@ Proof.
     try eapply value_inject_swap_ge; eauto.
   destruct f; destruct fn; inversion H11; subst; simpl in *; eauto.
 
+  rewrite Hmeta.
   eapply prog_public_public_value'; try eassumption.
     eauto using transf_prog_malloc_public.
 
+  rewrite Hmeta.
   eapply prog_public_public_value'; try eassumption.
     eauto using transf_prog_malloc_public.
 
@@ -517,6 +533,13 @@ Proof.
   intros.
   erewrite find_symbol_transf; eauto.
 
+  assert (Hmeta : p_meta prog = Cmajor.p_meta tprog).
+    { unfold transf_prog in TRANSF.
+      break_match_hyp; try congruence.
+      rewrite malloc_id_found in *.
+      monadInv TRANSF. simpl in *. reflexivity. }
+
+  rewrite <- Hmeta.
   eapply prog_public_public_value; try eassumption.
     eauto using transf_prog_public.
 Qed.

@@ -19,6 +19,8 @@ Require Import Ring.
 Require Import StructTact.StructTactics.
 Require Import StructTact.Util.
 
+Require Import Metadata.
+
 Require Import EricTact.
 
 (* Computation will be over higher level values, i.e. Constr and Close *)
@@ -587,76 +589,80 @@ Fixpoint zip {A B} (a : list A) (b : list B) : list (A * B) :=
 
 
 
-Inductive public_value {F V} (P : AST.program F V) : value -> Prop :=
+Definition meta_map := list (ident * metadata).
+
+Inductive public_value {F V} (P : AST.program F V) (M : meta_map) : value -> Prop :=
 | PvConstr : forall tag args,
-        Forall (public_value P) args ->
-        public_value P (Constr tag args)
-| PvClose : forall fname free,
+        Forall (public_value P M) args ->
+        public_value P M (Constr tag args)
+| PvClose : forall fname free m,
         In fname (prog_public P) ->
-        Forall (public_value P) free ->
-        public_value P (Close fname free).
+        Forall (public_value P M) free ->
+        In (fname, m) M ->
+        length free = m_nfree m ->
+        public_value P M (Close fname free).
 
 Lemma prog_public_public_value : forall F V F' V'
-        (p : AST.program F V) (p' : AST.program F' V'),
+        (p : AST.program F V) (p' : AST.program F' V') M,
     prog_public p = prog_public p' ->
     forall v,
-    public_value p v ->
-    public_value p' v.
+    public_value p M v ->
+    public_value p' M v.
 intros until v.
 induction v using value_rect_mut with
     (Pl := fun vs =>
-        Forall (public_value p) vs ->
-        Forall (public_value p') vs);
+        Forall (public_value p M) vs ->
+        Forall (public_value p' M) vs);
 intros Apub; invc Apub; econstructor; eauto.
 - find_rewrite. auto.
 Qed.
 
 Lemma prog_public_public_value' : forall F V F' V'
-        (p : AST.program F V) (p' : AST.program F' V'),
+        (p : AST.program F V) (p' : AST.program F' V') M,
     prog_public p = prog_public p' ->
     forall v,
-    public_value p' v ->
-    public_value p v.
+    public_value p' M v ->
+    public_value p M v.
 intros until v.
 induction v using value_rect_mut with
     (Pl := fun vs =>
-        Forall (public_value p') vs ->
-        Forall (public_value p) vs);
+        Forall (public_value p' M) vs ->
+        Forall (public_value p M) vs);
 intros Bpub; invc Bpub; econstructor; eauto.
 - find_rewrite. auto.
 Qed.
 
-Lemma transf_public_value : forall A B V (f : A -> B) (p : AST.program A V) v,
-    public_value p v ->
-    public_value (AST.transform_program f p) v.
+Lemma transf_public_value : forall A B V (f : A -> B) (p : AST.program A V) M v,
+    public_value p M v ->
+    public_value (AST.transform_program f p) M v.
 intros.
 eapply prog_public_public_value; try eassumption; eauto.
 Qed.
 
-Lemma transf_public_value' : forall A B V (f : A -> B) (p : AST.program A V) v,
-    public_value (AST.transform_program f p) v ->
-    public_value p v.
+Lemma transf_public_value' : forall A B V (f : A -> B) (p : AST.program A V) M v,
+    public_value (AST.transform_program f p) M v ->
+    public_value p M v.
 intros.
 eapply prog_public_public_value'; try eassumption; eauto.
 Qed.
 
 Lemma transf_partial_public_value : forall A B V (f : A -> res B)
-        (p : AST.program A V) p',
+        (p : AST.program A V) p' M,
     AST.transform_partial_program f p = OK p' ->
     forall v,
-    public_value p v ->
-    public_value p' v.
+    public_value p M v ->
+    public_value p' M v.
 intros.
 eapply prog_public_public_value; try eassumption.
 symmetry. eauto using transform_partial_program_public.
 Qed.
 
 Lemma transf_partial_public_value' : forall A B V (f : A -> res B)
-        (p : AST.program A V) p',
+        (p : AST.program A V) p' M,
     AST.transform_partial_program f p = OK p' ->
     forall v,
-    public_value p' v ->
-    public_value p v.
+    public_value p' M v ->
+    public_value p M v.
 intros.
 eapply prog_public_public_value'; try eassumption.
 symmetry. eauto using transform_partial_program_public.

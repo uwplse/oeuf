@@ -122,23 +122,13 @@ Section Preservation.
     - simpl. intros0 II Afinal. invc Afinal.
       eexists. split. i_ctor. i_ctor.
 
+    - simpl. eauto.
+    - simpl. intros. tauto.
+
     - intros0 Astep. intros0 II.
       fwd eapply I_sim; eauto.
       subst s1. eexists. eauto.
 
-    Defined.
-
-    Lemma match_val_eq :
-      Semantics.fsim_match_val _ _ fsim = eq.
-    Proof.
-      unfold fsim. simpl.
-      unfold Semantics.fsim_match_val.
-      break_match. repeat (break_match_hyp; try congruence).
-      unfold forward_simulation_step in *.
-      unfold forward_simulation_plus in *.
-      unfold forward_simulation_star in *.
-      unfold forward_simulation_star_wf in *.
-      inv Heqf. reflexivity.
     Qed.
 
 

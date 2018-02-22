@@ -484,7 +484,8 @@ mut_induction av using HigherValue.value_rect_mut' with
 [ intros0 II Apub; invc II.. | ].
 
 - invc Apub. i_ctor.
-- invc Apub. i_ctor. rewrite nat_pos_nat. auto.
+- invc Apub. i_ctor. { rewrite nat_pos_nat. eauto. }
+  fwd i_lem Forall2_length. congruence.
 - auto.
 - invc Apub. i_ctor.
 
@@ -504,7 +505,8 @@ mut_induction bv using HighValues.value_rect_mut' with
 [ intros0 II Bpub; invc II.. | ].
 
 - invc Bpub. i_ctor.
-- invc Bpub. rewrite nat_pos_nat in *. i_ctor.
+- invc Bpub. i_ctor. { rewrite nat_pos_nat in *. eauto. }
+  fwd i_lem Forall2_length. congruence.
 - auto.
 - invc Bpub. i_ctor.
 
@@ -550,29 +552,19 @@ Section Preservation.
       on >I_func, invc.
       eexists. split; i_ctor.
       + i_ctor. i_ctor.
-      + i_lem I_value_public'.
-      + i_lem I_value_public'.
+      + i_lem I_value_public'. simpl in *. congruence.
+      + i_lem I_value_public'. simpl in *. congruence.
 
     - intros0 II Afinal. invc Afinal. invc II. on >I_cont, invc.
       eexists; split; eauto.
       i_ctor. i_lem I_value_public.
 
+    - simpl. eauto.
+    - simpl. intros. tauto.
+
     - intros0 Astep. intros0 II.
       eapply I_sim; eauto.
 
-  Defined.
-
-  Lemma match_val_I_value :
-    Semantics.fsim_match_val _ _ fsim = I_value.
-  Proof.
-    unfold fsim. simpl.
-    unfold Semantics.fsim_match_val.
-    break_match. repeat (break_match_hyp; try congruence).
-    try unfold forward_simulation_step in *.
-    try unfold forward_simulation_plus in *.
-    try unfold forward_simulation_star in *.
-    try unfold forward_simulation_star_wf in *.
-    inv Heqf. reflexivity.
   Qed.
 
 End Preservation.

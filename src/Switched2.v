@@ -6,6 +6,7 @@ Require Import ListLemmas.
 Require Import Utopia.
 Require Import Monads.
 Require Export HigherValue.
+Require Import AllValues.
 
 Definition function_name := nat.
 
@@ -109,7 +110,8 @@ Definition SPlusCons := @StepLib.SPlusCons state.
 Require Import Metadata.
 
 Definition prog_type : Type := list expr * list metadata.
-Definition valtype := HigherValue.value.
+Definition val_level := VlHigher.
+Definition valtype := value_type val_level.
 
 Inductive is_callstate (prog : prog_type) : valtype -> valtype -> state -> Prop :=
 | IsCallstate : forall fname free av body,
@@ -129,7 +131,7 @@ Definition initial_env (prog : prog_type) : env := fst prog.
 
 Require Semantics.
 Definition semantics (prog : prog_type) : Semantics.semantics :=
-  @Semantics.Semantics_gen state env valtype
+  @Semantics.Semantics_gen state env val_level
                  (is_callstate prog)
                  (sstep)
                  (final_state prog)

@@ -5,6 +5,7 @@ Require Import Monads.
 Require Import ListLemmas.
 Require Import Metadata.
 Require Import HigherValue.
+Require Import AllValues.
 Require StepLib.
 
 Definition function_name := nat.
@@ -238,7 +239,8 @@ Qed.
 Require Semantics.
 
 Definition prog_type : Type := list expr * list metadata.
-Definition valtype := HigherValue.value.
+Definition val_level := VlHigher.
+Definition valtype := value_type val_level.
 
 Definition initial_env (prog : prog_type) : env := fst prog.
 
@@ -257,7 +259,7 @@ Inductive final_state (prog : prog_type) : state -> valtype -> Prop :=
         final_state prog (Stop v) v.
 
 Definition semantics (prog : prog_type) : Semantics.semantics :=
-  @Semantics.Semantics_gen state env valtype
+  @Semantics.Semantics_gen state env val_level
                  (is_callstate prog)
                  (sstep)
                  (final_state prog)

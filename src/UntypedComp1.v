@@ -9,6 +9,7 @@ Require Import CompilationUnit.
 Require Import Semantics.
 Require Import HighestValues.
 Require Import OpaqueOps.
+Require Import ListLemmas.
 
 Require SourceLiftedProofs.
 
@@ -93,10 +94,28 @@ Definition compile_state {G rty} (s : A.state G rty) :=
     | A.Stop v => B.Stop (go_value v)
     end.
 
+
+Definition check_nfree : forall G meta,
+    { Forall2 (fun g m => m_nfree m = SourceLifted.g_nfree g) G meta } +
+    { ~ Forall2 (fun g m => m_nfree m = SourceLifted.g_nfree g) G meta }.
+induction G; destruct meta; try solve [right; inversion 1].
+  { left. constructor. }
+
+rename a into g.
+destruct (eq_nat_dec (m_nfree m) (SourceLifted.g_nfree g)), (IHG meta);
+  try solve [right; inversion 1; eauto].
+left. eauto.
+Defined.
+
+
 Definition compile_cu {G} (cu : A.genv G * list metadata) :
-        list B.expr * list metadata :=
+        option (list B.expr * list metadata) :=
     let '(exprs, metas) := cu in
-    (compile_genv exprs, metas).
+    match check_nfree G metas with
+    | left Hnfree => Some (compile_genv exprs, metas)
+    | right _ => None
+    end.
+    
 
 
 
@@ -818,29 +837,31 @@ eexists. split; cycle 1.
   f_equal. congruence.
 Qed.
 
-Lemma compile_member_lt : forall A (a : A) xs (mb : member a xs),
-    compile_member mb < length xs.
-induction mb; simpl; omega.
+Lemma compile_member_nth_error : forall A (a : A) xs (mb : member a xs),
+    nth_error xs (compile_member mb) = Some a.
+induction mb; simpl; eauto.
 Qed.
 
 Lemma compile_value_public : forall G Bmeta,
     Forall (fun m => m_access m = Public) Bmeta ->
-    length G = length Bmeta ->
+    Forall2 (fun g m => m_nfree m = SourceLifted.g_nfree g) G Bmeta ->
     forall ty (av : A.value G ty),
     public_value Bmeta (compile_value av).
-intros0 Bpub Blen.
+intros0 Bpub Bnfree.
 induction av using A.value_rect_mut with
     (Pl := fun tys avs => Forall (public_value Bmeta) (compile_value_list avs));
 simpl.
 1: fold (@compile_value_list G arg_tys).
 2: fold (@compile_value_list G free_tys).
-all: i_ctor.
+all: try i_ctor.
 
-- unfold public_fname.
-  fwd eapply compile_member_lt with (mb := mb) as Hmb; eauto.
-  rewrite Blen in Hmb. rewrite <- nth_error_Some in Hmb.
-  destruct (nth_error _ _) eqn:Hmb'; try congruence.
-  fwd eapply Forall_nth_error with (xs := Bmeta); eauto.
+- fwd eapply compile_member_nth_error with (mb := mb) as Hmb; eauto.
+  fwd eapply Forall2_nth_error_ex as HH; eauto. destruct HH as (meta & ? & ?).
+  fwd eapply Forall_nth_error with (xs := Bmeta); [ eauto.. | ].
+  simpl in *.
+
+  econstructor; eauto.
+  rewrite compile_value_length. eauto.
 Qed.
 
 Lemma compile_genv_length : forall G (g : A.genv G),
@@ -848,18 +869,40 @@ Lemma compile_genv_length : forall G (g : A.genv G),
 induction g; simpl; eauto.
 Qed.
 
+Lemma compile_cu_compile_genv : forall G (A : A.genv G) Ameta B Bmeta,
+    compile_cu (A, Ameta) = Some (B, Bmeta) ->
+    compile_genv A = B.
+intros0 Hcomp. unfold compile_cu in Hcomp. break_match; try discriminate.
+inject_some. eauto.
+Qed.
+
+Lemma compile_cu_meta_eq : forall G (A : A.genv G) Ameta B Bmeta,
+    compile_cu (A, Ameta) = Some (B, Bmeta) ->
+    Bmeta = Ameta.
+intros0 Hcomp. unfold compile_cu in Hcomp. break_match; try discriminate.
+inject_some. eauto.
+Qed.
+
+Lemma compile_cu_nfree : forall G (A : A.genv G) Ameta B Bmeta,
+    compile_cu (A, Ameta) = Some (B, Bmeta) ->
+    Forall2 (fun g m => m_nfree m = SourceLifted.g_nfree g) G Bmeta.
+intros0 Hcomp. unfold compile_cu in Hcomp. break_match; try discriminate.
+inject_some. eauto.
+Qed.
+
 Lemma match_final_state : forall G (AE : A.genv G) BE Bmeta
     ty (av : A.value G ty) (a : A.state G ty)
     (b : B.state),
     compile_genv AE = BE ->
     Forall (fun m => m_access m = Public) Bmeta ->
+    Forall2 (fun g m => m_nfree m = SourceLifted.g_nfree g) G Bmeta ->
     length BE = length Bmeta ->
     compile_state a = b ->
     A.final_state a av ->
     exists bv,
         B.final_state (BE, Bmeta) b bv /\
         compile_value av = bv.
-intros0 Henv Bpub Blen Hcomp Afin.
+intros0 Henv Bpub Bnfree Blen Hcomp Afin.
 invc Afin. fix_existT. subst.
 
 eexists. split.

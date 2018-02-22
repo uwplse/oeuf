@@ -312,15 +312,6 @@ Lemma upvars_list_not_value : forall n,
 intros. unfold upvars_list. i_lem upvars'_list_not_value.
 Qed.
 
-Lemma map_inj : forall {A B} (f : A -> B) xs ys,
-    (forall x y, f x = f y -> x = y) ->
-    map f xs = map f ys -> xs = ys.
-induction xs; destruct ys; intros0 Hinj Hmap; simpl in *; try discriminate.
-- reflexivity.
-- invc Hmap. erewrite Hinj with (x := a); eauto.
-  erewrite IHxs; eauto.
-Qed.
-
 
 
 (* Cost of an expression inside MkClose's `free` argument. *)
@@ -691,22 +682,12 @@ Section Preservation.
       eexists. split. 2: reflexivity.
       econstructor; eauto.
 
+    - simpl. eauto.
+    - simpl. intros. tauto.
+
     - intros0 Astep. intros0 II.
       eapply sstar_01_semantics_sim, I'_sim; eauto.
 
     Defined.
-
-    Lemma match_val_eq :
-      Semantics.fsim_match_val _ _ fsim = eq.
-    Proof.
-      unfold fsim. simpl.
-      unfold Semantics.fsim_match_val.
-      break_match. admit. (*repeat (break_match_hyp; try congruence).
-      try unfold forward_simulation_step in *.
-      try unfold forward_simulation_plus in *.
-      try unfold forward_simulation_star in *.
-      try unfold forward_simulation_star_wf in *.
-      inv Heqf. reflexivity.*)
-    Admitted.
 
 End Preservation.

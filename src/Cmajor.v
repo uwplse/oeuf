@@ -53,7 +53,11 @@ Record function : Type := mkfunction {
 
 
 Definition fundef := AST.fundef function.
-Definition program := AST.program fundef unit.
+
+Record program := MkProgram {
+    p_ast :> AST.program fundef unit;
+    p_meta : meta_map
+}.
 
 Definition funsig (fd: fundef) :=
   match fd with
@@ -299,8 +303,8 @@ Inductive is_callstate (p : program) : value -> value -> state -> Prop :=
       length (fn_params fn) = 2%nat ->
       global_blocks_valid (Genv.globalenv p) (Mem.nextblock m) ->
       no_future_pointers m ->
-      public_value p (Close fname vs) ->
-      public_value p arg ->
+      public_value p (p_meta p) (Close fname vs) ->
+      public_value p (p_meta p) arg ->
       is_callstate p (Close fname vs) arg (Callstate (Internal fn) ((Vptr fb fofs) :: argptr :: nil) Kstop m).
 
 (** A final state is a [Returnstate] with an empty continuation. *)
@@ -308,7 +312,7 @@ Inductive is_callstate (p : program) : value -> value -> state -> Prop :=
 Inductive final_state (p : program) : state -> value -> Prop :=
 | final_state_intro: forall v v' m,
     value_inject (Genv.globalenv p) m v v' ->
-    public_value p v ->
+    public_value p (p_meta p) v ->
     final_state p (Returnstate v' Kstop m) v.
 
 (** The corresponding small-step semantics. *)
@@ -338,14 +342,20 @@ Qed.
 Require Import compcert.backend.Cminor.
 
 (* Cminor bridge *)
-Inductive cminor_final_state(p : Cminor.program): Cminor.state -> value -> Prop :=
+
+Record Cminor_program := MkCminorProgram {
+    cm_ast :> AST.program Cminor.fundef unit;
+    cm_meta : meta_map
+}.
+
+Inductive cminor_final_state(p : Cminor_program): Cminor.state -> value -> Prop :=
 | cminor_final_state_intro: forall v v' m,
     value_inject (Genv.globalenv p) m v v' ->
-    public_value p v ->
+    public_value p (cm_meta p) v ->
     cminor_final_state p (Cminor.Returnstate v' Cminor.Kstop m) v.
 
 
-Inductive cminor_is_callstate (p : Cminor.program) : value -> value -> state -> Prop := 
+Inductive cminor_is_callstate (p : Cminor_program) : value -> value -> state -> Prop := 
 | CmIsCallstate :
     forall fname vs arg fb fofs argptr m fn fnb,
       value_inject (Genv.globalenv p) m (Close fname vs) (Vptr fb fofs) ->
@@ -356,12 +366,12 @@ Inductive cminor_is_callstate (p : Cminor.program) : value -> value -> state -> 
       length (fn_params fn) = 2%nat ->
       global_blocks_valid (Genv.globalenv p) (Mem.nextblock m) ->
       no_future_pointers m ->
-      public_value p (Close fname vs) ->
-      public_value p arg ->
+      public_value p (cm_meta p) (Close fname vs) ->
+      public_value p (cm_meta p) arg ->
       cminor_is_callstate p (Close fname vs) arg (Callstate (Internal fn) ((Vptr fb fofs) :: argptr :: nil) Kstop m).
 
 
-Definition Cminor_semantics (p: Cminor.program) :=
+Definition Cminor_semantics (p: Cminor_program) :=
   Semantics Cminor.step (cminor_is_callstate p) (cminor_final_state p) (Genv.globalenv p).
 
 
@@ -414,7 +424,7 @@ Proof.
 Qed.
   
 Lemma semantics_determinate:
-  forall (p: Cminor.program), TraceSemantics.determinate (Cminor_semantics p).
+  forall (p: Cminor_program), TraceSemantics.determinate (Cminor_semantics p).
 Proof.
   intros.
   econstructor.

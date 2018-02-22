@@ -265,7 +265,9 @@ Definition compile_cu (cu : list (A.stmt * A.expr) * list metadata) (M : id_map)
     extra_defs M >>= fun gdefs' =>
     let pub_fnames := map fst (filter (fun n_m => m_is_public (snd n_m)) (numbered metas)) in
     map_partial (fun fn => id_key_assoc M (IkFunc fn)) pub_fnames >>= fun pub_idents =>
-    Some (AST.mkprogram (gdefs ++ gdefs') pub_idents 1%positive).
+    map_partial (fun n_m => let '(n, m) := n_m in
+        id_key_assoc M (IkFunc n) >>= fun i => Some (i, m)) (numbered metas) >>= fun mmap =>
+    Some (B.MkProgram (AST.mkprogram (gdefs ++ gdefs') pub_idents 1%positive) mmap).
 
 Definition compile_cu_intern (cu : list (A.stmt * A.expr) * list metadata) : option B.program :=
     build_id_list cu >>= fun M =>
@@ -368,8 +370,8 @@ Inductive I_env : A.env -> B.genv -> Prop :=
 .
 
 Inductive I_prog : A.env -> B.program -> Prop :=
-| IProg : forall AP BP,
-        I_env AP (Genv.globalenv BP) ->
+| IProg : forall AP (BP : B.program),
+        I_env AP (Genv.globalenv (B.p_ast BP)) ->
         I_prog AP BP.
 
 Definition I_value := (MatchValues.mv_fmajor M).
@@ -910,7 +912,7 @@ Qed.
 
 Lemma prog_defs_norepet : forall A metas B M,
     compile_cu (A, metas) M = Some B ->
-    list_norepet (map fst (prog_defs B)).
+    list_norepet (map fst (prog_defs (B.p_ast B))).
 intros0 Hcomp.
 unfold compile_cu in *. break_bind_option. inject_some.
 rename l0 into bdefs. rename l1 into xdefs. rename l2 into bpublic.
@@ -969,7 +971,7 @@ Qed.
 
 Lemma compile_I_env_fwd : forall A metas BP B M an af,
     compile_cu (A, metas) M = Some BP ->
-    Genv.globalenv BP = B ->
+    Genv.globalenv (B.p_ast BP) = B ->
     nth_error A an = Some af ->
     exists bid bsym bf,
         Genv.find_symbol B bid = Some bsym /\
@@ -980,13 +982,13 @@ intros0 Hcomp HBP Hnth.
 pose proof Hcomp.
 unfold compile_cu in Hcomp. break_bind_option. inject_some.
 replace l with M in * by (eauto using check_id_list_eq). clear l.
-remember (AST.mkprogram _ _ _) as BP.
+remember (B.MkProgram _ _) as BP.
 
 eapply numbered_nth_error in Hnth. eapply nth_error_in in Hnth.
 fwd eapply compile_gdefs_fwd as HH; eauto. destruct HH as (bid & bf & ? & ?).
 fwd eapply compile_gdef_I_id; eauto.
 fwd eapply compile_gdef_I_func; eauto.
-fwd eapply Genv.find_funct_ptr_exists with (p := BP) as HH.
+fwd eapply Genv.find_funct_ptr_exists with (p := B.p_ast BP) as HH.
   { eapply prog_defs_norepet. eauto. }
   { subst BP. simpl. eapply in_or_app. left. eassumption. }
   destruct HH as (bsym & ? & ?).
@@ -1040,7 +1042,7 @@ Qed.
 
 Lemma compile_I_env_rev : forall A metas BP B M bid bsym bf,
     compile_cu (A, metas) M = Some BP ->
-    Genv.globalenv BP = B ->
+    Genv.globalenv (B.p_ast BP) = B ->
     Genv.find_symbol B bid = Some bsym ->
     Genv.find_funct_ptr B bsym = Some (Internal bf) ->
     exists an af,
@@ -1079,7 +1081,7 @@ Qed.
 
 Lemma I_prog_env : forall M A B,
     I_prog M A B ->
-    I_env M A (Genv.globalenv B).
+    I_env M A (Genv.globalenv (B.p_ast B)).
 intros0 II. invc II. auto.
 Qed.
 
@@ -1472,13 +1474,13 @@ Lemma compile_cu_public : forall A Ameta B M fname meta id,
     compile_cu (A, Ameta) M = Some B ->
     nth_error Ameta fname = Some meta ->
     I_id M (IkFunc fname) id ->
-    m_access meta = Public <-> In id (prog_public B).
+    m_access meta = Public <-> In id (prog_public (B.p_ast B)).
 intros0 Hcomp Hmeta II. split; intro Hpub.
 
 - unfold compile_cu in Hcomp. break_bind_option.
   replace l with M in * by (eauto using check_id_list_eq). clear l.
   inject_some. simpl.
-  on _, eapply_lem map_partial_Forall2.
+  on (map_partial _ (map fst _) = _), eapply_lem map_partial_Forall2.
   unfold I_id in II.
 
   assert (In fname
@@ -1496,7 +1498,7 @@ intros0 Hcomp Hmeta II. split; intro Hpub.
 - unfold compile_cu in Hcomp. break_bind_option.
   replace l with M in * by (eauto using check_id_list_eq). clear l.
   inject_some. simpl in *.
-  on _, eapply_lem map_partial_Forall2.
+  on (map_partial _ (map fst _) = _), eapply_lem map_partial_Forall2.
   unfold I_id in II.
 
   eapply In_nth_error in Hpub. destruct Hpub as (? & ?).
@@ -1570,7 +1572,7 @@ Qed.
 Lemma compile_cu_public' : forall A Ameta B M fname id,
     compile_cu (A, Ameta) M = Some B ->
     I_id M (IkFunc fname) id ->
-    public_fname Ameta fname <-> In id (prog_public B).
+    public_fname Ameta fname <-> In id (prog_public (B.p_ast B)).
 intros. split; intro.
 
 - unfold public_fname in *. break_exists. break_and.
@@ -1585,39 +1587,81 @@ intros. split; intro.
   eexists; eauto.
 Qed.
 
+Lemma compile_cu_meta : forall A Ameta B M,
+    compile_cu (A, Ameta) M = Some B ->
+    forall fname m,
+    nth_error Ameta fname = Some m <->
+    (exists id, I_id M (IkFunc fname) id /\ In (id, m) (B.p_meta B)).
+intros0 Hcomp. intros.
+unfold compile_cu in Hcomp. break_bind_option. inject_some. simpl.
+rename l3 into Bmeta.
+on (_ = Some Bmeta), eapply_lem map_partial_Forall2.
+fwd i_lem check_id_list_eq. subst l.
+fwd i_lem check_id_list_ok.
+
+split; intro.
+
+- fwd i_lem numbered_nth_error.
+  fwd i_lem Forall2_nth_error_ex as HH. destruct HH as ([id' m'] & ? & ?).
+  break_bind_option. inject_some.
+  eexists. split; eauto.
+  i_lem nth_error_in.
+
+- on _, fun H => destruct H as (id & ? & ?).
+  fwd i_lem In_nth_error as HH.  destruct HH as (fname' & ?).
+  fwd i_lem Forall2_nth_error_ex' as HH.  destruct HH as ([fname'' m'] & ? & ?).
+  break_bind_option. inject_some.
+  fwd eapply I_id_sur with (k1 := IkFunc fname) (k2 := IkFunc fname'') as HH; eauto.
+    invc HH.
+  fwd i_lem numbered_nth_error_fst_snd. simpl in *. assumption.
+Qed.
+
 Lemma I_value_public : forall A Ameta B M,
     compile_cu (A, Ameta) M = Some B ->
     forall av bv,
     I_value M av bv ->
     A.fit_public_value Ameta av ->
-    public_value B bv.
+    public_value (B.p_ast B) (B.p_meta B) bv.
 intros until av.
 induction av using value_rect_mut with
     (Pl := fun av => forall bv,
         Forall2 (I_value M) av bv ->
         Forall (A.fit_public_value Ameta) av ->
-        Forall (public_value B) bv);
+        Forall (public_value (B.p_ast B) (B.p_meta B)) bv);
 intros0 II Apub; invc II; invc Apub; i_ctor.
 
-- unfold public_fname in *.
-  rewrite <- compile_cu_public'; eauto.
+- rewrite <- compile_cu_public'; eauto.
+  unfold public_fname. eauto.
+
+- fwd eapply compile_cu_meta as HH; eauto.
+    destruct HH as [HH _]. specialize (HH ** ). destruct HH as (id & ? & ?).
+  replace bfname with id by eauto using I_id_inj. eauto.
+
+- fwd i_lem Forall2_length. congruence.
 Qed.
 
 Lemma I_value_public' : forall A Ameta B M,
     compile_cu (A, Ameta) M = Some B ->
     forall bv av,
     I_value M av bv ->
-    public_value B bv ->
+    public_value (B.p_ast B) (B.p_meta B) bv ->
     A.fit_public_value Ameta av.
 intros until bv.
 induction bv using value_rect_mut with
     (Pl := fun bv => forall av,
         Forall2 (I_value M) av bv ->
-        Forall (public_value B) bv ->
+        Forall (public_value (B.p_ast B) (B.p_meta B)) bv ->
         Forall (A.fit_public_value Ameta) av);
-intros0 II Bpub; invc II; invc Bpub; i_ctor.
+intros0 II Bpub; invc II; invc Bpub; try solve [i_ctor].
 
-- rewrite -> compile_cu_public'; eauto.
+on _, rewrite_rev compile_cu_public'; eauto.
+unfold public_fname in *. break_exists. break_and.
+
+i_ctor.
+
+fwd eapply compile_cu_meta as HH; eauto.
+  destruct HH as [_ HH]. fwd i_lem HH.
+fwd i_lem Forall2_length. congruence.
 Qed.
 
 Require Semantics.

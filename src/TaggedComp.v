@@ -348,8 +348,8 @@ Hint Resolve I_expr_value'_list.
 
 (* I_sim *)
 
-Ltac i_ctor := intros; constructor; eauto.
-Ltac i_lem H := intros; eapply H; eauto.
+Ltac i_ctor := intros; econstructor; simpl; eauto.
+Ltac i_lem H := intros; eapply H; simpl; eauto.
 
 Lemma unroll'_sim :
     forall acase actor aargs amk_rec aidx ae',
@@ -462,7 +462,7 @@ inv Astep; invc II; try on (I_expr _ _), invc.
 - on _, invc_using Forall2_3part_inv.
 
   eexists. split. eapply B.SConstrStep; eauto.
-  i_ctor. i_ctor. i_ctor. i_lem Forall2_app. i_ctor.
+  i_ctor. i_ctor. i_ctor. i_lem Forall2_app.
 
 - fwd eapply I_expr_map_value as HH; eauto.  destruct HH as (bvs & ? & ?).
   subst.
@@ -474,7 +474,7 @@ inv Astep; invc II; try on (I_expr _ _), invc.
 - on _, invc_using Forall2_3part_inv.
 
   eexists. split. eapply B.SCloseStep; eauto.
-  i_ctor. i_ctor. i_ctor. i_lem Forall2_app. i_ctor.
+  i_ctor. i_ctor. i_ctor. i_lem Forall2_app.
 
 - fwd eapply I_expr_map_value as HH; eauto.  destruct HH as (bvs & ? & ?).
   subst.
@@ -541,7 +541,7 @@ mut_induction av using HighestValues.value_rect_mut' with
 [ intros0 II Apub; invc II.. | ].
 
 - invc Apub. i_ctor.
-- invc Apub. i_ctor.
+- invc Apub. i_ctor. fwd i_lem Forall2_length. congruence.
 - auto.
 - invc Apub. i_ctor.
 
@@ -561,7 +561,7 @@ mut_induction bv using HigherValue.value_rect_mut' with
 [ intros0 II Bpub; invc II.. | ].
 
 - invc Bpub. i_ctor.
-- invc Bpub. i_ctor.
+- invc Bpub. i_ctor. fwd i_lem Forall2_length. congruence.
 - auto.
 - invc Bpub. i_ctor.
 
@@ -604,22 +604,12 @@ Section Preservation.
       + i_lem I_value_public.
       + auto.
 
+    - simpl. eauto.
+    - simpl. intros. tauto.
+
     - intros0 Astep. intros0 II.
       i_lem I_sim.
 
-    Defined.
-
-    Lemma match_val_I :
-      Semantics.fsim_match_val _ _ fsim = I_value.
-    Proof.
-      unfold fsim. simpl.
-      unfold Semantics.fsim_match_val.
-      break_match. repeat (break_match_hyp; try congruence).
-      try unfold forward_simulation_step in *.
-      try unfold forward_simulation_plus in *.
-      try unfold forward_simulation_star in *.
-      try unfold forward_simulation_star_wf in *.
-      inv Heqf. reflexivity.
     Qed.
 
 
