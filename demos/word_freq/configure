@@ -29,6 +29,7 @@ src/Freq.v
 src/FreqProof.v
 src/OeufDefs.v
 src/string_of_nat.v
+src/CminorToAsm.v
 EOF
 
 ##Build coq in 2 different stages
@@ -59,4 +60,5 @@ src/string_of_nat.v
 src/ShimProof.v
 src/word_freq_cm.v
 src/word_freq_oeuf.v
+src/CminorToAsm.v
 EOF
