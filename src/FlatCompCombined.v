@@ -32,8 +32,8 @@ Definition compile_cu (cu : A.prog_type) : res B.prog_type :=
     @@  FlatExprComp.compile_cu
     @@  FlatExprRetComp.compile_cu
     @@  FlatStopComp.compile_cu
-    @@@ FlatDestCheckComp.compile_cu
-    @@@ FlatIntTagComp.compile_cu
+    @@@ FlatDestCheckComp.compile_cu ~~ "FlatDestCheckComp"
+    @@@ FlatIntTagComp.compile_cu ~~ "FlatIntTagComp"
 .
 
 

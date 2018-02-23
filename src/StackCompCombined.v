@@ -21,7 +21,7 @@ Module B := StackFlatter2.
 
 Definition compile_cu (cu : A.prog_type) : res B.prog_type :=
         OK cu
-    @@@ StackMachComp.compile_cu
+    @@@ StackMachComp.compile_cu ~~ "StackMachComp"
     @@  StackContComp.compile_cu
     @@  StackContComp2.compile_cu
     @@  StackContComp3.compile_cu

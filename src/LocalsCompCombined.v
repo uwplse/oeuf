@@ -19,10 +19,10 @@ Module B := LocalsOnly.
 
 Definition compile_cu (cu : A.prog_type) : res B.prog_type :=
         OK cu
-    @@@ LocalsDestsComp.compile_cu
+    @@@ LocalsDestsComp.compile_cu ~~ "LocalsDestsComp"
     @@  LocalsSwitchComp.compile_cu
-    @@@ LocalsReturnComp.compile_cu
-    @@@ LocalsSourcesComp.compile_cu
+    @@@ LocalsReturnComp.compile_cu ~~ "LocalsReturnComp"
+    @@@ LocalsSourcesComp.compile_cu ~~ "LocalsSourcesComp"
     @@  LocalsOnlyComp.compile_cu
 .
 

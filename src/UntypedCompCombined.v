@@ -13,8 +13,6 @@ Require
     UntypedComp3
     UntypedComp4
     UntypedComp5
-    UntypedComp6
-    UntypedComp7
     UntypedComp8
 .
 
@@ -27,7 +25,7 @@ Definition compile_cu (cu : A.prog_type) : res B.prog_type :=
     @@  UntypedComp2.compile_cu
     @@  UntypedComp3.compile_cu
     @@  UntypedComp4.compile_cu
-    @@@ UntypedComp5.compile_cu
+    @@@ UntypedComp5.compile_cu ~~ "UntypedComp5"
     @@  UntypedComp8.compile_cu
 .
 
