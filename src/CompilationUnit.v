@@ -16,12 +16,14 @@ Definition singleton {ty} (e : body_expr [] ty) (name : string) : compilation_un
   CompilationUnit [ty] (GenvCons e GenvNil) [name] [0].
 
 
-Definition init_metadata j :=
+Definition init_metadata' :=
     let fix go names nfrees :=
         match names, nfrees with
         | name :: names,
           nfree :: nfrees => Metadata name Public nfree :: go names nfrees
         | _, _ => []
-        end in
-    (exprs j, go (names j) (nfrees j)).
+        end in go.
+
+Definition init_metadata j :=
+    (exprs j, init_metadata' (names j) (nfrees j)).
 

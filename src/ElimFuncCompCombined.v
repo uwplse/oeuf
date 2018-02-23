@@ -24,15 +24,15 @@ Module B := Switched2.
 
 Definition compile_cu (cu : A.prog_type) : res B.prog_type :=
         OK cu
-    @@@ TaggedComp.compile_cu
-    @@@ ElimFuncComp1.compile_cu
-    @@@ ElimFuncComp2.compile_cu
+    @@@ TaggedComp.compile_cu ~~ "TaggedComp"
+    @@@ ElimFuncComp1.compile_cu ~~ "ElimFuncComp1"
+    @@@ ElimFuncComp2.compile_cu ~~ "ElimFuncComp2"
     @@  ElimFuncComp3.compile_cu
-    @@@ ElimFuncComp4.compile_cu
+    @@@ ElimFuncComp4.compile_cu ~~ "ElimFuncComp4"
     @@  SelfCloseComp.compile_cu
-    @@@ MkCloseSelfOpt.compile_cu
-    @@@ SwitchedComp1.compile_cu
-    @@@ SwitchedComp2.compile_cu
+    @@@ MkCloseSelfOpt.compile_cu ~~ "MkCloseSelfOpt"
+    @@@ SwitchedComp1.compile_cu ~~ "SwitchedComp1"
+    @@@ SwitchedComp2.compile_cu ~~ "SwitchedComp2"
 .
 
 

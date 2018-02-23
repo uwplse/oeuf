@@ -258,7 +258,7 @@ End compile.
 Section compile_cu.
 Open Scope option_monad.
 
-Definition compile_cu (cu : list (A.stmt * A.expr) * list metadata) (M : id_map) : option B.program :=
+Definition compile_cu (M : id_map) (cu : list (A.stmt * A.expr) * list metadata) : option B.program :=
     check_id_list cu M >>= fun M =>
     let '(funcs, metas) := cu in
     compile_gdefs M (length funcs) (numbered funcs) >>= fun gdefs =>
@@ -271,7 +271,7 @@ Definition compile_cu (cu : list (A.stmt * A.expr) * list metadata) (M : id_map)
 
 Definition compile_cu_intern (cu : list (A.stmt * A.expr) * list metadata) : option B.program :=
     build_id_list cu >>= fun M =>
-    compile_cu cu M.
+    compile_cu M cu.
 
 End compile_cu.
 
@@ -911,7 +911,7 @@ Qed.
 
 
 Lemma prog_defs_norepet : forall A metas B M,
-    compile_cu (A, metas) M = Some B ->
+    compile_cu M (A, metas) = Some B ->
     list_norepet (map fst (prog_defs (B.p_ast B))).
 intros0 Hcomp.
 unfold compile_cu in *. break_bind_option. inject_some.
@@ -970,7 +970,7 @@ eapply compile_I_func. eassumption.
 Qed.
 
 Lemma compile_I_env_fwd : forall A metas BP B M an af,
-    compile_cu (A, metas) M = Some BP ->
+    compile_cu M (A, metas) = Some BP ->
     Genv.globalenv (B.p_ast BP) = B ->
     nth_error A an = Some af ->
     exists bid bsym bf,
@@ -1041,7 +1041,7 @@ intuition eauto.
 Qed.
 
 Lemma compile_I_env_rev : forall A metas BP B M bid bsym bf,
-    compile_cu (A, metas) M = Some BP ->
+    compile_cu M (A, metas) = Some BP ->
     Genv.globalenv (B.p_ast BP) = B ->
     Genv.find_symbol B bid = Some bsym ->
     Genv.find_funct_ptr B bsym = Some (Internal bf) ->
@@ -1071,7 +1071,7 @@ Qed.
 
 
 Lemma compile_I_prog : forall M A metas B,
-    compile_cu (A, metas) M = Some B ->
+    compile_cu M (A, metas) = Some B ->
     I_prog M A B.
 intros0 Hcomp.
 constructor. constructor.
@@ -1115,7 +1115,7 @@ destruct a_i, b_i. eauto using compile_gdef_fnames_below.
 Qed.
 
 Theorem compile_prog_fnames_below : forall a metas b M,
-    compile_cu (a, metas) M = Some b ->
+    compile_cu M (a, metas) = Some b ->
     Forall (fun f => A.fnames_below (length a) (fst f)) a.
 intros0 Hcomp.
 unfold compile_cu in Hcomp; simpl in Hcomp; break_bind_option.
@@ -1156,7 +1156,7 @@ destruct a_i, b_i. eauto using compile_gdef_switch_placement.
 Qed.
 
 Theorem compile_prog_switch_placement : forall a metas b M,
-    compile_cu (a, metas) M = Some b ->
+    compile_cu M (a, metas) = Some b ->
     Forall (fun f => A.switch_placement (fst f)) a.
 intros0 Hcomp.
 unfold compile_cu in Hcomp; simpl in Hcomp; break_bind_option.
@@ -1471,7 +1471,7 @@ Qed.
 
 
 Lemma compile_cu_public : forall A Ameta B M fname meta id,
-    compile_cu (A, Ameta) M = Some B ->
+    compile_cu M (A, Ameta) = Some B ->
     nth_error Ameta fname = Some meta ->
     I_id M (IkFunc fname) id ->
     m_access meta = Public <-> In id (prog_public (B.p_ast B)).
@@ -1561,7 +1561,7 @@ let rec go :=
 Qed.
 
 Lemma compile_cu_check_id_list : forall A Ameta M B,
-    compile_cu (A, Ameta) M = Some B ->
+    compile_cu M (A, Ameta) = Some B ->
     check_id_list (A, Ameta) M = Some M.
 intros.
 unfold compile_cu in *. break_bind_option.
@@ -1570,7 +1570,7 @@ reflexivity.
 Qed.
 
 Lemma compile_cu_public' : forall A Ameta B M fname id,
-    compile_cu (A, Ameta) M = Some B ->
+    compile_cu M (A, Ameta) = Some B ->
     I_id M (IkFunc fname) id ->
     public_fname Ameta fname <-> In id (prog_public (B.p_ast B)).
 intros. split; intro.
@@ -1588,7 +1588,7 @@ intros. split; intro.
 Qed.
 
 Lemma compile_cu_meta : forall A Ameta B M,
-    compile_cu (A, Ameta) M = Some B ->
+    compile_cu M (A, Ameta) = Some B ->
     forall fname m,
     nth_error Ameta fname = Some m <->
     (exists id, I_id M (IkFunc fname) id /\ In (id, m) (B.p_meta B)).
@@ -1617,7 +1617,7 @@ split; intro.
 Qed.
 
 Lemma I_value_public : forall A Ameta B M,
-    compile_cu (A, Ameta) M = Some B ->
+    compile_cu M (A, Ameta) = Some B ->
     forall av bv,
     I_value M av bv ->
     A.fit_public_value Ameta av ->
@@ -1641,7 +1641,7 @@ intros0 II Apub; invc II; invc Apub; i_ctor.
 Qed.
 
 Lemma I_value_public' : forall A Ameta B M,
-    compile_cu (A, Ameta) M = Some B ->
+    compile_cu M (A, Ameta) = Some B ->
     forall bv av,
     I_value M av bv ->
     public_value (B.p_ast B) (B.p_meta B) bv ->
@@ -1675,7 +1675,7 @@ Section Preservation.
 
 
   
-  Hypothesis TRANSF : compile_cu prog M = Some tprog.
+  Hypothesis TRANSF : compile_cu M prog = Some tprog.
 
 Lemma func_body_I : forall M,
     forall abody aret aarg afname afree,
@@ -1835,4 +1835,11 @@ Proof.
     intros.
     unfold fsim_intern.
     eapply match_val_eq.
+Qed.
+
+
+Lemma unintern_compile_cu : forall A Ameta B,
+    compile_cu_intern (A, Ameta) = Some B ->
+    exists M, compile_cu M (A, Ameta) = Some B.
+intros. unfold compile_cu_intern in *. break_bind_option. eauto.
 Qed.
