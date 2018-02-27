@@ -1,10 +1,10 @@
-Require Import Common Monads.
-Require Import Metadata.
+Require Import oeuf.Common oeuf.Monads.
+Require Import oeuf.Metadata.
 Require String.
-Require StackFlat StackFlatter.
-Require Import ListLemmas.
-Require Import HigherValue.
-Require Import StepLib.
+Require oeuf.StackFlat oeuf.StackFlatter.
+Require Import oeuf.ListLemmas.
+Require Import oeuf.HigherValue.
+Require Import oeuf.StepLib.
 
 Require Import Psatz.
 
@@ -357,7 +357,7 @@ Lemma compile_cu_metas : forall A Ameta B Bmeta,
 simpl. inversion 1. auto.
 Qed.
 
-Require Semantics.
+Require oeuf.Semantics.
 
 Section Preservation.
 

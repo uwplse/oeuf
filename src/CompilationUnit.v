@@ -1,8 +1,9 @@
-Require Import List String HList SourceLifted.
+Require Import List String.
+Require Import oeuf.HList oeuf.SourceLifted.
 Import ListNotations.
-Require Semantics.
-Require Import Utopia.
-Require Import Metadata.
+Require oeuf.Semantics.
+Require Import oeuf.Utopia.
+Require Import oeuf.Metadata.
 
 Record compilation_unit :=
   CompilationUnit {

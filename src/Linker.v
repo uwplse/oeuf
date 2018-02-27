@@ -9,9 +9,9 @@ Require Import compcert.common.Memory.
 
 Require Import StructTact.StructTactics.
 Require Import StructTact.Util.
-Require Import EricTact.
-Require Import StuartTact.
-Require Cmajor.
+Require Import oeuf.EricTact.
+Require Import oeuf.StuartTact.
+Require oeuf.Cmajor.
 
 
 (* linker needs to make each id point to only one thing *)

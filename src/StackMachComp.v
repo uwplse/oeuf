@@ -1,9 +1,9 @@
-Require Import Common Monads.
-Require Import Metadata.
+Require Import oeuf.Common oeuf.Monads.
+Require Import oeuf.Metadata.
 Require String.
-Require Switched2 StackMach.
-Require Import ListLemmas.
-Require Import HigherValue.
+Require oeuf.Switched2 oeuf.StackMach.
+Require Import oeuf.ListLemmas.
+Require Import oeuf.HigherValue.
 
 Require Import Psatz.
 
@@ -344,7 +344,7 @@ unfold compile_cu. simpl. inversion 1.
 break_match; try discriminate. inject_some. auto.
 Qed.
 
-Require Semantics.
+Require oeuf.Semantics.
 
 Section Preservation.
 

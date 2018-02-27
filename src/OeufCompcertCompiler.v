@@ -3,7 +3,7 @@ Require Import String.
 Require Import compcert.lib.Coqlib.
 Require Import compcert.common.Errors.
 Require Import compcert.common.AST.
-Require Import TraceSemantics.
+Require Import oeuf.TraceSemantics.
 (** Languages (syntax and semantics). *)
 Require compcert.backend.Cminor.
 Require compcert.backend.CminorSel.

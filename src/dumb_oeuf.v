@@ -4,8 +4,8 @@ Require Import BinNums.
 Require Import compcert.lib.Integers.
 Require Import List.
 Import ListNotations.
-Require Cmajor.
-Require Import Metadata.
+Require oeuf.Cmajor.
+Require Import oeuf.Metadata.
 Require Import String.
 
 Local Open Scope Z_scope.

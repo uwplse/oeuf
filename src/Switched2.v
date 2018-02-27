@@ -1,12 +1,12 @@
-Require Import Common.
-Require StepLib.
+Require Import oeuf.Common.
+Require oeuf.StepLib.
 Require Import Psatz.
-Require Import ListLemmas.
+Require Import oeuf.ListLemmas.
 
-Require Import Utopia.
-Require Import Monads.
-Require Export HigherValue.
-Require Import AllValues.
+Require Import oeuf.Utopia.
+Require Import oeuf.Monads.
+Require Export oeuf.HigherValue.
+Require Import oeuf.AllValues.
 
 Definition function_name := nat.
 
@@ -107,7 +107,7 @@ Definition SPlusCons := @StepLib.SPlusCons state.
 
 
 
-Require Import Metadata.
+Require Import oeuf.Metadata.
 
 Definition prog_type : Type := list expr * list metadata.
 Definition val_level := VlHigher.
@@ -129,7 +129,7 @@ Inductive final_state (prog : prog_type) : state -> valtype -> Prop :=
 
 Definition initial_env (prog : prog_type) : env := fst prog.
 
-Require Semantics.
+Require oeuf.Semantics.
 Definition semantics (prog : prog_type) : Semantics.semantics :=
   @Semantics.Semantics_gen state env val_level
                  (is_callstate prog)

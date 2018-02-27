@@ -11,12 +11,12 @@ Require Import compcert.lib.Maps.
 Require Import StructTact.StructTactics.
 Require Import StructTact.Util.
 
-Require Import EricTact.
-Require Import OeufProof.
+Require Import oeuf.EricTact.
+Require Import oeuf.OeufProof.
 
-Require Cmajor.
+Require oeuf.Cmajor.
 
-Require Import HighValues.
+Require Import oeuf.HighValues.
 
 Lemma mem_contents_alloc :
   forall m lo hi m' b,

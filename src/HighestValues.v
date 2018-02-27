@@ -1,7 +1,7 @@
-Require Import Common.
-Require Import Utopia.
-Require Import Metadata.
-Require Import OpaqueTypes.
+Require Import oeuf.Common.
+Require Import oeuf.Utopia.
+Require Import oeuf.Metadata.
+Require Import oeuf.OpaqueTypes.
 
 Definition function_name := nat.
 

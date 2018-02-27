@@ -10,8 +10,8 @@ Require Import compcert.common.Events.
 Require Import compcert.common.Switch.
 (*Require Import compcert.common.Smallstep.*)
 
-Require TraceSemantics.
-Require Import FullSemantics.
+Require oeuf.TraceSemantics.
+Require Import oeuf.FullSemantics.
 
 Require Import List.
 Import ListNotations.
@@ -20,12 +20,12 @@ Require Import Arith.
 Require Import StructTact.StructTactics.
 Require Import StructTact.Util.
 
-Require Import HighValues.
+Require Import oeuf.HighValues.
 
-Require Import EricTact.
+Require Import oeuf.EricTact.
 
-Require Import Fflatmajor.
-Require Import Emajor.
+Require Import oeuf.Fflatmajor.
+Require Import oeuf.Emajor.
 
 Fixpoint transf_expr (f : Fflatmajor.expr) : Emajor.expr :=
   match f with

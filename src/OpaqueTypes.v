@@ -1,4 +1,4 @@
-Require Import SafeInt.
+Require Import oeuf.SafeInt.
 
 Inductive opaque_type_name : Set :=
 | Oint

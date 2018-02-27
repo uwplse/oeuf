@@ -1,12 +1,12 @@
-Require Import Common.
+Require Import oeuf.Common.
 
-Require Import Utopia.
-Require Import Monads.
-Require Import ListLemmas.
-Require Import Metadata.
-Require Import HigherValue.
-Require Import AllValues.
-Require StepLib.
+Require Import oeuf.Utopia.
+Require Import oeuf.Monads.
+Require Import oeuf.ListLemmas.
+Require Import oeuf.Metadata.
+Require Import oeuf.HigherValue.
+Require Import oeuf.AllValues.
+Require oeuf.StepLib.
 
 Definition function_name := nat.
 
@@ -177,7 +177,7 @@ Definition expr_ind' (P : expr -> Prop)
         HValue HArg HUpVar HDeref HCall HConstr HElim HClose _ _ e); eauto).
 
 
-Require Semantics.
+Require oeuf.Semantics.
 
 Definition prog_type : Type := list expr * list metadata.
 Definition val_level := VlHigher.

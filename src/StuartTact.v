@@ -2,7 +2,7 @@ Require Import List.
 Import ListNotations.
 Require Import Omega.
 Require Import StructTact.StructTactics.
-Require Import Forall3.
+Require Import oeuf.Forall3.
 
 
 Ltac generalize_all :=

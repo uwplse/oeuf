@@ -1,14 +1,14 @@
-Require Import Common Monads.
-Require Import Metadata.
+Require Import oeuf.Common oeuf.Monads.
+Require Import oeuf.Metadata.
 Require String.
-Require Import ListLemmas.
-Require Import StepLib.
-Require Import HigherValue.
+Require Import oeuf.ListLemmas.
+Require Import oeuf.StepLib.
+Require Import oeuf.HigherValue.
 
 Require Import Psatz.
 
-Require ElimFunc4.
-Require SelfClose.
+Require oeuf.ElimFunc4.
+Require oeuf.SelfClose.
 
 Module A := ElimFunc4.
 Module B := SelfClose.
@@ -282,7 +282,7 @@ Lemma compile_cu_metas : forall A Ameta B Bmeta,
 simpl. inversion 1. break_bind_option. inject_some. auto.
 Qed.
 
-Require Semantics.
+Require oeuf.Semantics.
 
 Section Preservation.
 

@@ -19,17 +19,17 @@ Require Import Ring.
 Require Import StructTact.StructTactics.
 Require Import StructTact.Util.
 
-Require Import EricTact.
+Require Import oeuf.EricTact.
 
 
-Require Import HList.
+Require Import oeuf.HList.
 
-Require SourceValues.
-Require HighestValues.
-Require HigherValue.
-Require HighValues.
+Require oeuf.SourceValues.
+Require oeuf.HighestValues.
+Require oeuf.HigherValue.
+Require oeuf.HighValues.
 
-Require Import OpaqueTypes.
+Require Import oeuf.OpaqueTypes.
 
 Close Scope Z.
 

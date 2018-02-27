@@ -12,13 +12,13 @@ Global Unset Asymmetric Patterns.
 Require Import StructTact.StructTactics.
 Require Import StructTact.Util.
 
-Require Import EricTact.
-Require Import StuartTact.
+Require Import oeuf.EricTact.
+Require Import oeuf.StuartTact.
 
-Require Import AllValues.
-Require Import MatchValues.
+Require Import oeuf.AllValues.
+Require Import oeuf.MatchValues.
 
-Require FullSemantics.
+Require oeuf.FullSemantics.
 
 Set Default Timeout 15.
 Set Implicit Arguments.

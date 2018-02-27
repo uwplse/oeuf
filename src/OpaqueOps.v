@@ -1,15 +1,15 @@
-Require Import Common.
-Require Import HList.
-Require Import SafeInt.
-Require Import Utopia.
-Require Import Monads.
+Require Import oeuf.Common.
+Require Import oeuf.HList.
+Require Import oeuf.SafeInt.
+Require Import oeuf.Utopia.
+Require Import oeuf.Monads.
 
-Require Import OpaqueTypes.
+Require Import oeuf.OpaqueTypes.
 
-Require Import SourceValues.
-Require HighestValues.
+Require Import oeuf.SourceValues.
+Require oeuf.HighestValues.
 
-Require Import MatchValues.
+Require Import oeuf.MatchValues.
 
 Local Open Scope option_monad.
 

@@ -1,19 +1,19 @@
 Require Import compcert.driver.Compiler compcert.common.Errors.
-Require Import Common Monads.
-Require CompilationUnit.
-Require Import Metadata.
-Require Import CompilerUtil.
-Require Import Semantics.
+Require Import oeuf.Common oeuf.Monads.
+Require oeuf.CompilationUnit.
+Require Import oeuf.Metadata.
+Require Import oeuf.CompilerUtil.
+Require Import oeuf.Semantics.
 
-Require Switched2 StackFlatter2.
+Require oeuf.Switched2 oeuf.StackFlatter2.
 Require
-    StackMachComp
-    StackContComp
-    StackContComp2
-    StackContComp3
-    StackFlatComp
-    StackFlatterComp
-    StackFlatterComp2
+    oeuf.StackMachComp
+    oeuf.StackContComp
+    oeuf.StackContComp2
+    oeuf.StackContComp3
+    oeuf.StackFlatComp
+    oeuf.StackFlatterComp
+    oeuf.StackFlatterComp2
 .
 
 

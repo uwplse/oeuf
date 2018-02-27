@@ -1,15 +1,15 @@
 Require Import List.
 Import ListNotations.
 
-Require SourceValues.
-Require HighestValues.
-Require HigherValue.
-Require HighValues.
+Require oeuf.SourceValues.
+Require oeuf.HighestValues.
+Require oeuf.HigherValue.
+Require oeuf.HighValues.
 
-Require MatchValues.
+Require oeuf.MatchValues.
 
 Require Import StructTact.StructTactics.
-Require Import StuartTact.
+Require Import oeuf.StuartTact.
 
 
 Inductive value_level : Set :=
