@@ -34,9 +34,9 @@ Section SIM.
 
   Definition prog := dumb_cm.prog. (* make sure we get correct prog *)
   Definition oprog := dumb_oeuf.prog.
-  Definition ge := Genv.globalenv prog.
+  Definition ge := Genv.globalenv (Cmajor.cm_ast prog).
   Variable st : Cminor.state.
-  Hypothesis init_state : initial_state prog st.
+  Hypothesis init_state : initial_state (Cmajor.cm_ast prog) st.
 
   
   Lemma Plt_one_succ :

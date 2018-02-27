@@ -40,42 +40,6 @@ Proof.
   unfold Dumb.oeuf_prog. simpl.
   unfold transf_untyped_to_cminor.
   simpl.
-  s. 
-  unfold transf_untyped_to_cmajor.
-  s.
-  unfold transf_untyped_to_dflatmajor.
-  s.
-  unfold transf_untyped_to_dmajor.
-  s.
-  unfold transf_untyped_to_emajor.
-  s.
-  unfold transf_untyped_to_fflatmajor.
-  s.
-  unfold transf_untyped_to_fmajor.
-  s.
-  unfold transf_untyped_to_flat.
-  s.
-  unfold transf_untyped_to_locals.
-  s.
-  unfold transf_untyped_to_stack.
-  s.
-  unfold transf_untyped_to_value_flag.
-  s.
-  unfold transf_untyped_to_self_close.
-  s.
-  unfold transf_untyped_to_switched.
-  s.
-  unfold transf_untyped_to_elim_func3.
-  s.
-  unfold transf_untyped_to_elim_func2.
-  s.
-  unfold transf_untyped_to_elim_func.
-  s.
-  unfold transf_untyped_to_tagged_numbered.
-  s.
-  unfold transf_untyped_to_tagged.
-  s.
-  simpl.
   unfold Fmajortofflatmajor.transf_program.
   unfold AST.transform_program.
   simpl.
