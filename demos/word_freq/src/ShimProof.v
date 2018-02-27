@@ -43,6 +43,9 @@ Require Import Freq.
 Require Import FreqProof.
 (* what we want here: a proof about stepping from the beginning of time to the Oeuf call, and back out when done *)
 
+
+Require Import CminorToAsm.
+
 Section Simulation.
 
   (* TODO: make Oeuf dump this out as well *)
@@ -445,7 +448,7 @@ Section Simulation.
         corresponds vpt0 vpt /\
         value_inject (Genv.globalenv oeuf_prog) m' hv' vpt /\
         v_match string_t (calculate_frequencies_top input) hv'.
-
+  
     
   Lemma most_steps :
     exists st' t,
@@ -529,23 +532,6 @@ Section Simulation.
     take_E0_step.
     take_E0_step.
 
-    (* eapply estar_left_t_E0. *)
-    (* split. *)
-    (* econstructor. *)
-    (* repeat (econstructor; eauto). *)
-    (* repeat (econstructor; eauto). *)
-    (* simpl. simpl_int_add.  *)
-    (* destruct (Integers.Int.eq_dec _ _); try congruence. *)
-    (* unfold Genv.find_funct_ptr. *)
-    (* reflexivity. *)
-    (* reflexivity. *)
-    
-
-    (* alloc_m x3. *)
-    (* take_E0_step. *)
-    (* take_E0_step. *)
-    (* take_E0_step. *)
-    (* take_E0_step. *)
     alloc_m x3.
     store_m m1.
     eapply init_alloc. eassumption.
@@ -579,21 +565,6 @@ Section Simulation.
     take_E0_step.
     take_E0_step.
 
-    (* assert (Hdiff_blocks : b0 <> b1). *)
-    (* { *)
-    (*   copy Heqp0. copy Heqp1. *)
-    (*   eapply Mem.alloc_result in Heqp0. *)
-    (*   eapply Mem.nextblock_alloc in H4. *)
-    (*   eapply Mem.alloc_result in H7. *)
-    (*   eapply Mem.nextblock_alloc in Heqp1. *)
-    (*   subst. *)
-    (*   rewrite H4. *)
-    (*   remember (Pos.succ_discr (Mem.nextblock x3)) as HHH. *)
-    (*   clear HeqHHH. *)
-    (*   congruence. *)
-      
-
-    (* } *)
     take_E0_step.
     eapply loadable_load.
     loadable_chain.
@@ -603,7 +574,9 @@ Section Simulation.
     unfold Genv.find_funct_ptr.
     reflexivity.
     reflexivity.
-    
+
+    (* TODO: factor proof into smaller proofs *)
+    (* in order for QED to be faster. *)
 
     eapply oeuf_string_matches in H6.
     repeat break_exists.
@@ -804,12 +777,12 @@ Section Simulation.
 
     Unshelve. exact (Vint Integers.Int.zero).
     
-  Qed.    
+  Qed.
 
 
-  Lemma top_level_correctness :
-    exists st' t,
-      Smallstep.star step ge st t st' /\ word_freq t.
+  Lemma cminor_top_level_correctness :
+    exists st' t res,
+      Smallstep.star step ge st t st' /\ word_freq t /\ Cminor.final_state st' res.
   Proof.
     destruct most_steps. break_exists. break_and.
     unfold correct in H0. break_exists.
@@ -823,11 +796,13 @@ Section Simulation.
     repeat break_exists.
     repeat break_and.
     eexists. eexists.
+    eexists.
     split.
     eapply Smallstep.star_trans.
     eassumption.
     eassumption.
     reflexivity.
+    split.
     unfold word_freq.
     exists x0.
     exists x3.
@@ -847,9 +822,47 @@ Section Simulation.
     split. apply H4.
     split. eassumption.
     eassumption.
+    eauto.
   Qed.
 
 
+  Require Import compcert.driver.Compiler.  
+  Require Import compcert.common.Smallstep.
+  
+  Variable tprog : Asm.program.
+  Hypothesis ASM_TRANSF : transf_cminor_program prog = OK tprog.
+
+  Definition tge := Genv.globalenv tprog.
+  
+  Definition compcert_forward_sim := compcert_forward_simulation prog tprog ASM_TRANSF.
+  
+  Lemma asm_top_level_correctness :
+    exists ast ast' t i i' st' res,
+      compcert_forward_sim i st ast /\
+      compcert_forward_sim i' st' ast' /\
+      Smallstep.star Asm.step tge ast t ast' /\ word_freq t /\
+      Cminor.final_state st' res /\
+      Asm.final_state ast' res.
+  Proof.
+    destruct cminor_top_level_correctness.
+    repeat break_exists; repeat break_and.
+    eapply asm_steps in H; eauto.
+    repeat break_exists; repeat break_and;
+      repeat break_exists;
+      repeat break_and.
+    instantiate (1 := tprog) in x2.
+    instantiate (1 := ASM_TRANSF) in H2.
+    exists x2. exists x4.
+    exists x0.
+    exists x3. exists x5.
+    exists x. exists x1.
+    split. auto.
+    split. auto.
+    split. auto.
+    split. auto.
+    split. auto.
+    eapply (fsim_match_final_states compcert_forward_sim); eauto.
+  Qed.
   
 End Simulation.
 
