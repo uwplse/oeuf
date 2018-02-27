@@ -4,6 +4,9 @@ Require Import BinNums.
 Require Import compcert.lib.Integers.
 Require Import List.
 Import ListNotations.
+Require Cmajor.
+Require Import Metadata.
+Require Import String.
 
 Local Open Scope Z_scope.
 
@@ -503,7 +506,7 @@ Definition f_main := {|
   (Sreturn (Some (Econst (Ointconst (Int.repr 0))))))
 |}.
 
-Definition prog : Cminor.program := {|
+Definition prog0 : Cminor.program := {|
 prog_defs :=
 ((_id, Gfun(Internal f_id)) :: (_malloc, Gfun(External EF_malloc)) ::
  (___stringlit_2, Gvar v___stringlit_2) ::
@@ -738,3 +741,13 @@ prog_public :=
 prog_main := _main;
 |}.
 
+
+Definition m_id := {|
+        m_name := "id";
+        m_access := Public;
+        m_nfree := 0
+        |}.
+
+Definition prog : Cmajor.Cminor_program :=
+    {| Cmajor.cm_ast := prog0;
+       Cmajor.cm_meta := [(_id, m_id)] |}.

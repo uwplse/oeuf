@@ -1060,7 +1060,7 @@ Require Import String.
 
 Module compilation_unit.
   Definition current_major_version : symbol.t := symbol.of_string_unsafe "1".
-  Definition current_minor_version : symbol.t := symbol.of_string_unsafe "0".
+  Definition current_minor_version : symbol.t := symbol.of_string_unsafe "1".
   Definition current_version_vector : list (tree symbol.t) :=
     [atom current_major_version;
      atom current_minor_version].
@@ -1073,20 +1073,24 @@ Module compilation_unit.
   Definition to_tree (j : compilation_unit) : tree symbol.t :=
     node [node [atom (symbol.of_string_unsafe "version"); node current_version_vector];
           node (List.map (fun s => atom (symbol.of_string_safe s)) (names j));
-          genv.to_tree (exprs j)].
+          genv.to_tree (exprs j);
+          node (List.map (fun n => atom (nat_to_symbol n)) (nfrees j))].
 
   Definition from_tree (t : tree symbol.t) : option compilation_unit :=
     match t with
-    | node [node [atom tag; node vs]; node name_ts; genv_t] =>
+    | node [node [atom tag; node vs]; node name_ts; genv_t; node nfree_ts] =>
       if symbol.eq_dec tag (symbol.of_string_unsafe "version")
       then if list_eq_dec (tree_eq_dec symbol.eq_dec) vs current_version_vector
       then match genv.from_tree genv_t with None => None
-           | Some (G, g) =>
-           match sequence (List.map (fun t => get_atom t >>= symbol.to_string) name_ts) with
-           | None => None
-           | Some names => Some (CompilationUnit G g names)
-           end
-           end
+        | Some (G, g) =>
+        let xs := List.map (fun t => get_atom t >>= symbol.to_string) name_ts in
+        match sequence xs with | None => None
+        | Some names =>
+        let xs := List.map (fun t => get_atom t >>= fun x => Some (nat_from_symbol x)) nfree_ts in
+        match sequence xs with | None => None
+        | Some nfrees =>
+            Some (CompilationUnit G g names nfrees)
+        end end end
       else None
       else None
     | _ => None
@@ -1100,16 +1104,20 @@ Module compilation_unit.
     repeat break_if; try congruence.
     rewrite genv.to_from_tree_id.
     rewrite map_map.
-    rewrite map_ext with (g := Some).
-    - rewrite sequence_map_Some.
-      destruct j; auto.
-    - intros s. simpl. now rewrite symbol.to_string_of_string_safe_id.
+    rewrite map_ext with (g := Some); cycle 1.
+      { intros s. simpl. now rewrite symbol.to_string_of_string_safe_id. }
+    rewrite sequence_map_Some.
+    rewrite map_map. rewrite map_ext with (g := Some); cycle 1.
+      { simpl. intro. now rewrite nat_to_from_symbol. }
+    rewrite sequence_map_Some.
+    destruct j; reflexivity.
   Qed.
 
   Lemma to_tree_wf : forall j, Tree.Forall symbol.wf (to_tree j).
   Proof.
     unfold to_tree.
-    auto 10 using Forall_map_intro, Forall_forall_intro, symbol.of_string_safe_wf.
+    auto 10 using Forall_map_intro, Forall_forall_intro,
+        symbol.of_string_safe_wf, nat_to_symbol_wf.
   Qed.
   Hint Resolve to_tree_wf.
 

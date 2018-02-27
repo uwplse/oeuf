@@ -10,6 +10,8 @@ Require Import compcert.common.Memory.
 Require Import StructTact.StructTactics.
 Require Import StructTact.Util.
 Require Import EricTact.
+Require Import StuartTact.
+Require Cmajor.
 
 
 (* linker needs to make each id point to only one thing *)
@@ -116,7 +118,7 @@ Proof.
 Defined.
 
 (* We need a way to construct a shim, given Oeuf code *)
-Definition shim_link (oeuf_code : Cminor.program) (shim_code : Cminor.program) : res Cminor.program :=
+Definition shim_link0 (oeuf_code : Cminor.program) (shim_code : Cminor.program) : res Cminor.program :=
   if (list_norepet_dec peq (prog_defs_names oeuf_code)) then
     if (list_norepet_dec peq (prog_defs_names shim_code)) then
       if (only_malloc_ext (prog_defs oeuf_code)) then
@@ -131,6 +133,16 @@ Definition shim_link (oeuf_code : Cminor.program) (shim_code : Cminor.program) :
       else Error ((MSG "Oeuf code contained non-malloc external functions, or global variables") :: nil)
     else Error ((MSG "Shim list_norepet check failed"):: nil)
   else Error ((MSG "Oeuf list_norepet check failed"):: nil).
+
+Definition shim_link (oeuf_code : Cmajor.Cminor_program)
+        (shim_code : Cminor.program) : res Cmajor.Cminor_program :=
+    match shim_link0 (Cmajor.cm_ast oeuf_code) shim_code with
+    | OK linked => OK {|
+            Cmajor.cm_ast := linked;
+            Cmajor.cm_meta := Cmajor.cm_meta oeuf_code
+            |}
+    | Error m => Error m
+    end.
 
 
 Lemma remove_id_preserve_not_in :
@@ -243,12 +255,12 @@ Proof.
   
 Qed.
 
-Lemma list_norepet_link :
+Lemma list_norepet_link0 :
   forall a b c,
-    shim_link a b = OK c ->
+    shim_link0 a b = OK c ->
     list_norepet (prog_defs_names c).
 Proof.
-  intros. unfold shim_link in *.
+  intros. unfold shim_link0 in *.
   repeat break_match_hyp; try congruence.
   inv H. unfold prog_defs_names.
   eapply link_fundefs_norepet in Heqr; eauto.
@@ -357,13 +369,13 @@ Qed.
 
 Lemma prog_def_transf_l :
   forall a b c,
-    shim_link a b = OK c ->
+    shim_link0 a b = OK c ->
     forall id fd,
       In (id,Gfun fd) (prog_defs a) ->
       In (id,Gfun fd) (prog_defs c).
 Proof.
   intros.
-  unfold shim_link in *.
+  unfold shim_link0 in *.
   repeat (break_match_hyp; try congruence).
   inv H. simpl.
   eapply prog_def_link_fundefs_l; eauto.
@@ -371,13 +383,13 @@ Qed.
 
 Lemma prog_def_transf_r :
   forall a b c,
-    shim_link a b = OK c ->
+    shim_link0 a b = OK c ->
     forall id fd,
       In (id,Gfun (Internal fd)) (prog_defs b) ->
       In (id,Gfun (Internal fd)) (prog_defs c).
 Proof.
   intros.
-  unfold shim_link in *.
+  unfold shim_link0 in *.
   repeat (break_match_hyp; try congruence).
   inv H. simpl.
   eapply prog_def_link_fundefs_r; eauto.
@@ -539,12 +551,17 @@ Qed.
 
 Section LINKED.
 
-  Variable oeuf_code shim_code link_code : Cminor.program.
+  Variable oeuf_code : Cmajor.Cminor_program.
+  Variable shim_code : Cminor.program.
+  Variable link_code : Cmajor.Cminor_program.
   Hypothesis TRANSF : shim_link oeuf_code shim_code = OK link_code.
 
-  Definition oeuf_ge := Genv.globalenv oeuf_code.
+  Let oeuf_code0 := Cmajor.cm_ast oeuf_code.
+  Let link_code0 := Cmajor.cm_ast link_code.
+
+  Definition oeuf_ge := Genv.globalenv oeuf_code0.
   Definition shim_ge := Genv.globalenv shim_code.
-  Definition link_ge := Genv.globalenv link_code.
+  Definition link_ge := Genv.globalenv link_code0.
 
   Lemma genv_next_Ple :
     Ple (Genv.genv_next oeuf_ge) (Genv.genv_next link_ge).
@@ -552,11 +569,11 @@ Section LINKED.
     unfold oeuf_ge.
     unfold link_ge.
     unfold Genv.globalenv.
-    unfold shim_link in *.
+    unfold shim_link in *. break_match; try discriminate.
+      on (OK _ = OK _), invc. unfold shim_link0 in *.
     repeat (break_match_hyp; try congruence).
-    invc TRANSF.
-    copy Heqr.
-    eapply link_fundefs_head in H.
+      on (OK _ = OK _), invc.
+    on _, eapply_lem link_fundefs_head.
     break_exists.
     subst l1.
     simpl.
@@ -564,7 +581,7 @@ Section LINKED.
     repeat rewrite Genv.genv_next_add_globals.
     eapply Genv.advance_next_le.
   Qed.
-    
+
   Lemma oeuf_symbol_transf :
     forall id b,
       Genv.find_symbol oeuf_ge id = Some b ->
@@ -573,11 +590,11 @@ Section LINKED.
     intros.
     unfold oeuf_ge in *.
     unfold link_ge in *.
-    unfold shim_link in TRANSF.
+    unfold shim_link, shim_link0 in TRANSF.
     repeat break_match_hyp; try congruence.
-    invc TRANSF.
-    copy Heqr.
-    eapply link_fundefs_head in Heqr.
+    invc TRANSF. invc Heqr.
+    copy Heqr0.
+    eapply link_fundefs_head in Heqr0.
     break_exists. subst l1.
 
     unfold Genv.globalenv in *. simpl.
@@ -599,13 +616,13 @@ Section LINKED.
     intros.
     unfold oeuf_ge in *.
     unfold link_ge in *.
-    unfold shim_link in TRANSF.
+    unfold shim_link, shim_link0 in TRANSF.
     repeat break_match_hyp; try congruence.
-    invc TRANSF.
-    copy Heqr.
-    eapply link_fundefs_head in Heqr.
+    do 2 on (OK _ = OK _), invc.
+    copy Heqr0.
+    eapply link_fundefs_head in Heqr0.
     break_exists. subst l1.
-    
+
     unfold Genv.globalenv in *. simpl.
     rewrite Genv.add_globals_app.
     eapply find_funct_ptr_head; eauto.
@@ -639,9 +656,9 @@ Section LINKED.
       internal_or_malloc fd.
   Proof.
     intros. unfold oeuf_ge in *.
-    unfold shim_link in *.
+    unfold shim_link, shim_link0 in *.
     repeat (break_match_hyp; try congruence).
-    invc TRANSF.
+    do 2 on (OK _ = OK _), invc.
     eapply Genv.find_funct_ptr_inversion in H.
     break_exists.
     eapply only_malloc_ext_sound; eauto.
@@ -657,9 +674,9 @@ Section LINKED.
       end.
   Proof.
     intros. unfold oeuf_ge in *.
-    unfold shim_link in *.
+    unfold shim_link, shim_link0 in *.
     repeat (break_match_hyp; try congruence).
-    invc TRANSF.
+    do 2 on (OK _ = OK _), invc.
     eapply Genv.find_funct_ptr_inversion in H.
     break_exists.
     rewrite Forall_forall in f.

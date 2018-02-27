@@ -47,16 +47,16 @@ Definition transf_c_to_cminor (p : Csyntax.program) : res Cminor.program :=
   @@@ Cshmgen.transl_program
   @@@ Cminorgen.transl_program.
 
-Definition transf_whole_program (oeuf_code : CompilationUnit.compilation_unit) (shim_code : Csyntax.program) : res (Cminor.program * Cminor.program * Cminor.program * Asm.program) :=
+Definition transf_whole_program (oeuf_code : CompilationUnit.compilation_unit) (shim_code : Csyntax.program) : res (Cmajor.Cminor_program * Cminor.program * Cmajor.Cminor_program * Asm.program) :=
   match transf_oeuf_to_cminor oeuf_code with
   | OK oeuf_cm =>
     match transf_c_to_cminor shim_code with
     | OK shim_cm =>
-      match shim_link (Cmajor.cm_ast oeuf_cm) shim_cm with
+      match shim_link oeuf_cm shim_cm with
       | OK all_cm =>
-        match transf_cminor_program all_cm with
+        match transf_cminor_program (Cmajor.cm_ast all_cm) with
         | OK all_asm =>
-          OK (Cmajor.cm_ast oeuf_cm, shim_cm, all_cm, all_asm)
+          OK (oeuf_cm, shim_cm, all_cm, all_asm)
         | Error m => Error m
         end
       | Error m => Error m

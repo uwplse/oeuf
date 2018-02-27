@@ -171,7 +171,7 @@ Require Import Cmajor.
 Section NEWCONT.
 
   Variable st st' : Cminor.state.
-  Variable prog : Cminor.program.
+  Variable prog : Cminor_program.
   Variable fv av rv : value.
   Hypothesis start : cminor_is_callstate prog fv av st.
   Hypothesis finish : cminor_final_state prog st' rv.
@@ -202,12 +202,12 @@ Section NEWCONT.
   Proof.
     induction 1; intros.
     eexists; split.
-    eapply star_refl. eauto.
+    eapply FullSemantics.star_refl. eauto.
 
     subst. eapply step_sim in H; eauto.
     break_exists. break_and.
     specialize (IHstar _ H1). break_exists; break_and.
-    eexists; split. eapply star_left; eauto.
+    eexists; split. eapply FullSemantics.star_left; eauto.
     eauto.
   Qed.
 
