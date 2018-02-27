@@ -1,14 +1,14 @@
-Require Import Common Monads.
-Require Import Metadata.
+Require Import oeuf.Common oeuf.Monads.
+Require Import oeuf.Metadata.
 Require String.
-Require Import ListLemmas.
-Require Import Forall3.
-Require Import StepLib.
-Require Import HigherValue.
+Require Import oeuf.ListLemmas.
+Require Import oeuf.Forall3.
+Require Import oeuf.StepLib.
+Require Import oeuf.HigherValue.
 
 Require Import Psatz.
 
-Require Import SelfClose.
+Require Import oeuf.SelfClose.
 Module AB := SelfClose.
 
 Set Default Timeout 15.
@@ -636,7 +636,7 @@ Qed.
 
 
 
-Require Import Semantics.
+Require Import oeuf.Semantics.
 
 Section Preservation.
 

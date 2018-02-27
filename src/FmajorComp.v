@@ -8,16 +8,16 @@ Require compcert.backend.SelectLong.
 
 Require Import StructTact.Assoc.
 
-Require Import Common Monads.
-Require Import StuartTact.
-Require Import HighValues.
-Require Import ListLemmas.
-Require Import Metadata.
+Require Import oeuf.Common oeuf.Monads.
+Require Import oeuf.StuartTact.
+Require Import oeuf.HighValues.
+Require Import oeuf.ListLemmas.
+Require Import oeuf.Metadata.
 Require PrettyParsing.NatToSymbol String.
 Delimit Scope string_scope with string.
 Local Notation "s1 ++ s2" := (String.append s1 s2) : string_scope.
-Require FlatIntTag Fmajor.
-Require MatchValues.
+Require oeuf.FlatIntTag oeuf.Fmajor.
+Require oeuf.MatchValues.
 
 Close Scope Z_scope.
 
@@ -1664,8 +1664,8 @@ fwd eapply compile_cu_meta as HH; eauto.
 fwd i_lem Forall2_length. congruence.
 Qed.
 
-Require Semantics.
-Require MixSemantics.
+Require oeuf.Semantics.
+Require oeuf.MixSemantics.
 
 Section Preservation.
 

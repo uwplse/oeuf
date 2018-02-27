@@ -1,22 +1,22 @@
 Require Import compcert.driver.Compiler compcert.common.Errors.
-Require Import Common Monads.
-Require CompilationUnit.
-Require Import Metadata.
-Require Import CompilerUtil.
-Require MatchValues.
-Require Import Semantics.
+Require Import oeuf.Common oeuf.Monads.
+Require oeuf.CompilationUnit.
+Require Import oeuf.Metadata.
+Require Import oeuf.CompilerUtil.
+Require oeuf.MatchValues.
+Require Import oeuf.Semantics.
 
-Require Untyped8 Switched2.
+Require oeuf.Untyped8 oeuf.Switched2.
 Require
-    TaggedComp
-    ElimFuncComp1
-    ElimFuncComp2
-    ElimFuncComp3
-    ElimFuncComp4
-    SelfCloseComp
-    MkCloseSelfOpt
-    SwitchedComp1
-    SwitchedComp2
+    oeuf.TaggedComp
+    oeuf.ElimFuncComp1
+    oeuf.ElimFuncComp2
+    oeuf.ElimFuncComp3
+    oeuf.ElimFuncComp4
+    oeuf.SelfCloseComp
+    oeuf.MkCloseSelfOpt
+    oeuf.SwitchedComp1
+    oeuf.SwitchedComp2
 .
 
 

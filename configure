@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 
-echo NOTE: Skipping building verdi demo and shim_verif because SourceLifted reflection is not yet implementd
-#DIRS=(src demos/verdi/echo shim_verif)
+echo NOTE: Skipping building all demos, edit configure file to enable
+#DIRS=(src demos/verdi/echo shim_verif demos/sha256 demos/list_max demos/double_nat)
 DIRS=(src)
 NAMESPACE_compcert=compcert
+NAMESPACE_src=oeuf
 LOCALDEPS=(compcert)
 DEPS=(StructTact PrettyParsing)
 CANARIES=("compcert.backend.RTL" "Oeuf requires compcert to be built first."

@@ -1,22 +1,22 @@
 Require Import compcert.driver.Compiler compcert.common.Errors.
-Require Import Common Monads.
-Require CompilationUnit.
-Require Import Metadata.
-Require Import CompilerUtil.
-Require Import Semantics.
+Require Import oeuf.Common oeuf.Monads.
+Require oeuf.CompilationUnit.
+Require Import oeuf.Metadata.
+Require Import oeuf.CompilerUtil.
+Require Import oeuf.Semantics.
 
-Require LocalsOnly FlatIntTag.
+Require oeuf.LocalsOnly oeuf.FlatIntTag.
 Require
-    FlatSwitchComp
-    FlatSeqComp
-    FlatSeqComp2
-    FlatSeqStmtComp
-    FlatReturnComp
-    FlatExprComp
-    FlatExprRetComp
-    FlatStopComp
-    FlatDestCheckComp
-    FlatIntTagComp
+    oeuf.FlatSwitchComp
+    oeuf.FlatSeqComp
+    oeuf.FlatSeqComp2
+    oeuf.FlatSeqStmtComp
+    oeuf.FlatReturnComp
+    oeuf.FlatExprComp
+    oeuf.FlatExprRetComp
+    oeuf.FlatStopComp
+    oeuf.FlatDestCheckComp
+    oeuf.FlatIntTagComp
 .
 
 

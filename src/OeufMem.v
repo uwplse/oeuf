@@ -20,7 +20,7 @@ Require Import Dflatmajor.*)
 Require Import StructTact.StructTactics.
 Require Import StructTact.Util.
 
-Require Import EricTact.
+Require Import oeuf.EricTact.
 
 
 (* Non-shitty version of Mem library copy *)

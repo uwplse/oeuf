@@ -1,4 +1,4 @@
-Require Export List Arith Omega StructTact.StructTactics StuartTact.
+Require Export List Arith Omega StructTact.StructTactics oeuf.StuartTact.
 Export ListNotations.
 
 (* Several basic functions from the stdlib have implicit arguments

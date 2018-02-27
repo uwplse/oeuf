@@ -1,12 +1,13 @@
 (* Boring stuff, including but not limited to list lemmas *)
-Require Import Arith List Omega StructTact.StructTactics StuartTact.
+Require Import Arith List Omega StructTact.StructTactics.
+Require Import oeuf.StuartTact.
 Require Import ZArith.
 Import ListNotations.
 Require Import Psatz.
 Require Import StructTact.Assoc.
 
-Require Import Monads.
-Require Import Forall3.
+Require Import oeuf.Monads.
+Require Import oeuf.Forall3.
 
 
 (* nat <= *)

@@ -1,14 +1,14 @@
 Require Import compcert.lib.Integers.
-Require StepLib.
-Require Import Common.
+Require oeuf.StepLib.
+Require Import oeuf.Common.
 Require Import Psatz.
 
-Require Import Utopia.
-Require Import Monads.
+Require Import oeuf.Utopia.
+Require Import oeuf.Monads.
 
-Require Export HighValues.
-Require Import AllValues.
-Require Import ListLemmas.
+Require Export oeuf.HighValues.
+Require Import oeuf.AllValues.
+Require Import oeuf.ListLemmas.
 
 Inductive expr :=
 | Arg
@@ -142,8 +142,8 @@ Definition SPlusCons := @StepLib.SPlusCons state.
 
 
 
-Require Import Metadata.
-Require Semantics.
+Require Import oeuf.Metadata.
+Require oeuf.Semantics.
 
 Definition prog_type : Type := env * list metadata.
 Definition val_level := VlHighFname.

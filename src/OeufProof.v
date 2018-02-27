@@ -1,31 +1,31 @@
-Require Import Oeuf.
-Require Import CompilationUnit.
-Require Import HList.
-Require Import StepLib.
-Require Import MixSemantics.
-Require Import CompilerUtil.
+Require Import oeuf.Oeuf.
+Require Import oeuf.CompilationUnit.
+Require Import oeuf.HList.
+Require Import oeuf.StepLib.
+Require Import oeuf.MixSemantics.
+Require Import oeuf.CompilerUtil.
 
-Require Import SourceLifted.
-Require Import HighValues.
+Require Import oeuf.SourceLifted.
+Require Import oeuf.HighValues.
 
-Require Untyped1.
-Require UntypedComp1.
-Require UntypedCompCombined.
-Require ElimFuncCompCombined.
-Require StackCompCombined.
-Require LocalsCompCombined.
-Require FlatCompCombined.
-Require FmajorComp.
-Require Fmajortofflatmajor.
-Require Fflatmajortoemajor.
-Require Emajortodmajor.
-Require Dmajortodflatmajor.
-Require Dflatmajortocmajor.
-Require Cmajortominor.
+Require oeuf.Untyped1.
+Require oeuf.UntypedComp1.
+Require oeuf.UntypedCompCombined.
+Require oeuf.ElimFuncCompCombined.
+Require oeuf.StackCompCombined.
+Require oeuf.LocalsCompCombined.
+Require oeuf.FlatCompCombined.
+Require oeuf.FmajorComp.
+Require oeuf.Fmajortofflatmajor.
+Require oeuf.Fflatmajortoemajor.
+Require oeuf.Emajortodmajor.
+Require oeuf.Dmajortodflatmajor.
+Require oeuf.Dflatmajortocmajor.
+Require oeuf.Cmajortominor.
 
-Require Oeuf OeufIntern.
+Require oeuf.Oeuf oeuf.OeufIntern.
 
-Require Import Cmajor. (* Cminor bridge *)
+Require Import oeuf.Cmajor. (* Cminor bridge *)
 
 Require Import compcert.lib.Coqlib.
 Require Import compcert.ia32.Asm.
@@ -38,10 +38,11 @@ Require Import compcert.driver.Compiler.
 
 Require Import StructTact.StructTactics.
 Require Import StructTact.Util.
-Require Import EricTact.
-Require Import StuartTact.
-Require Import ListLemmas.
+Require Import oeuf.EricTact.
+Require Import oeuf.StuartTact.
+Require Import oeuf.ListLemmas.
 
+Require Import oeuf.Monads.  
 
 Lemma unintern_untyped_to_cminor : forall p p',
     Oeuf.transf_untyped_to_cminor p = OK p' ->

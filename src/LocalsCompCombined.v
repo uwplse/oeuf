@@ -1,17 +1,17 @@
 Require Import compcert.driver.Compiler compcert.common.Errors.
-Require Import Common Monads.
-Require CompilationUnit.
-Require Import Metadata.
-Require Import CompilerUtil.
-Require Import Semantics.
+Require Import oeuf.Common oeuf.Monads.
+Require oeuf.CompilationUnit.
+Require Import oeuf.Metadata.
+Require Import oeuf.CompilerUtil.
+Require Import oeuf.Semantics.
 
-Require StackFlatter2 LocalsOnly.
+Require oeuf.StackFlatter2 oeuf.LocalsOnly.
 Require
-    LocalsDestsComp
-    LocalsSwitchComp
-    LocalsReturnComp
-    LocalsSourcesComp
-    LocalsOnlyComp
+    oeuf.LocalsDestsComp
+    oeuf.LocalsSwitchComp
+    oeuf.LocalsReturnComp
+    oeuf.LocalsSourcesComp
+    oeuf.LocalsOnlyComp
 .
 
 

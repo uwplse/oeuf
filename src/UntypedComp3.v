@@ -1,17 +1,17 @@
-Require Import Common.
+Require Import oeuf.Common.
 
-Require Import Utopia.
-Require Import Metadata.
+Require Import oeuf.Utopia.
+Require Import oeuf.Metadata.
 Require Import Program.
 
-Require Import HList.
-Require Import CompilationUnit.
-Require Import Semantics.
-Require Import HighestValues.
+Require Import oeuf.HList.
+Require Import oeuf.CompilationUnit.
+Require Import oeuf.Semantics.
+Require Import oeuf.HighestValues.
 
-Require Untyped1.
-Require Untyped2.
-Require Untyped3.
+Require oeuf.Untyped1.
+Require oeuf.Untyped2.
+Require oeuf.Untyped3.
 
 Module A := Untyped2.
 Module B := Untyped3.

@@ -1,14 +1,14 @@
-Require Import Common Monads.
-Require Import Metadata.
+Require Import oeuf.Common oeuf.Monads.
+Require Import oeuf.Metadata.
 Require String.
-Require Import ListLemmas.
-Require Import StepLib.
-Require Import HigherValue.
+Require Import oeuf.ListLemmas.
+Require Import oeuf.StepLib.
+Require Import oeuf.HigherValue.
 
 Require Import Psatz.
 
-Require Switched1.
-Require Switched2.
+Require oeuf.Switched1.
+Require oeuf.Switched2.
 
 Module A := Switched1.
 Module B := Switched2.
@@ -359,7 +359,7 @@ Qed.
 
 
 
-Require Import Semantics.
+Require Import oeuf.Semantics.
 
 Section Preservation.
 

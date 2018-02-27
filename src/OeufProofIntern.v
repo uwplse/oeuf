@@ -1,32 +1,32 @@
-Require Import OeufIntern.
-Require Import CompilationUnit.
-Require Import HList.
-Require Import StepLib.
-Require Import CompilerUtil.
+Require Import oeuf.OeufIntern.
+Require Import oeuf.CompilationUnit.
+Require Import oeuf.HList.
+Require Import oeuf.StepLib.
+Require Import oeuf.CompilerUtil.
 
-Require Import SourceLifted.
-Require Import HighValues.
-Require Import AllValues.
+Require Import oeuf.SourceLifted.
+Require Import oeuf.HighValues.
+Require Import oeuf.AllValues.
 
-Require Untyped1.
-Require UntypedComp1.
-Require UntypedCompCombined.
-Require ElimFuncCompCombined.
-Require StackCompCombined.
-Require LocalsCompCombined.
-Require FlatCompCombined.
-Require FmajorComp.
-Require Fmajortofflatmajor.
-Require Fflatmajortoemajor.
-Require Emajortodmajor.
-Require Dmajortodflatmajor.
-Require Dflatmajortocmajor.
-Require Cmajortominor.
+Require oeuf.Untyped1.
+Require oeuf.UntypedComp1.
+Require oeuf.UntypedCompCombined.
+Require oeuf.ElimFuncCompCombined.
+Require oeuf.StackCompCombined.
+Require oeuf.LocalsCompCombined.
+Require oeuf.FlatCompCombined.
+Require oeuf.FmajorComp.
+Require oeuf.Fmajortofflatmajor.
+Require oeuf.Fflatmajortoemajor.
+Require oeuf.Emajortodmajor.
+Require oeuf.Dmajortodflatmajor.
+Require oeuf.Dflatmajortocmajor.
+Require oeuf.Cmajortominor.
 
 
-Require Import Cmajor. (* Cminor bridge *)
-Require FullSemantics.
-Require Semantics.
+Require Import oeuf.Cmajor. (* Cminor bridge *)
+Require oeuf.FullSemantics.
+Require oeuf.Semantics.
 
 Require Import compcert.lib.Coqlib.
 Require Import compcert.ia32.Asm.
@@ -40,9 +40,9 @@ Require Import compcert.driver.Compiler.
 Require Import StructTact.StructTactics.
 Require Import StructTact.Util.
 
-Require Import EricTact.
-Require Import StuartTact.
-Require Import ListLemmas.
+Require Import oeuf.EricTact.
+Require Import oeuf.StuartTact.
+Require Import oeuf.ListLemmas.
 
 Set Default Timeout 15.
 
@@ -337,7 +337,7 @@ r ′ such that f a ∼ r ′, and there exists a Cminor returnstate t ′
 carrying the value r ′ such that the Cminor state s ′ takes zero or
 more steps to reach t ′.*)
 
-Require Import SourceLiftedProofs.
+Require Import oeuf.SourceLiftedProofs.
 
 Inductive value_match (ty : type) (gv : type_denote ty) (hv : HighValues.value) : Prop :=
 | mv :

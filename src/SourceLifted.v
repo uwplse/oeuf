@@ -1,16 +1,17 @@
-Require Import Common.
-Require Import HList.
-Require Import Utopia.
+Require Import oeuf.Common.
+Require Import oeuf.HList.
+Require Import oeuf.Utopia.
 
-Require SourceValues.
-Include SourceValues.
+Require oeuf.SourceValues.
+Include oeuf.SourceValues.
 
-Require Import OpaqueOps.
+Require Import oeuf.OpaqueOps.
 
 
 (* an eliminator that takes cases with types given by the first index,
    eliminates a target with type given by the second index,
    and produces a result with type given by the third index *)
+(* Extend this if you want to extend Oeuf *)
 Inductive elim : list type -> type -> type -> Type :=
 | ENat : forall ty, elim [ty; Arrow (ADT Tnat) (Arrow ty ty)] (ADT Tnat) ty
 | EBool : forall ty, elim [ty; ty] (ADT Tbool) ty
@@ -30,6 +31,35 @@ Inductive elim : list type -> type -> type -> Type :=
         ; Arrow (ADT Tpositive) ty
         ; Arrow (ADT Tpositive) ty
         ] (ADT TZ) ty
+(*| EAscii : forall ty, elim [ty; ty; ty; ty; ty; ty; ty; ty;
+                            ty; ty; ty; ty; ty; ty; ty; ty;
+                            ty; ty; ty; ty; ty; ty; ty; ty;
+                            ty; ty; ty; ty; ty; ty; ty; ty;
+                            ty; ty; ty; ty; ty; ty; ty; ty;
+                            ty; ty; ty; ty; ty; ty; ty; ty;
+                            ty; ty; ty; ty; ty; ty; ty; ty;
+                            ty; ty; ty; ty; ty; ty; ty; ty;
+                            ty; ty; ty; ty; ty; ty; ty; ty;
+                            ty; ty; ty; ty; ty; ty; ty; ty;
+                            ty; ty; ty; ty; ty; ty; ty; ty;
+                            ty; ty; ty; ty; ty; ty; ty; ty;
+                            ty; ty; ty; ty; ty; ty; ty; ty;
+                            ty; ty; ty; ty; ty; ty; ty; ty;
+                            ty; ty; ty; ty; ty; ty; ty; ty;
+                            ty; ty; ty; ty; ty; ty; ty; ty]
+                           (ADT Tascii) ty*)
+| EAscii : forall ty, elim [Arrow (ADT Tbool)
+                               (Arrow (ADT Tbool)
+                                  (Arrow (ADT Tbool)
+                                     (Arrow (ADT Tbool)
+                                        (Arrow (ADT Tbool)
+                                           (Arrow (ADT Tbool)
+                                              (Arrow (ADT Tbool)
+                                                 (Arrow (ADT Tbool)
+                                                    ty)))))))]
+                            (ADT Tascii) ty
+                                                        
+                                                                                            
 .
 
 Section expr.
@@ -232,10 +262,10 @@ refine (
 - simpl. exact (weaken_body _ (gget_weaken _ mb')).
 Defined.
 
-
+Check Ascii.ascii_rect.
 
 (* denotation functions *)
-
+(* Extend this if you want to extend Oeuf *)
 Definition elim_denote {case_tys target_ty ty} (e : elim case_tys target_ty ty) :
   hlist type_denote case_tys -> type_denote target_ty -> type_denote ty :=
   match e with
@@ -258,6 +288,142 @@ Definition elim_denote {case_tys target_ty ty} (e : elim case_tys target_ty ty) 
               (hhead (htail cases))
               (hhead (htail (htail cases)))
               target
+  | EAscii _ => fun cases target =>
+          Ascii.ascii_rect _
+              (hhead cases)
+              target
+              
+  (*  | EAscii _ => fun cases target =>
+          @ascii_rect _
+              (hhead cases)                     
+              (hhead (htail cases))
+              (hhead (htail (htail cases)))
+              (hhead (htail (htail (htail cases))))
+              (hhead (htail (htail (htail (htail cases)))))
+              (hhead (htail (htail (htail (htail (htail cases))))))
+              (hhead (htail (htail (htail (htail (htail (htail cases)))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail cases))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail cases)))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail cases))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases)))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases)))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases)))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases)))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases)))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases)))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases)))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases)))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases)))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases)))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases)))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases)))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases)))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases)))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases)))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases)))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases)))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases)))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases)))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases)))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases)))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases)))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases))))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases)))))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases)))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+              (hhead (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail (htail cases))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+              target*)
   end.
 
 Definition expr_denote {G L} (g : hlist func_type_denote G) (l : hlist type_denote L) :
@@ -438,6 +604,12 @@ Local Notation "f $ a" := (App f a) (at level 50, left associativity, only parsi
 Local Notation "'h0' x" := (hhead x) (only parsing, at level 0).
 Local Notation "'h1' x" := (hhead (htail x)) (only parsing, at level 0).
 Local Notation "'h2' x" := (hhead (htail (htail x))) (only parsing, at level 0).
+Local Notation "'h3' x" := (hhead (htail (htail (htail x)))) (only parsing, at level 0).
+Local Notation "'h4' x" := (hhead (htail (htail (htail (htail x))))) (only parsing, at level 0).
+Local Notation "'h5' x" := (hhead (htail (htail (htail (htail (htail x)))))) (only parsing, at level 0).
+Local Notation "'h6' x" := (hhead (htail (htail (htail (htail (htail (htail x))))))) (only parsing, at level 0).
+Local Notation "'h7' x" := (hhead (htail (htail (htail (htail (htail (htail (htail x)))))))) (only parsing, at level 0).
+Local Notation "'h8' x" := (hhead (htail (htail (htail (htail (htail (htail (htail (htail x))))))))) (only parsing, at level 0).
 
 Definition run_elim {G L case_tys target_tyn ret_ty}
         (e : elim case_tys (ADT target_tyn) ret_ty)
@@ -465,8 +637,11 @@ refine match e in elim case_tys_ (ADT target_tyn_) ret_ty_
     | EPositive ret_ty => _
     | EN ret_ty => _
     | EZ ret_ty => _
+    | EAscii ret_ty => _
+    (*| EAscii ret_ty => _*)
     end; intros;
 clear e target_tyn ret_ty0 case_tys.
+
 
 - revert args cases. pattern ctor, arg_tys.
   refine match ct in constr_type ctor_ arg_tys_ (Tnat) return _ ctor_ arg_tys_ with
@@ -551,6 +726,275 @@ clear e target_tyn ret_ty0 case_tys.
   + exact (h1 cases $ Value (h0 args)).
   + exact (h2 cases $ Value (h0 args)).
 
+- revert args cases. pattern ctor, arg_tys.
+  refine match ct in constr_type ctor_ arg_tys_ (Tascii)
+          return _ ctor_ arg_tys_ with
+      | CTAscii => _
+      end; intros; clear ct arg_tys ctor.
+  + exact (h0 cases $ Value (h0 args) $ Value (h1 args) $ Value (h2 args) $ Value (h3 args)
+              $ Value (h4 args) $ Value (h5 args) $ Value (h6 args) $ Value (h7 args)).
+
+
+(*    
+- revert args cases. pattern ctor, arg_tys.
+  refine match ct in constr_type ctor_ arg_tys_ (Tascii) return _ ctor_ arg_tys_ with
+         | CTascii_0 => _
+         | CTascii_1 => _
+         | CTascii_2 => _
+         | CTascii_3 => _
+         | CTascii_4 => _
+         | CTascii_5 => _
+         | CTascii_6 => _
+         | CTascii_7 => _
+         | CTascii_8 => _
+         | CTascii_9 => _
+         | CTascii_10 => _
+         | CTascii_11 => _
+         | CTascii_12 => _
+         | CTascii_13 => _
+         | CTascii_14 => _
+         | CTascii_15 => _
+         | CTascii_16 => _
+         | CTascii_17 => _
+         | CTascii_18 => _
+         | CTascii_19 => _
+         | CTascii_20 => _
+         | CTascii_21 => _
+         | CTascii_22 => _
+         | CTascii_23 => _
+         | CTascii_24 => _
+         | CTascii_25 => _
+         | CTascii_26 => _
+         | CTascii_27 => _
+         | CTascii_28 => _
+         | CTascii_29 => _
+         | CTascii_30 => _
+         | CTascii_31 => _
+         | CTascii_32 => _
+         | CTascii_33 => _
+         | CTascii_34 => _
+         | CTascii_35 => _
+         | CTascii_36 => _
+         | CTascii_37 => _
+         | CTascii_38 => _
+         | CTascii_39 => _
+         | CTascii_40 => _
+         | CTascii_41 => _
+         | CTascii_42 => _
+         | CTascii_43 => _
+         | CTascii_44 => _
+         | CTascii_45 => _
+         | CTascii_46 => _
+         | CTascii_47 => _
+         | CTascii_48 => _
+         | CTascii_49 => _
+         | CTascii_50 => _
+         | CTascii_51 => _
+         | CTascii_52 => _
+         | CTascii_53 => _
+         | CTascii_54 => _
+         | CTascii_55 => _
+         | CTascii_56 => _
+         | CTascii_57 => _
+         | CTascii_58 => _
+         | CTascii_59 => _
+         | CTascii_60 => _
+         | CTascii_61 => _
+         | CTascii_62 => _
+         | CTascii_63 => _
+         | CTascii_64 => _
+         | CTascii_65 => _
+         | CTascii_66 => _
+         | CTascii_67 => _
+         | CTascii_68 => _
+         | CTascii_69 => _
+         | CTascii_70 => _
+         | CTascii_71 => _
+         | CTascii_72 => _
+         | CTascii_73 => _
+         | CTascii_74 => _
+         | CTascii_75 => _
+         | CTascii_76 => _
+         | CTascii_77 => _
+         | CTascii_78 => _
+         | CTascii_79 => _
+         | CTascii_80 => _
+         | CTascii_81 => _
+         | CTascii_82 => _
+         | CTascii_83 => _
+         | CTascii_84 => _
+         | CTascii_85 => _
+         | CTascii_86 => _
+         | CTascii_87 => _
+         | CTascii_88 => _
+         | CTascii_89 => _
+         | CTascii_90 => _
+         | CTascii_91 => _
+         | CTascii_92 => _
+         | CTascii_93 => _
+         | CTascii_94 => _
+         | CTascii_95 => _
+         | CTascii_96 => _
+         | CTascii_97 => _
+         | CTascii_98 => _
+         | CTascii_99 => _
+         | CTascii_100 => _
+         | CTascii_101 => _
+         | CTascii_102 => _
+         | CTascii_103 => _
+         | CTascii_104 => _
+         | CTascii_105 => _
+         | CTascii_106 => _
+         | CTascii_107 => _
+         | CTascii_108 => _
+         | CTascii_109 => _
+         | CTascii_110 => _
+         | CTascii_111 => _
+         | CTascii_112 => _
+         | CTascii_113 => _
+         | CTascii_114 => _
+         | CTascii_115 => _
+         | CTascii_116 => _
+         | CTascii_117 => _
+         | CTascii_118 => _
+         | CTascii_119 => _
+         | CTascii_120 => _
+         | CTascii_121 => _
+         | CTascii_122 => _
+         | CTascii_123 => _
+         | CTascii_124 => _
+         | CTascii_125 => _
+         | CTascii_126 => _
+         | CTascii_127 => _
+      end; intros; clear ct arg_tys ctor.
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).
+  + exact (h0 cases).*)
 Defined.
 
 End run_elim.

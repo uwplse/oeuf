@@ -1,8 +1,8 @@
 (* Specific program we care about *)
-Require Import dumb_oeuf. (* Oeuf program in cminor *)
-Require Import dumb_cm. (* Linked program in cminor *)
-Require Import Dumb. (* Original Oeuf program *)
-Require Import dumb_axioms. (* necessary axioms for proof *)
+Require Import oeuf.dumb_oeuf. (* Oeuf program in oeuf.cminor *)
+Require Import oeuf.dumb_cm. (* Linked program in oeuf.cminor *)
+Require Import oeuf.Dumb. (* Original Oeuf oeuf.program *)
+Require Import oeuf.dumb_axioms. (* necessary axioms for oeuf.proof *)
 
 Require Import compcert.common.Globalenvs.
 Require Import compcert.common.Memory.
@@ -10,25 +10,25 @@ Require Import compcert.common.Values.
 Require Import compcert.lib.Coqlib.
 Require Import compcert.common.Events.
 Require Import compcert.common.Smallstep.
-Require Import Semantics.
+Require Import oeuf.Semantics.
 Require Import compcert.backend.Cminor.
 (* prog is the whole program *)
 
 Require Import StructTact.StructTactics.
 Require Import StructTact.Util.
 
-Require Import NewCont.
-Require Import EricTact.
-Require Import StuartTact.
+Require Import oeuf.NewCont.
+Require Import oeuf.EricTact.
+Require Import oeuf.StuartTact.
 
-Require Import OeufProofIntern.
+Require Import oeuf.OeufProofIntern.
 
 
-Require Cmajor.
+Require oeuf.Cmajor.
 
-Require Import CminorLib.
+Require Import oeuf.CminorLib.
 
-Require Import Monads.
+Require Import oeuf.Monads.
 
 Section SIM.
 

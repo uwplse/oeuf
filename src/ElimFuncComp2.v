@@ -1,20 +1,19 @@
-Require Import Common.
+Require Import oeuf.Common.
 
-Require Import Utopia.
-Require Import Metadata.
-Require Import Program.
-Require Import Monads.
+Require Import oeuf.Utopia.
+Require Import oeuf.Metadata.
+Require Import oeuf.Monads.
 
-Require Import ListLemmas.
-Require Import Forall3.
-Require Import Semantics.
-Require Import HigherValue.
-Require Import StepLib.
+Require Import oeuf.ListLemmas.
+Require Import oeuf.Forall3.
+Require Import oeuf.Semantics.
+Require Import oeuf.HigherValue.
+Require Import oeuf.StepLib.
 
 Require Import Psatz.
 
-Require Tagged.
-Require ElimFunc2.
+Require oeuf.Tagged.
+Require oeuf.ElimFunc2.
 
 Module A := Tagged.
 Module B := ElimFunc2.
@@ -928,7 +927,7 @@ Qed.
 
 
 
-Require Semantics.
+Require oeuf.Semantics.
 
 Lemma compile_cu_env_ok : forall A Ameta B Bmeta,
     compile_cu (A, Ameta) = Some (B, Bmeta) ->

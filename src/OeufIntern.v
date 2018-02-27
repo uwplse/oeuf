@@ -1,17 +1,17 @@
-Require Import OeufCompcertCompiler compcert.common.Errors.
-Require Import Common Monads.
-Require Untyped1.
-Require UntypedComp1.
-Require FmajorComp Fmajortofflatmajor Fflatmajortoemajor Emajortodmajor
-    Dmajortodflatmajor Dflatmajortocmajor Cmajortominor.
-Require UntypedCompCombined ElimFuncCompCombined StackCompCombined
-    LocalsCompCombined FlatCompCombined.
-Require CompilationUnit Metadata.
-Require Import CompilerUtil.
+Require Import oeuf.OeufCompcertCompiler compcert.common.Errors.
+Require Import oeuf.Common oeuf.Monads.
+Require oeuf.Untyped1.
+Require oeuf.UntypedComp1.
+Require oeuf.FmajorComp oeuf.Fmajortofflatmajor oeuf.Fflatmajortoemajor oeuf.Emajortodmajor
+    oeuf.Dmajortodflatmajor oeuf.Dflatmajortocmajor oeuf.Cmajortominor.
+Require oeuf.UntypedCompCombined oeuf.ElimFuncCompCombined oeuf.StackCompCombined
+    oeuf.LocalsCompCombined oeuf.FlatCompCombined.
+Require oeuf.CompilationUnit oeuf.Metadata.
+Require Import oeuf.CompilerUtil.
 
 Require Import compcert.common.AST.
 Require compcert.backend.SelectLong.
-Require Import Linker.
+Require Import oeuf.Linker.
 
 Definition transf_untyped_to_cminor (M : MatchValues.id_map) (p : Untyped1.prog_type) :=
         OK p

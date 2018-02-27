@@ -12,18 +12,18 @@ Require Import compcert.common.Switch.
 Require Import compcert.common.Errors.
 Require compcert.backend.SelectLong.
 
-Require Import HighValues.
-Require TraceSemantics.
-Require Import FullSemantics.
+Require Import oeuf.HighValues.
+Require oeuf.TraceSemantics.
+Require Import oeuf.FullSemantics.
 
-Require Import Cmajor.
-Require Import Dmajor.
-Require Import Dflatmajor.
+Require Import oeuf.Cmajor.
+Require Import oeuf.Dmajor.
+Require Import oeuf.Dflatmajor.
 
 Require Import StructTact.StructTactics.
 Require Import StructTact.Util.
 
-Require Import EricTact.
+Require Import oeuf.EricTact.
 
 Local Open Scope error_monad_scope.
 

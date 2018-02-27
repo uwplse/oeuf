@@ -10,9 +10,9 @@ Require Import compcert.common.Events.
 Require Import compcert.common.Switch.
 (*Require Import compcert.common.Smallstep.*)
 
-Require Import TraceSemantics.
-Require Import HighValues.
-Require Import AllValues.
+Require Import oeuf.TraceSemantics.
+Require Import oeuf.HighValues.
+Require Import oeuf.AllValues.
 
 Require Import List.
 Import ListNotations.

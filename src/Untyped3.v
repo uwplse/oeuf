@@ -1,13 +1,13 @@
-Require Import Common.
-Require Import Utopia.
+Require Import oeuf.Common.
+Require Import oeuf.Utopia.
 
-Require Import Metadata.
-Require Import Semantics.
-Require Import HighestValues.
-Require Import AllValues.
-Require Import OpaqueOps.
+Require Import oeuf.Metadata.
+Require Import oeuf.Semantics.
+Require Import oeuf.HighestValues.
+Require Import oeuf.AllValues.
+Require Import oeuf.OpaqueOps.
 
-Require Export Untyped1.
+Require Export oeuf.Untyped1.
 
 
 

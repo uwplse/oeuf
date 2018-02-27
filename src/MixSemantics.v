@@ -3,10 +3,10 @@ Require Import Relations.
 Require Import Wellfounded.
 
 (* Oeuf *)
-Require Import FullSemantics.
-Require TraceSemantics.
-Require Semantics.
-Require Import MatchValues AllValues.
+Require Import oeuf.FullSemantics.
+Require oeuf.TraceSemantics.
+Require oeuf.Semantics.
+Require Import oeuf.MatchValues oeuf.AllValues.
 
 (* Compcert *)
 (*Require Import compcert.common.Smallstep.*)
@@ -18,8 +18,8 @@ Require Import compcert.lib.Coqlib.
 Require Import StructTact.StructTactics.
 Require Import StructTact.Util.
 
-Require Import EricTact.
-Require Import StuartTact.
+Require Import oeuf.EricTact.
+Require Import oeuf.StuartTact.
 
 Set Implicit Arguments.
 
