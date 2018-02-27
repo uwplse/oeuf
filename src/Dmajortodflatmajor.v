@@ -13,7 +13,8 @@ Require Import compcert.common.Switch.
 Require Import compcert.common.Errors.
 Require compcert.backend.SelectLong.
 
-Require Import TraceSemantics.
+Require TraceSemantics.
+Require Import FullSemantics.
 Require Import OeufMem.
 
 Require Import Dmajor.
@@ -1444,60 +1445,25 @@ Proof.
 Qed.
 
 Theorem fsim' :
-  forward_simulation (Dmajor.semantics prog) (Dflatmajor.semantics prog).
+  TraceSemantics.forward_simulation (Dmajor.semantics prog) (Dflatmajor.semantics prog).
 Proof.
-  eapply forward_simulation_plus.
+  eapply TraceSemantics.forward_simulation_plus.
   instantiate (2 := eq).
-  intros.
-  eapply callstate_match; eauto.
-  rewrite <- tprog_prog.
-  subst. eauto.
-  intros. eapply match_final_states in H0; eauto.
-  eapply single_step_correct.
-Defined.
-
-Lemma match_val_eq' :
-  TraceSemantics.fsim_match_val fsim' = eq.
-Proof.
-  intros.
-  unfold fsim'. simpl.
-  unfold TraceSemantics.fsim_match_val.
-  repeat break_match. repeat (break_match_hyp; try congruence).
-  
-  try unfold forward_simulation_step in *.
-  try unfold forward_simulation_plus in *.
-  try unfold forward_simulation_star in *.
-  try unfold forward_simulation_star_wf in *.
-  try inv Heqf. 
-  
-  reflexivity.
+  - intros.
+    eapply callstate_match; eauto.
+    rewrite <- tprog_prog.
+    subst. eauto.
+  - intros. eapply match_final_states in H0; eauto.
+  - simpl. auto.
+  - simpl. intros. tauto.
+  - eapply single_step_correct.
 Qed.
 
 Theorem fsim :
-  forward_simulation (Dmajor.semantics prog) (Dflatmajor.semantics tprog).
+  TraceSemantics.forward_simulation (Dmajor.semantics prog) (Dflatmajor.semantics tprog).
 Proof.
   rewrite <- tprog_prog. eapply fsim'.
-Defined.
-
-Lemma match_val_eq :
-  TraceSemantics.fsim_match_val fsim = eq.
-Proof.
-  unfold fsim.
-  rewrite <- tprog_prog. simpl.
-  reflexivity.
 Qed.
 
 End PRESERVATION.
-
-(*
-Theorem fsim :
-  forall prog tprog,
-    transf_prog prog = OK tprog ->
-    forward_simulation (Dmajor.semantics prog) (Dflatmajor.semantics tprog).
-Proof.
-  intros.
-  unfold transf_prog in *. break_match_hyp; try congruence. inv H.
-  eapply fsim'; eauto.
-Defined.
-*)
 

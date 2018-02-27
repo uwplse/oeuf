@@ -4,6 +4,8 @@ Require CompilationUnit.
 Require Import Metadata.
 Require Import CompilerUtil.
 
+Require Import Semantics.
+
 (* Note that we start at Untyped1, not SourceLifted.  The SourceLifted
    semantics have lots of dependent indices and are hard to fit into the
    Semantics.semantics record. *)
@@ -37,24 +39,16 @@ Variable bprog : B.prog_type.
 
 Hypothesis Hcomp : compile_cu aprog = OK bprog.
 
-Definition fsim : Semantics.forward_simulation (A.semantics aprog) (B.semantics bprog).
+Definition fsim : forward_simulation (A.semantics aprog) (B.semantics bprog).
   unfold compile_cu in Hcomp.
   break_result_chain.
   
 
-  eapply Semantics.compose_forward_simulation. eauto using UntypedComp2.fsim.
-  eapply Semantics.compose_forward_simulation. eauto using UntypedComp3.fsim.
-  eapply Semantics.compose_forward_simulation. eauto using UntypedComp4.fsim.
-  eapply Semantics.compose_forward_simulation. eauto using UntypedComp5.fsim.
+  eapply compose_forward_simulation. eauto using UntypedComp2.fsim.
+  eapply compose_forward_simulation. eauto using UntypedComp3.fsim.
+  eapply compose_forward_simulation. eauto using UntypedComp4.fsim.
+  eapply compose_forward_simulation. eauto using UntypedComp5.fsim.
   eauto using UntypedComp8.fsim.
-Qed.
-
-Lemma fsim_match_val :
-  forall x y,
-    Semantics.fsim_match_val _ _ fsim x y <-> x = y.
-Proof.
-  intros. erewrite (Semantics.fsim_match_val_canon _ _ fsim).
-  simpl. tauto.
 Qed.
 
 End Preservation.

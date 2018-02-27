@@ -689,9 +689,27 @@ Qed.
 Ltac fix_existT :=
     let rec go :=
         match goal with
+
         | [ H : existT ?P ?x _ = existT ?P ?x _ |- _ ] =>
                 eapply existT_eq in H;
                 [ try go | eauto with eq_dec.. ]
+
+        | [ H : existT ?P ?x1 _ = existT ?P ?x2 _ |- _ ] =>
+                let Heq := fresh "Heq" in
+                let x2i := fresh "x2i" in
+                let Heq' := fresh "Heq'" in
+
+                (* Do some tricks with `remember` to handle the case where `x2`
+                   is a nontrivial expression. *)
+                remember x2 as x2i eqn:Heq' in *;
+                assert (Heq : x1 = x2i) by (eapply eq_sigT_fst with (1 := H));
+                move Heq at top; generalize dependent x2i; intros0 Heq; rewrite <- Heq;
+                intros;
+                subst x2i;
+
+                eapply existT_eq in H;
+                [ try go | eauto with eq_dec.. ]
+
         end in go.
 
 Ltac fix_eq_rect :=
@@ -709,3 +727,12 @@ Hint Resolve eq_nat_dec : eq_dec.
 Hint Resolve Bool.bool_dec : eq_dec.
 Hint Resolve list_eq_dec : eq_dec.
 
+
+Definition prod_eq_dec {A B}
+    (A_eq_dec : forall (x y : A), { x = y } + { x <> y })
+    (B_eq_dec : forall (x y : B), { x = y } + { x <> y }) :
+    forall (x y : (A * B)), { x = y } + { x <> y }.
+destruct x as [xa xb], y as [ya yb].
+destruct (A_eq_dec xa ya), (B_eq_dec xb yb); left + right; congruence.
+Defined.
+Hint Resolve prod_eq_dec : eq_dec.

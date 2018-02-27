@@ -146,7 +146,7 @@ Require Import Metadata.
 Require Semantics.
 
 Definition prog_type : Type := env * list metadata.
-Definition val_level := VlHigh.
+Definition val_level := VlHighFname.
 Definition valtype := value_type val_level.
 
 Inductive fit_public_value (M : list metadata) : value -> Prop :=

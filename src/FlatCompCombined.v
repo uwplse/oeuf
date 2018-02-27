@@ -3,6 +3,7 @@ Require Import Common Monads.
 Require CompilationUnit.
 Require Import Metadata.
 Require Import CompilerUtil.
+Require Import Semantics.
 
 Require LocalsOnly FlatIntTag.
 Require
@@ -44,28 +45,20 @@ Variable bprog : B.prog_type.
 
 Hypothesis Hcomp : compile_cu aprog = OK bprog.
 
-Definition fsim : Semantics.forward_simulation (A.semantics aprog) (B.semantics bprog).
+Definition fsim : forward_simulation (A.semantics aprog) (B.semantics bprog).
   unfold compile_cu in Hcomp.
   break_result_chain.
 
-  eapply Semantics.compose_forward_simulation. eauto using FlatSwitchComp.fsim.
-  eapply Semantics.compose_forward_simulation. eauto using FlatSeqComp.fsim.
-  eapply Semantics.compose_forward_simulation. eauto using FlatSeqComp2.fsim.
-  eapply Semantics.compose_forward_simulation. eauto using FlatSeqStmtComp.fsim.
-  eapply Semantics.compose_forward_simulation. eauto using FlatReturnComp.fsim.
-  eapply Semantics.compose_forward_simulation. eauto using FlatExprComp.fsim.
-  eapply Semantics.compose_forward_simulation. eauto using FlatExprRetComp.fsim.
-  eapply Semantics.compose_forward_simulation. eauto using FlatStopComp.fsim.
-  eapply Semantics.compose_forward_simulation. eauto using FlatDestCheckComp.fsim.
+  eapply compose_forward_simulation. eauto using FlatSwitchComp.fsim.
+  eapply compose_forward_simulation. eauto using FlatSeqComp.fsim.
+  eapply compose_forward_simulation. eauto using FlatSeqComp2.fsim.
+  eapply compose_forward_simulation. eauto using FlatSeqStmtComp.fsim.
+  eapply compose_forward_simulation. eauto using FlatReturnComp.fsim.
+  eapply compose_forward_simulation. eauto using FlatExprComp.fsim.
+  eapply compose_forward_simulation. eauto using FlatExprRetComp.fsim.
+  eapply compose_forward_simulation. eauto using FlatStopComp.fsim.
+  eapply compose_forward_simulation. eauto using FlatDestCheckComp.fsim.
   eauto using FlatIntTagComp.fsim.
-Qed.
-
-Lemma fsim_match_val :
-  forall x y,
-    Semantics.fsim_match_val _ _ fsim x y <-> MatchValues.mv_high x y.
-Proof.
-  intros. erewrite (Semantics.fsim_match_val_canon _ _ fsim).
-  simpl. tauto.
 Qed.
 
 End Preservation.

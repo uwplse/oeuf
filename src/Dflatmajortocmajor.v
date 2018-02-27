@@ -13,7 +13,8 @@ Require Import compcert.common.Errors.
 Require compcert.backend.SelectLong.
 
 Require Import HighValues.
-Require Import TraceSemantics.
+Require TraceSemantics.
+Require Import FullSemantics.
 
 Require Import Cmajor.
 Require Import Dmajor.
@@ -570,34 +571,18 @@ Section FSIM.
     unfold malloc_id. destruct malloc_id_f. assumption.
   Qed.
 
-  Definition fsim : forward_simulation (Dflatmajor.semantics prog) (Cmajor.semantics tprog).
-    eapply forward_simulation_plus.
-    intros. eapply is_callstate_match; eauto.
-    eapply malloc_id_found.
-    instantiate (1 := eq) in H0. subst. apply H.
-    intros. exists v1; split; eauto. eapply match_final_states; eauto.
-    apply malloc_id_found.
-    eapply single_step_correct; eauto.
-    apply malloc_id_found.
-  Defined.
-  
-
-Lemma match_val_eq :
-  TraceSemantics.fsim_match_val fsim = eq.
-Proof.
-  intros.
-  unfold fsim. simpl.
-  unfold TraceSemantics.fsim_match_val.
-  repeat break_match. repeat (break_match_hyp; try congruence).
-  
-  try unfold forward_simulation_step in *.
-  try unfold forward_simulation_plus in *.
-  try unfold forward_simulation_star in *.
-  try unfold forward_simulation_star_wf in *.
-  try inv Heqf. 
-  
-  reflexivity.
-Qed.
+  Definition fsim : TraceSemantics.forward_simulation (Dflatmajor.semantics prog) (Cmajor.semantics tprog).
+    eapply TraceSemantics.forward_simulation_plus; simpl.
+    - intros. eapply is_callstate_match; eauto.
+      eapply malloc_id_found.
+      instantiate (1 := eq) in H0. subst. apply H.
+    - intros. exists v; split; eauto. eapply match_final_states; eauto.
+      apply malloc_id_found.
+    - simpl. auto.
+    - simpl. intros. tauto.
+    - eapply single_step_correct; eauto.
+      apply malloc_id_found.
+  Qed.
 
 End FSIM.
 
