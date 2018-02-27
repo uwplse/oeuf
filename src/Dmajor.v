@@ -12,6 +12,7 @@ Require Import compcert.common.Switch.
 
 Require Import TraceSemantics.
 Require Import HighValues.
+Require Import AllValues.
 
 Require Import List.
 Import ListNotations.
@@ -284,7 +285,8 @@ Inductive final_state (p : program): state -> value -> Prop :=
 (** The corresponding small-step semantics. *)
 
 Definition semantics (p: program) :=
-  Semantics step (is_callstate p) (final_state p) (Genv.globalenv p).
+  Semantics (val_level := VlHigh)
+    step (is_callstate p) (final_state p) (Genv.globalenv p).
 
 (** This semantics is receptive to changes in events. *)
 

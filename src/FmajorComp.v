@@ -1716,40 +1716,14 @@ i_ctor.
   i_ctor.
 Qed.
 
-Lemma raw_sim_lockstep : forall (index : Type) (order : index -> index -> Prop)
-          (state_a state_b : Type) (match_states : state_a -> state_b -> Prop)
-          (genv : Type)
-          (step : genv -> state_b -> trace -> state_b -> Prop)
-          (a' : state_a) (b : state_b) (i : index) (ge : genv),
-    (exists b' : state_b,
-        step ge b E0 b' /\ match_states a' b') ->
-    (exists (i' : index), True) ->
-    (exists (i' : index) (b' : state_b),
-        (TraceSemantics.plus step ge b E0 b' \/
-         TraceSemantics.star step ge b E0 b' /\ order i' i) /\
-        match_states a' b').
-intros.
-do 2 break_exists. break_and.
-do 2 on _, fun x => exists x.
-split.
-- left. econstructor 1; eauto.
-  + econstructor 1.
-  + reflexivity.
-- assumption.
-Qed.
-
   Theorem fsim :
-    MixSemantics.mix_forward_simulation (A.semantics prog) (B.semantics tprog).
+    MixSemantics.forward_simulation (A.semantics prog) (B.semantics tprog) M.
   Proof.
     destruct prog as [AE ameta].
 
-    eapply MixSemantics.Forward_simulation with
-        (fsim_index := unit)
-        (fsim_order := ltof _ (fun _ => 0))
-        (fsim_match_states := fun _ => I' M AE)
-        (fsim_match_val := I_value M).
-
-    - apply well_founded_ltof.
+    eapply MixSemantics.forward_simulation_step with
+        (match_states := I' M AE)
+        (match_values := I_value M).
 
     - simpl. intros.  on >B.is_callstate, invc. on (I_value _ _ (Close _ _)), inv.
       fwd eapply compile_I_prog; eauto. fwd eapply I_prog_env as HH; eauto.  invc HH.
@@ -1758,7 +1732,7 @@ Qed.
       fwd eapply compile_cu_check_id_list; eauto.
       fwd eapply check_id_list_ok; eauto.
       
-      eexists. exists tt. split. 2: econstructor.
+      eexists. split. 2: econstructor.
       + econstructor.
         * eapply func_body_I; eauto.
         * i_ctor. fwd eapply compile_prog_fnames_below; eauto.
@@ -1778,14 +1752,16 @@ Qed.
       + eapply I_value_public; eauto.
       + assumption.
 
+    - simpl. eauto.
+    - simpl. intros. tauto.
+
     - intros0 Astep. intros0 II.
-      eapply raw_sim_lockstep; eauto. simpl.
       eapply I'_sim; try eassumption.
       + eauto using check_id_list_ok, compile_cu_check_id_list.
-      + eapply I_prog_env. eapply compile_I_prog; eauto.
+      + simpl. eapply I_prog_env. eapply compile_I_prog; eauto.
       + eapply compile_prog_fnames_below. eauto.
       + eapply compile_prog_switch_placement. eauto.
-    Defined.
+    Qed.
 
 End Preservation.
 
@@ -1807,35 +1783,16 @@ Definition MM : list (id_key * ident).
 Defined.
 
   Theorem fsim_intern :
-    MixSemantics.mix_forward_simulation (A.semantics prog) (B.semantics tprog).
+    MixSemantics.forward_simulation (A.semantics prog) (B.semantics tprog) MM.
   Proof.
     eapply fsim with (M := MM).
     unfold MM. destruct build_list_succ as [M HM].
     unfold compile_cu_intern in TRANSF.
     rewrite HM in TRANSF. simpl in TRANSF.
     assumption.
-  Defined.
+  Qed.
 
 End Preservation_intern.
-
-Lemma match_val_eq :
-    forall prog M tprog TRANSF,
-  MixSemantics.fsim_match_val _ _ (fsim prog M tprog TRANSF) = I_value M.
-Proof.
-    intros.
-    unfold fsim.
-    destruct prog. simpl.
-    reflexivity.
-Qed.
-
-Lemma match_val_eq_intern :
-    forall prog tprog TRANSF,
-  MixSemantics.fsim_match_val _ _ (fsim_intern prog tprog TRANSF) = I_value (MM prog tprog TRANSF).
-Proof.
-    intros.
-    unfold fsim_intern.
-    eapply match_val_eq.
-Qed.
 
 
 Lemma unintern_compile_cu : forall A Ameta B,

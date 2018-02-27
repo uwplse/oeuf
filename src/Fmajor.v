@@ -20,6 +20,7 @@ Require Import StructTact.StructTactics.
 Require Import StructTact.Util.
 
 Require Import HighValues.
+Require Import AllValues.
 
 Inductive expr : Type :=
 | Var : ident -> expr
@@ -211,7 +212,8 @@ Inductive final_state (p : program) : state -> value -> Prop :=
       final_state p (Returnstate v Kstop) v.
 
 Definition semantics (p: program) :=
-  Semantics step (is_callstate p) (final_state p) (Genv.globalenv p).
+  Semantics (val_level := VlHigh)
+    step (is_callstate p) (final_state p) (Genv.globalenv p).
 
 Lemma semantics_receptive:
   forall (p: program), receptive (semantics p).

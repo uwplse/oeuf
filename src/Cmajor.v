@@ -11,6 +11,7 @@ Require Import compcert.common.Switch.
 (*Require Import compcert.common.Smallstep.*)
 Require Import TraceSemantics.
 Require Import HighValues.
+Require Import AllValues.
 
 Require Import List.
 Import ListNotations.
@@ -318,7 +319,8 @@ Inductive final_state (p : program) : state -> value -> Prop :=
 (** The corresponding small-step semantics. *)
 
 Definition semantics (p: program) :=
-  Semantics step (is_callstate p) (final_state p) (Genv.globalenv p).
+  Semantics (val_level := VlHigh)
+    step (is_callstate p) (final_state p) (Genv.globalenv p).
 
 (** This semantics is receptive to changes in events. *)
 
@@ -372,7 +374,8 @@ Inductive cminor_is_callstate (p : Cminor_program) : value -> value -> state -> 
 
 
 Definition Cminor_semantics (p: Cminor_program) :=
-  Semantics Cminor.step (cminor_is_callstate p) (cminor_final_state p) (Genv.globalenv p).
+  Semantics (val_level := VlHigh)
+    Cminor.step (cminor_is_callstate p) (cminor_final_state p) (Genv.globalenv p).
 
 
 Lemma eval_unop_det :
@@ -422,9 +425,12 @@ Proof.
   f_equal.
   eapply eval_expr_det; eauto.
 Qed.
-  
+
+
+Require FullSemantics.
+
 Lemma semantics_determinate:
-  forall (p: Cminor_program), TraceSemantics.determinate (Cminor_semantics p).
+  forall (p: Cminor_program), FullSemantics.determinate (Cminor_semantics p).
 Proof.
   intros.
   econstructor.
@@ -456,12 +462,12 @@ Proof.
     eapply external_call_determ in H8; try eapply H1. break_and.
     specialize (H4 H2). break_and. congruence.
 
-  - unfold single_events. intros.
+  - unfold FullSemantics.single_events. intros.
     inv H; simpl; try omega;
       eapply external_call_trace_length; eauto.
 
   - intros. inv H. simpl.
-    unfold nostep. intros. intro. inv H2; try congruence.
+    unfold FullSemantics.nostep. intros. intro. inv H2; try congruence.
 
 Qed.
 

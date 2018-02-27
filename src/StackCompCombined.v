@@ -3,6 +3,7 @@ Require Import Common Monads.
 Require CompilationUnit.
 Require Import Metadata.
 Require Import CompilerUtil.
+Require Import Semantics.
 
 Require Switched2 StackFlatter2.
 Require
@@ -38,25 +39,17 @@ Variable bprog : B.prog_type.
 
 Hypothesis Hcomp : compile_cu aprog = OK bprog.
 
-Definition fsim : Semantics.forward_simulation (A.semantics aprog) (B.semantics bprog).
+Definition fsim : forward_simulation (A.semantics aprog) (B.semantics bprog).
   unfold compile_cu in Hcomp.
   break_result_chain.
 
-  eapply Semantics.compose_forward_simulation. eauto using StackMachComp.fsim.
-  eapply Semantics.compose_forward_simulation. eauto using StackContComp.fsim.
-  eapply Semantics.compose_forward_simulation. eauto using StackContComp2.fsim.
-  eapply Semantics.compose_forward_simulation. eauto using StackContComp3.fsim.
-  eapply Semantics.compose_forward_simulation. eauto using StackFlatComp.fsim.
-  eapply Semantics.compose_forward_simulation. eauto using StackFlatterComp.fsim.
+  eapply compose_forward_simulation. eauto using StackMachComp.fsim.
+  eapply compose_forward_simulation. eauto using StackContComp.fsim.
+  eapply compose_forward_simulation. eauto using StackContComp2.fsim.
+  eapply compose_forward_simulation. eauto using StackContComp3.fsim.
+  eapply compose_forward_simulation. eauto using StackFlatComp.fsim.
+  eapply compose_forward_simulation. eauto using StackFlatterComp.fsim.
   eauto using StackFlatterComp2.fsim.
-Qed.
-
-Lemma fsim_match_val :
-  forall x y,
-    Semantics.fsim_match_val _ _ fsim x y <-> x = y.
-Proof.
-  intros. erewrite (Semantics.fsim_match_val_canon _ _ fsim).
-  simpl. tauto.
 Qed.
 
 End Preservation.

@@ -4,6 +4,7 @@ Require CompilationUnit.
 Require Import Metadata.
 Require Import CompilerUtil.
 Require MatchValues.
+Require Import Semantics.
 
 Require Untyped8 Switched2.
 Require
@@ -43,27 +44,19 @@ Variable bprog : B.prog_type.
 
 Hypothesis Hcomp : compile_cu aprog = OK bprog.
 
-Definition fsim : Semantics.forward_simulation (A.semantics aprog) (B.semantics bprog).
+Definition fsim : forward_simulation (A.semantics aprog) (B.semantics bprog).
   unfold compile_cu in Hcomp.
   break_result_chain.
 
-  eapply Semantics.compose_forward_simulation. eauto using TaggedComp.fsim.
-  eapply Semantics.compose_forward_simulation. eauto using ElimFuncComp1.fsim.
-  eapply Semantics.compose_forward_simulation. eauto using ElimFuncComp2.fsim.
-  eapply Semantics.compose_forward_simulation. eauto using ElimFuncComp3.fsim.
-  eapply Semantics.compose_forward_simulation. eauto using ElimFuncComp4.fsim.
-  eapply Semantics.compose_forward_simulation. eauto using SelfCloseComp.fsim.
-  eapply Semantics.compose_forward_simulation. eauto using MkCloseSelfOpt.fsim.
-  eapply Semantics.compose_forward_simulation. eauto using SwitchedComp1.fsim.
+  eapply compose_forward_simulation. eauto using TaggedComp.fsim.
+  eapply compose_forward_simulation. eauto using ElimFuncComp1.fsim.
+  eapply compose_forward_simulation. eauto using ElimFuncComp2.fsim.
+  eapply compose_forward_simulation. eauto using ElimFuncComp3.fsim.
+  eapply compose_forward_simulation. eauto using ElimFuncComp4.fsim.
+  eapply compose_forward_simulation. eauto using SelfCloseComp.fsim.
+  eapply compose_forward_simulation. eauto using MkCloseSelfOpt.fsim.
+  eapply compose_forward_simulation. eauto using SwitchedComp1.fsim.
   eauto using SwitchedComp2.fsim.
-Qed.
-
-Lemma fsim_match_val :
-  forall x y,
-    Semantics.fsim_match_val _ _ fsim x y <-> MatchValues.mv_higher x y.
-Proof.
-  intros. erewrite (Semantics.fsim_match_val_canon _ _ fsim).
-  simpl. tauto.
 Qed.
 
 End Preservation.

@@ -11,7 +11,8 @@ Require Import compcert.common.Errors.
 Require Import compcert.common.Switch.
 (*Require Import compcert.common.Smallstep.*)
 
-Require Import TraceSemantics.
+Require Import FullSemantics.
+Require TraceSemantics.
 
 Require Import List.
 Import ListNotations.
@@ -1631,28 +1632,17 @@ Proof.
 Qed.
 
 Theorem fsim :
-  forward_simulation (Emajor.semantics prog) (Dmajor.semantics tprog).
+  TraceSemantics.forward_simulation (Emajor.semantics prog) (Dmajor.semantics tprog).
 Proof.
-  eapply forward_simulation_plus.
-  intros. 
-  eapply callstate_match; eauto.
-  instantiate (1 := eq) in H0. subst.
-  eauto.
-  intros. eapply match_final_states in H0; eauto.
-  intros. eapply step_sim; eauto.
-Defined.
-
-Lemma match_val_eq :
-  TraceSemantics.fsim_match_val fsim = eq.
-Proof.
-  unfold fsim. simpl.
-  unfold TraceSemantics.fsim_match_val.
-  repeat break_match. repeat (break_match_hyp; try congruence).
-  try unfold forward_simulation_step in *.
-  try unfold forward_simulation_plus in *.
-  try unfold forward_simulation_star in *.
-  try unfold forward_simulation_star_wf in *.
-  try inv Heqf. reflexivity.
+  eapply TraceSemantics.forward_simulation_plus.
+  - intros. 
+    eapply callstate_match; eauto.
+    instantiate (1 := eq) in H0. subst.
+    eauto.
+  - intros. eapply match_final_states in H0; eauto.
+  - simpl. auto.
+  - simpl. intros. tauto.
+  - intros. eapply step_sim; eauto.
 Qed.
 
 End PRESERVATION.
