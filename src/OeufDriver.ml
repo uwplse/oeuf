@@ -357,12 +357,12 @@ let compile_oeuf cu shim_ast sourcename asmname linked_cmname oeuf_cmname =
 
   (* Print linked cminor in coq defn form *)
   let out_cm = open_out linked_cmname in
-  ExportCminor.print_program out_cm lcm;
+  ExportCminor.print_program out_cm (Cmajor.cm_ast lcm);
   close_out out_cm;
 
   (* Print oeuf cminor in coq defn form *)
   let out_cm = open_out oeuf_cmname in
-  ExportCminor.print_program out_cm ocm;
+  ExportCminor.print_program out_cm (Cmajor.cm_ast ocm);
   close_out out_cm;
   
   (* Print Asm in text form *)

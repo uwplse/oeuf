@@ -1,5 +1,5 @@
-Require Import Common.
-Require Import HList SourceLifted.
+Require Import oeuf.Common.
+Require Import oeuf.HList oeuf.SourceLifted.
 Require Import SHA256_elim.
 Require Import SHA256_AST.
 

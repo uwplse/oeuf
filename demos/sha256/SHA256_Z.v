@@ -3,9 +3,9 @@ Require Import compcert.lib.Integers.
 Require Import List. 
 Import ListNotations.
 
-Require Import StuartTact.
+Require Import oeuf.StuartTact.
 Require Import StructTact.StructTactics.
-Require Import ListLemmas.
+Require Import oeuf.ListLemmas.
 
 Require Import Setoid.
 
