@@ -1,9 +1,9 @@
-Require Import Common.
+Require Import oeuf.Common.
 
-Require Import HList.
-Require Import Utopia.
-Require Import SourceLifted SourceValues.
-Require Import CompilationUnit.
+Require Import oeuf.HList.
+Require Import oeuf.Utopia.
+Require Import oeuf.SourceLifted oeuf.SourceValues.
+Require Import oeuf.CompilationUnit.
 
 Require Import NArith.
 
@@ -12,7 +12,7 @@ Require Import SHA256_AST.
 Require Import OeufPlugin.OeufPlugin.
 
 
-Require Import Pretty.
+Require Import oeuf.Pretty.
 From PrettyParsing Require Import PrettyParsing.
 
 Time Definition sha_256_tree :=
