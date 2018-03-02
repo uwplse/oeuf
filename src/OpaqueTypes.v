@@ -16,4 +16,10 @@ Definition opaque_type_denote oty : Type :=
     | Oint => int
     end.
 
+Definition opaque_type_denote_eq_dec oty (x y : opaque_type_denote oty) :
+        { x = y } + { x <> y }.
+destruct oty; simpl in x, y.
+- eapply Int.eq_dec.
+Defined.
+
 

@@ -81,3 +81,31 @@ Inductive public_value (M : list metadata) : value -> Prop :=
         public_value M (Close fname free)
 | PvOpaque : forall ty v, public_value M (Opaque ty v).
 
+
+Definition value_eq_dec (x y : value) : { x = y } + { x <> y }.
+revert y. induction x using value_rect_mut with
+    (Pl := fun xs => forall ys, { xs = ys } + { xs <> ys }); intros.
+
+- destruct y; try solve [right; discriminate].
+  destruct (constr_name_eq_dec ctor ctor0); [ subst ctor0 | right; congruence ].
+  destruct (IHx args0); [ subst args0 | right; congruence ].
+  left. reflexivity.
+
+- destruct y; try solve [right; discriminate].
+  destruct (eq_nat_dec fname f); [ subst f | right; congruence ].
+  destruct (IHx free0); [ subst free0 | right; congruence ].
+  left. reflexivity.
+
+- destruct y; try solve [right; discriminate].
+  destruct (opaque_type_name_eq_dec ty ty0); [ | right; congruence ]. subst ty0.
+  destruct (opaque_type_denote_eq_dec _ v v0); cycle 1.
+    { right. inversion 1. fix_existT. congruence. }
+    subst v0.
+  left. reflexivity.
+
+- destruct ys; left + right; congruence.
+- destruct ys; [ right; discriminate | ].
+  destruct (IHx v); [ subst v | right; congruence ].
+  destruct (IHx0 ys); [ subst ys | right; congruence ].
+  left. reflexivity.
+Defined.

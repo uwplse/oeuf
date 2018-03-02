@@ -20,6 +20,7 @@ Require Import StructTact.StructTactics.
 Require Import StructTact.Util.
 
 Require Import oeuf.Metadata.
+Require Import oeuf.OpaqueTypes.
 
 Require Import oeuf.EricTact.
 
@@ -34,13 +35,16 @@ Inductive value :=
 | Constr (tag : int) (args : list value) (* A constructor applied to some values *)
 (* At this level we have a Z tag  *)
 (* corresponds with lower level switch semantics nicely *)
-| Close (f : function_name) (free : list value). (* a closure value *)
+| Close (f : function_name) (free : list value) (* a closure value *)
 (* free is the list of values closed over, referred to inside as upvars *)
+| Opaque (ty : opaque_type_name) (v : opaque_type_denote ty)
+.
 
 (* Thanks Stuart *)
 Definition value_rect_mut (P : value -> Type) (Pl : list value -> Type)
            (HConstr : forall tag args, Pl args -> P (Constr tag args))
            (HClose : forall fname args, Pl args -> P (Close fname args))
+           (HOpaque :  forall ty v, P (Opaque ty v))
     (Hnil :     Pl [])
     (Hcons :    forall e es, P e -> Pl es -> Pl (e :: es))
     (v : value) : P v :=
@@ -53,6 +57,7 @@ Definition value_rect_mut (P : value -> Type) (Pl : list value -> Type)
         match v as v_ return P v_ with
         | Constr tag args => HConstr tag args (go_list args)
         | Close f args => HClose f args (go_list args)
+        | Opaque ty v => HOpaque ty v
         end in go v.
 
 Definition value_rect_mut'
@@ -60,6 +65,7 @@ Definition value_rect_mut'
         (Pl : list value -> Type)
     (HConstr :  forall tag args, Pl args -> P (Constr tag args))
     (HClose :   forall fname free, Pl free -> P (Close fname free))
+    (HOpaque :  forall ty v, P (Opaque ty v))
     (Hnil :     Pl [])
     (Hcons :    forall v vs, P v -> Pl vs -> Pl (v :: vs)) :
     (forall v, P v) * (forall vs, Pl vs) :=
@@ -72,6 +78,7 @@ Definition value_rect_mut'
         match v as v_ return P v_ with
         | Constr tag args => HConstr tag args (go_list args)
         | Close fname free => HClose fname free (go_list free)
+        | Opaque ty v => HOpaque ty v
         end in
     let fix go_list vs :=
         match vs as vs_ return Pl vs_ with
@@ -84,9 +91,10 @@ Definition value_rect_mut'
 Definition value_ind' (P : value -> Prop) 
            (HConstr : forall tag args, Forall P args -> P (Constr tag args))
            (HClose : forall fname args, Forall P args -> P (Close fname args))
+           (HOpaque :  forall ty v, P (Opaque ty v))
     (v : value) : P v :=
     ltac:(refine (@value_rect_mut P (Forall P)
-        HConstr HClose _ _ v); eauto).
+        HConstr HClose HOpaque _ _ v); eauto).
 
 
 (* given an address, addresses of the nested values *)
@@ -214,6 +222,7 @@ Lemma value_val_inject :
       value_inject ge m' v v0.
 Proof.
   induction v using value_ind'; intros;
+    try solve [inv H]; (* handle opaque *)
     inv H0; inv H1;
       app Mem.loadv_inject Mem.loadv;
       inv H7; app H3 (mi b); subst delta;
@@ -526,12 +535,14 @@ Definition size_bytes (v : value) : Z :=
   match v with
   | Close _ l => (4 * Z.of_nat (length l)) + 4
   | Constr _ l => (4 * Z.of_nat (length l)) + 4
+  | Opaque _ _ => 0
   end.
 
 Definition rest (v : value ) : list value :=
   match v with
   | Close _ l => l
   | Constr _ l => l
+  | Opaque _ _ => []
   end.
 
 Fixpoint store_list (b : block) (ofs : Z) (l : list val) (m : mem) : option mem :=
@@ -556,6 +567,7 @@ Definition first_byte {A B} (ge : Genv.t A B) (v : value) : option val :=
     | None => None
     end
   | Constr tag _ => Some (Vint tag)
+  | Opaque _ _ => None
   end.
 
 Definition store_value {A B} (ge : Genv.t A B) (v : value) (m : mem) (l : list val) : option (val * mem) :=
@@ -600,7 +612,8 @@ Inductive public_value {F V} (P : AST.program F V) (M : meta_map) : value -> Pro
         Forall (public_value P M) free ->
         In (fname, m) M ->
         length free = m_nfree m ->
-        public_value P M (Close fname free).
+        public_value P M (Close fname free)
+| PvOpaque : forall ty v, public_value P M (Opaque ty v).
 
 Lemma prog_public_public_value : forall F V F' V'
         (p : AST.program F V) (p' : AST.program F' V') M,
