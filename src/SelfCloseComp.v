@@ -31,6 +31,7 @@ Definition compile :=
         | A.MkConstr tag args => B.MkConstr tag (go_list args)
         | A.Elim loop cases target => B.Elim (go loop) (go_list cases) (go target)
         | A.MkClose fname free => B.MkClose fname (go_list free)
+        | A.OpaqueOp op args => B.OpaqueOp op (go_list args)
         end in go.
 
 Definition compile_list :=
@@ -94,6 +95,9 @@ Inductive I_expr : A.expr -> B.expr -> Prop :=
         I_expr (A.MkClose fname afree) (B.MkClose fname bfree)
 | IValue : forall v,
         I_expr (A.Value v) (B.Value v)
+| IOpaqueOp : forall op aargs bargs,
+        Forall2 I_expr aargs bargs ->
+        I_expr (A.OpaqueOp op aargs) (B.OpaqueOp op bargs)
 .
 
 Inductive I : A.state -> B.state -> Prop :=
@@ -230,6 +234,17 @@ inv Astep; invc II; try on (I_expr _ _), invc.
 - (* SConstrDone *)
   fwd i_lem I_expr_map_value. subst.
   eexists. split. eapply B.SPlusOne, B.SConstrDone; eauto.
+  eauto.
+
+- (* SOpaqueOpStep *)
+  on _, invc_using Forall2_3part_inv.
+  eexists. split. eapply B.SPlusOne, B.SOpaqueOpStep; eauto.
+  i_ctor. i_ctor. i_ctor.
+  i_lem Forall2_app. i_lem Forall2_app. i_ctor. i_ctor.
+
+- (* SOpaqueOpDone *)
+  fwd i_lem I_expr_map_value. subst.
+  eexists. split. eapply B.SPlusOne, B.SOpaqueOpDone; eauto.
   eauto.
 
 - (* SCallL *)

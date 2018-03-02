@@ -44,6 +44,7 @@ Definition compile : A.expr -> B.expr :=
         | A.Elim loop cases target =>
                 B.Elim (go loop) (go_list_pair cases) (go target)
         | A.MkClose f free => B.MkClose f (go_list free)
+        | A.OpaqueOp op args => B.OpaqueOp op (go_list args)
         end in go.
 
 Definition compile_list : list A.expr -> list B.expr :=
@@ -104,6 +105,9 @@ Inductive I_expr : A.expr -> B.expr -> Prop :=
 | IMkClose : forall fname aargs bargs,
         Forall2 (I_expr) aargs bargs ->
         I_expr (A.MkClose fname aargs) (B.MkClose fname bargs)
+| IOpaqueOp : forall op aargs bargs,
+        Forall2 I_expr aargs bargs ->
+        I_expr (A.OpaqueOp op aargs) (B.OpaqueOp op bargs)
 
 (* This is a weirdly specific case, but it avoids the issues that arise from
    letting non-values match with values in general. *)
@@ -254,61 +258,6 @@ Ltac B_star HS :=
     end.
 
 
-(*
-
-
-Lemma Forall3_nth_error_ex1 : forall A B C (P : A -> B -> C -> Prop) xs ys zs i x,
-    Forall3 P xs ys zs ->
-    nth_error xs i = Some x ->
-    exists y z,
-        nth_error ys i = Some y /\
-        nth_error zs i = Some z /\
-        P x y z.
-induction xs; intros0 Hfa Hnth; invc Hfa; destruct i; try discriminate.
-- simpl in *. inject_some. eauto.
-- simpl in *. eauto.
-Qed.
-
-Lemma Forall3_nth_error_ex2 : forall A B C (P : A -> B -> C -> Prop) xs ys zs i y,
-    Forall3 P xs ys zs ->
-    nth_error ys i = Some y ->
-    exists x z,
-        nth_error xs i = Some x /\
-        nth_error zs i = Some z /\
-        P x y z.
-first_induction ys; intros0 Hfa Hnth; invc Hfa; destruct i; try discriminate.
-- simpl in *. inject_some. eauto.
-- simpl in *. eauto.
-Qed.
-
-Lemma unroll_elim_ok : forall case args rec mk_rec,
-    length args = length rec ->
-    exists e', B.unroll_elim case args rec mk_rec = Some e'.
-first_induction args; destruct rec; intros0 Hlen; try discriminate; simpl in *.
-- eauto.
-- remember (if b then _ else _) as case'.
-  specialize (IHargs case' rec mk_rec ltac:(lia)). eauto.
-Qed.
-
-Lemma unroll_elim_sim : forall BE lfree,
-    forall acase bcase args rec amk_rec bmk_rec ae' be',
-    I_expr BE lfree acase bcase ->
-    (forall ae be,
-        I_expr BE lfree ae be ->
-        I_expr BE lfree (amk_rec ae) (bmk_rec be)) ->
-    A.unroll_elim acase args rec amk_rec = Some ae' ->
-    B.unroll_elim bcase args rec bmk_rec = Some be' ->
-    I_expr BE lfree ae' be'.
-first_induction args; intros0 Hcase Hmk_rec Aunroll Bunroll;
-destruct rec; try discriminate; simpl in *.
-  { inject_some. assumption. }
-
-rename a into arg.
-eapply IHargs with (3 := Aunroll) (4 := Bunroll); try eassumption.
-destruct b; eauto using ICall, IValue.
-Qed.
-*)
-
 Lemma unroll_elim_length : forall case args rec mk_rec e',
     A.unroll_elim case args rec mk_rec = Some e' ->
     length args = length rec.
@@ -413,6 +362,17 @@ all: try on (I_expr _ be), invc.
 - (* SConstrDone *)
   fwd i_lem I_expr_map_value. subst.
   eexists. split. eapply SPlusOne. i_lem B.SConstrDone.
+  auto.
+
+- (* SOpaqueOpStep *)
+  on _, invc_using Forall2_3part_inv.
+  eexists. split. eapply SPlusOne. i_lem B.SOpaqueOpStep.
+  + list_magic_on (vs, (ys1, tt)).
+  + i_ctor. i_ctor. i_ctor. i_lem Forall2_app. i_ctor. i_ctor.
+
+- (* SOpaqueOpDone *)
+  fwd i_lem I_expr_map_value. subst.
+  eexists. split. eapply SPlusOne. i_lem B.SOpaqueOpDone.
   auto.
 
 - (* SCallL - ICall *)

@@ -64,6 +64,7 @@ Definition simple_compile : A.expr -> option B.expr :=
         | A.MkConstr tag args => B.MkConstr tag <$> go_list args
         | A.Elim cases target => None
         | A.MkClose fname free => B.MkClose fname <$> go_list free
+        | A.OpaqueOp op args => B.OpaqueOp op <$> go_list args
         end in go.
 
 Definition simple_compile_list : list A.expr -> option (list B.expr) :=
@@ -198,6 +199,10 @@ Inductive I_expr (BE : B.env) (lfree : list value): A.expr -> B.expr -> Prop :=
         I_expr BE lfree
             (A.Elim acases (A.Value target))
             (B.Call (loop_value_expr bfname lfree) (B.Value target))
+
+| IOpaqueOp : forall op aargs bargs,
+        Forall2 (I_expr BE lfree) aargs bargs ->
+        I_expr BE lfree (A.OpaqueOp op aargs) (B.OpaqueOp op bargs)
 .
 
 Inductive I (AE : A.env) (BE : B.env) : A.state -> B.state -> Prop :=
@@ -246,6 +251,7 @@ mut_induction ae using A.expr_rect_mut' with
 - (* MkConstr *) i_ctor.
 - (* Elim *) discriminate.
 - (* MkClose *) i_ctor.
+- (* OpaqueOp *) i_ctor.
 
 - (* nil *) i_ctor.
 - (* cons *) i_ctor.
@@ -635,6 +641,28 @@ all: try on (I_expr _ _ _ be), invc.
   auto.
 - fwd i_lem I_expr_map_value. subst.
   eexists. split. eapply SPlusOne. i_lem B.SConstrDone.
+  auto.
+
+(* SOpaqueOpStep *)
+- on _, invc_using Forall2_3part_inv.
+  eexists. split. eapply SPlusOne. i_lem B.SOpaqueOpStep.
+  + list_magic_on (vs, (ys1, tt)).
+  + i_ctor. i_ctor. i_ctor. i_lem Forall2_app. i_ctor. i_ctor.
+
+- on _, invc_using Forall2_3part_inv.
+  eexists. split. eapply SPlusOne. i_lem B.SOpaqueOpStep.
+  + list_magic_on (vs, (ys1, tt)).
+  + simpl in *. A.refold_no_arg.
+    on _, eapply_lem A.no_arg_list_Forall. on _, invc_using Forall_3part_inv.
+    i_ctor. i_lem ISplitArg. i_ctor. i_lem Forall2_app. i_ctor. i_ctor.
+    A.refold_no_arg. eapply A.no_arg_list_Forall'. i_lem Forall_app. i_ctor.
+
+(* SOpaqueOpDone *)
+- fwd i_lem I_expr_map_value. subst.
+  eexists. split. eapply SPlusOne. i_lem B.SOpaqueOpDone.
+  auto.
+- fwd i_lem I_expr_map_value. subst.
+  eexists. split. eapply SPlusOne. i_lem B.SOpaqueOpDone.
   auto.
 
 (* SCallL *)

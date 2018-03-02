@@ -53,6 +53,7 @@ Definition rewrite fname nfree : expr -> expr :=
                     Self
                 else
                     MkClose f (go_list free)
+        | OpaqueOp op args => OpaqueOp op (go_list args)
         end in go.
 
 Definition rewrite_list fname nfree :=
@@ -118,6 +119,9 @@ Inductive I_expr fname nfree : expr -> expr -> Prop :=
 | IMkClose : forall fname' aargs bargs,
         Forall2 (I_expr fname nfree) aargs bargs ->
         I_expr fname nfree (MkClose fname' aargs) (MkClose fname' bargs)
+| IOpaqueOp : forall op aargs bargs,
+        Forall2 (I_expr fname nfree) aargs bargs ->
+        I_expr fname nfree (OpaqueOp op aargs) (OpaqueOp op bargs)
 
 | IMkCloseSelf :
         I_expr fname nfree (MkClose fname (upvars_list nfree)) Self
@@ -532,6 +536,18 @@ all: try on (I_expr _ _ _ be), invc.
   eexists. split. left. i_lem SConstrDone.
   eauto.
 
+- (* SOpaqueOpStep *)
+  on _, invc_using Forall2_3part_inv.
+  eexists. split. left. i_lem SOpaqueOpStep.
+  + list_magic_on (vs, (ys1, tt)).
+  + i_ctor. intros. eapply IRun with (fname := fname) (free := free); eauto.
+    i_ctor. i_lem Forall2_app. i_ctor. i_ctor.
+
+- (* SOpaqueOpDone *)
+  fwd i_lem I_expr_map_value. subst.
+  eexists. split. left. i_lem SOpaqueOpDone.
+  eauto.
+
 - (* SCallL *)
   eexists. split. left. i_lem SCallL.
   i_ctor. i_ctor. i_ctor. i_ctor.
@@ -672,7 +688,7 @@ Section Preservation.
            ++ i_lem Forall_nth_error.
            ++ i_lem public_value_nfree_ok.
            ++ refold_nfree_ok_value NFREES. split; eauto.
-              rewrite nfree_ok_value_list_Forall.  list_magic_on (free, tt).
+              rewrite Tagged.nfree_ok_value_list_Forall.  list_magic_on (free, tt).
                 i_lem public_value_nfree_ok.
            ++ i_ctor.
       + i_ctor. i_ctor.
