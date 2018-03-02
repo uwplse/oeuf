@@ -41,6 +41,7 @@ Definition compile : A.expr -> option B.expr :=
                 Some (B.Elim B.Self cases'' B.Arg)
         | A.Elim _ _ _ => None
         | A.MkClose f free => B.MkClose f <$> go_list free
+        | A.OpaqueOp op args => B.OpaqueOp op <$> go_list args
         end in go.
 
 Definition compile_list : list A.expr -> option (list B.expr) :=
@@ -90,6 +91,9 @@ Inductive I_expr vself varg : A.expr -> B.expr -> Prop :=
 | IMkClose : forall fname' aargs bargs,
         Forall2 (I_expr vself varg) aargs bargs ->
         I_expr vself varg (A.MkClose fname' aargs) (B.MkClose fname' bargs)
+| IOpaqueOp : forall op aargs bargs,
+        Forall2 (I_expr vself varg) aargs bargs ->
+        I_expr vself varg (A.OpaqueOp op aargs) (B.OpaqueOp op bargs)
 
 | ICallSelf : forall af bf,
         I_expr vself varg af bf ->
@@ -346,6 +350,21 @@ all: try on (I_expr _ _ _ be), invc.
 - (* SConstrDone *)
   fwd eapply I_expr_map_value; eauto. subst.
   eexists. split. eapply B.SPlusOne; i_lem B.SConstrDone.
+  eauto.
+
+- (* SOpaqueOpStep *)
+  destruct (Forall2_app_inv_l _ _ **) as (? & ? & ? & ? & ?).
+  on (Forall2 _ (_ :: _) _), invc.
+  rename x into b_vs. rename y into b_e. rename l' into b_es.
+
+  eexists. split. eapply B.SPlusOne; i_lem B.SOpaqueOpStep.
+  + list_magic_on (vs, (b_vs, tt)).
+  + i_ctor. i_ctor. i_ctor.
+    i_lem Forall2_app. i_ctor. i_ctor.
+
+- (* SOpaqueOpDone *)
+  fwd eapply I_expr_map_value; eauto. subst.
+  eexists. split. eapply B.SPlusOne; i_lem B.SOpaqueOpDone.
   eauto.
 
 - (* SCallL *)

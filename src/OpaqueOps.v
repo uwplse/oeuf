@@ -33,6 +33,10 @@ Definition opaque_oper_to_name {atys rty} (op : opaque_oper atys rty) : opaque_o
     | Otest => ONtest
     end.
 
+Definition opaque_oper_name_eq_dec (x y : opaque_oper_name) : { x = y } + { x <> y }.
+decide equality.
+Defined.
+
 
 
 Definition closure_sig_higher v :=

@@ -77,6 +77,7 @@ Definition compile base nfree : nat -> A.expr -> state _ B.expr :=
                 let func := B.MkClose (base + n) (locals_list (depth + nfree)) in
                 pure (B.Call func target')
         | A.MkClose fname free => B.MkClose fname <$> go_list depth free
+        | A.OpaqueOp op args => B.OpaqueOp op <$> go_list depth args
         end in go.
 
 Definition compile_list base nfree : nat -> list A.expr -> state _ (list B.expr) :=
@@ -122,6 +123,7 @@ Lemma unfold_compile base nfree depth e :
             let func := B.MkClose (base + n) (locals_list (depth + nfree)) in
             pure (B.Call func target')
     | A.MkClose fname free => B.MkClose fname <$> compile_list base nfree depth free
+    | A.OpaqueOp op args => B.OpaqueOp op <$> compile_list base nfree depth args
     end.
 revert e depth.
 mut_induction e using A.expr_rect_mut' with
@@ -233,6 +235,9 @@ Inductive I_expr (BE : B.env) nfree : nat -> A.expr -> B.expr -> Prop :=
         I_expr BE nfree depth
                 (A.Elim acases atarget)
                 (B.Call (B.MkClose bfname (locals_list (depth + nfree))) btarget)
+| IOpaqueOp : forall depth op aargs bargs,
+        Forall2 (I_expr BE nfree depth) aargs bargs ->
+        I_expr BE nfree depth (A.OpaqueOp op aargs) (B.OpaqueOp op bargs)
 .
 
 Inductive I (AE : A.env) (BE : B.env) : A.state -> B.state -> Prop :=
@@ -330,6 +335,7 @@ intros0 II.
     on (Forall2 _ _ _), invc_using Forall2_conj_inv.
     eapply Forall2_conj; eauto.
 - invc II. econstructor; eauto.
+- invc II. econstructor; eauto.
 
 - invc II. econstructor.
 - invc II. econstructor; eauto.
@@ -394,6 +400,8 @@ mut_induction e using A.expr_rect_mut' with
   pose proof (record_state_monotonic ?? ?? ?? ?? ?? ** ).
   do 3 break_exists. eexists.
   rewrite H0, H, H1. do 2 rewrite <- app_assoc. reflexivity.
+
+- break_bind_state. eauto.
 
 - break_bind_state. eauto.
 
@@ -485,6 +493,8 @@ intros0 Hcomp; try (unfold_compile_in Hcomp; invc Hcomp).
     reflexivity.
 
 - (* MkClose *) break_bind_state.  econstructor. eapply IHe. eauto.
+
+- (* OpaqueOp *) break_bind_state.  econstructor. eapply IHe. eauto.
 
 (* list *)
 - constructor.
@@ -973,6 +983,21 @@ simpl in *.
   eexists. split. eapply B.SPlusOne; i_lem B.SCloseDone.
   eauto.
 
+- (* SOpaqueOpStep *)
+  destruct (Forall2_app_inv_l _ _ **) as (? & ? & ? & ? & ?).
+  on (Forall2 _ (_ :: _) _), invc.
+  rename x into b_vs. rename y into b_e. rename l' into b_es.
+
+  eexists. split. eapply B.SPlusOne; i_lem B.SOpaqueOpStep.
+  + list_magic_on (vs, (b_vs, tt)).
+  + i_ctor. i_ctor. i_ctor.
+    rewrite Nat.add_0_r. i_lem Forall2_app. i_ctor. i_ctor.
+
+- (* SOpaqueOpDone *)
+  fwd eapply I_expr_map_value; eauto. subst.
+  eexists. split. eapply B.SPlusOne; i_lem B.SOpaqueOpDone.
+  eauto.
+
 Qed.
 
 
@@ -1147,6 +1172,7 @@ induction v using value_ind'; intros0 Hcomp Hpub; invc Hpub.
 - i_ctor.
   + i_lem compile_cu_fname_meta.
   + list_magic_on (free, tt).
+- i_ctor.
 Qed.
 
 Lemma compile_cu_public_value' : forall A Ameta B Bmeta v,
@@ -1158,6 +1184,7 @@ induction v using value_ind'; intros0 Hcomp Hpub; invc Hpub.
 - i_ctor.
   + i_lem compile_cu_fname_meta'.
   + list_magic_on (free, tt).
+- i_ctor.
 Qed.
 
 Lemma env_ok_nth_error : forall A B NFREES fname abody bbody nfree,
