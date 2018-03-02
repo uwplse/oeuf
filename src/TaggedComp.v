@@ -9,6 +9,7 @@ Require Import oeuf.StepLib.
 Require oeuf.Utopia String.
 Require oeuf.HigherValue.
 Require oeuf.HighestValues.
+Require Import oeuf.OpaqueOps.
 
 Require oeuf.Untyped8.
 Require oeuf.Tagged.
@@ -83,6 +84,7 @@ Definition compile (e : A.expr) : option B.expr :=
                 go_list cases >>= fun cases =>
                 B.Elim <$> mk_tagged_cases ty cases <*> go target
         | A.MkClose f free => B.MkClose f <$> go_list free
+        | A.OpaqueOp op args => B.OpaqueOp op <$> go_list args
         end in go e.
 
 (* Nested fixpoint alias for `compile`, but also used as a top-level function *)
@@ -215,6 +217,9 @@ Inductive I_expr : A.expr -> B.expr -> Prop :=
 | IClose : forall tag afree bfree,
         Forall2 I_expr afree bfree ->
         I_expr (A.MkClose tag afree) (B.MkClose tag bfree)
+| IOpaqueOp : forall op aargs bargs,
+        Forall2 I_expr aargs bargs ->
+        I_expr (A.OpaqueOp op aargs) (B.OpaqueOp op bargs)
 .
 Hint Resolve IValue.
 
@@ -483,6 +488,19 @@ inv Astep; invc II; try on (I_expr _ _), invc.
   on _, eapply_; eauto.
   all: constructor; eauto.
 
+- on _, invc_using Forall2_3part_inv.
+
+  eexists. split. eapply B.SOpaqueOpStep; eauto.
+  i_ctor. i_ctor. i_ctor. i_lem Forall2_app.
+
+- fwd eapply I_expr_map_value as HH; eauto.  destruct HH as (bvs & ? & ?).
+  subst.
+
+  fwd eapply opaque_oper_sim_higher as HH; eauto. destruct HH as (bv & ? & ?).
+
+  eexists. split. eapply B.SOpaqueOpDone; eauto.
+  eauto.
+
 - eexists. split. eapply B.SElimStep; eauto.
   i_ctor. i_ctor. i_ctor.
 
@@ -542,6 +560,7 @@ mut_induction av using HighestValues.value_rect_mut' with
 
 - invc Apub. i_ctor.
 - invc Apub. i_ctor. fwd i_lem Forall2_length. congruence.
+- invc Apub. i_ctor.
 - auto.
 - invc Apub. i_ctor.
 
@@ -562,6 +581,7 @@ mut_induction bv using HigherValue.value_rect_mut' with
 
 - invc Bpub. i_ctor.
 - invc Bpub. i_ctor. fwd i_lem Forall2_length. congruence.
+- invc Bpub. i_ctor.
 - auto.
 - invc Bpub. i_ctor.
 

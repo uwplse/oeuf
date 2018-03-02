@@ -81,6 +81,9 @@ Inductive mv_higher : HighestValues.value -> HigherValue.value -> Prop :=
         Forall2 mv_higher aargs bargs ->
         mv_higher (HighestValues.Close fname aargs)
                   (HigherValue.Close fname bargs)
+| HrOpaque : forall oty ov,
+        mv_higher (HighestValues.Opaque oty ov)
+                  (HigherValue.Opaque oty ov)
 .
 
 
@@ -97,6 +100,9 @@ Inductive mv_high : HigherValue.value -> HighValues.value -> Prop :=
         Forall2 mv_high afree bfree ->
         mv_high (HigherValue.Close afname afree)
                 (HighValues.Close bfname bfree)
+| HgOpaque : forall oty ov,
+        mv_high (HigherValue.Opaque oty ov)
+                (HighValues.Opaque oty ov)
 .
 
 

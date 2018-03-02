@@ -8,11 +8,15 @@ Require Import oeuf.OpaqueTypes.
 
 Require Import oeuf.SourceValues.
 Require oeuf.HighestValues.
+Require oeuf.HigherValue.
+Require oeuf.HighValues.
 
 Require Import oeuf.MatchValues.
 
 Local Open Scope option_monad.
 
+
+(* Opaque operation names and signatures *)
 
 Inductive opaque_oper_name : Set :=
 | ONadd
@@ -31,27 +35,62 @@ Definition opaque_oper_to_name {atys rty} (op : opaque_oper atys rty) : opaque_o
 
 
 
+Definition closure_sig_higher v :=
+    match v with
+    | HigherValue.Close fname free => Some (fname, length free)
+    | _ => None
+    end.
+
+Record opaque_oper_impl {atys rty} := MkOpaqueOperImpl {
+        oo_denote : hlist type_denote atys -> type_denote rty;
+        oo_denote_source : forall {G}, hlist (value G) atys -> value G rty;
+        oo_denote_highest : list HighestValues.value -> option HighestValues.value;
+        oo_denote_higher : list HigherValue.value -> option HigherValue.value;
+        oo_denote_high : list HighValues.value -> option HighValues.value;
+        (* TODO: oo_denote_low *)
+
+        (* properties *)
+        (* "No fabricated closures."  Every closure in the output must be
+           derived from a closure in the input. *)
+        oo_no_fab_clos_higher : forall args ret,
+            oo_denote_higher args = Some ret ->
+            forall v sig,
+                HigherValue.VIn v ret ->
+                closure_sig_higher v = Some sig ->
+                exists v',
+                    HigherValue.VIn_list v' args /\
+                    closure_sig_higher v' = Some sig;
+
+        (* simulation proofs *)
+        oo_sim_source : forall G (h : hlist func_type_denote G) vs,
+            oo_denote (hmap (@value_denote G h) vs) =
+            value_denote h (oo_denote_source vs);
+        oo_sim_highest : forall G (args : hlist (value G) atys) (ret : value G rty),
+            oo_denote_source args = ret ->
+            oo_denote_highest (MatchValues.compile_highest_list args) =
+                Some (MatchValues.compile_highest ret);
+        oo_sim_higher : forall args args' ret,
+            Forall2 mv_higher args args' ->
+            oo_denote_highest args = Some ret ->
+            exists ret',
+                oo_denote_higher args' = Some ret' /\
+                mv_higher ret ret';
+        oo_sim_high : forall args args' ret,
+            Forall2 mv_high args args' ->
+            oo_denote_higher args = Some ret ->
+            exists ret',
+                oo_denote_high args' = Some ret' /\
+                mv_high ret ret'
+    }.
+
+Implicit Arguments opaque_oper_impl [].
+
+
+
 Definition unwrap_opaque {G oty} (v : value G (Opaque oty)) : opaque_type_denote oty :=
     match v in value _ (Opaque oty_) return opaque_type_denote oty_ with
     | VOpaque v => v
     end.
-
-
-Fixpoint hmap_map {A A'} {B : A' -> Type} (f : A -> A') {xs : list A}
-        (h : hlist B (map f xs)) : hlist (fun x => B (f x)) xs :=
-    match xs as xs_ return hlist B (map f xs_) -> hlist _ xs_ with
-    | [] => fun _ => hnil
-    | x :: xs =>
-            case_hlist_cons _ (fun (y : B (f x)) ys =>
-                let ys' := hmap_map f ys in
-                hcons y ys'
-            ) 
-    end h.
-
-Definition type_denote_map_opaque {otys} :
-        hlist type_denote (map Opaque otys) ->
-        hlist opaque_type_denote otys :=
-    hmap_map Opaque.
 
 Definition unwrap_opaque_hlist {G otys} (vs : hlist (value G) (map Opaque otys)) :
         hlist opaque_type_denote otys.
@@ -60,219 +99,280 @@ induction otys.
 invc vs. constructor; eauto using unwrap_opaque.
 Defined.
 
-Lemma unwrap_opaque_hlist_is_hmap :
-    forall G otys (vs : hlist (value G) (map Opaque otys)),
-    unwrap_opaque_hlist vs = hmap (fun _ v => unwrap_opaque v) (hmap_map Opaque vs).
-induction otys; intros.
-- reflexivity.
-- pattern vs. simple refine (case_hlist_cons _ _ vs).
-  intros. simpl.
-  rewrite <- IHotys. reflexivity.
-Qed.
 
-Definition unwrap_highest oty (v : HighestValues.value) :
-        option (opaque_type_denote oty).
-refine (
-    match v with
-    | HighestValues.Opaque vty v =>
-        if opaque_type_name_eq_dec oty vty then Some _ else None
-    | _ => None
-    end
-).
-rewrite e. exact v.
-Defined.
-
-Definition unwrap_highest_hlist otys (vs : list HighestValues.value) :
-        option (hlist opaque_type_denote otys) :=
-    let fix go otys vs :=
-        match otys as otys_ return option (hlist _ otys_) with
-        | [] => Some hnil
-        | oty :: otys =>
-                match vs with
-                | [] => None
-                | v :: vs =>
-                        unwrap_highest oty v >>= fun v' =>
-                        go otys vs >>= fun vs' =>
-                        Some (hcons v' vs')
-                end
-        end in
-    go otys vs.
-
-
-
-Definition oper_implH atys rty :=
-    hlist opaque_type_denote atys ->
-    opaque_type_denote rty.
-
-Definition liftH {atys rty} (f : oper_implH atys rty) :
-        hlist type_denote (map Opaque atys) -> type_denote (Opaque rty) :=
-    fun args => f (type_denote_map_opaque args).
-
-Definition liftH_source {G atys rty} (f : oper_implH atys rty) :
-        hlist (value G) (map Opaque atys) -> value G (Opaque rty) :=
-    fun args => VOpaque (f (unwrap_opaque_hlist args)).
-
-Definition liftH_highest {atys rty} (f : oper_implH atys rty) :
-        list HighestValues.value -> option HighestValues.value :=
-    fun args =>
-        unwrap_highest_hlist atys args >>= fun args' =>
-        Some (HighestValues.Opaque rty (f args')).
-
-
-
-
-Lemma value_denote_unwrap_opaque :
-    forall G (h : hlist func_type_denote G) oty (v : value G (Opaque oty)),
-    value_denote h v = unwrap_opaque v.
+Lemma hmap_hhead : forall A B C (f : forall (a : A), B a -> C a) x xs (h : hlist B (x :: xs)),
+    hhead (hmap f h) = f x (hhead h).
 intros.
-pattern v.
-refine match v as v_ in value _ (Opaque oty_) return _ v_ with
-| VOpaque v => _
+pattern x, xs, h.
+refine match h as h_ in hlist _ (x_ :: xs_) return _ x_ xs_ h_ with
+| hcons x xs => _
 end.
 reflexivity.
 Qed.
 
-Lemma type_denote_map_opaque_unwrap_opaque_hlist :
-    forall G (h : hlist func_type_denote G)
-        otys (vs : hlist (value G) (map Opaque otys)),
-    type_denote_map_opaque (hmap (@value_denote G h) vs) =
-    unwrap_opaque_hlist vs.
-intros. rewrite unwrap_opaque_hlist_is_hmap.
-unfold type_denote_map_opaque.
-induction otys.
-- simpl. reflexivity.
-- pattern vs. simple refine (case_hlist_cons _ _ vs).
-  intros. simpl.
-  rewrite <- IHotys. rewrite value_denote_unwrap_opaque. reflexivity.
+Lemma hmap_htail : forall A B C (f : forall (a : A), B a -> C a) x xs (h : hlist B (x :: xs)),
+    htail (hmap f h) = hmap f (htail h).
+intros.
+pattern x, xs, h.
+refine match h as h_ in hlist _ (x_ :: xs_) return _ x_ xs_ h_ with
+| hcons x xs => _
+end.
+reflexivity.
 Qed.
 
-Lemma liftH_source_sim :
-    forall G (h : hlist func_type_denote G) atys rty (f : oper_implH atys rty)
-        (vs : hlist (value G) (map Opaque atys)),
-    liftH f (hmap (@value_denote G h) vs) =
-    value_denote h (liftH_source f vs).
-intros. simpl. unfold liftH.
-revert f vs. induction atys; intros.
-- reflexivity.
-- f_equal. apply type_denote_map_opaque_unwrap_opaque_hlist.
-Qed.
-
-
-Lemma compile_highest_unwrap :
-    forall G oty (v : value G (Opaque oty)),
-    Some (unwrap_opaque v) = unwrap_highest oty (MatchValues.compile_highest v).
+Lemma opaque_value_denote : forall G h oty (v : value G (Opaque oty)),
+    value_denote h v = unwrap_opaque v.
 intros.
 pattern oty, v.
 refine match v as v_ in value _ (Opaque oty_) return _ oty_ v_ with
-| VOpaque v => _
+| VOpaque v' => _
 end.
-simpl. break_match; try congruence. f_equal.
-unfold eq_rect_r. fix_eq_rect. reflexivity.
-Qed.
-
-Lemma compile_highest_unwrap_hlist :
-    forall G otys (vs : hlist (value G) (map Opaque otys)),
-    Some (unwrap_opaque_hlist vs) =
-    unwrap_highest_hlist otys (MatchValues.compile_highest_list vs).
-induction otys; intros.
-- reflexivity.
-- pattern vs. simple refine (case_hlist_cons _ _ vs).
-  intros. simpl.
-  rewrite <- IHotys.
-  rewrite <- compile_highest_unwrap.
-  reflexivity.
-Qed.
-
-Lemma liftH_highest_sim :
-    forall G (h : hlist func_type_denote G) atys rty (f : oper_implH atys rty)
-        (vs : hlist (value G) (map Opaque atys)),
-    Some (MatchValues.compile_highest (liftH_source f vs)) =
-    liftH_highest f (MatchValues.compile_highest_list vs).
-intros. simpl. unfold liftH_highest. 
-induction atys; intros.
-- reflexivity.
-- rewrite <- compile_highest_unwrap_hlist. cbn [bind_option].
-  reflexivity.
+reflexivity.
 Qed.
 
 
+Definition impl_add : opaque_oper_impl [Opaque Oint; Opaque Oint] (Opaque Oint).
+simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _  _  _ _ _ _).
 
-Definition oper_impl2 aty1 aty2 rty :=
-    opaque_type_denote aty1 ->
-    opaque_type_denote aty2 ->
-    opaque_type_denote rty.
+- exact (fun args => Int.add (hhead args) (hhead (htail args))).
+- refine (fun G args =>
+    let x := unwrap_opaque (hhead args) in
+    let y := unwrap_opaque (hhead (htail args)) in
+    VOpaque (oty := Oint) (Int.add x y)).
+- refine (fun args =>
+    match args with
+    | [HighestValues.Opaque Oint x;
+       HighestValues.Opaque Oint y] => Some (HighestValues.Opaque Oint (Int.add x y))
+    | _ => None
+    end).
+- refine (fun args =>
+    match args with
+    | [HigherValue.Opaque Oint x;
+       HigherValue.Opaque Oint y] => Some (HigherValue.Opaque Oint (Int.add x y))
+    | _ => None
+    end).
+- refine (fun args =>
+    match args with
+    | [HighValues.Opaque Oint x;
+       HighValues.Opaque Oint y] => Some (HighValues.Opaque Oint (Int.add x y))
+    | _ => None
+    end).
 
-Definition lift2H {aty1 aty2 rty} :
-        oper_impl2 aty1 aty2 rty -> oper_implH [aty1; aty2] rty :=
-    fun f => fun args => f (hhead args) (hhead (htail args)).
 
-Definition lift2 {aty1 aty2 rty} (f : oper_impl2 aty1 aty2 rty) :
-        hlist type_denote (map Opaque [aty1; aty2]) -> type_denote (Opaque rty) :=
-    liftH (lift2H f).
-
-Definition lift2_source {G aty1 aty2 rty} (f : oper_impl2 aty1 aty2 rty) :
-        hlist (value G) (map Opaque [aty1; aty2]) -> value G (Opaque rty) :=
-    liftH_source (lift2H f).
-
-Definition lift2_highest {aty1 aty2 rty} (f : oper_impl2 aty1 aty2 rty) :
-        list HighestValues.value -> option HighestValues.value :=
-    liftH_highest (lift2H f).
+- (* no_fab_clos_higher *)
+  intros. simpl in *.
+  repeat (break_match; try discriminate; [ ]). subst. inject_some.
+  on >HigherValue.VIn, invc; try solve [exfalso; eauto].
+  simpl in *. discriminate.
 
 
+- intros. simpl.
+  rewrite hmap_hhead. rewrite hmap_htail, hmap_hhead.
+  do 2 rewrite opaque_value_denote. reflexivity.
 
-Definition opaque_oper_denote {atys rty} (op : opaque_oper atys rty) :
-        hlist type_denote atys -> type_denote rty :=
+- intros. simpl in *.
+  revert H.
+  do 2 on _, invc_using (@case_hlist_cons type). on _, invc_using (@case_hlist_nil type).
+  do 2 on _, invc_using case_value_opaque.
+  simpl. reflexivity.
+
+- intros. simpl in *.
+
+  on >Forall2, invc; try discriminate.
+  on >mv_higher, invc; try discriminate.
+  destruct oty; try discriminate.
+  on >Forall2, invc; try discriminate.
+  on >mv_higher, invc; try discriminate.
+  destruct oty; try discriminate.
+  on >Forall2, invc; try discriminate.
+  inject_some.
+
+  eexists. split; eauto. econstructor.
+
+- intros. simpl in *.
+
+  on >Forall2, invc; try discriminate.
+  on >mv_high, invc; try discriminate.
+  destruct oty; try discriminate.
+  on >Forall2, invc; try discriminate.
+  on >mv_high, invc; try discriminate.
+  destruct oty; try discriminate.
+  on >Forall2, invc; try discriminate.
+  inject_some.
+
+  eexists. split; eauto. econstructor.
+
+Defined.
+
+
+Definition impl_test : opaque_oper_impl [Opaque Oint] (ADT Tbool).
+simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _  _  _ _ _ _).
+
+- exact (fun args => Int.eq (hhead args) Int.zero).
+- refine (fun G args =>
+    let x := unwrap_opaque (hhead args) in
+    if Int.eq x Int.zero
+        then VConstr CTtrue hnil
+        else VConstr CTfalse hnil).
+- refine (fun args =>
+    match args with
+    | [HighestValues.Opaque Oint x] => Some (
+           let ctor := if Int.eq x Int.zero then Ctrue else Cfalse in
+           HighestValues.Constr ctor [])
+    | _ => None
+    end).
+- refine (fun args =>
+    match args with
+    | [HigherValue.Opaque Oint x] => Some (
+           let tag := if Int.eq x Int.zero then 0 else 1 in
+           HigherValue.Constr tag [])
+    | _ => None
+    end).
+- refine (fun args =>
+    match args with
+    | [HighValues.Opaque Oint x] => Some (
+           let tag := if Int.eq x Int.zero then Int.zero else Int.one in
+           HighValues.Constr tag [])
+    | _ => None
+    end).
+
+
+- (* no_fab_clos_higher *)
+  intros. simpl in *.
+  repeat (break_match; try discriminate; [ ]). subst. inject_some.
+  on >HigherValue.VIn, invc; try solve [exfalso; eauto].
+  simpl in *. discriminate.
+
+
+- intros. simpl.
+  rewrite hmap_hhead.  rewrite opaque_value_denote.
+  destruct (Int.eq _ _); reflexivity.
+
+- intros. simpl in *.
+  revert H.
+  on _, invc_using (@case_hlist_cons type). on _, invc_using (@case_hlist_nil type).
+  on _, invc_using case_value_opaque.
+  simpl. destruct (Int.eq _ _); reflexivity.
+
+- intros. simpl in *.
+
+  on >Forall2, invc; try discriminate.
+  on >mv_higher, invc; try discriminate.
+  destruct oty; try discriminate.
+  on >Forall2, invc; try discriminate.
+  inject_some.
+
+  eexists. split; eauto. destruct (Int.eq _ _); econstructor; eauto.
+
+- intros. simpl in *.
+
+  on >Forall2, invc; try discriminate.
+  on >mv_high, invc; try discriminate.
+  destruct oty; try discriminate.
+  on >Forall2, invc; try discriminate.
+  inject_some.
+
+  eexists. split; eauto. destruct (Int.eq _ _); econstructor; eauto.
+
+Defined.
+
+
+Definition get_opaque_oper_impl {atys rty} (op : opaque_oper atys rty) :
+        opaque_oper_impl atys rty :=
     match op with
-    | Oadd => @lift2 Oint Oint Oint  Int.add
-    | Otest => fun args => Int.eq (hhead args) Int.zero
+    | Oadd => impl_add
+    | Otest => impl_test
     end.
 
-Definition opaque_oper_denote_source {G atys rty} (op : opaque_oper atys rty) :
-        hlist (value G) atys -> value G rty :=
+Definition get_opaque_oper_impl' (op : opaque_oper_name) :
+        { atys : list type & { rty : type & opaque_oper_impl atys rty } } :=
     match op with
-    | Oadd => @lift2_source _ Oint Oint Oint  Int.add
-    | Otest => fun args =>
-            let x := unwrap_opaque (hhead args) in
-            if Int.eq x Int.zero then
-                VConstr CTtrue hnil
-            else
-                VConstr CTfalse hnil
+    | ONadd => existT _ _ (existT _ _ impl_add)
+    | ONtest => existT _ _ (existT _ _ impl_test)
     end.
 
-Definition opaque_oper_denote_highest (op : opaque_oper_name) :
-        list HighestValues.value -> option HighestValues.value :=
-    match op with
-    | ONadd => @lift2_highest Oint Oint Oint  Int.add
-    | ONtest => fun args =>
-        unwrap_highest_hlist [Oint] args >>= fun args' =>
-        if Int.eq (hhead args') Int.zero
-           then Some (HighestValues.Constr Ctrue [])
-           else Some (HighestValues.Constr Cfalse [])
-    end.
-
-
-Lemma opaque_oper_source_sim :
-    forall G (h : hlist func_type_denote G) atys rty (op : opaque_oper atys rty)
-        (vs : hlist (value G) atys),
-    opaque_oper_denote op (hmap (@value_denote G h) vs) =
-    value_denote h (opaque_oper_denote_source op vs).
-destruct op; intros; try solve [eapply liftH_source_sim]; simpl.
-- (* Otest *)
-  pattern vs. simple refine (case_hlist_cons _ _ vs).  intros. simpl.
-  rewrite value_denote_unwrap_opaque.
-  break_match. all: reflexivity.
+Lemma get_opaque_oper_impl_name : forall atys rty (op : opaque_oper atys rty),
+    get_opaque_oper_impl' (opaque_oper_to_name op) =
+        existT _ atys (existT _ rty (get_opaque_oper_impl op)).
+intros.  destruct op; reflexivity.
 Qed.
 
-Lemma opaque_oper_highest_sim :
-    forall G (h : hlist func_type_denote G) atys rty (op : opaque_oper atys rty)
-        (vs : hlist (value G) atys),
-    Some (MatchValues.compile_highest (opaque_oper_denote_source op vs)) =
-    opaque_oper_denote_highest (opaque_oper_to_name op)
-        (MatchValues.compile_highest_list vs).
-destruct op; intros; try solve [eapply liftH_highest_sim; eauto]; simpl.
-- (* Otest *)
-  pattern vs. simple refine (case_hlist_cons _ _ vs).  intros. simpl.
-  rewrite <- compile_highest_unwrap. simpl.
-  break_match; simpl; reflexivity.
+
+
+Section BY_NAME.
+Local Set Implicit Arguments.
+
+Variable atys : list type.
+Variable rty : type.
+Variable op : opaque_oper atys rty.
+Let impl := get_opaque_oper_impl op.
+
+Variable op' : opaque_oper_name.
+Let impl' := get_opaque_oper_impl' op'.
+
+Hypothesis Hname : opaque_oper_to_name op = op'.
+
+Definition opaque_oper_denote := oo_denote impl.
+Definition opaque_oper_denote_source G := oo_denote_source (G := G) impl.
+Definition opaque_oper_denote_highest :=
+    let '(existT _ atys (existT _ rty impl)) := impl' in
+    oo_denote_highest impl.
+Definition opaque_oper_denote_higher :=
+    let '(existT _ atys (existT _ rty impl)) := impl' in
+    oo_denote_higher impl.
+Definition opaque_oper_denote_high :=
+    let '(existT _ atys (existT _ rty impl)) := impl' in
+    oo_denote_high impl.
+
+
+Lemma opaque_oper_no_fab_clos_higher : forall args ret,
+    opaque_oper_denote_higher args = Some ret ->
+    forall v sig,
+        HigherValue.VIn v ret ->
+        closure_sig_higher v = Some sig ->
+        exists v',
+            HigherValue.VIn_list v' args /\
+            closure_sig_higher v' = Some sig.
+intros. unfold opaque_oper_denote_higher in *.
+clearbody impl'. destruct impl' as (? & ? & impl'').
+eapply (oo_no_fab_clos_higher impl''); eauto.
 Qed.
 
+
+Lemma opaque_oper_sim_source : forall G h args,
+    opaque_oper_denote (hmap (@value_denote G h) args) =
+    value_denote h (opaque_oper_denote_source args).
+intros. eapply (oo_sim_source impl).
+Qed.
+
+Lemma opaque_oper_sim_highest : forall G args (ret : value G rty),
+    opaque_oper_denote_source args = ret ->
+    opaque_oper_denote_highest (compile_highest_list args) = Some (compile_highest ret).
+intros. unfold opaque_oper_denote_source, opaque_oper_denote_highest in *.
+unfold impl'. rewrite <- Hname. rewrite get_opaque_oper_impl_name. fold impl.
+eapply (oo_sim_highest impl). auto.
+Qed.
+
+Lemma opaque_oper_sim_higher : forall args args' ret,
+    Forall2 mv_higher args args' ->
+    opaque_oper_denote_highest args = Some ret ->
+    exists ret',
+        opaque_oper_denote_higher args' = Some ret' /\
+        mv_higher ret ret'.
+intros0 Hmv HH. unfold opaque_oper_denote_highest, opaque_oper_denote_higher in *.
+clearbody impl'. destruct impl' as (? & ? & impl'').
+eapply (oo_sim_higher impl''); eauto.
+Qed.
+
+Lemma opaque_oper_sim_high : forall args args' ret,
+    Forall2 mv_high args args' ->
+    opaque_oper_denote_higher args = Some ret ->
+    exists ret',
+        opaque_oper_denote_high args' = Some ret' /\
+        mv_high ret ret'.
+intros0 Hmv HH. unfold opaque_oper_denote_higher, opaque_oper_denote_high in *.
+clearbody impl'. destruct impl' as (? & ? & impl'').
+eapply (oo_sim_high impl''); eauto.
+Qed.
+
+End BY_NAME.

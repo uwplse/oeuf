@@ -6,6 +6,7 @@ Require Import oeuf.ListLemmas.
 Require Import oeuf.Metadata.
 Require Import oeuf.HigherValue.
 Require Import oeuf.AllValues.
+Require Import oeuf.OpaqueOps.
 Require oeuf.StepLib.
 
 Definition function_name := nat.
@@ -23,6 +24,7 @@ Inductive expr :=
 | MkConstr (tag : nat) (args : list expr)
 | Elim (cases : list (expr * rec_info)) (target : expr)
 | MkClose (f : function_name) (free : list expr)
+| OpaqueOp (o : opaque_oper_name) (args : list expr)
 .
 
 Inductive is_value : expr -> Prop :=
@@ -73,6 +75,16 @@ Inductive sstep (E : env) : state -> state -> Prop :=
 | SConstrDone : forall fname vs l k,
         let es := map Value vs in
         sstep E (Run (MkConstr fname es) l k) (k (Constr fname vs))
+
+| SOpaqueOpStep : forall op vs e es l k,
+        Forall is_value vs ->
+        ~ is_value e ->
+        sstep E (Run (OpaqueOp op (vs ++ [e] ++ es)) l k)
+                (Run e l (fun v => Run (OpaqueOp op (vs ++ [Value v] ++ es)) l k))
+| SOpaqueOpDone : forall op vs l k v,
+        let es := map Value vs in
+        opaque_oper_denote_higher op vs = Some v ->
+        sstep E (Run (OpaqueOp op es) l k) (k v)
 
 | SCallL : forall e1 e2 l k,
         ~ is_value e1 ->
@@ -127,6 +139,7 @@ Definition expr_rect_mut
     (HConstr :  forall tag args, Pl args -> P (MkConstr tag args))
     (HElim :    forall cases target, Plp cases -> P target -> P (Elim cases target))
     (HClose :   forall f free, Pl free -> P (MkClose f free))
+    (HOpaqueOp : forall o args, Pl args -> P (OpaqueOp o args))
     (Hnil :     Pl [])
     (Hcons :    forall e es, P e -> Pl es -> Pl (e :: es))
     (Hpair :    forall e r, P e -> Pp (e, r))
@@ -155,6 +168,7 @@ Definition expr_rect_mut
         | MkConstr tag args => HConstr tag args (go_list args)
         | Elim cases target => HElim cases target (go_pair_list cases) (go target)
         | MkClose f free => HClose f free (go_list free)
+        | OpaqueOp o args => HOpaqueOp o args (go_list args)
         end in go e.
 
 Definition expr_rect_mut'
@@ -162,10 +176,10 @@ Definition expr_rect_mut'
         (Pl : list expr -> Type)
         (Pp : expr * rec_info -> Type)
         (Plp : list (expr * rec_info) -> Type)
-    HValue HArg HUpVar HCall HConstr HElim HClose Hnil Hcons Hpair Hnil_p Hcons_p
+    HValue HArg HUpVar HCall HConstr HElim HClose HOpaque Hnil Hcons Hpair Hnil_p Hcons_p
     : (forall e, P e) * (forall es, Pl es) * (forall p, Pp p) * (forall ps, Plp ps) :=
     let go := expr_rect_mut P Pl Pp Plp
-        HValue HArg HUpVar HCall HConstr HElim HClose Hnil Hcons Hpair Hnil_p Hcons_p
+        HValue HArg HUpVar HCall HConstr HElim HClose HOpaque Hnil Hcons Hpair Hnil_p Hcons_p
     in
     let fix go_list es :=
         match es as es_ return Pl es_ with
@@ -191,10 +205,11 @@ Definition expr_ind' (P : expr -> Prop) (Pp : (expr * rec_info) -> Prop)
     (HConstr :  forall c args, Forall P args -> P (MkConstr c args))
     (HElim :    forall cases target, Forall Pp cases -> P target -> P (Elim cases target))
     (HClose :   forall f free, Forall P free -> P (MkClose f free))
+    (HOpaqueOp : forall o args, Forall P args -> P (OpaqueOp o args))
     (Hpair :    forall e r, P e -> Pp (e, r))
     (e : expr) : P e :=
     ltac:(refine (@expr_rect_mut P (Forall P) Pp (Forall Pp)
-        HValue HArg HUpVar HCall HConstr HElim HClose _ _ Hpair _ _ e); eauto).
+        HValue HArg HUpVar HCall HConstr HElim HClose HOpaqueOp _ _ Hpair _ _ e); eauto).
 
 (* Useful wrapper for `expr_rect_mut with (Pl := Forall P)` *)
 Definition expr_ind'' (P : expr -> Prop)
@@ -208,9 +223,10 @@ Definition expr_ind'' (P : expr -> Prop)
         P target ->
         P (Elim cases target))
     (HClose :   forall f free, Forall P free -> P (MkClose f free))
+    (HOpaqueOp : forall o args, Forall P args -> P (OpaqueOp o args))
     (e : expr) : P e :=
     ltac:(refine (@expr_rect_mut P (Forall P) (fun c => P (fst c)) (Forall (fun c => P (fst c)))
-        HValue HArg HUpVar HCall HConstr HElim HClose _ _ _ _ _ e); eauto).
+        HValue HArg HUpVar HCall HConstr HElim HClose HOpaqueOp _ _ _ _ _ e); eauto).
 
 
 (*
@@ -281,6 +297,7 @@ Definition nfree_ok_value nfrees : value -> Prop :=
         | Close fname free =>
                 nth_error nfrees fname = Some (length free) /\
                 go_list free
+        | Opaque _ _ => True
         end in go.
 
 Definition nfree_ok_value_list nfrees :=
@@ -321,6 +338,7 @@ Definition nfree_ok nfrees : expr -> Prop :=
         | MkClose fname free =>
                 nth_error nfrees fname = Some (length free) /\
                 go_list free
+        | OpaqueOp op args => go_list args
         end in go.
 
 Definition nfree_ok_list nfrees :=
@@ -412,6 +430,7 @@ all: try solve [left; constructor].
   destruct (eq_nat_dec (length free) nfree), IHe;
     simpl; refold_nfree_ok_value nfrees; try subst nfree;
     try solve [left; eauto | right; inversion 1; eauto + congruence].
+- (* OpaqueOp *) destruct IHe; simpl; left + right; eassumption.
 
 (* list, pair, etc *)
 - destruct IHe, IHe0; simpl; refold_nfree_ok nfrees;
@@ -509,6 +528,46 @@ eapply IHargs with (case := case'); eauto.
 subst case'. destruct b; simpl; eauto.
 Qed.
 
+
+
+Definition nfree_ok_value0 nfrees : value -> Prop :=
+    fun v =>
+        match v with
+        | Close fname free => nth_error nfrees fname = Some (length free)
+        | _ => True
+        end.
+
+Lemma nfree_ok_value_VForall : forall nfrees v,
+    nfree_ok_value nfrees v <-> VForall (nfree_ok_value0 nfrees) v.
+intro nfrees.
+mut_induction v using value_rect_mut' with
+    (Pl := fun vs =>
+        nfree_ok_value_list nfrees vs <-> VForall_list (nfree_ok_value0 nfrees) vs);
+[ simpl; refold_nfree_ok_value nfrees; refold_VForall (nfree_ok_value0 nfrees);
+  tauto.. | ].
+finish_mut_induction nfree_ok_value_VForall using list.
+Qed exporting.
+
+Lemma opaque_oper_denote_higher_nfree_ok_value : forall nfrees op vs v,
+    opaque_oper_denote_higher op vs = Some v ->
+    nfree_ok_value_list nfrees vs ->
+    nfree_ok_value nfrees v.
+intros.
+rewrite nfree_ok_value_VForall, VForall_VIn.
+rewrite nfree_ok_value_VForall_list, VForall_VIn_list in *.
+intros.
+rename vs into args, v into ret, v' into v.
+destruct v; try solve [constructor].
+fwd eapply opaque_oper_no_fab_clos_higher with (args := args) (ret := ret) as HH; eauto.
+  { reflexivity. }
+  destruct HH as (v0 & ? & ?).
+assert (nfree_ok_value0 nfrees v0) by eauto.
+destruct v0; try discriminate. simpl in *. inject_some.
+auto.
+Qed.
+
+
+
 Lemma step_nfree_ok : forall E nfrees s s',
     Forall (nfree_ok nfrees) E ->
     nfree_ok_state nfrees s ->
@@ -549,6 +608,20 @@ invc STEP; invc II.
   on _, eapply_.
   simpl in *. refold_nfree_ok nfrees. refold_nfree_ok_value nfrees. break_and.
   subst es.
+  eapply nfree_ok_value_list_Forall', nfree_ok_list_map_value, nfree_ok_list_Forall. auto.
+
+- (* SOpaqueOpStep *)
+  simpl in *. refold_nfree_ok nfrees. break_and.
+  on _, eapply_lem nfree_ok_list_Forall.  on _, invc_using Forall_3part_inv.
+  i_ctor. i_ctor.
+  simpl. refold_nfree_ok nfrees.
+  eapply nfree_ok_list_Forall'. i_lem Forall_app.
+
+- (* SOpaqueOpDone *)
+  on _, eapply_.
+  simpl in *. refold_nfree_ok nfrees. refold_nfree_ok_value nfrees. break_and.
+  subst es.
+  eapply opaque_oper_denote_higher_nfree_ok_value; eauto.
   eapply nfree_ok_value_list_Forall', nfree_ok_list_map_value, nfree_ok_list_Forall. auto.
 
 - (* SCallL *)
@@ -592,6 +665,7 @@ induction v using value_ind'; intros0 Hpub; invc Hpub.
   + erewrite map_nth_error; [ | eauto ]. congruence.
   + eapply nfree_ok_value_list_Forall'.
     list_magic_on (free, tt).
+- constructor.
 Qed.
 
 
@@ -624,6 +698,7 @@ Definition no_arg : expr -> Prop :=
                 go target
         | MkClose fname free =>
                 go_list free
+        | OpaqueOp op args => go_list args
         end in go.
 
 Definition no_arg_list :=
@@ -781,6 +856,7 @@ Definition elim_cases_no_arg : expr -> Prop :=
                 go target
         | MkClose fname free =>
                 go_list free
+        | OpaqueOp _ args => go_list args
         end in go.
 
 Definition elim_cases_no_arg_list :=
@@ -909,6 +985,12 @@ eauto.
   rewrite elim_cases_no_arg_list_Forall. i_lem Forall_app. i_ctor.
 
 - (* SConstrStep *)
+  simpl in *. refold_elim_cases_no_arg.
+  on _, rewrite_fwd elim_cases_no_arg_list_Forall. on _, invc_using Forall_3part_inv.
+  i_ctor. i_ctor. refold_elim_cases_no_arg.
+  rewrite elim_cases_no_arg_list_Forall. i_lem Forall_app. i_ctor.
+
+- (* SOpaqueOpStep *)
   simpl in *. refold_elim_cases_no_arg.
   on _, rewrite_fwd elim_cases_no_arg_list_Forall. on _, invc_using Forall_3part_inv.
   i_ctor. i_ctor. refold_elim_cases_no_arg.
