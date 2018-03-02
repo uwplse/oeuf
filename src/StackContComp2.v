@@ -33,6 +33,7 @@ Definition compile : A.insn -> B.insn :=
         | A.MkConstr tag nargs => B.MkConstr tag nargs
         | A.Switch cases => B.Switch (go_list_list cases)
         | A.MkClose fname nfree => B.MkClose fname nfree
+        | A.OpaqueOp op nargs => B.OpaqueOp op nargs
         end in go.
 
 Definition compile_list :=
@@ -78,6 +79,7 @@ Inductive I_insn : A.insn -> B.insn -> Prop :=
         Forall2 (Forall2 I_insn) acases bcases ->
         I_insn (A.Switch acases) (B.Switch bcases)
 | IMkClose : forall fname nfree, I_insn (A.MkClose fname nfree) (B.MkClose fname nfree)
+| IOpaqueOp : forall op nargs, I_insn (A.OpaqueOp op nargs) (B.OpaqueOp op nargs)
 .
 
 Inductive I_frame : A.frame -> B.frame -> Prop :=
@@ -418,6 +420,12 @@ simpl in *.
 - (* MkClose *)
   B_start HS.
   B_step HS. { eapply B.SCloseDone; eauto. }
+  eexists. split. exact HS.
+  i_ctor. stk_simpl'. i_ctor.
+
+- (* MkOpaqueOp *)
+  B_start HS.
+  B_step HS. { eapply B.SOpaqueOpDone; eauto. }
   eexists. split. exact HS.
   i_ctor. stk_simpl'. i_ctor.
 
