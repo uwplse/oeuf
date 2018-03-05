@@ -8,6 +8,7 @@ Require Import oeuf.Monads.
 
 Require Export oeuf.HighValues.
 Require Import oeuf.AllValues.
+Require Import oeuf.OpaqueOps.
 Require Import oeuf.ListLemmas.
 
 Inductive expr :=
@@ -24,6 +25,7 @@ Inductive stmt :=
 | MkConstr (dst : nat) (tag : int) (args : list expr)
 | Switch (dst : nat) (cases : list (Z * stmt))
 | MkClose (dst : nat) (f : nat) (free : list expr)
+| OpaqueOp (dst : nat) (op : opaque_oper_name) (args : list expr)
 | Assign (dst : nat) (e : expr)
 .
 
@@ -91,6 +93,12 @@ Inductive sstep (E : env) : state -> state -> Prop :=
         Forall2 (eval f) free vs ->
         sstep E (Run (MkClose dst fname free) f k)
                 (Run Skip (set f dst (Close (Pos.of_succ_nat fname) vs)) k)
+| SOpaqueOpDone : forall dst op args f k vs v,
+        local f dst = None ->
+        Forall2 (eval f) args vs ->
+        opaque_oper_denote_high op vs = Some v ->
+        sstep E (Run (OpaqueOp dst op args) f k)
+                (Run Skip (set f dst v) k)
 
 | SMakeCall : forall dst fe ae f k  fname free arg body ret,
         local f dst = None ->
@@ -159,6 +167,7 @@ Inductive fit_public_value (M : list metadata) : value -> Prop :=
         Forall (fit_public_value M) free ->
         length free = m_nfree m ->
         fit_public_value M (Close fname free)
+| PvOpaque : forall ty v, fit_public_value M (Opaque ty v)
 .
 
 Inductive is_callstate (prog : prog_type) : valtype -> valtype -> state -> Prop :=
@@ -201,6 +210,7 @@ Definition stmt_rect_mut
     (HConstr :  forall dst tag args, P (MkConstr dst tag args))
     (HSwitch :  forall dst cases, Pl cases -> P (Switch dst cases))
     (HClose :   forall dst fname free, P (MkClose dst fname free))
+    (HOpaqueOp : forall dst op args, P (OpaqueOp dst op args))
     (HAssign :  forall dst src, P (Assign dst src))
     (Hnil :     Pl [])
     (Hcons :    forall k i is, P i -> Pl is -> Pl ((k, i) :: is))
@@ -218,6 +228,7 @@ Definition stmt_rect_mut
         | MkConstr dst tag args => HConstr dst tag args
         | Switch dst cases => HSwitch dst cases (go_list cases)
         | MkClose dst fname free => HClose dst fname free
+        | OpaqueOp dst op args => HOpaqueOp dst op args
         | Assign dst src => HAssign dst src
         end in go i.
 
@@ -229,10 +240,11 @@ Definition stmt_ind' (P : stmt -> Prop)
     (HConstr :  forall dst tag args, P (MkConstr dst tag args))
     (HSwitch :  forall dst cases, Forall (fun p => P (snd p)) cases -> P (Switch dst cases))
     (HClose :   forall dst fname free, P (MkClose dst fname free))
+    (HOpaqueOp : forall dst op args, P (OpaqueOp dst op args))
     (HAssign :  forall dst src, P (Assign dst src))
     (i : stmt) : P i :=
     ltac:(refine (@stmt_rect_mut P (Forall (fun p => P (snd p)))
-        HSkip HSeq HCall HConstr HSwitch HClose HAssign _ _ i); eauto).
+        HSkip HSeq HCall HConstr HSwitch HClose HOpaqueOp HAssign _ _ i); eauto).
 
 
 
@@ -251,6 +263,7 @@ Definition dests_below n :=
         | MkConstr dst _ _ => dst < n
         | Switch _ cases => go_list cases
         | MkClose dst _ _ => dst < n
+        | OpaqueOp dst _ _ => dst < n
         | Assign dst _ => dst < n
         end in go.
 
@@ -280,6 +293,7 @@ Definition max_dest :=
         | MkConstr dst _ _ => dst
         | Switch _ cases => go_list cases
         | MkClose dst _ _ => dst
+        | OpaqueOp dst _ _ => dst
         | Assign dst _ => dst
         end in go.
 
@@ -314,6 +328,7 @@ intros0 Hdb Hle; simpl in *; refold_dests_below n; refold_dests_below m.
 - firstorder.
 - lia.
 - lia.
+- lia.
 
 - auto.
 - firstorder.
@@ -343,6 +358,7 @@ simpl in *; refold_max_dest.
 - refold_dests_below (S (max_dest_list cases)). auto.
 - lia.
 - lia.
+- lia.
 
 - auto.
 - split.
@@ -362,6 +378,7 @@ Definition no_switch :=
         | MkConstr dst _ _ => True
         | Switch _ cases => False
         | MkClose dst _ _ => True
+        | OpaqueOp dst _ _ => True
         | Assign dst _ => True
         end in go.
 
@@ -443,6 +460,7 @@ simpl in *; refold_no_switch.
 - intuition.
 - auto.
 - intuition.
+- intuition.
 - fwd eapply Forall_nth_error; eauto. simpl in *. intuition.
 
 - break_and. split; auto.
@@ -477,6 +495,7 @@ Definition fnames_below n :=
         | MkConstr _ _ _ => True
         | Switch _ cases => go_list cases
         | MkClose _ fname _ => fname < n
+        | OpaqueOp _ _ _ => True
         | Assign _ _ => True
         end in go.
 
@@ -546,6 +565,7 @@ simpl in *; refold_fnames_below n.
 
 - intuition.
 - auto.
+- intuition.
 - intuition.
 - fwd eapply Forall_nth_error; eauto. simpl in *. intuition.
 

@@ -41,6 +41,7 @@ Definition compile : A.insn -> state nat B.insn :=
         | A.MkConstr tag nargs => B.MkConstr <$> fresh <*> pure tag <*> pure nargs
         | A.Switch cases => B.Switch <$> fresh <*> go_list_list cases
         | A.MkClose fname nfree => B.MkClose <$> fresh <*> pure fname <*> pure nfree
+        | A.OpaqueOp op nargs => B.OpaqueOp <$> fresh <*> pure op <*> pure nargs
         end in go.
 
 Definition compile_list :=
@@ -101,6 +102,8 @@ Inductive I_insn : A.insn -> B.insn -> Prop :=
         I_insn (A.Switch acases) (B.Switch dst bcases)
 | IMkClose : forall dst fname nfree,
         I_insn (A.MkClose fname nfree) (B.MkClose dst fname nfree)
+| IOpaqueOp : forall dst op nargs,
+        I_insn (A.OpaqueOp op nargs) (B.OpaqueOp dst op nargs)
 .
 
 Inductive I_frame : A.frame -> B.frame -> Prop :=
@@ -536,6 +539,13 @@ simpl in *; B.refold_dests; try subst.
     { erewrite <- Forall2_length; eauto. }
     { unfold B.local. simpl. eapply Forall2_rev, Forall2_firstn.
       instantiate (1 := astk). list_magic_on (astk, (bstk, tt)). }
+  i_ctor.
+
+- (* OpaqueOp *)
+  eexists. split. eapply B.SOpaqueOpDone; simpl; eauto.
+    { erewrite <- Forall2_length; eauto. }
+    { unfold B.local. simpl. eapply Forall2_rev, Forall2_firstn.
+      list_magic_on (astk, (bstk, tt)). }
   i_ctor.
 
 - (* MakeCall *)

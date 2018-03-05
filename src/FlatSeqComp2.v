@@ -34,6 +34,7 @@ Definition compile : A.insn -> B.insn :=
         | A.MkConstr dst tag args => B.MkConstr dst tag args
         | A.Switch dst cases => B.Switch dst (go_list_list cases)
         | A.MkClose dst fname free => B.MkClose dst fname free
+        | A.OpaqueOp dst op args => B.OpaqueOp dst op args
         | A.Copy dst src => B.Copy dst src
         end in go.
 
@@ -84,6 +85,8 @@ Inductive I_insn : A.insn -> B.insn -> Prop :=
         I_insn (A.Switch dst acases) (B.Switch dst bcases)
 | IMkClose : forall dst fname free,
         I_insn (A.MkClose dst fname free) (B.MkClose dst fname free)
+| IOpaqueOp : forall dst op args,
+        I_insn (A.OpaqueOp dst op args) (B.OpaqueOp dst op args)
 | ICopy : forall dst src,
         I_insn (A.Copy dst src) (B.Copy dst src)
 .
@@ -239,6 +242,10 @@ simpl in *.
 
 - (* MkClose *)
   eexists. split. eapply B.SCloseDone; eauto.
+  i_ctor.
+
+- (* MkClose *)
+  eexists. split. eapply B.SOpaqueOpDone; eauto.
   i_ctor.
 
 - (* MakeCall *)
