@@ -140,6 +140,9 @@ Inductive mv_fmajor (M : id_map) : HighValues.value -> HighValues.value -> Prop 
         Forall2 (mv_fmajor M) afree bfree ->
         mv_fmajor M (HighValues.Close afname afree)
                     (HighValues.Close bfname bfree)
+| FmOpaque : forall oty ov,
+        mv_fmajor M (HighValues.Opaque oty ov)
+                    (HighValues.Opaque oty ov)
 .
 
 
