@@ -20,6 +20,7 @@ Require Import StructTact.StructTactics.
 Require Import StructTact.Util.
 
 Require Import oeuf.HighValues.
+Require Import oeuf.OpaqueOps.
 
 Require Import oeuf.StuartTact.
 Require Import oeuf.EricTact.
@@ -46,6 +47,7 @@ Fixpoint transf_stmt (s : Fmajor.stmt) : Fflatmajor.stmt :=
   | Fmajor.Sassign dst exp => Sassign dst (transf_expr exp)
   | Fmajor.SmakeConstr dst tag args => SmakeConstr dst tag (map transf_expr args)
   | Fmajor.SmakeClose dst fname args => SmakeClose dst fname (map transf_expr args) 
+  | Fmajor.SopaqueOp dst op args => SopaqueOp dst op (map transf_expr args)
   | Fmajor.Sseq s1 s2 => Sseq (transf_stmt s1) (transf_stmt s2)
   | Fmajor.Sswitch targid cases target => Fflatmajor.Sswitch targid (transf_cases cases) (transf_expr target)
   end.
@@ -331,6 +333,13 @@ Proof.
     eapply find_symbol_transf; eauto.
     eapply find_funct_ptr_transf; eauto.
     
+    econstructor; eauto.
+
+  (* opaque_op *)
+  + eexists. split.
+    eapply plus_one.
+    econstructor; eauto.
+    eapply eval_exprlist_transf; eauto.
     econstructor; eauto.
 
   (* switch *)

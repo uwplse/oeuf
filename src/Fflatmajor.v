@@ -21,6 +21,7 @@ Require Import StructTact.Util.
 
 Require Import oeuf.HighValues.
 Require Import oeuf.AllValues.
+Require Import oeuf.OpaqueOps.
 
 Inductive expr : Type :=
 | Var : ident -> expr
@@ -34,6 +35,7 @@ Inductive stmt : Type :=
 | SmakeConstr (dst : ident) (tag : int) (args : list expr)
 | Sswitch (targid : ident) (cases : list (Z * stmt)) (target : expr)
 | SmakeClose (dst : ident) (f : function_name) (free : list expr)
+| SopaqueOp (dst : ident) (op : opaque_oper_name) (args : list expr)
 | Sseq (s1 : stmt) (s2 : stmt)
 | Sreturn (e : expr)
 .
@@ -189,6 +191,12 @@ Inductive step : state -> trace -> state -> Prop :=
       Genv.find_funct_ptr ge bcode = Some fn ->
       step (State f (SmakeClose id fname l) k e)
         E0 (State f Sskip k (PTree.set id (Close fname vargs) e))
+  | step_opaque_op: forall id op l f k e vargs v,
+      eval_exprlist e l vargs ->
+      e ! id = None ->
+      opaque_oper_denote_high op vargs = Some v ->
+      step (State f (SopaqueOp id op l) k e)
+        E0 (State f Sskip k (PTree.set id v e))
   | step_switch: forall e target targid tag vargs cases s k f,
       eval_expr e target (Constr tag vargs) -> (* eval match target *)
       find_case (Int.unsigned tag) cases = Some s -> (* find the right case *) 
