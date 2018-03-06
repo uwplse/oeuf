@@ -21,6 +21,7 @@ Require Import StructTact.StructTactics.
 Require Import StructTact.Util.
 
 Require Import oeuf.HighValues.
+Require Import oeuf.OpaqueOps.
 
 Require Import oeuf.EricTact.
 
@@ -61,6 +62,7 @@ let transf_cases (targid : ident) (cases : list (Z * Fflatmajor.stmt)) (target_d
   | Fflatmajor.Sassign dst exp => Sassign dst (transf_expr exp)
   | Fflatmajor.SmakeConstr dst tag args => SmakeConstr dst tag (map transf_expr args)
   | Fflatmajor.SmakeClose dst fname args => SmakeClose dst fname (map transf_expr args) 
+  | Fflatmajor.SopaqueOp dst op args => SopaqueOp dst op (map transf_expr args)
   | Fflatmajor.Sseq s1 s2 => Sseq (transf_stmt s1) (transf_stmt s2)
   | Fflatmajor.Sswitch targid cases target => transf_cases targid cases (transf_expr target)
   | Fflatmajor.Sreturn exp => Sreturn (transf_expr exp)
