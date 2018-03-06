@@ -680,3 +680,47 @@ intros.
 eapply prog_public_public_value'; try eassumption.
 symmetry. eauto using transform_partial_program_public.
 Qed.
+
+
+
+
+Definition change_only_fnames (P : function_name -> function_name -> Prop) :
+        value -> value -> Prop :=
+    let fix go v1 v2 :=
+        let fix go_list vs1 vs2 :=
+            match vs1, vs2 with
+            | [], [] => True
+            | v1 :: vs1, v2 :: vs2 => go v1 v2 /\ go_list vs1 vs2
+            | _, _ => False
+            end in
+        match v1, v2 with
+        | Constr tag1 args1, Constr tag2 args2 =>
+                tag1 = tag2 /\ go_list args1 args2
+        | Close f1 free1, Close f2 free2 =>
+                P f1 f2 /\ go_list free1 free2
+        | Opaque oty1 ov1, Opaque oty2 ov2 =>
+                existT _ oty1 ov1 = existT _ oty2 ov2
+        | _, _ => False
+        end in go.
+
+Definition change_only_fnames_list (P : function_name -> function_name -> Prop) :=
+    let go := change_only_fnames P in
+    let fix go_list vs1 vs2 :=
+        match vs1, vs2 with
+        | [], [] => True
+        | v1 :: vs1, v2 :: vs2 => go v1 v2 /\ go_list vs1 vs2
+        | _, _ => False
+        end in go_list.
+
+Ltac refold_change_only_fnames P := fold (change_only_fnames P) in *.
+
+Lemma change_only_fnames_list_Forall : forall P vs1 vs2,
+    change_only_fnames_list P vs1 vs2 <->
+    Forall2 (change_only_fnames P) vs1 vs2.
+induction vs1; destruct vs2; split; intro HH; invc HH.
+- constructor.
+- constructor.
+- constructor; eauto. firstorder.
+- constructor; eauto. firstorder.
+Qed.
+

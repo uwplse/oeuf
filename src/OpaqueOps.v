@@ -64,6 +64,12 @@ Record opaque_oper_impl {atys rty} := MkOpaqueOperImpl {
                 exists v',
                     HigherValue.VIn_list v' args /\
                     closure_sig_higher v' = Some sig;
+        oo_change_fnames_high : forall P args args' ret,
+            oo_denote_high args = Some ret ->
+            Forall2 (HighValues.change_only_fnames P) args args' ->
+            exists ret',
+                oo_denote_high args' = Some ret' /\
+                HighValues.change_only_fnames P ret ret';
 
         (* simulation proofs *)
         oo_sim_source : forall G (h : hlist func_type_denote G) vs,
@@ -136,7 +142,7 @@ Qed.
 
 
 Definition impl_add : opaque_oper_impl [Opaque Oint; Opaque Oint] (Opaque Oint).
-simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _  _  _ _ _ _).
+simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _  _ _  _ _ _ _).
 
 - exact (fun args => Int.add (hhead args) (hhead (htail args))).
 - refine (fun G args =>
@@ -168,6 +174,13 @@ simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _  _  _ _ _ _).
   repeat (break_match; try discriminate; [ ]). subst. inject_some.
   on >HigherValue.VIn, invc; try solve [exfalso; eauto].
   simpl in *. discriminate.
+
+- (* change_fname_high *)
+  intros. simpl in *.
+  repeat (break_match_hyp; try discriminate; [ ]).
+  repeat on >Forall2, invc. simpl in *. repeat (break_match; try contradiction).
+  fix_existT. subst. inject_some.
+  eexists; split; eauto. simpl. eauto.
 
 
 - intros. simpl.
@@ -210,7 +223,7 @@ Defined.
 
 
 Definition impl_test : opaque_oper_impl [Opaque Oint] (ADT Tbool).
-simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _  _  _ _ _ _).
+simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _  _ _  _ _ _ _).
 
 - exact (fun args => Int.eq (hhead args) Int.zero).
 - refine (fun G args =>
@@ -246,6 +259,13 @@ simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _  _  _ _ _ _).
   repeat (break_match; try discriminate; [ ]). subst. inject_some.
   on >HigherValue.VIn, invc; try solve [exfalso; eauto].
   simpl in *. discriminate.
+
+- (* change_fname_high *)
+  intros. simpl in *.
+  repeat (break_match_hyp; try discriminate; [ ]).
+  repeat on >Forall2, invc. simpl in *. break_match; try contradiction.
+  fix_existT. subst. inject_some.
+  eexists; split; eauto. simpl. eauto.
 
 
 - intros. simpl.
@@ -340,6 +360,17 @@ Lemma opaque_oper_no_fab_clos_higher : forall args ret,
 intros. unfold opaque_oper_denote_higher in *.
 clearbody impl'. destruct impl' as (? & ? & impl'').
 eapply (oo_no_fab_clos_higher impl''); eauto.
+Qed.
+
+Lemma opaque_oper_change_fnames_high : forall P args args' ret,
+    opaque_oper_denote_high args = Some ret ->
+    Forall2 (HighValues.change_only_fnames P) args args' ->
+    exists ret',
+        opaque_oper_denote_high args' = Some ret' /\
+        HighValues.change_only_fnames P ret ret'.
+intros. unfold opaque_oper_denote_high in *.
+clearbody impl'. destruct impl' as (? & ? & impl'').
+eapply (oo_change_fnames_high impl''); eauto.
 Qed.
 
 
