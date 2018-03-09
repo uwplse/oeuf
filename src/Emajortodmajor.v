@@ -28,6 +28,8 @@ Require Import oeuf.EricTact.
 Require Import oeuf.Emajor.
 Require Import oeuf.Dmajor.
 Require Import oeuf.HighValues.
+Require Import oeuf.OpaqueOps.
+Require Import oeuf.MemFacts.
 
 Local Open Scope error_monad_scope.
 
@@ -74,6 +76,7 @@ Fixpoint transf_stmt (s : Emajor.stmt) : Dmajor.stmt :=
     alloc id sz;;
       store (var id) (Econst (Oaddrsymbol fname Int.zero));;
       store_args id args 4%Z
+  | Emajor.SopaqueOp id op args => Dmajor.SopaqueOp id op args
   | Emajor.Sexit n => Dmajor.Sexit n
   | Emajor.Sreturn exp => Dmajor.Sreturn (Some (transf_expr exp))
   end.
@@ -100,6 +103,7 @@ Fixpoint walk_stmt (s : Emajor.stmt) : state (list ident) unit :=
     | Emajor.SmakeConstr x _ _ => record_local x
     | Emajor.Sswitch x _ _ _ => record_local x
     | Emajor.SmakeClose x _ _ => record_local x
+    | Emajor.SopaqueOp x _ _ => record_local x
     | Emajor.Sseq s1 s2 =>
             walk_stmt s1 >>= fun _ =>
             walk_stmt s2 >>= fun _ =>
@@ -509,21 +513,6 @@ Proof.
 Qed.
 
 
-Lemma alloc_store :
-  forall m lo hi m' b,
-    Mem.alloc m lo hi = (m',b) ->
-    forall v c,
-      hi - lo > size_chunk c ->
-      (align_chunk c | lo) ->
-      { m'' : mem | Mem.store c m' b lo v = Some m''}.
-Proof.
-  intros.
-  app Mem.valid_access_alloc_same Mem.alloc; try omega.
-  app Mem.valid_access_implies Mem.valid_access.
-  2: instantiate (1 := Writable); econstructor; eauto.
-  eapply Mem.valid_access_store; eauto.
-Qed.
-
 Lemma value_inject_load :
   forall m x tag args,
     value_inject tge m (Constr tag args) x ->
@@ -555,51 +544,6 @@ Proof.
   eapply IHparms; eauto.
   rewrite PTree.gso in H0 by congruence.
   eauto.
-Qed.
-
-Definition mem_locked' (m m' : mem) (b : block) : Prop :=
-  forall b',
-    (b' < b)%positive ->
-    forall ofs c v,
-      Mem.load c m b' ofs = Some v ->
-      Mem.load c m' b' ofs = Some v.
-
-Definition mem_locked (m m' : mem) : Prop :=
-  mem_locked' m m' (Mem.nextblock m).
-
-
-Lemma load_lt_nextblock :
-  forall c m b ofs v,
-    Mem.load c m b ofs = Some v ->
-    (b < Mem.nextblock m)%positive.
-Proof.
-  intros.
-  remember (Mem.nextblock_noaccess m) as H2.
-  clear HeqH2.
-  destruct (plt b (Mem.nextblock m)). assumption.
-  app Mem.load_valid_access Mem.load.
-  unfold Mem.valid_access in *.
-  break_and. unfold Mem.range_perm in *.
-  specialize (H ofs).
-  assert (ofs <= ofs < ofs + size_chunk c).
-  destruct c; simpl; omega.
-  specialize (H H3).
-  unfold Mem.perm in *.
-  unfold Mem.perm_order' in H.
-  rewrite H2 in H; eauto. inversion H.
-Qed.
-
-Lemma alloc_mem_locked :
-  forall m lo hi m' b,
-    Mem.alloc m lo hi = (m',b) ->
-    mem_locked m m'.
-Proof.
-  unfold mem_locked.
-  unfold mem_locked'.
-  intros.
-  app Mem.alloc_result Mem.alloc. subst b.
-  app load_lt_nextblock Mem.load.
-  erewrite Mem.load_alloc_unchanged; eauto.
 Qed.
 
 
@@ -683,102 +627,6 @@ Proof.
   intros. eapply H0. simpl. right. auto.
 Qed.
 
-Definition writable (m : mem) (b : block) (lo hi : Z) : Prop :=
-  forall ofs k,
-    lo <= ofs < hi ->
-    Mem.perm m b ofs k Freeable.
-
-Lemma alloc_writable :
-  forall m lo hi m' b,
-    Mem.alloc m lo hi = (m',b) ->
-    writable m' b lo hi.
-Proof.
-  intros.
-  unfold writable.
-  intros.
-  eapply Mem.perm_alloc_2; eauto.
-Qed.  
-
-Lemma pos_lt_neq :
-  forall p q,
-    (p < q)%positive ->
-    p <> q.
-Proof.
-  intros.
-  unfold Pos.lt in H.
-  intro. rewrite <- Pos.compare_eq_iff in H0.
-  congruence.
-Qed.
-  
-
-Lemma mem_locked_store_nextblock :
-  forall m m',
-    mem_locked m m' ->
-    forall c ofs v m'',
-      Mem.store c m' (Mem.nextblock m) ofs v = Some m'' ->
-      mem_locked m m''.
-Proof.
-  intros.
-  unfold mem_locked in *.
-  unfold mem_locked' in *.
-  intros.
-  app Mem.load_store_other Mem.store.
-  rewrite H0.
-  eapply H; eauto.
-  left.
-  eapply pos_lt_neq; eauto.
-Qed.
-
-Lemma writable_storeable :
-  forall m b lo hi,
-    writable m b lo hi ->
-    forall c v ofs,
-      lo <= ofs < hi ->
-      (align_chunk c | ofs) ->
-      hi >= ofs + size_chunk c ->
-      {m' : mem | Mem.store c m b ofs v = Some m' /\ writable m' b lo hi }.
-Proof.
-  intros.
-  assert (Mem.valid_access m c b ofs Writable).
-  unfold Mem.valid_access. split; auto.
-  unfold Mem.range_perm. intros.
-  unfold writable in H.
-  eapply Mem.perm_implies; try apply H; eauto; try solve [econstructor].
-  omega.
-  app Mem.valid_access_store Mem.valid_access.
-  destruct H3.
-  exists x. split. apply e.
-  unfold writable. intros.
-  eapply Mem.perm_store_1; eauto.
-Qed.
-
-Lemma writable_storevable :
-  forall m b lo hi,
-    writable m b lo hi ->
-    forall c v ofs,
-      lo <= Int.unsigned ofs < hi ->
-      (align_chunk c | Int.unsigned ofs) ->
-      hi >= (Int.unsigned ofs) + size_chunk c ->
-      {m' : mem | Mem.storev c m (Vptr b ofs) v = Some m' /\ writable m' b lo hi }.
-Proof.
-  intros.
-  app writable_storeable writable.
-Qed.
-
-Lemma mem_locked_load :
-  forall m m',
-    mem_locked m m' ->
-    forall c b ofs v,
-      Mem.load c m b ofs = Some v ->
-      Mem.load c m' b ofs = Some v.
-Proof.
-  intros.
-  unfold mem_locked in *.
-  unfold mem_locked' in *.
-  eapply H; eauto.
-  eapply load_lt_nextblock; eauto.
-Qed.
-      
 Lemma eval_expr_mem_locked :
   forall m m',
     mem_locked m m' ->
