@@ -89,6 +89,12 @@ Notation "**" := (ltac:(eassumption)) (only parsing).
 Notation "***" := (ltac:(eauto)) (only parsing).
 Notation "??" := (ltac:(shelve)) (only parsing).
 
+Ltac spec_assert H :=
+    match type of H with
+    | forall x : ?T, _ =>
+            assert (HH : T); [ | specialize (H HH); try clear HH ]
+    end.
+
 
 
 (* list_magic and friends *)

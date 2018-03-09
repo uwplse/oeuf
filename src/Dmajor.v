@@ -220,6 +220,10 @@ Inductive step: state -> trace -> state -> Prop :=
         external_call EF_malloc ge (v :: nil) m t vres m' ->
         step (State f (Salloc id expr) k e m)
            t (State f Sskip k (PTree.set id vres e) m')
+  | step_opaque_op : forall id 
+      eval_exprlist e m args vargs ->
+      step (State f (SopaqueOp id op args) k e m)
+        E0 (State f Sskip k (PTree.set id vret e) m')
   | step_seq: forall f s1 s2 k e m,
       step (State f (Sseq s1 s2) k e m)
         E0 (State f s1 (Kseq s2 k) e m)

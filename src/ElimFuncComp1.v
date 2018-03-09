@@ -272,37 +272,6 @@ Inductive I (AE : A.env) (BE : B.env) : A.state -> B.state -> Prop :=
 
 
 
-Ltac spec_assert H :=
-    match type of H with
-    | forall x : ?T, _ =>
-            assert (HH : T); [ | specialize (H HH); try clear HH ]
-    end.
-
-Lemma Forall2_imp : forall {A B} (P Q : A -> B -> Prop) xs ys,
-    Forall2 P xs ys ->
-    (forall x y, P x y -> Q x y) ->
-    Forall2 Q xs ys.
-induction xs; destruct ys; intros0 Hfa Himp; invc Hfa; econstructor; eauto.
-Qed.
-
-Lemma Forall2_conj : forall {A B} (P Q : A -> B -> Prop) xs ys,
-    Forall2 P xs ys ->
-    Forall2 Q xs ys ->
-    Forall2 (fun x y => P x y /\ Q x y) xs ys.
-induction xs; destruct ys; intros0 Hfa1 Hfa2; invc Hfa1; invc Hfa2; econstructor; eauto.
-Qed.
-
-Lemma Forall2_conj_inv : forall A B (P Q : A -> B -> Prop) xs ys (M : Prop),
-    (Forall2 P xs ys ->
-        Forall2 Q xs ys ->
-        M) ->
-    Forall2 (fun x y => P x y /\ Q x y) xs ys -> M.
-intros0 HM Hfa.
-eapply HM; eapply Forall2_imp with (1 := Hfa); intros; firstorder.
-Qed.
-
-
-
 Lemma I_expr_weaken : forall BE BE' nfree depth ae be,
     I_expr BE nfree depth ae be ->
     I_expr (BE ++ BE') nfree depth ae be.

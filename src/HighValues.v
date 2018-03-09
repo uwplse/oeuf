@@ -21,8 +21,10 @@ Require Import StructTact.Util.
 
 Require Import oeuf.Metadata.
 Require Import oeuf.OpaqueTypes.
+Require Import oeuf.MemInjProps.
 
 Require Import oeuf.EricTact.
+Require Import oeuf.StuartTact.
 
 (* Computation will be over higher level values, i.e. Constr and Close *)
 (* We will need a way to relate those to lower level values *)
@@ -141,21 +143,12 @@ Inductive value_inject {A B} (ge : Genv.t A B) (m : mem) : value -> val -> Prop 
       Genv.find_symbol ge fname = Some bcode -> (* name we have points to same code *)
       load_all (arg_addrs b (Int.add ofs (Int.repr 4)) values) m = Some l' -> (* one more deref for args *)
       (forall a b, In (a,b) l' -> value_inject ge m a b) -> (* all args inject *)
-      value_inject ge m (Close fname values) (Vptr b ofs).
+      value_inject ge m (Close fname values) (Vptr b ofs)
+| inj_opaque : forall oty ov cv,
+        opaque_type_value_inject oty ov cv m ->
+        value_inject ge m (Opaque oty ov) cv
+.
 
-
-(* nothing is moved around within blocks *)
-Definition same_offsets (mi : meminj) : Prop :=
-  forall b b' delta,
-    mi b = Some (b',delta) ->
-    delta = 0.
-
-(* globals aren't moved around *)
-Definition globals_inj_same {F V} (ge : Genv.t F V) (mi : meminj) : Prop :=
-  forall b f v,
-    (Genv.find_funct_ptr ge b = Some f \/
-    Genv.find_var_info ge b = Some v) ->
-    mi b = Some (b,0).
 
 Lemma load_all_inject :
     forall l b ofs k args b' mi m m',
@@ -221,8 +214,13 @@ Lemma value_val_inject :
       globals_inj_same ge mi ->
       value_inject ge m' v v0.
 Proof.
-  induction v using value_ind'; intros;
-    try solve [inv H]; (* handle opaque *)
+  induction v using value_ind'; intros; cycle 2.
+
+  { on >@value_inject, invc. fix_existT.  subst. econstructor.
+    on >Mem.inject, invc.  eapply opaque_type_value_val_inject; eauto. }
+
+
+  all: try solve [inv H]; (* handle opaque *)
     inv H0; inv H1;
       app Mem.loadv_inject Mem.loadv;
       inv H7; app H3 (mi b); subst delta;
@@ -274,6 +272,7 @@ Proof.
   econstructor; eauto.
   eapply H5 in H0.
   break_exists.
+  econstructor; eauto.
   econstructor; eauto.
 Qed.
 
@@ -380,23 +379,28 @@ Proof.
     subst.
     invc H.
     eapply IHl in Heqo0; eauto.
-    app Mem.loadv_extends Mem.loadv.
-    break_exists; break_and. eexists; split.
-    simpl. repeat collapse_match. reflexivity.
-    Focus 2. intros. eapply H0. simpl. right. assumption.
-    
-    intros. simpl in H7. destruct H7.
-    Focus 2. eapply H6. assumption.
 
-    invc H7.
-    assert (value_inject ge m' a v1). {
-      eapply H2. simpl. left. auto.
-    }
-    assert (v1 = b) by (inv H7; inv H5; congruence). subst.
-    assumption.
+    + app Mem.loadv_extends Mem.loadv.
+      break_exists; break_and. eexists; split.
+        { simpl. repeat collapse_match. reflexivity. }
 
+      intros. simpl in H7. destruct H7; cycle 1.
+        { eapply H6. assumption. }
+      invc H7.
+      assert (value_inject ge m' a v1). {
+        eapply H2. simpl. left. auto.
+      }
+      assert (v1 = b). {
+        inv H7; inv H5; try congruence.
+        - (* opaque case *)
+          on >@value_inject, invc.
+          fwd eapply opaque_type_inject_defined; eauto.  congruence.
+      } subst.
+      assumption.
 
-    intros. eapply H2. simpl. right. auto.
+    + intros. eapply H0. simpl. right. assumption.
+
+    + intros. eapply H2. simpl. right. auto.
 Qed.
 
 Lemma load_all_result_decomp :
@@ -450,8 +454,20 @@ Proof.
                                                    list_forall2 (value_inject ge m') vs vs'
                                         ); intros;
     inv H;
-    try solve [econstructor; eauto];
-    app Mem.loadv_extends Mem.loadv;
+    try solve [econstructor; eauto].
+
+  Focus 3. {
+    on >Mem.extends, invc. on >@value_inject, invc. fix_existT. subst.
+    assert (same_offsets inject_id).
+      { unfold same_offsets, inject_id. simpl. intros. congruence. }
+    econstructor.
+    eapply opaque_type_value_val_inject; eauto.
+    - destruct v'; econstructor; eauto.
+      + reflexivity.
+      + rewrite Int.add_zero. reflexivity.
+  } Unfocus.
+
+  all: app Mem.loadv_extends Mem.loadv;
     app (@load_all_extends F V) load_all;
   try solve [econstructor; eauto;
              inv H3; eauto].
@@ -592,12 +608,6 @@ Ltac clean :=
   | [ H : Some _ = Some _ |- _ ] => invc H
   | [ H : False |- _ ] => inv H
   end; try congruence.
-
-Fixpoint zip {A B} (a : list A) (b : list B) : list (A * B) :=
-  match a,b with
-  | f :: r, x :: y => (f,x) :: zip r y
-  | _,_ => nil
-  end.
 
 
 
