@@ -58,7 +58,7 @@ Record opaque_oper_impl {atys rty} := MkOpaqueOperImpl {
         oo_denote_highest : list HighestValues.value -> option HighestValues.value;
         oo_denote_higher : list HigherValue.value -> option HigherValue.value;
         oo_denote_high : list HighValues.value -> option HighValues.value;
-        oo_denote_mem_effect : forall A B, Genv.t A B -> mem -> list val -> mem -> val -> Prop;
+        oo_denote_mem_effect : forall {A B}, Genv.t A B -> mem -> list val -> mem -> val -> Prop;
         (* TODO: oo_denote_low *)
 
         (* properties *)
@@ -103,7 +103,7 @@ Record opaque_oper_impl {atys rty} := MkOpaqueOperImpl {
             Forall2 (HighValues.value_inject ge m) args args' ->
             oo_denote_high args = Some ret ->
             exists m' ret',
-                oo_denote_mem_effect A B ge m args' m' ret' /\
+                oo_denote_mem_effect ge m args' m' ret' /\
                 HighValues.value_inject ge m' ret ret'
     }.
 
@@ -405,9 +405,9 @@ Definition opaque_oper_denote_higher :=
 Definition opaque_oper_denote_high :=
     let '(existT _ atys (existT _ rty impl)) := impl' in
     oo_denote_high impl.
-Definition opaque_oper_denote_mem_effect :=
+Definition opaque_oper_denote_mem_effect {A B} :=
     let '(existT _ atys (existT _ rty impl)) := impl' in
-    oo_denote_mem_effect impl.
+    oo_denote_mem_effect (A := A) (B := B) impl.
 
 
 Lemma opaque_oper_no_fab_clos_higher : forall args ret,
