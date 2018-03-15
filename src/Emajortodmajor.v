@@ -14,22 +14,26 @@ Require Import compcert.common.Switch.
 Require Import oeuf.FullSemantics.
 Require oeuf.TraceSemantics.
 
+Require Import String.
 Require Import List.
 Import ListNotations.
 Require Import Arith.
 Require Import Ring.
+Require Import Psatz.
 
 Require Import StructTact.StructTactics.
 Require Import StructTact.Util.
 
 
 Require Import oeuf.EricTact.
+Require Import oeuf.StuartTact.
 
 Require Import oeuf.Emajor.
 Require Import oeuf.Dmajor.
 Require Import oeuf.HighValues.
 Require Import oeuf.OpaqueOps.
 Require Import oeuf.MemFacts.
+Require Import oeuf.ListLemmas.
 
 Local Open Scope error_monad_scope.
 
@@ -76,7 +80,7 @@ Fixpoint transf_stmt (s : Emajor.stmt) : Dmajor.stmt :=
     alloc id sz;;
       store (var id) (Econst (Oaddrsymbol fname Int.zero));;
       store_args id args 4%Z
-  | Emajor.SopaqueOp id op args => Dmajor.SopaqueOp id op args
+  | Emajor.SopaqueOp id op args => Dmajor.SopaqueOp id op (map transf_expr args)
   | Emajor.Sexit n => Dmajor.Sexit n
   | Emajor.Sreturn exp => Dmajor.Sreturn (Some (transf_expr exp))
   end.
@@ -116,51 +120,25 @@ Definition collect_locals (s : Emajor.stmt) : list ident :=
 End collect_locals.
 
 Section TF.
-Require Import String.
-Open Scope string.
+Local Open Scope string_scope.
 
-Definition bound := (two_power_nat (30%nat) - 2)%Z.
+Definition bound := max_arg_count.
 
-Lemma bound_sound :
-  (Int.unsigned (Int.repr (4 + 4 * bound)) = 4 + 4 * bound)%Z.
-Proof.
-  unfold bound. simpl.
-  rewrite Int.unsigned_repr; eauto.
-  unfold Int.max_unsigned. unfold Int.modulus. simpl.
-  omega.
+Lemma bound_correct : forall A (xs : list A),
+    Zlength xs <= bound ->
+    0 <= (1 + Zlength xs) * 4 < Int.modulus.
+intros0 Hlen.
+unfold bound in Hlen. apply max_arg_count_value_size_ok in Hlen.
+rewrite Z.mul_add_distr_r.
+fwd eapply Zlength_nonneg with (xs := xs).
+unfold Int.max_unsigned in *. lia.
 Qed.
 
-Lemma bound_spec :
-  forall x,
-    0 <= x <= bound ->
-    (Int.unsigned (Int.repr (4 + 4 * x)) = 4 + 4 * x)%Z.
-Proof.
-  unfold bound. intros.
-  simpl in H.
-  rewrite Int.unsigned_repr; eauto.
-  unfold Int.max_unsigned. unfold Int.modulus. split; try omega.
-  unfold two_power_nat. unfold Int.wordsize. unfold Wordsize_32.wordsize.
-  unfold shift_nat. unfold nat_rect.
-  omega.
-Qed.
-
-Lemma nat_le_dec :
-  forall (n m : nat),
-    ({n <= m} + {n > m})%nat.
-Proof.
-  intros. destruct ((n ?= m)%nat) eqn:?.
-  left. eapply nat_compare_eq in Heqc. omega.
-  left. eapply nat_compare_lt in Heqc. omega.
-  right. eapply nat_compare_gt in Heqc. omega.
-Defined.
-
-(* Damnit string scope *)
-Definition length {A} (l : list A) := List.length l.
 
 Fixpoint lists_ok (s : Emajor.stmt) : bool :=
   match s with
-  | SmakeConstr _ _ l => if Z_le_dec (Z.of_nat (length l)) bound then true else false
-  | SmakeClose _ _ l => if Z_le_dec (Z.of_nat (length l)) bound then true else false
+  | SmakeConstr _ _ l => if Z_le_dec (Zlength l) bound then true else false
+  | SmakeClose _ _ l => if Z_le_dec (Zlength l) bound then true else false
   | Emajor.Sseq s1 s2 => if lists_ok s1 then lists_ok s2 else false
   | Emajor.Sblock s => lists_ok s
   | _ => true
@@ -182,7 +160,6 @@ Definition transf_function (f : Emajor.function) : res Dmajor.function :=
   else
     Error (MSG "tried to use the same ID for a param and a local" :: nil).
 
-Close Scope string.
 End TF.
 
 Definition transf_fundef (fd : Emajor.fundef) : res Dmajor.fundef :=
@@ -200,80 +177,93 @@ Let ge := Genv.globalenv prog.
 Let tge := Genv.globalenv tprog.
 Hypothesis TRANSF : transf_prog prog = OK tprog.
 
-Lemma transf_expr_inject_id :
-  forall Ee De m id,
-    env_inject Ee De tge m ->
-    Ee ! id = None ->
-    forall (exp : Emajor.expr) v,
-      Emajor.eval_expr Ee exp v ->
-      forall x,
-      exists v',
-        Dmajor.eval_expr tge (PTree.set id x De) m (transf_expr exp) v' /\ value_inject tge m v v'.
-Proof.
-  induction exp; intros.
-  * inv H1. unfold env_inject in H.
-    copy H3. 
-    eapply H in H3.
-    break_exists. break_and.
-    simpl. exists x0. split; eauto.
-    econstructor; eauto.
-    destruct (peq id i). subst id. congruence.
-    rewrite PTree.gso by congruence. assumption.
-  * inv H1.
-    - (* deref a closure *)
-      remember (IHexp _ H4) as IH.
-      clear HeqIH.
-      specialize (IH x).
-      break_exists. break_and.
-      inv H3.
-  
-      (* value is a pointer *)
-      (* we want nth field of that *)
-      (* we want *(b,ofs + 4*(1+n) *)
-      eapply load_all_val in H11; eauto.
-      break_exists. exists x0.
-      break_and. apply H13 in H7.
-      split; auto.
-      unfold transf_expr. fold transf_expr.
-      repeat (econstructor; eauto).
-      replace (Vptr b (Int.add (Int.add ofs (Int.repr 4)) (Int.repr (4 * Z.of_nat n)))) with (Val.add (Vptr b ofs) (Vint (Int.repr (4 + 4 * Z.of_nat n)))).
-      repeat (econstructor; eauto).
-      
-      unfold Val.add.
-      f_equal.
-      rewrite Int.add_assoc. f_equal.
-      rewrite Int.add_unsigned.
-      eapply Int.eqm_samerepr.
-      eapply Int.eqm_add. rewrite Int.unsigned_repr. eapply Int.eqm_refl.
-      unfold Int.max_unsigned. simpl. omega.
-      eapply Int.eqm_unsigned_repr.
 
-    - (* deref a constructor *)
-      remember (IHexp _ H4) as IH.
-      clear HeqIH.
-      specialize (IH x).
-      break_exists. break_and.
-      inv H3.
-  
-      eapply load_all_val in H9; eauto.
-      break_exists. exists x0.
-      break_and. apply H11 in H7.
-      split; auto.
-      unfold transf_expr. fold transf_expr.
-      repeat (econstructor; eauto).
-      replace (Vptr b (Int.add (Int.add ofs (Int.repr 4)) (Int.repr (4 * Z.of_nat n)))) with
-      (Val.add (Vptr b ofs) (Vint (Int.repr (4 + 4 * Z.of_nat n)))).
-      repeat (econstructor; eauto).
-
-      unfold Val.add.
-      f_equal.
-      rewrite Int.add_assoc. f_equal.
-      rewrite Int.add_unsigned.
-      eapply Int.eqm_samerepr.
-      eapply Int.eqm_add. rewrite Int.unsigned_repr. eapply Int.eqm_refl.
-      unfold Int.max_unsigned. simpl. omega.
-      eapply Int.eqm_unsigned_repr.
+Lemma eval_expr_unassigned : forall De m exp v' id v,
+    Dmajor.eval_expr tge De m (transf_expr exp) v' ->
+    De ! id = None ->
+    Dmajor.eval_expr tge (PTree.set id v De) m (transf_expr exp) v'.
+induction 1; intros0 Hid.
+- econstructor. rewrite PTree.gso; eauto. congruence.
+- econstructor. eauto.
+- specialize (IHeval_expr1 Hid). specialize (IHeval_expr2 Hid).
+  econstructor; eauto.
+- specialize (IHeval_expr Hid).
+  econstructor; eauto.
 Qed.
+
+
+(* `noacc id e`: evaluation of expression `e` never accesses local variable `id`. *)
+Inductive E_noacc id : Emajor.expr -> Prop :=
+| ENaVar : forall id', id' <> id -> E_noacc id (Emajor.Var id')
+| ENaDeref : forall e n, E_noacc id e -> E_noacc id (Emajor.Deref e n)
+.
+
+Inductive noacc id : Dmajor.expr -> Prop :=
+| NaVar : forall id', id' <> id -> noacc id (Evar id')
+| NaConst : forall c, noacc id (Econst c)
+| NaAdd : forall e1 e2, noacc id e1 -> noacc id e2 -> noacc id (Eadd e1 e2)
+| NaLoad : forall chunk e, noacc id e -> noacc id (Eload chunk e)
+.
+
+Lemma E_eval_expr_noacc : forall Ee id exp v,
+    Emajor.eval_expr Ee exp v ->
+    Ee ! id = None ->
+    E_noacc id exp.
+induction 1; intros0 Hid.
+- econstructor. congruence.
+- econstructor; eauto.
+- econstructor; eauto.
+Qed.
+
+Lemma transf_expr_noacc : forall id exp,
+    E_noacc id exp ->
+    noacc id (transf_expr exp).
+induction exp; intros0 Hacc.
+- invc Hacc. econstructor. eauto.
+- invc Hacc.
+  unfold transf_expr. fold transf_expr.
+  econstructor. econstructor; eauto. econstructor.
+Qed.
+
+Lemma noacc_eval_expr : forall De m exp v id v',
+    Dmajor.eval_expr tge De m exp v ->
+    noacc id exp ->
+    Dmajor.eval_expr tge (PTree.set id v' De) m exp v.
+induction 1; intros0 Hacc; invc Hacc.
+- econstructor. rewrite PTree.gso; eauto.
+- econstructor; eauto.
+- econstructor; eauto.
+- econstructor; eauto.
+Qed.
+
+Lemma E_eval_exprlist_noacc : forall Ee id exp v,
+    Emajor.eval_exprlist Ee exp v ->
+    Ee ! id = None ->
+    Forall (E_noacc id) exp.
+induction 1; intros0 Hid.
+- econstructor; eauto.
+- econstructor; eauto using E_eval_expr_noacc.
+Qed.
+
+Lemma transf_exprlist_noacc : forall id exp,
+    Forall (E_noacc id) exp ->
+    Forall (noacc id) (map transf_expr exp).
+induction exp; intros0 Hacc.
+- invc Hacc. econstructor.
+- invc Hacc. econstructor; eauto using transf_expr_noacc.
+Qed.
+
+Lemma noacc_eval_exprlist : forall De m exp v id v',
+    Dmajor.eval_exprlist tge De m exp v ->
+    Forall (noacc id) exp ->
+    Dmajor.eval_exprlist tge (PTree.set id v' De) m exp v.
+induction 1; intros0 Hacc; invc Hacc.
+- econstructor; eauto.
+- econstructor; eauto using noacc_eval_expr.
+Qed.
+
+
+
 
 
 Lemma transf_expr_inject :
@@ -345,28 +335,17 @@ Proof.
 
 Qed.      
 
-
-Lemma transf_exprlist_inject_id :
-  forall Ee De m id,
-    env_inject Ee De tge m ->
-    Ee ! id = None ->
-    forall (expl : list Emajor.expr) vlist,
-      Emajor.eval_exprlist Ee expl vlist ->
-      forall x, 
-      exists vlist',
-        Dmajor.eval_exprlist tge (PTree.set id x De) m (map transf_expr expl) vlist' /\ list_forall2 (value_inject tge m) vlist vlist'.
-Proof.
-  induction expl; intros.
-  inversion H1. exists nil. simpl.
-  split; econstructor; eauto.
-  inversion H1. eapply IHexpl in H6; eauto.
-  break_exists; break_and.
-  app transf_expr_inject_id Emajor.eval_expr.
-  subst.
-  exists (x1 :: x0).
-  split. econstructor; eauto.
-  econstructor; eauto.
+    (*
+Lemma eval_exprlist_unassigned : forall tge De m exps vs' id v,
+    Dmajor.eval_exprlist tge De m (map transf_expr exps) vs' ->
+    De ! id = None ->
+    Dmajor.eval_exprlist tge (PTree.set id v De) m (map transf_expr exps) vs'.
+induction exps; intros0 Heval Hid; invc Heval.
+- econstructor.
+- econstructor; eauto using eval_expr_unassigned.
 Qed.
+*)
+
 
 
 Lemma transf_exprlist_inject :
@@ -387,7 +366,8 @@ Proof.
   split. econstructor; eauto.
   econstructor; eauto.
 Qed.
-  
+
+
 Inductive match_cont: Emajor.cont -> Dmajor.cont -> mem -> Prop :=
 | match_cont_stop: forall m,
     match_cont Emajor.Kstop Dmajor.Kstop m
@@ -502,16 +482,6 @@ Proof.
   eapply Genv.find_funct_ptr_transf_partial; eauto.
 Qed.
 
-Lemma value_inject_ptr :
-  forall m v x,
-  value_inject tge m v x ->
-  exists b ofs,
-    x = Vptr b ofs.
-Proof.
-  intros.
-  inv H; eauto.
-Qed.
-
 
 Lemma value_inject_load :
   forall m x tag args,
@@ -547,6 +517,8 @@ Proof.
 Qed.
 
 
+
+(*
 Lemma load_all_mem_locked :
   forall m m',
     mem_locked m m' ->
@@ -574,7 +546,9 @@ Lemma mem_locked_value_inject :
       value_inject ge m v v' ->
       value_inject ge m' v v'.
 Proof.
-  induction 2; intros;
+  induction 2; intros.
+  Focus 3. {
+    
     simpl in H0;
     app load_lt_nextblock Mem.load;
   app load_all_mem_locked load_all;
@@ -610,23 +584,6 @@ Proof.
   eapply mem_locked_env_inject; eauto.
 Qed.
 
-Lemma disjoint_set_locals :
-  forall l e e' m,
-    env_inject e e' tge m ->
-    (forall x, In x l -> e ! x = None) ->
-    env_inject e (set_locals l e') tge m.
-Proof.
-  induction l; intros.
-  simpl. auto.
-  simpl. unfold env_inject in *.
-  intros.
-  destruct (peq id a). subst.
-  simpl in H0. rewrite H0 in H1; eauto. congruence.
-  rewrite PTree.gso by congruence.
-  eapply IHl; eauto.
-  intros. eapply H0. simpl. right. auto.
-Qed.
-
 Lemma eval_expr_mem_locked :
   forall m m',
     mem_locked m m' ->
@@ -653,6 +610,24 @@ Proof.
   econstructor; eauto.
   econstructor; eauto.
   eapply eval_expr_mem_locked; eauto.
+Qed.
+*)
+
+Lemma disjoint_set_locals :
+  forall l e e' m,
+    env_inject e e' tge m ->
+    (forall x, In x l -> e ! x = None) ->
+    env_inject e (set_locals l e') tge m.
+Proof.
+  induction l; intros.
+  simpl. auto.
+  simpl. unfold env_inject in *.
+  intros.
+  destruct (peq id a). subst.
+  simpl in H0. rewrite H0 in H1; eauto. congruence.
+  rewrite PTree.gso by congruence.
+  eapply IHl; eauto.
+  intros. eapply H0. simpl. right. auto.
 Qed.
 
 Ltac st :=
@@ -690,6 +665,7 @@ Proof.
 Qed.
 
 
+(*
 (* key store_args lemma *)  
 Lemma step_store_args :
   forall (l : list Emajor.expr) ofs m f id k env m0 vs hvs,
@@ -1209,6 +1185,11 @@ Proof.
   eexists. split; eauto.
   eapply mem_locked_value_inject; try eassumption.
 Qed.  
+    *)
+
+
+
+
 
 
 Lemma not_in_set_params :
@@ -1223,6 +1204,315 @@ Proof.
   break_and. rewrite PTree.gso by congruence.
   eauto.
 Qed.
+
+
+Lemma eval_exprlist_length : forall ge e m al vl,
+    eval_exprlist ge e m al vl ->
+    length al = length vl.
+induction 1; simpl; eauto.
+Qed.
+
+
+Lemma alloc_effect : forall ge f id n k e m,
+    0 <= n < Int.modulus ->
+    exists m' m'' b e',
+        Mem.alloc m (-4) n = (m', b) /\
+        Mem.store Mint32 m' b (-4) (Vint (Int.repr n)) = Some m'' /\
+        PTree.set id (Vptr b Int.zero) e = e' /\
+        step ge (State f (alloc id n) k e m)
+             E0 (State f Sskip k e' m'').
+intros0 Hn.
+
+destruct (Mem.alloc m (-4) n) as [m' b] eqn:?.
+
+fwd eapply Mem.valid_access_store
+    with (m1 := m') (b := b) (ofs := -4) (chunk := Mint32) as HH.
+  { eapply Mem.valid_access_implies with (p1 := Freeable); cycle 1.
+      { constructor. }
+    eapply Mem.valid_access_alloc_same; eauto.
+    - lia.
+    - unfold size_chunk. lia.
+    - simpl. eapply Zmod_divide; eauto; lia.
+  }
+  destruct HH as [m'' ?].
+
+eexists _, _, _, _. split; [|split; [|split] ].
+- reflexivity.
+- eassumption.
+- reflexivity.
+- econstructor.
+  + econstructor. simpl. reflexivity.
+  + econstructor; eauto.
+    rewrite Int.unsigned_repr by (unfold Int.max_unsigned; lia). eauto.
+Qed.
+
+Lemma effect_alloc : forall n m0 m1 m2 b id ge f k e e',
+    0 <= n < Int.modulus ->
+    Mem.alloc m0 (-4) n = (m1, b) ->
+    Mem.store Mint32 m1 b (-4) (Vint (Int.repr n)) = Some m2 ->
+    PTree.set id (Vptr b Int.zero) e = e' ->
+    step ge (State f (alloc id n) k e m0)
+         E0 (State f Sskip k e' m2).
+intros0 Hn Halloc Hstore Hset.
+
+subst e'.
+econstructor.
+- econstructor. reflexivity.
+- econstructor.
+  + rewrite Int.unsigned_repr; eauto.
+    unfold Int.max_unsigned. lia.
+  + eauto.
+Qed.
+
+Lemma effect_store : forall ge f addr payload k e m b off vpayload m',
+    eval_expr ge e m addr (Vptr b off) ->
+    eval_expr ge e m payload vpayload ->
+    Mem.store Mint32 m b (Int.unsigned off) vpayload = Some m' ->
+    step ge (State f (store addr payload) k e m)
+         E0 (State f Sskip k e m').
+intros0 Haddr Hpayload Hstore.
+econstructor; eauto.
+Qed.
+
+Lemma store_effect : forall ge f addr payload k e m b off vpayload,
+    eval_expr ge e m addr (Vptr b off) ->
+    eval_expr ge e m payload vpayload ->
+    Mem.valid_access m Mint32 b (Int.unsigned off) Writable ->
+    exists m',
+        Mem.store Mint32 m b (Int.unsigned off) vpayload = Some m' /\
+        step ge (State f (store addr payload) k e m)
+             E0 (State f Sskip k e m').
+intros0 Haddr Hpayload Hacc.
+
+fwd eapply Mem.valid_access_store
+    with (m1 := m) (b := b) (ofs := Int.unsigned off) (chunk := Mint32) as HH; eauto.
+  destruct HH as (m' & ?).
+
+eexists. split; eauto using effect_store.
+Qed.
+
+Print store_args.
+
+Print eval_exprlist.
+
+Lemma eval_exprlist_Forall2 : forall ge e m es vs,
+    eval_exprlist ge e m es vs <-> Forall2 (eval_expr ge e m) es vs.
+induction es; intros; split; intro HH; invc HH; econstructor; eauto.
+- rewrite <- IHes. eauto.
+- rewrite -> IHes. eauto.
+Qed.
+
+Lemma mem_inj_id_eval_expr : forall ge le m m' e v,
+    eval_expr ge le m e v ->
+    Mem.mem_inj inject_id m m' ->
+    exists v',
+        eval_expr ge le m' e v' /\
+        Val.inject inject_id v v'.
+induction 1; intros0 Hmi.
+
+- eexists. split.
+  + econstructor. eauto.
+  + eapply val_inject_id. eapply Val.lessdef_refl.
+
+- eexists. split.
+  + econstructor. eauto.
+  + eapply val_inject_id. eapply Val.lessdef_refl.
+
+- destruct (IHeval_expr1 Hmi) as (v1' & ? & ?).
+  destruct (IHeval_expr2 Hmi) as (v2' & ? & ?).
+  eexists. split.
+  + econstructor; eauto.
+  + rewrite val_inject_id in *.
+    destruct v1, v2; simpl; try constructor.
+    all: do 2 on >Val.lessdef, invc; simpl; eauto.
+
+- destruct (IHeval_expr Hmi) as (v' & ? & ?).
+
+  destruct vaddr; simpl in *; try discriminate.
+  on >Val.inject, invc. unfold inject_id in *. inject_some. simpl in *.
+  fwd eapply Mem.load_inj as HH; eauto. destruct HH as (v'' & ? & ?).
+  rewrite Z.add_0_r in *.
+
+  eexists. split.
+  + econstructor; eauto.
+    simpl. rewrite Int.add_zero. eauto.
+  + eauto.
+Qed.
+
+
+Lemma mem_inj_id_eval_exprlist : forall ge le m m' es vs,
+    eval_exprlist ge le m es vs ->
+    Mem.mem_inj inject_id m m' ->
+    exists vs',
+        eval_exprlist ge le m' es vs' /\
+        Forall2 (Val.inject inject_id) vs vs'.
+induction 1; intros0 Hmi.
+- eexists; split; econstructor.
+- destruct (IHeval_exprlist Hmi) as (vs' & ? & ?).
+  fwd eapply mem_inj_id_eval_expr as HH; eauto. destruct HH as (v' & ? & ?).
+  exists (v' :: vs'); split; econstructor; eauto.
+Qed.
+
+
+
+Lemma effect_store_args : forall ge f id b off0 e,
+    e ! id = Some (Vptr b off0) ->
+    (4 | Int.unsigned off0) ->
+    forall es es' off off' k m1 m2 m3 hvs vs,
+    es' = map transf_expr es ->
+    eval_exprlist ge e m1 es' vs ->
+    Forall2 (value_inject ge m1) hvs vs ->
+    Z.add (Int.unsigned off0) off = off' ->
+    Mem.range_perm m2 b off' (off' + 4 * Zlength vs) Cur Writable ->
+    (4 | off) ->
+    0 <= Int.unsigned off0 ->
+    0 <= off ->
+    off' + Zlength vs * 4 <= Int.max_unsigned ->
+    Mem.mem_inj inject_id m1 m2 ->
+    (Mem.mem_contents m1) !! b = ZMap.init Undef ->
+    store_multi Mint32 m2 b off' vs = Some m3 ->
+    star step ge (State f (store_args id es off) k e m2)
+              E0 (State f Sskip k e m3).
+intros0 Hbase Hdiv0.
+induction es; intros0 Hes Heval Hvi Hoff' Hperm Hdiv Hmin0 Hmin Hmax Hmi Hnewblock Hstore.
+
+  { simpl in Hes. subst es'.
+    rewrite eval_exprlist_Forall2 in Heval. invc Heval.
+    simpl in Hstore. inject_some.
+    simpl. econstructor. }
+
+simpl in Hes. subst es'.
+rewrite eval_exprlist_Forall2 in Heval. invc Heval.
+invc Hvi.
+simpl in Hstore. inject_some.
+break_match; try discriminate. rename m3 into m4, m into m3.
+
+assert (Mem.mem_inj inject_id m1 m3).
+  { eapply store_new_block_mem_inj_id; eauto. }
+
+fwd eapply mem_inj_id_eval_expr with (m' := m2) as HH; eauto.
+  destruct HH as (v' & ? & ?).
+fwd eapply mem_inj_id_eval_exprlist with (m' := m2) as HH; eauto.
+  { rewrite eval_exprlist_Forall2. eauto. }
+  destruct HH as (vs' & ? & ?).
+
+simpl.
+eapply star_left; [ | | nil_trace ]. { econstructor. }
+
+eapply star_left; [ | | nil_trace ]. {
+  eapply effect_store; eauto.
+  - remember (Val.add (Vptr b off0) (Vint (Int.repr off))) as ptr.
+    pose proof Heqptr as Heqptr'. simpl in Heqptr'. rewrite <- Heqptr', Heqptr.
+    clear dependent ptr.
+    econstructor; econstructor; eauto.
+  - replace (Int.unsigned _) with (Int.unsigned off0 + off)%Z; cycle 1.
+      { rewrite Int.add_unsigned.
+        fwd eapply Zlength_nonneg with (xs := y :: l').
+        assert (0 <= off <= Int.max_unsigned) by lia.
+        rewrite 2 Int.unsigned_repr; eauto.
+        rewrite Int.unsigned_repr; eauto.
+        lia. }
+    replace y with v' in *; cycle 1.
+      { eapply lessdef_def_eq.
+        - eapply val_inject_id. eauto.
+        - eapply value_inject_defined. eauto. }
+    eauto.
+}
+
+eapply star_left; [ | | nil_trace ]. { econstructor. }
+
+{
+  eapply IHes with (vs := l'); eauto.
+  - rewrite eval_exprlist_Forall2. eapply Forall2_imp; eauto.
+  - rewrite <- range_perm_store; eauto.
+    eapply shrink_range_perm; eauto.
+    + lia.
+    + rewrite Zlength_cons. unfold Z.succ. eapply Z.eq_le_incl. ring.
+  - eapply Z.divide_add_r; eauto. eapply Z.divide_refl.
+  - lia.
+  - rewrite Zlength_cons in *. unfold Z.succ in *. rewrite Z.mul_add_distr_r in *. lia.
+  - rewrite Z.add_assoc. eauto.
+}
+Qed.
+
+(*
+Lemma store_args_effect' : forall ge f id b off0 e,
+    e ! id = Some (Vptr b off0) ->
+    (4 | Int.unsigned off0) ->
+    forall es es' off off' k m vs,
+    es' = map transf_expr es ->
+    eval_exprlist ge e m es' vs ->
+    Z.add (Int.unsigned off0) off = off' ->
+    Mem.range_perm m b off' (off' + 4 * Zlength vs) Cur Writable ->
+    (4 | off) ->
+    exists m',
+        store_multi Mint32 m b off' vs = Some m' /\
+        star step ge (State f (store_args id es off) k e m)
+                  E0 (State f Sskip k e m').
+intros0 Hbase Hdiv0.
+induction es; intros0 Hes Heval Hoff' Hperm Hdiv.
+
+  { simpl in Hes. subst es'.
+    rewrite eval_exprlist_Forall2 in Heval. invc Heval.
+    simpl.  exists m. split; eauto. constructor. }
+
+fwd eapply valid_access_store_multi with
+    (m := m) (chunk := Mint32) (b := b) (ofs := off') (vs := vs) as HH; eauto.
+  { subst off'. simpl. eapply Z.divide_add_r; eauto. }
+  destruct HH as (m' & Hm').
+
+simpl in Hes. subst es'.
+rewrite eval_exprlist_Forall2 in Heval. destruct vs as [ | v vs ]; invc Heval.
+simpl in Hm'. break_match; try discriminate. 
+rename m' into m'', m0 into m'.
+
+simpl.
+
+fwd eapply IHes with (off := off + 4) (m := m').
+  { reflexivity. }
+  { rewrite eval_exprlist_Forall2. eassumption. }
+  { 
+
+eexists. split.
+- eauto.
+- econstructor; eauto.
+
+        Mem.store Mint32 m b (Int.unsigned off) vpayload = Some m' /\
+        step ge (State f (store addr payload) k e m)
+             E0 (State f Sskip k e m').
+intros0 Haddr Hpayload Hacc.
+
+fwd eapply Mem.valid_access_store
+    with (m1 := m) (b := b) (ofs := Int.unsigned off) (chunk := Mint32) as HH; eauto.
+  destruct HH as (m' & ?).
+
+eexists. split.
+- eauto.
+- econstructor; eauto.
+Qed.
+*)
+
+Lemma mem_inj_id_env_inject : forall e e' m m',
+    env_inject e e' tge m ->
+    Mem.mem_inj inject_id m m' ->
+    env_inject e e' tge m'.
+unfold env_inject. intros0 Henv Hmi.
+intros0 Hid.
+destruct (Henv ?? ?? ** ) as (v' & ? & ?).
+exists v'. split; eauto using mem_inj_id_value_inject.
+Qed.
+
+Lemma mem_inj_id_match_cont : forall k k' m m',
+    match_cont k k' m ->
+    Mem.mem_inj inject_id m m' ->
+    match_cont k k' m'.
+induction 1; intros0 Hmi.
+- econstructor; eauto.
+- econstructor; eauto.
+- econstructor; eauto.
+- econstructor; eauto using mem_inj_id_env_inject.
+Qed.
+
 
 
 (* This is sorta what we want *)
@@ -1243,7 +1533,7 @@ Proof.
   econstructor; eauto.
   econstructor; eauto.
   eapply env_inject_update; eauto.
-  
+
   (* sequence from continuation *)
   + invp match_cont.
   eexists.  split. eapply plus_one.
@@ -1257,7 +1547,7 @@ Proof.
     app functions_transf Genv.find_funct_ptr.
     destruct x1; simpl in H16; try congruence.
     Focus 2. unfold bind in *. break_match_hyp; try congruence.
-    
+
   inv H7. find_rewrite. inv H21.
   eexists. split.
   eapply plus_one.
@@ -1276,7 +1566,7 @@ Proof.
   assumption.
   repeat (econstructor; eauto).
   unfold bind in *. break_match_hyp; try congruence.
-  
+
   (* return *)
   + destruct k; simpl in H10; try solve [inv H10]; invp match_cont.
     app transf_expr_inject Emajor.eval_expr.
@@ -1294,7 +1584,7 @@ Proof.
     econstructor; eauto.
 
     econstructor; eauto.
-    
+
   (* seq *)
   + eexists. split.
   eapply plus_one.
@@ -1305,20 +1595,113 @@ Proof.
   simpl in H3. break_match_hyp; try congruence.
 
   (* make_constr *)
-  + eapply SmakeConstr_sim; eauto.
+  + unfold lists_ok in *. break_match; try discriminate.
 
-    simpl in H3. break_match_hyp; try congruence.
-    intros. eapply bound_spec; eauto. omega.
-    
-    
+    fwd eapply transf_exprlist_inject as HH; eauto. destruct HH as (vargs' & ? & ?).
+    rewrite list_forall2_Forall2 in *.
+
+    assert (Hlen : Zlength l = Zlength vargs').
+      { rewrite 2 Zlength_correct. f_equal.
+        erewrite <- map_length with (l := l). eapply Forall2_length.
+        rewrite <- eval_exprlist_Forall2. eauto. }
+
+    fwd eapply build_constr_ok with (tag := tag) as HH; eauto.
+      { unfold bound in *. congruence. }
+      destruct HH as (v & m2 & ? & ?).
+    fwd eapply build_constr_mem_inj_id; eauto.
+
+    compute [transf_stmt].
+    unfold build_constr in *. break_match. break_bind_option. inject_some.
+    rename m3 into m3, m2 into m4, m1 into m2, m0 into m1, m into m0.
+
+    assert (Mem.mem_inj inject_id m0 m1).
+      { eapply alloc_mem_inj_id. eauto. }
+
+    fwd eapply mem_inj_id_eval_exprlist with (m' := m1) as HH; eauto.
+      destruct HH as (vargs'' & ? & ?).
+
+    fwd eapply E_eval_exprlist_noacc; eauto.
+    fwd eapply transf_exprlist_noacc; eauto.
+
+    assert (vargs'' = vargs').
+      { eapply Forall2_eq. list_magic_on (vargs, (vargs', (vargs'', tt))).
+        eapply lessdef_def_eq.
+        - eapply val_inject_id; eauto.
+        - eapply value_inject_defined; eauto. }
+      subst vargs''.
+      on (Forall2 _ vargs' vargs'), fun H => clear H.
+
+    assert (Hsize : (4 + 4 * Z.of_nat (Datatypes.length l) = (1 + Zlength vargs') * 4)%Z).
+      { rewrite <- Zlength_correct. rewrite Hlen. ring. }
+
+    assert ((Mem.mem_contents m1) !! b = ZMap.init Undef).
+      { erewrite Mem.contents_alloc; eauto.
+        erewrite <- Mem.alloc_result; eauto.
+        erewrite PMap.gss. reflexivity. }
+
+    eexists. split.
+
+    eapply plus_left; [ | | nil_trace ]. { econstructor. }
+    eapply star_left; [ | | nil_trace ]. { econstructor. }
+    eapply star_left; [ | | nil_trace ]. {
+      rewrite Hsize.
+      eapply effect_alloc; eauto.
+      eapply bound_correct. congruence.
+    }
+
+    eapply star_left; [ | | nil_trace ]. { econstructor. }
+    eapply star_left; [ | | nil_trace ]. {
+      eapply effect_store; eauto.
+      - econstructor. rewrite PTree.gss. reflexivity.
+      - econstructor. reflexivity.
+      - rewrite Int.unsigned_zero. eauto.
+    }
+
+    eapply star_left; [ | | nil_trace ]. { econstructor. }
+    {
+      eapply effect_store_args with (m1 := m1).
+      - rewrite PTree.gss. reflexivity.
+      - rewrite Int.unsigned_zero. eapply Z.divide_0_r.
+      - reflexivity.
+      - eapply noacc_eval_exprlist; eauto.
+      - eapply Forall2_imp. { on (Forall2 (value_inject _ _) _ _), fun H => exact H. }
+        intros. eapply mem_inj_id_value_inject; eauto.
+      - rewrite Int.unsigned_zero. rewrite Z.add_0_l. reflexivity.
+      - eapply Mem.range_perm_implies with (p1 := Freeable); [ | constructor ].
+        eapply shrink_range_perm with (lo1 := -4).
+        + erewrite <- 2 range_perm_store by eauto. eapply alloc_range_perm. eauto.
+        + lia.
+        + rewrite Z.mul_add_distr_r. lia.
+      - eapply Z.divide_refl.
+      - rewrite Int.unsigned_zero. lia.
+      - lia.
+      - pose proof max_arg_count_ok. fold bound in *. lia.
+      - eapply store_new_block_mem_inj_id; eauto.
+        eapply store_new_block_mem_inj_id; eauto.
+        eapply Mem.mext_inj, Mem.extends_refl.
+      - eauto.
+      - eauto.
+    }
+
+    econstructor; eauto.
+    -- eapply mem_inj_id_match_cont; eauto.
+    -- eapply env_inject_update; eauto. eapply mem_inj_id_env_inject; eauto.
+
+
   (* make close *)
   (* same as make constr *)
-  + app symbols_transf Genv.find_symbol.
+  + compute [transf_stmt]. admit.
+    (*
+    app symbols_transf Genv.find_symbol.
     app functions_transf Genv.find_funct_ptr.
     eapply SmakeClose_sim; eauto.
 
     simpl in H3. break_match_hyp; try congruence.
     intros. eapply bound_spec; eauto. omega.
+    *)
+
+  (* opaque op *)
+  + compute [transf_stmt]. admit.
 
   (* switch *)
   + app transf_expr_inject Emajor.eval_expr.
@@ -1333,6 +1716,8 @@ Proof.
   econstructor; eauto.
   econstructor; eauto.
   rewrite PTree.gss. reflexivity.
+  all: admit.
+  (*
 
   app value_inject_ptr (value_inject tge). subst x.
   eapply value_inject_load; eauto.
@@ -1340,7 +1725,8 @@ Proof.
   eapply star_refl; eauto.
   econstructor; eauto.
   eapply env_inject_update; eauto.
-  
+    *)
+
   (* Exit/Block *)
   + invp match_cont.
   eexists.  split.
@@ -1372,7 +1758,7 @@ Proof.
   econstructor; eauto.
 
   (* callstate *)
-  + 
+  +
     destruct (Mem.alloc m 0 (fn_stackspace f')) eqn:?.
   eexists.  split.
   eapply plus_one; nil_trace.
@@ -1383,7 +1769,7 @@ Proof.
   unfold transf_function in H1. simpl in H1. inv H1. simpl. reflexivity.
 
   unfold transf_function in H1. repeat break_match_hyp; try congruence.
-  
+
   app env_inject_set_params_locals list_forall2.
   unfold transf_function in H1. repeat break_match_hyp; try congruence.
   assert (Emajor.fn_params f = fn_params f').
@@ -1407,7 +1793,7 @@ Proof.
   econstructor; eauto.
   econstructor; eauto.
   simpl. eapply env_inject_update; eauto.
-Qed.  
+Admitted.
 
 (* Easier to prove originally with no trace, now just thin wrapper *)
 Lemma step_sim :

@@ -9,6 +9,9 @@ Require Import StructTact.Assoc.
 Require Import oeuf.Monads.
 Require Import oeuf.Forall3.
 
+Require Import compcert.lib.Coqlib.
+Local Close Scope Z_scope.
+
 
 (* nat <= *)
 
@@ -1582,6 +1585,15 @@ induction xs; destruct ys, n; intros0 Hzip; simpl in *; try discriminate.
 Qed.
 
 
+
+
+(* list_forall2 <-> Forall2 *)
+
+Lemma list_forall2_Forall2 : forall A B (P : A -> B -> Prop) xs ys,
+    list_forall2 P xs ys <-> Forall2 P xs ys.
+induction xs; destruct ys; split; intro HH; invc HH; econstructor; eauto.
+all: firstorder.
+Qed.
 
 
 
