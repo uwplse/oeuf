@@ -1063,27 +1063,29 @@ Qed.
 
 
 
-Lemma build_close_inject' : forall A B (ge : Genv.t A B) m0 m1 m2 m3 b fname free freev,
+Lemma build_close_inject' : forall A B (ge : Genv.t A B) m0 m1 m2 m3 m4 b fname free freev,
     forall bcode fp,
     Genv.find_symbol ge fname = Some bcode ->
     Genv.find_funct_ptr ge bcode = Some fp ->
     Forall2 (value_inject ge m0) free freev ->
     Zlength free <= max_arg_count ->
-    Mem.alloc m0 0 ((1 + Zlength free) * 4) = (m1, b) ->
-    Mem.store Mint32 m1 b 0 (Vptr bcode Int.zero) = Some m2 ->
-    store_multi Mint32 m2 b 4 freev = Some m3 ->
-    value_inject ge m3 (Close fname free) (Vptr b Int.zero).
-intros0 Hsym Hfp Hfree Hmax Hm1 Hm2 Hm3.
+    Mem.alloc m0 (-4) ((1 + Zlength free) * 4) = (m1, b) ->
+    Mem.store Mint32 m1 b (-4) (Vint (Int.repr ((1 + Zlength free) * 4))) = Some m2 ->
+    Mem.store Mint32 m2 b 0 (Vptr bcode Int.zero) = Some m3 ->
+    store_multi Mint32 m3 b 4 freev = Some m4 ->
+    value_inject ge m4 (Close fname free) (Vptr b Int.zero).
+intros0 Hsym Hfp Hfree Hmax Hm1 Hm2 Hm3 H4.
 
 assert ((Mem.mem_contents m1) !! b = ZMap.init Undef).
   { erewrite Mem.contents_alloc; eauto.
     erewrite <- Mem.alloc_result; eauto.
     erewrite PMap.gss. reflexivity. }
 
-assert (Mem.mem_inj inject_id m0 m3).
+assert (Mem.mem_inj inject_id m0 m4).
   { rewrite <- inject_id_compose_self. eapply Mem.mem_inj_compose with (m2 := m1).
     - eapply alloc_mem_inj_id; eauto.
     - eapply store_multi_new_block_mem_inj_id; eauto.
+      eapply store_new_block_mem_inj_id; eauto.
       eapply store_new_block_mem_inj_id; eauto.
       eapply Mem.mext_inj, Mem.extends_refl. }
 
@@ -1123,17 +1125,19 @@ Lemma build_close_ok' : forall A B (ge : Genv.t A B) m0 fname free freev,
     Genv.find_funct_ptr ge bcode = Some fp ->
     Forall2 (value_inject ge m0) free freev ->
     Zlength free <= max_arg_count ->
-    exists m1 m2 m3 b,
-        Mem.alloc m0 0 ((1 + Zlength free) * 4) = (m1, b) /\
-        Mem.store Mint32 m1 b 0 (Vptr bcode Int.zero) = Some m2 /\
-        store_multi Mint32 m2 b 4 freev = Some m3 /\
-        value_inject ge m3 (Close fname free) (Vptr b Int.zero).
+    exists m1 m2 m3 m4 b,
+        Mem.alloc m0 (-4) ((1 + Zlength free) * 4) = (m1, b) /\
+        Mem.store Mint32 m1 b (-4) (Vint (Int.repr ((1 + Zlength free) * 4))) = Some m2 /\
+        Mem.store Mint32 m2 b 0 (Vptr bcode Int.zero) = Some m3 /\
+        store_multi Mint32 m3 b 4 freev = Some m4 /\
+        value_inject ge m4 (Close fname free) (Vptr b Int.zero).
 
 intros.
-destruct (Mem.alloc m0 0 ((1 + Zlength free) * 4)) as [m1 b] eqn:?.
+destruct (Mem.alloc m0 (-4) ((1 + Zlength free) * 4)) as [m1 b] eqn:?.
 
-fwd eapply Mem.valid_access_store
-    with (m1 := m1) (b := b) (ofs := 0) (chunk := Mint32) as HH.
+fwd eapply Mem.valid_access_store with
+    (m1 := m1) (b := b) (ofs := -4) (chunk := Mint32)
+    (v := Vint (Int.repr ((1 + Zlength free) * 4))) as HH.
   { eapply Mem.valid_access_implies with (p1 := Freeable); cycle 1.
       { constructor. }
     eapply Mem.valid_access_alloc_same; eauto.
@@ -1144,19 +1148,33 @@ fwd eapply Mem.valid_access_store
   }
   destruct HH as [m2 ?].
 
-fwd eapply (valid_access_store_multi Mint32 m2 b 4 freev) as HH; eauto.
+fwd eapply Mem.valid_access_store with
+    (m1 := m2) (b := b) (ofs := 0) (chunk := Mint32) (v := Vptr bcode Int.zero) as HH.
+  { eapply Mem.valid_access_implies with (p1 := Freeable); cycle 1.
+      { constructor. }
+    eapply Mem.store_valid_access_1; eauto.
+    eapply Mem.valid_access_alloc_same; eauto.
+    - clear. lia.
+    - unfold size_chunk. rewrite Zlength_correct.
+      fwd eapply Zlength_nonneg with (xs := free). lia.
+    - simpl. eapply Zmod_divide; eauto; lia.
+  }
+  destruct HH as [m3 ?].
+
+fwd eapply (valid_access_store_multi Mint32 m3 b 4 freev) as HH; eauto.
   { eapply Mem.range_perm_implies with (p1 := Freeable); [ | constructor ].
-    eapply shrink_range_perm with (lo1 := 0).
-    - erewrite <- range_perm_store by eauto. eapply alloc_range_perm. eauto.
+    eapply shrink_range_perm with (lo1 := -4).
+    - erewrite <- 2 range_perm_store by eauto. eapply alloc_range_perm. eauto.
     - clear. lia.
     - unfold size_chunk. fwd eapply Forall2_length as HH; eauto. clear -HH.
       replace ((1 + Zlength free) * 4) with (4 + 4 * Zlength free) by ring.
       rewrite 2 Zlength_correct. rewrite HH. lia.
   }
   { simpl. clear. eapply Zmod_divide; eauto. lia. }
-  destruct HH as [m3 ?].
+  destruct HH as [m4 ?].
 
-exists m1, m2, m3, b.
+exists m1, m2, m3, m4, b.
+split; eauto.
 split; eauto.
 split; eauto.
 split; eauto.
@@ -1169,7 +1187,8 @@ Local Open Scope option_monad.
 Definition build_close {A B} (ge : Genv.t A B) m fname free :=
     Genv.find_symbol ge fname >>= fun bcode =>
     Genv.find_funct_ptr ge bcode >>= fun fp =>
-    let '(m, b) := Mem.alloc m 0 ((1 + Zlength free) * 4) in
+    let '(m, b) := Mem.alloc m (-4) ((1 + Zlength free) * 4) in
+    Mem.store Mint32 m b (-4) (Vint (Int.repr ((1 + Zlength free) * 4))) >>= fun m =>
     Mem.store Mint32 m b 0 (Vptr bcode Int.zero) >>= fun m =>
     store_multi Mint32 m b 4 free >>= fun m =>
     Some (Vptr b Int.zero, m).
@@ -1202,12 +1221,17 @@ assert (Hlen_eq : length hfree = length free) by eauto using Forall2_length.
 rewrite Zlength_correct, <- Hlen_eq, <- Zlength_correct in *.
 fwd eapply build_close_ok' as HH; eauto.
 rewrite Zlength_correct, Hlen_eq, <- Zlength_correct in *.
-destruct HH as (? & ? & m' & b & ? & ? & ? & ?).
+destruct HH as (? & ? & ? & m' & b & ? & ? & ? & ? & ?).
 
-eexists. eexists.
+eexists _, _.
 split; eauto.
 unfold build_close.
-repeat on _, fun H => (rewrite H; clear H; simpl).
+on _, fun H => (rewrite H; clear H).
+on _, fun H => (rewrite H; clear H; simpl).
+on _, fun H => (rewrite H; clear H; simpl).
+on _, fun H => (rewrite H; clear H; simpl).
+on _, fun H => (rewrite H; clear H; simpl).
+on _, fun H => (rewrite H; clear H; simpl).
 reflexivity.
 Qed.
 
@@ -1217,7 +1241,7 @@ Lemma build_close_mem_inj_id : forall A B (ge : Genv.t A B) m1 fname free v m2,
 intros0 Hbuild.
 unfold build_close in Hbuild. break_match. break_bind_option. inject_some.
 
-rename m2 into m3, m0 into m2, m1 into m0, m into m1.
+rename m2 into m4, m3 into m3, m0 into m2, m1 into m0, m into m1.
 
 assert ((Mem.mem_contents m1) !! b = ZMap.init Undef).
   { erewrite Mem.contents_alloc; eauto.
@@ -1227,6 +1251,7 @@ assert ((Mem.mem_contents m1) !! b = ZMap.init Undef).
 rewrite <- inject_id_compose_self. eapply Mem.mem_inj_compose with (m2 := m1).
 - eapply alloc_mem_inj_id; eauto.
 - eapply store_multi_new_block_mem_inj_id; eauto.
+  eapply store_new_block_mem_inj_id; eauto.
   eapply store_new_block_mem_inj_id; eauto.
   eapply Mem.mext_inj, Mem.extends_refl.
 Qed.

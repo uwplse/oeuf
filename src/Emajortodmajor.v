@@ -1515,6 +1515,238 @@ Qed.
 
 
 
+
+Lemma step_sim_make_constr : forall f f' e e' k k' id tag args vargs m,
+    match_states (Emajor.State f (SmakeConstr id tag args) k e)
+        (State f' (transf_stmt (SmakeConstr id tag args)) k' e' m) ->
+    Emajor.eval_exprlist e args vargs ->
+    e ! id = None ->
+    lists_ok (SmakeConstr id tag args) = true ->
+    Emajor.step ge (Emajor.State f (SmakeConstr id tag args) k e)
+        E0 (Emajor.State f Emajor.Sskip k (PTree.set id (Constr tag vargs) e)) ->
+    exists st0',
+        plus step tge
+            (State f' (transf_stmt (SmakeConstr id tag args)) k' e' m) E0 st0' /\
+        match_states
+            (Emajor.State f Emajor.Sskip k (PTree.set id (Constr tag vargs) e)) st0'.
+intros.
+inv H. on (transf_stmt _ = _), fun H => clear H.
+
+unfold lists_ok in *. break_match; try discriminate.
+
+fwd eapply transf_exprlist_inject as HH; eauto. destruct HH as (vargs' & ? & ?).
+rewrite list_forall2_Forall2 in *.
+
+assert (Hlen : Zlength args = Zlength vargs').
+  { rewrite 2 Zlength_correct. f_equal.
+    erewrite <- map_length with (l := args). eapply Forall2_length.
+    rewrite <- eval_exprlist_Forall2. eauto. }
+
+fwd eapply build_constr_ok with (tag := tag) as HH; eauto.
+  { unfold bound in *. congruence. }
+  destruct HH as (v & m2 & ? & ?).
+fwd eapply build_constr_mem_inj_id; eauto.
+
+compute [transf_stmt].
+unfold build_constr in *. break_match. break_bind_option. inject_some.
+rename m3 into m3, m2 into m4, m1 into m2, m0 into m1, m into m0.
+
+assert (Mem.mem_inj inject_id m0 m1).
+  { eapply alloc_mem_inj_id. eauto. }
+
+fwd eapply mem_inj_id_eval_exprlist with (m' := m1) as HH; eauto.
+  destruct HH as (vargs'' & ? & ?).
+
+fwd eapply E_eval_exprlist_noacc; eauto.
+fwd eapply transf_exprlist_noacc; eauto.
+
+assert (vargs'' = vargs').
+  { eapply Forall2_eq. list_magic_on (vargs, (vargs', (vargs'', tt))).
+    eapply lessdef_def_eq.
+    - eapply val_inject_id; eauto.
+    - eapply value_inject_defined; eauto. }
+  subst vargs''.
+  on (Forall2 _ vargs' vargs'), fun H => clear H.
+
+assert (Hsize : (4 + 4 * Z.of_nat (Datatypes.length args) = (1 + Zlength vargs') * 4)%Z).
+  { rewrite <- Zlength_correct. rewrite Hlen. ring. }
+
+assert ((Mem.mem_contents m1) !! b = ZMap.init Undef).
+  { erewrite Mem.contents_alloc; eauto.
+    erewrite <- Mem.alloc_result; eauto.
+    erewrite PMap.gss. reflexivity. }
+
+eexists. split.
+
+eapply plus_left; [ | | nil_trace ]. { econstructor. }
+eapply star_left; [ | | nil_trace ]. { econstructor. }
+eapply star_left; [ | | nil_trace ]. {
+  rewrite Hsize.
+  eapply effect_alloc; eauto.
+  eapply bound_correct. congruence.
+}
+
+eapply star_left; [ | | nil_trace ]. { econstructor. }
+eapply star_left; [ | | nil_trace ]. {
+  eapply effect_store; eauto.
+  - econstructor. rewrite PTree.gss. reflexivity.
+  - econstructor. reflexivity.
+  - rewrite Int.unsigned_zero. eauto.
+}
+
+eapply star_left; [ | | nil_trace ]. { econstructor. }
+{
+  eapply effect_store_args with (m1 := m1).
+  - rewrite PTree.gss. reflexivity.
+  - rewrite Int.unsigned_zero. eapply Z.divide_0_r.
+  - reflexivity.
+  - eapply noacc_eval_exprlist; eauto.
+  - eapply Forall2_imp. { on (Forall2 (value_inject _ _) _ _), fun H => exact H. }
+    intros. eapply mem_inj_id_value_inject; eauto.
+  - rewrite Int.unsigned_zero. rewrite Z.add_0_l. reflexivity.
+  - eapply Mem.range_perm_implies with (p1 := Freeable); [ | constructor ].
+    eapply shrink_range_perm with (lo1 := -4).
+    + erewrite <- 2 range_perm_store by eauto. eapply alloc_range_perm. eauto.
+    + lia.
+    + rewrite Z.mul_add_distr_r. lia.
+  - eapply Z.divide_refl.
+  - rewrite Int.unsigned_zero. lia.
+  - lia.
+  - pose proof max_arg_count_ok. fold bound in *. lia.
+  - eapply store_new_block_mem_inj_id; eauto.
+    eapply store_new_block_mem_inj_id; eauto.
+    eapply Mem.mext_inj, Mem.extends_refl.
+  - eauto.
+  - eauto.
+}
+
+econstructor; eauto.
+- eapply mem_inj_id_match_cont; eauto.
+- eapply env_inject_update; eauto. eapply mem_inj_id_env_inject; eauto.
+Qed.
+
+
+Lemma step_sim_make_close : forall f f' e e' k k' id fname args vargs m,
+    match_states (Emajor.State f (SmakeClose id fname args) k e)
+        (State f' (transf_stmt (SmakeClose id fname args)) k' e' m) ->
+    Emajor.eval_exprlist e args vargs ->
+    e ! id = None ->
+    lists_ok (SmakeClose id fname args) = true ->
+    Emajor.step ge (Emajor.State f (SmakeClose id fname args) k e)
+        E0 (Emajor.State f Emajor.Sskip k (PTree.set id (Close fname vargs) e)) ->
+    exists st0',
+        plus step tge
+            (State f' (transf_stmt (SmakeClose id fname args)) k' e' m) E0 st0' /\
+        match_states
+            (Emajor.State f Emajor.Sskip k (PTree.set id (Close fname vargs) e)) st0'.
+intros.
+inv H. on (transf_stmt _ = _), fun H => clear H.
+
+on >Emajor.step, inv.
+assert (vargs0 = vargs).
+  { assert (HH : (PTree.set id (Close fname vargs0) e) ! id =
+                 (PTree.set id (Close fname vargs) e) ! id) by congruence.
+    do 2 rewrite PTree.gss in HH. congruence. }
+  subst vargs0.
+on _, rewrite_rev find_symbol_transf.
+on _, eapply_lem functions_transf. break_exists. break_and.
+
+
+unfold lists_ok in *. break_match; try discriminate.
+
+fwd eapply transf_exprlist_inject as HH; eauto. destruct HH as (vargs' & ? & ?).
+rewrite list_forall2_Forall2 in *.
+
+assert (Hlen : Zlength args = Zlength vargs').
+  { rewrite 2 Zlength_correct. f_equal.
+    erewrite <- map_length with (l := args). eapply Forall2_length.
+    rewrite <- eval_exprlist_Forall2. eauto. }
+
+fwd eapply build_close_ok with (fname := fname) as HH; try eassumption.
+  { unfold bound in *. congruence. }
+  destruct HH as (v & m2 & ? & ?).
+fwd eapply build_close_mem_inj_id; eauto.
+
+compute [transf_stmt].
+unfold build_close in *. break_match. break_bind_option. inject_some.
+rename m3 into m3, m2 into m4, m1 into m2, m0 into m1, m into m0.
+change (_ * 4) with ((1 + Zlength vargs')%Z * 4) in *.
+
+assert (Mem.mem_inj inject_id m0 m1).
+  { eapply alloc_mem_inj_id. eauto. }
+
+fwd eapply mem_inj_id_eval_exprlist with (m' := m1) as HH; eauto.
+  destruct HH as (vargs'' & ? & ?).
+
+fwd eapply E_eval_exprlist_noacc; eauto.
+fwd eapply transf_exprlist_noacc; eauto.
+
+assert (vargs'' = vargs').
+  { eapply Forall2_eq. list_magic_on (vargs, (vargs', (vargs'', tt))).
+    eapply lessdef_def_eq.
+    - eapply val_inject_id; eauto.
+    - eapply value_inject_defined; eauto. }
+  subst vargs''.
+  on (Forall2 _ vargs' vargs'), fun H => clear H.
+
+assert (Hsize : (4 + 4 * Z.of_nat (Datatypes.length args) = (1 + Zlength vargs') * 4)%Z).
+  { rewrite <- Zlength_correct. rewrite Hlen. ring. }
+
+assert ((Mem.mem_contents m1) !! b = ZMap.init Undef).
+  { erewrite Mem.contents_alloc; eauto.
+    erewrite <- Mem.alloc_result; eauto.
+    erewrite PMap.gss. reflexivity. }
+
+eexists. split.
+
+eapply plus_left; [ | | nil_trace ]. { econstructor. }
+eapply star_left; [ | | nil_trace ]. { econstructor. }
+eapply star_left; [ | | nil_trace ]. {
+  rewrite Hsize.
+  eapply effect_alloc; eauto.
+  eapply bound_correct. congruence.
+}
+
+eapply star_left; [ | | nil_trace ]. { econstructor. }
+eapply star_left; [ | | nil_trace ]. {
+  eapply effect_store; eauto.
+  - econstructor. rewrite PTree.gss. reflexivity.
+  - econstructor. reflexivity.
+  - rewrite Int.unsigned_zero. on _, fun H => rewrite H. eauto.
+}
+
+eapply star_left; [ | | nil_trace ]. { econstructor. }
+{
+  eapply effect_store_args with (m1 := m1).
+  - rewrite PTree.gss. reflexivity.
+  - rewrite Int.unsigned_zero. eapply Z.divide_0_r.
+  - reflexivity.
+  - eapply noacc_eval_exprlist; eauto.
+  - eapply Forall2_imp. { on (Forall2 (value_inject _ _) _ _), fun H => exact H. }
+    intros. eapply mem_inj_id_value_inject; eauto.
+  - rewrite Int.unsigned_zero. rewrite Z.add_0_l. reflexivity.
+  - eapply Mem.range_perm_implies with (p1 := Freeable); [ | constructor ].
+    eapply shrink_range_perm with (lo1 := -4).
+    + erewrite <- 2 range_perm_store by eauto. eapply alloc_range_perm. eauto.
+    + lia.
+    + rewrite Z.mul_add_distr_r. lia.
+  - eapply Z.divide_refl.
+  - rewrite Int.unsigned_zero. lia.
+  - lia.
+  - pose proof max_arg_count_ok. fold bound in *. lia.
+  - eapply store_new_block_mem_inj_id; eauto.
+    eapply store_new_block_mem_inj_id; eauto.
+    eapply Mem.mext_inj, Mem.extends_refl.
+  - eauto.
+  - eauto.
+}
+
+econstructor; eauto.
+- eapply mem_inj_id_match_cont; eauto.
+- eapply env_inject_update; eauto. eapply mem_inj_id_env_inject; eauto.
+Qed.
+
+
 (* This is sorta what we want *)
 Theorem step_sim_no_trace :
   forall st st',
@@ -1595,113 +1827,26 @@ Proof.
   simpl in H3. break_match_hyp; try congruence.
 
   (* make_constr *)
-  + unfold lists_ok in *. break_match; try discriminate.
-
-    fwd eapply transf_exprlist_inject as HH; eauto. destruct HH as (vargs' & ? & ?).
-    rewrite list_forall2_Forall2 in *.
-
-    assert (Hlen : Zlength l = Zlength vargs').
-      { rewrite 2 Zlength_correct. f_equal.
-        erewrite <- map_length with (l := l). eapply Forall2_length.
-        rewrite <- eval_exprlist_Forall2. eauto. }
-
-    fwd eapply build_constr_ok with (tag := tag) as HH; eauto.
-      { unfold bound in *. congruence. }
-      destruct HH as (v & m2 & ? & ?).
-    fwd eapply build_constr_mem_inj_id; eauto.
-
-    compute [transf_stmt].
-    unfold build_constr in *. break_match. break_bind_option. inject_some.
-    rename m3 into m3, m2 into m4, m1 into m2, m0 into m1, m into m0.
-
-    assert (Mem.mem_inj inject_id m0 m1).
-      { eapply alloc_mem_inj_id. eauto. }
-
-    fwd eapply mem_inj_id_eval_exprlist with (m' := m1) as HH; eauto.
-      destruct HH as (vargs'' & ? & ?).
-
-    fwd eapply E_eval_exprlist_noacc; eauto.
-    fwd eapply transf_exprlist_noacc; eauto.
-
-    assert (vargs'' = vargs').
-      { eapply Forall2_eq. list_magic_on (vargs, (vargs', (vargs'', tt))).
-        eapply lessdef_def_eq.
-        - eapply val_inject_id; eauto.
-        - eapply value_inject_defined; eauto. }
-      subst vargs''.
-      on (Forall2 _ vargs' vargs'), fun H => clear H.
-
-    assert (Hsize : (4 + 4 * Z.of_nat (Datatypes.length l) = (1 + Zlength vargs') * 4)%Z).
-      { rewrite <- Zlength_correct. rewrite Hlen. ring. }
-
-    assert ((Mem.mem_contents m1) !! b = ZMap.init Undef).
-      { erewrite Mem.contents_alloc; eauto.
-        erewrite <- Mem.alloc_result; eauto.
-        erewrite PMap.gss. reflexivity. }
-
-    eexists. split.
-
-    eapply plus_left; [ | | nil_trace ]. { econstructor. }
-    eapply star_left; [ | | nil_trace ]. { econstructor. }
-    eapply star_left; [ | | nil_trace ]. {
-      rewrite Hsize.
-      eapply effect_alloc; eauto.
-      eapply bound_correct. congruence.
-    }
-
-    eapply star_left; [ | | nil_trace ]. { econstructor. }
-    eapply star_left; [ | | nil_trace ]. {
-      eapply effect_store; eauto.
-      - econstructor. rewrite PTree.gss. reflexivity.
-      - econstructor. reflexivity.
-      - rewrite Int.unsigned_zero. eauto.
-    }
-
-    eapply star_left; [ | | nil_trace ]. { econstructor. }
-    {
-      eapply effect_store_args with (m1 := m1).
-      - rewrite PTree.gss. reflexivity.
-      - rewrite Int.unsigned_zero. eapply Z.divide_0_r.
-      - reflexivity.
-      - eapply noacc_eval_exprlist; eauto.
-      - eapply Forall2_imp. { on (Forall2 (value_inject _ _) _ _), fun H => exact H. }
-        intros. eapply mem_inj_id_value_inject; eauto.
-      - rewrite Int.unsigned_zero. rewrite Z.add_0_l. reflexivity.
-      - eapply Mem.range_perm_implies with (p1 := Freeable); [ | constructor ].
-        eapply shrink_range_perm with (lo1 := -4).
-        + erewrite <- 2 range_perm_store by eauto. eapply alloc_range_perm. eauto.
-        + lia.
-        + rewrite Z.mul_add_distr_r. lia.
-      - eapply Z.divide_refl.
-      - rewrite Int.unsigned_zero. lia.
-      - lia.
-      - pose proof max_arg_count_ok. fold bound in *. lia.
-      - eapply store_new_block_mem_inj_id; eauto.
-        eapply store_new_block_mem_inj_id; eauto.
-        eapply Mem.mext_inj, Mem.extends_refl.
-      - eauto.
-      - eauto.
-    }
-
-    econstructor; eauto.
-    -- eapply mem_inj_id_match_cont; eauto.
-    -- eapply env_inject_update; eauto. eapply mem_inj_id_env_inject; eauto.
-
+  + eapply step_sim_make_constr; eauto.
 
   (* make close *)
   (* same as make constr *)
-  + compute [transf_stmt]. admit.
-    (*
-    app symbols_transf Genv.find_symbol.
-    app functions_transf Genv.find_funct_ptr.
-    eapply SmakeClose_sim; eauto.
-
-    simpl in H3. break_match_hyp; try congruence.
-    intros. eapply bound_spec; eauto. omega.
-    *)
+  + eapply step_sim_make_close; eauto.
 
   (* opaque op *)
-  + compute [transf_stmt]. admit.
+  + fwd eapply transf_exprlist_inject as HH; eauto. destruct HH as (vargs' & ? & ?).
+    rewrite list_forall2_Forall2 in *.
+
+    fwd eapply opaque_oper_sim_mem_effect as HH; try eassumption.
+      destruct HH as (m' & ret' & ? & ?).
+
+    fwd eapply opaque_oper_mem_inj_id; eauto.
+
+    eexists. split.
+    eapply plus_one. econstructor; eauto.
+    econstructor; eauto.
+    -- eapply mem_inj_id_match_cont; eauto.
+    -- eapply env_inject_update; eauto. eapply mem_inj_id_env_inject; eauto.
 
   (* switch *)
   + app transf_expr_inject Emajor.eval_expr.
