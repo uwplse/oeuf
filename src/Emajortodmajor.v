@@ -1850,27 +1850,22 @@ Proof.
 
   (* switch *)
   + app transf_expr_inject Emajor.eval_expr.
-  eexists.  split. try eapply plus_left; nil_trace.
-  econstructor; eauto.
-  eapply star_left; nil_trace.
-  econstructor; eauto.
-  eapply star_left; nil_trace.
-  econstructor; eauto.
-  eapply star_left; nil_trace.
-  econstructor; eauto.
-  econstructor; eauto.
-  econstructor; eauto.
-  rewrite PTree.gss. reflexivity.
-  all: admit.
-  (*
 
-  app value_inject_ptr (value_inject tge). subst x.
-  eapply value_inject_load; eauto.
-  econstructor; eauto.
-  eapply star_refl; eauto.
-  econstructor; eauto.
-  eapply env_inject_update; eauto.
-    *)
+    eexists. split.
+    eapply plus_left; [ | | nil_trace ]. { econstructor. }
+    eapply star_left; [ | | nil_trace ]. { econstructor. eauto. }
+    eapply star_left; [ | | nil_trace ]. { econstructor. }
+    eapply star_left; [ | | nil_trace ]. {
+      econstructor.
+      - econstructor; eauto.
+        + econstructor; eauto. rewrite PTree.gss. reflexivity.
+        + on >@value_inject, invc. eauto.
+      - econstructor; eauto.
+    }
+    eapply star_refl.
+
+    econstructor; eauto.
+    eapply env_inject_update; eauto.
 
   (* Exit/Block *)
   + invp match_cont.
@@ -1938,7 +1933,7 @@ Proof.
   econstructor; eauto.
   econstructor; eauto.
   simpl. eapply env_inject_update; eauto.
-Admitted.
+Qed.
 
 (* Easier to prove originally with no trace, now just thin wrapper *)
 Lemma step_sim :
