@@ -16,6 +16,7 @@ Require compcert.backend.SelectLong.
 Require oeuf.TraceSemantics.
 Require Import oeuf.FullSemantics.
 Require Import oeuf.OeufMem.
+Require Import oeuf.OpaqueTypes.
 Require Import oeuf.OpaqueOps.
 Require oeuf.MemInjProps.
 
@@ -1181,7 +1182,10 @@ Proof.
       congruence.
     } 
 
-  * (* opaque op *) admit.
+  * (* opaque op *)
+    eexists. split.
+    eapply plus_one. econstructor; eauto.
+    all: admit.
 
   * eexists; split; try eapply plus_one; econstructor; eauto.
     econstructor; eauto.
@@ -1336,22 +1340,25 @@ Qed.
 Lemma value_inject_val_inject :
   forall m hv lv,
     HighValues.value_inject ge m hv lv ->
+    Mem.mem_inj (Mem.flat_inj (Mem.nextblock m)) m m ->
     Val.inject (Mem.flat_inj (Mem.nextblock m)) lv lv.
 Proof.
   intros.
   unfold Mem.flat_inj.
   inv H; cycle 2.
-    { (* opaque case *) admit. }
+    { (* opaque case *)
+      eapply opaque_type_mem_inj_strict; eauto.
+      intros. unfold Mem.valid_block in *. break_if; try contradiction. reflexivity. }
   all: unfold Mem.loadv in *;
-    eapply Mem.load_valid_access in H0;
-    eapply Mem.valid_access_implies in H0;
-    try eapply Mem.valid_access_valid_block in H0;
+    eapply Mem.load_valid_access in H1;
+    eapply Mem.valid_access_implies in H1;
+    try eapply Mem.valid_access_valid_block in H1;
     try solve [econstructor];
     unfold Mem.valid_block in *;
     econstructor; eauto;
       try (break_match; try congruence; try reflexivity);
       rewrite Int.add_zero; reflexivity.
-Admitted.
+Qed.
 
   
 Lemma meminj_value_inject :
@@ -1365,24 +1372,30 @@ Lemma meminj_value_inject :
 Proof.
   intros.
   exists (Mem.flat_inj (Mem.nextblock m)).
+
+  assert (Hmi : Mem.inject (Mem.flat_inj (Mem.nextblock m)) m m).
+  { 
+    eapply Mem.neutral_inject.
+
+    simpl. econstructor; eauto.
+    intros.
+    unfold Mem.flat_inj in *. break_match_hyp; try congruence. inv H3.
+    rewrite Z.add_0_r. assumption.
+    intros.
+    unfold Mem.flat_inj in *. break_match_hyp; try congruence. inv H3.
+    eapply Z.divide_0_r.
+    intros.
+    unfold Mem.flat_inj in *. break_match_hyp; try congruence. inv H3.
+    rewrite Z.add_0_r.
+    destruct (ZMap.get ofs (Mem.mem_contents m) !! b2) eqn:?; econstructor; eauto.
+    destruct v; econstructor; eauto.
+    eapply H1 in Heqm0; eauto.
+    break_match; try congruence. reflexivity.
+    rewrite Int.add_zero. reflexivity.
+  }
+
   split.
-  eapply Mem.neutral_inject.
-  
-  simpl. econstructor; eauto.
-  intros.
-  unfold Mem.flat_inj in *. break_match_hyp; try congruence. inv H3.
-  rewrite Z.add_0_r. assumption.
-  intros.
-  unfold Mem.flat_inj in *. break_match_hyp; try congruence. inv H3.
-  eapply Z.divide_0_r.
-  intros.
-  unfold Mem.flat_inj in *. break_match_hyp; try congruence. inv H3.
-  rewrite Z.add_0_r.
-  destruct (ZMap.get ofs (Mem.mem_contents m) !! b2) eqn:?; econstructor; eauto.
-  destruct v; econstructor; eauto.
-  eapply H1 in Heqm0; eauto.
-  break_match; try congruence. reflexivity.
-  rewrite Int.add_zero. reflexivity.
+  eauto.
 
   split.
   unfold wf_mem.
@@ -1420,8 +1433,8 @@ Proof.
   break_match_hyp; try congruence.
   simpl. repeat (econstructor; eauto).
 
-  eapply value_inject_val_inject; eauto.
-  eapply value_inject_val_inject; eauto.
+  eapply value_inject_val_inject; eauto using Mem.mi_inj.
+  eapply value_inject_val_inject; eauto using Mem.mi_inj.
 Qed.
 
 
@@ -1439,7 +1452,7 @@ Proof.
   split; econstructor; eauto; simpl.
   - eapply Pos.le_1_l.
   - econstructor.
-Qed
+Qed.
 
 Theorem fsim' :
   TraceSemantics.forward_simulation (Dmajor.semantics prog) (Dflatmajor.semantics prog).

@@ -3,6 +3,8 @@ Require Import compcert.common.Values.
 Require Import compcert.common.Memory.
 Require Import oeuf.SafeInt.
 
+Require Import ZArith.
+
 Require Import oeuf.MemInjProps.
 
 Require Import StructTact.StructTactics.
@@ -48,7 +50,19 @@ Record opaque_type_impl {oty} := MkOpaqueTypeImpl {
         cv <> Vundef;
     ot_value_32bit : forall ov cv m,
         ot_value_inject ov cv m ->
-        Val.load_result Mint32 cv = cv
+        Val.load_result Mint32 cv = cv;
+    ot_mem_inj : forall mi m m' cv ov,
+        ot_value_inject ov cv m ->
+        Mem.mem_inj mi m m' ->
+        (forall b, Mem.valid_block m b -> mi b <> None) ->
+        exists cv',
+            ot_value_inject ov cv' m' /\
+            Val.inject mi cv cv';
+    ot_mem_inj_strict : forall mi m m' cv ov,
+        ot_value_inject ov cv m ->
+        Mem.mem_inj mi m m' ->
+        (forall b, Mem.valid_block m b -> mi b = Some (b, 0%Z)) ->
+        Val.inject mi cv cv
 }.
 
 Implicit Arguments opaque_type_impl [].
@@ -56,7 +70,7 @@ Implicit Arguments opaque_type_impl [].
 
 
 Definition impl_int : opaque_type_impl Oint.
-simple refine (MkOpaqueTypeImpl _  _  _ _ _).
+simple refine (MkOpaqueTypeImpl _  _  _ _ _ _ _).
 
 - exact (fun ov cv m => cv = Vint ov).
 
@@ -65,6 +79,10 @@ simple refine (MkOpaqueTypeImpl _  _  _ _ _).
 - intros. simpl in *. congruence.
 
 - intros. simpl in *. subst cv. reflexivity.
+
+- intros. simpl in *. exists cv. subst cv. split; eauto.
+
+- intros. simpl in *. subst cv. eauto. 
 Defined.
 
 
@@ -107,5 +125,24 @@ intros. unfold opaque_type_value_inject in *.
 eapply (ot_value_32bit impl); eauto.
 Qed.
 
+Lemma opaque_type_mem_inj : forall mi m m' cv ov,
+    opaque_type_value_inject ov cv m ->
+    Mem.mem_inj mi m m' ->
+    (forall b, Mem.valid_block m b -> mi b <> None) ->
+    exists cv',
+        opaque_type_value_inject ov cv' m' /\
+        Val.inject mi cv cv'.
+intros. unfold opaque_type_value_inject in *.
+eapply (ot_mem_inj impl); eauto.
+Qed.
+
+Lemma opaque_type_mem_inj_strict : forall mi m m' cv ov,
+    opaque_type_value_inject ov cv m ->
+    Mem.mem_inj mi m m' ->
+    (forall b, Mem.valid_block m b -> mi b = Some (b, 0%Z)) ->
+    Val.inject mi cv cv.
+intros. unfold opaque_type_value_inject in *.
+eapply (ot_mem_inj_strict impl); eauto.
+Qed.
 
 End BY_NAME.
