@@ -78,6 +78,9 @@ Record opaque_oper_impl {atys rty} := MkOpaqueOperImpl {
             exists ret',
                 oo_denote_high args' = Some ret' /\
                 HighValues.change_only_fnames P ret ret';
+        oo_mem_inj_id : forall A B (ge : Genv.t A B) m args m' ret,
+            oo_denote_mem_effect ge m args m' ret ->
+            Mem.mem_inj inject_id m m';
 
         (* simulation proofs *)
         oo_sim_source : forall G (h : hlist func_type_denote G) vs,
@@ -156,7 +159,7 @@ Qed.
 
 
 Definition impl_add : opaque_oper_impl [Opaque Oint; Opaque Oint] (Opaque Oint).
-simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _ _  _ _  _ _ _ _ _).
+simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _ _  _ _ _  _ _ _ _ _).
 
 - exact (fun args => Int.add (hhead args) (hhead (htail args))).
 - refine (fun G args =>
@@ -199,6 +202,10 @@ simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _ _  _ _  _ _ _ _ _).
   repeat on >Forall2, invc. simpl in *. repeat (break_match; try contradiction).
   fix_existT. subst. inject_some.
   eexists; split; eauto. simpl. eauto.
+
+- (* mem_inj_id *)
+  intros. simpl in *. break_exists. break_and. subst.
+  eapply Mem.mext_inj. eapply Mem.extends_refl.
 
 
 - intros. simpl.
@@ -256,7 +263,7 @@ Defined.
 
 
 Definition impl_test : opaque_oper_impl [Opaque Oint] (ADT Tbool).
-simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _ _  _ _  _ _ _ _ _).
+simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _ _  _ _ _  _ _ _ _ _).
 
 - exact (fun args => Int.eq (hhead args) Int.zero).
 - refine (fun G args =>
@@ -304,6 +311,10 @@ simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _ _  _ _  _ _ _ _ _).
   repeat on >Forall2, invc. simpl in *. break_match; try contradiction.
   fix_existT. subst. inject_some.
   eexists; split; eauto. simpl. eauto.
+
+- (* mem_inj_id *)
+  intros. simpl in *. break_exists. break_and. subst.
+  eauto.
 
 
 - intros. simpl.
@@ -432,6 +443,14 @@ Lemma opaque_oper_change_fnames_high : forall P args args' ret,
 intros. unfold opaque_oper_denote_high in *.
 clearbody impl'. destruct impl' as (? & ? & impl'').
 eapply (oo_change_fnames_high impl''); eauto.
+Qed.
+
+Lemma opaque_oper_mem_inj_id : forall A B (ge : Genv.t A B) m args m' ret,
+    opaque_oper_denote_mem_effect ge m args m' ret ->
+    Mem.mem_inj inject_id m m'.
+intros. unfold opaque_oper_denote_mem_effect in *.
+clearbody impl'. destruct impl' as (? & ? & impl'').
+eapply (oo_mem_inj_id impl''); eauto.
 Qed.
 
 
