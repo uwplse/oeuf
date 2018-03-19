@@ -27,6 +27,7 @@ Require Import StructTact.StructTactics.
 Require Import StructTact.Util.
 
 Require Import oeuf.EricTact.
+Require Import oeuf.StuartTact.
 
 Definition transf_prog (p : Dmajor.program) : Errors.res Dmajor.program :=
   if (list_norepet_dec ident_eq (prog_defs_names p)) then
@@ -1041,6 +1042,13 @@ eapply Ple_trans; eauto.
 eapply Ple_succ.
 Qed.
 
+Lemma val_inject_list_forall2 : forall mi vs vs',
+    Val.inject_list mi vs vs' <-> Forall2 (Val.inject mi) vs vs'.
+induction vs; destruct vs'; split; intro HH; invc HH; econstructor; eauto.
+- rewrite <- IHvs. eauto.
+- rewrite -> IHvs. eauto.
+Qed.
+
 
 Lemma single_step_correct:
   forall S1 t S2, Dmajor.step ge S1 t S2 ->
@@ -1183,9 +1191,19 @@ Proof.
     } 
 
   * (* opaque op *)
+    fwd eapply opaque_oper_mem_inject as HH; eauto.
+      { unfold wf_mem, wf_inj in *. break_and. auto. }
+      { rewrite <- val_inject_list_forall2. eauto. }
+      destruct HH as (mi' & m2' & ret' & ? & ? & ?).
+
     eexists. split.
     eapply plus_one. econstructor; eauto.
-    all: admit.
+    econstructor; eauto.
+    - admit. (* stack_frame_wf *)
+    - admit. (* highest_block *)
+    - admit. (* match_cont *)
+    - eapply env_inj_set; eauto. admit. (* env_inj - reuse proof block above *)
+    - admit. (* wf_mem *)
 
   * eexists; split; try eapply plus_one; econstructor; eauto.
     econstructor; eauto.

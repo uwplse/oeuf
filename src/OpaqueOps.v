@@ -1,4 +1,5 @@
 Require Import Psatz.
+Require Import ZArith.
 
 Require Import compcert.common.Values.
 Require Import compcert.common.Memory.
@@ -10,6 +11,7 @@ Require Import oeuf.SafeInt.
 Require Import oeuf.Utopia.
 Require Import oeuf.Monads.
 Require Import oeuf.MemFacts.
+Require Import oeuf.MemInjProps.
 
 Require Import oeuf.OpaqueTypes.
 
@@ -58,7 +60,7 @@ Record opaque_oper_impl {atys rty} := MkOpaqueOperImpl {
         oo_denote_highest : list HighestValues.value -> option HighestValues.value;
         oo_denote_higher : list HigherValue.value -> option HigherValue.value;
         oo_denote_high : list HighValues.value -> option HighValues.value;
-        oo_denote_mem_effect : forall {A B}, Genv.t A B -> mem -> list val -> mem -> val -> Prop;
+        oo_denote_mem_effect : forall {A B}, Genv.t A B -> mem -> list val -> option (mem * val);
         (* TODO: oo_denote_low *)
 
         (* properties *)
@@ -79,8 +81,18 @@ Record opaque_oper_impl {atys rty} := MkOpaqueOperImpl {
                 oo_denote_high args' = Some ret' /\
                 HighValues.change_only_fnames P ret ret';
         oo_mem_inj_id : forall A B (ge : Genv.t A B) m args m' ret,
-            oo_denote_mem_effect ge m args m' ret ->
+            oo_denote_mem_effect ge m args = Some (m', ret) ->
             Mem.mem_inj inject_id m m';
+        oo_mem_inject : forall A B (ge : Genv.t A B) m1 args m2 ret,
+            forall mi m1' args',
+            oo_denote_mem_effect ge m1 args = Some (m2, ret) ->
+            Mem.inject mi m1 m1' ->
+            same_offsets mi ->
+            Forall2 (Val.inject mi) args args' ->
+            exists mi' m2' ret',
+                oo_denote_mem_effect ge m1' args' = Some (m2', ret') /\
+                Mem.inject mi' m2 m2' /\
+                Val.inject mi' ret ret';
 
         (* simulation proofs *)
         oo_sim_source : forall G (h : hlist func_type_denote G) vs,
@@ -106,7 +118,7 @@ Record opaque_oper_impl {atys rty} := MkOpaqueOperImpl {
             Forall2 (HighValues.value_inject ge m) args args' ->
             oo_denote_high args = Some ret ->
             exists m' ret',
-                oo_denote_mem_effect ge m args' m' ret' /\
+                oo_denote_mem_effect ge m args' = Some (m', ret') /\
                 HighValues.value_inject ge m' ret ret'
     }.
 
@@ -159,7 +171,7 @@ Qed.
 
 
 Definition impl_add : opaque_oper_impl [Opaque Oint; Opaque Oint] (Opaque Oint).
-simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _ _  _ _ _  _ _ _ _ _).
+simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _ _  _ _ _ _  _ _ _ _ _).
 
 - exact (fun args => Int.add (hhead args) (hhead (htail args))).
 - refine (fun G args =>
@@ -184,10 +196,11 @@ simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _ _  _ _ _  _ _ _ _ _).
        HighValues.Opaque Oint y] => Some (HighValues.Opaque Oint (Int.add x y))
     | _ => None
     end).
-- refine (fun A B ge m args m' ret => exists x y,
-    args = [Vint x; Vint y] /\
-    ret = Vint (Int.add x y) /\
-    m = m').
+- refine (fun A B ge m args =>
+    match args with
+    | [Vint x; Vint y] => Some (m, Vint (Int.add x y))
+    | _ => None
+    end).
 
 
 - (* no_fab_clos_higher *)
@@ -204,8 +217,13 @@ simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _ _  _ _ _  _ _ _ _ _).
   eexists; split; eauto. simpl. eauto.
 
 - (* mem_inj_id *)
-  intros. simpl in *. break_exists. break_and. subst.
-  eapply Mem.mext_inj. eapply Mem.extends_refl.
+  intros. simpl in *. repeat (break_match; try discriminate; []). subst.
+  inject_some.  eapply Mem.mext_inj. eapply Mem.extends_refl.
+
+- (* mem_inject *)
+  intros. simpl in *. repeat (break_match_hyp; try discriminate; []). subst. inject_some.
+  do 3 on >Forall2, invc. do 2 on >Val.inject, invc.
+  eexists mi, _, _. split; eauto.
 
 
 - intros. simpl.
@@ -262,8 +280,17 @@ simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _ _  _ _ _  _ _ _ _ _).
 Defined.
 
 
+
+Lemma perm_cur_freeable : forall m b ofs k p,
+    Mem.perm m b ofs Cur Freeable ->
+    Mem.perm m b ofs k p.
+intros. eapply Mem.perm_cur.  eapply Mem.perm_implies; eauto.
+eapply perm_F_any.
+Qed.
+
+
 Definition impl_test : opaque_oper_impl [Opaque Oint] (ADT Tbool).
-simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _ _  _ _ _  _ _ _ _ _).
+simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _ _  _ _ _ _  _ _ _ _ _).
 
 - exact (fun args => Int.eq (hhead args) Int.zero).
 - refine (fun G args =>
@@ -292,11 +319,16 @@ simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _ _  _ _ _  _ _ _ _ _).
            HighValues.Constr tag [])
     | _ => None
     end).
-- refine (fun A B ge m args m' ret => exists x,
-    args = [Vint x] /\
-    (let tag := if Int.eq x Int.zero then Int.zero else Int.one in
-     HighValues.value_inject ge m' (HighValues.Constr tag []) ret) /\
-    Mem.mem_inj inject_id m m').
+- refine (fun A B ge m args =>
+    match args with
+    | [Vint x] =>
+            let tag := if Int.eq x Int.zero then Int.zero else Int.one in
+            match build_constr m tag [] with
+            | Some (ret, m') => Some (m', ret)
+            | None => None
+            end
+    | _ => None
+    end).
 
 
 - (* no_fab_clos_higher *)
@@ -313,8 +345,35 @@ simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _ _  _ _ _  _ _ _ _ _).
   eexists; split; eauto. simpl. eauto.
 
 - (* mem_inj_id *)
-  intros. simpl in *. break_exists. break_and. subst.
-  eauto.
+  intros. simpl in *. repeat (break_match_hyp; try discriminate; []). subst. inject_some.
+  eapply build_constr_mem_inj_id; eauto.
+
+- (* mem_inject *)
+  intros. simpl in *. repeat (break_match_hyp; try discriminate; []). subst. inject_some.
+  do 2 on >Forall2, invc. on >Val.inject, invc.
+  unfold build_constr in * |-. break_match_hyp. break_bind_option. inject_some.
+  rename m2 into m3, m0 into m2, m1 into m0, m into m1.
+  rename m1' into m0'.
+
+  (* TODO: pull this out as a lemma about build_constr *)
+
+  fwd eapply Mem.alloc_parallel_inject with (lo2 := (-4)%Z) (hi2 := 4%Z) as HH; eauto.
+    { lia. }
+    { simpl. lia. }
+    destruct HH as (mi' & m1' & b' & ? & ? & ? & ? & ?).
+
+  fwd eapply Mem.store_mapped_inject with (m1 := m1) as HH; eauto.
+    destruct HH as (m2' & ? & ?).
+
+  fwd eapply Mem.store_mapped_inject with (m1 := m2) as HH; eauto.
+    destruct HH as (m3' & ? & ?).
+
+  eexists mi', m3', _.
+  split; eauto.
+  unfold build_constr.
+  simpl in *.
+  repeat (on _, fun H => rewrite H; simpl).
+  reflexivity.
 
 
 - intros. simpl.
@@ -363,9 +422,7 @@ simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _ _  _ _ _  _ _ _ _ _).
     { rewrite Zcomplements.Zlength_nil. eapply max_arg_count_big. lia. }
     destruct HH as (ret' & m' & ? & ?).
   exists m', ret'. split; eauto.
-  exists ov. split; [|split]; eauto.
-
-  + eapply build_constr_mem_inj_id. eauto.
+  find_rewrite. reflexivity.
 
 Defined.
 
@@ -446,11 +503,26 @@ eapply (oo_change_fnames_high impl''); eauto.
 Qed.
 
 Lemma opaque_oper_mem_inj_id : forall A B (ge : Genv.t A B) m args m' ret,
-    opaque_oper_denote_mem_effect ge m args m' ret ->
+    opaque_oper_denote_mem_effect ge m args  = Some (m', ret) ->
     Mem.mem_inj inject_id m m'.
 intros. unfold opaque_oper_denote_mem_effect in *.
 clearbody impl'. destruct impl' as (? & ? & impl'').
 eapply (oo_mem_inj_id impl''); eauto.
+Qed.
+
+Lemma opaque_oper_mem_inject : forall A B (ge : Genv.t A B) m1 args m2 ret,
+    forall mi m1' args',
+    opaque_oper_denote_mem_effect ge m1 args = Some (m2, ret) ->
+    Mem.inject mi m1 m1' ->
+    same_offsets mi ->
+    Forall2 (Val.inject mi) args args' ->
+    exists mi' m2' ret',
+        opaque_oper_denote_mem_effect ge m1' args' = Some (m2', ret') /\
+        Mem.inject mi' m2 m2' /\
+        Val.inject mi' ret ret'.
+intros. unfold opaque_oper_denote_mem_effect in *.
+clearbody impl'. destruct impl' as (? & ? & impl'').
+eapply (oo_mem_inject impl''); eauto.
 Qed.
 
 
@@ -494,7 +566,7 @@ Lemma opaque_oper_sim_mem_effect : forall A B (ge : Genv.t A B) m args args' ret
     Forall2 (HighValues.value_inject ge m) args args' ->
     opaque_oper_denote_high args = Some ret ->
     exists m' ret',
-        opaque_oper_denote_mem_effect ge m args' m' ret' /\
+        opaque_oper_denote_mem_effect ge m args' = Some (m', ret') /\
         HighValues.value_inject ge m' ret ret'.
 intros0 Hmv HH. unfold opaque_oper_denote_high, opaque_oper_denote_mem_effect in *.
 clearbody impl'. destruct impl' as (? & ? & impl'').
