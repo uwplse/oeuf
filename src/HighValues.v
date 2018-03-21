@@ -734,3 +734,23 @@ induction vs1; destruct vs2; split; intro HH; invc HH.
 - constructor; eauto. firstorder.
 Qed.
 
+
+
+Lemma ptr_block_valid : forall A B (ge : Genv.t A B) m hv b ofs,
+    value_inject ge m hv (Vptr b ofs) ->
+    Mem.valid_block m b.
+inversion 1.
+
+- eapply Mem.valid_access_valid_block.
+  eapply Mem.valid_access_implies.
+  + eapply Mem.load_valid_access. eauto.
+  + constructor.
+
+- eapply Mem.valid_access_valid_block.
+  eapply Mem.valid_access_implies.
+  + eapply Mem.load_valid_access. eauto.
+  + constructor.
+
+- eapply opaque_type_ptr_block_valid; eauto.
+Qed.
+

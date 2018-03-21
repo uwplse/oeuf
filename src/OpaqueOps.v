@@ -22,6 +22,9 @@ Require oeuf.HighValues.
 
 Require Import oeuf.MatchValues.
 
+Require Import oeuf.StuartTact.
+Require Import oeuf.EricTact.
+
 Local Open Scope option_monad.
 
 
@@ -48,11 +51,104 @@ Defined.
 
 
 
+Section MEM_SIM.
+Local Open Scope positive_scope.
+
 Definition closure_sig_higher v :=
     match v with
     | HigherValue.Close fname free => Some (fname, length free)
     | _ => None
     end.
+
+Definition mem_sim (mi mi' : block -> option (block * Z)) m1 m1' m2 m2' :=
+    (forall b,
+        b >= Mem.nextblock m1 ->
+        b < Mem.nextblock m1' ->
+        exists b' delta,
+            mi' b = Some (b', delta) /\
+            b' >= Mem.nextblock m2 /\
+            b' < Mem.nextblock m2') /\
+    (forall b,
+        b < Mem.nextblock m1 \/ b >= Mem.nextblock m1' ->
+        mi' b = mi b) /\
+    Mem.nextblock m1 <= Mem.nextblock m1' /\
+    Mem.nextblock m2 <= Mem.nextblock m2'.
+
+Lemma mem_sim_refl : forall mi m1 m1' m2 m2',
+    Mem.nextblock m1 = Mem.nextblock m1' ->
+    Mem.nextblock m2 = Mem.nextblock m2' ->
+    mem_sim mi mi m1 m1' m2 m2'.
+intros0 Hnext1 Hnext2. split; [|split]; [..|split]; intros.
+- exfalso. rewrite <- Hnext1 in *. lia.
+- reflexivity.
+- rewrite Hnext1. lia.
+- rewrite Hnext2. lia.
+Qed.
+
+(* Compose memory simulation "vertically", by adding more steps. *)
+Lemma mem_sim_compose : forall mi mi' mi'' m1 m1' m1'' m2 m2' m2'',
+    mem_sim mi mi' m1 m1' m2 m2' ->
+    mem_sim mi' mi'' m1' m1'' m2' m2'' ->
+    mem_sim mi mi'' m1 m1'' m2 m2''.
+unfold mem_sim. intros0 Hsim Hsim'.
+destruct Hsim as (Hnew & Hold & Hext1 & Hext2).
+destruct Hsim' as (Hnew' & Hold' & Hext1' & Hext2').
+split; [|split]; [..|split]; intros.
+
+- assert (HH : b >= Mem.nextblock m1' \/ b < Mem.nextblock m1'). { lia. } destruct HH.
+  + destruct (Hnew' ?? ** ** ) as (b' & delta & ? & ? & ?).
+    exists b', delta. split; [|split]; eauto. lia.
+  + destruct (Hnew ?? ** ** ) as (b' & delta & ? & ? & ?).
+    fwd eapply Hold' as HH; eauto.
+    exists b', delta. split; [|split]; eauto.
+    * congruence.
+    * lia.
+
+- eapply eq_trans.
+  + eapply Hold'. break_or; [left; lia | right; eauto].
+  + eapply Hold. break_or; [left; eauto | right; lia].
+
+- lia.
+- lia.
+Qed.
+
+Lemma alloc_mem_sim : forall m1 m2 lo hi m1' b1 mi,
+    Mem.alloc m1 lo hi = (m1', b1) ->
+    Mem.inject mi m1 m2 ->
+    exists mi' m2' b2,
+        Mem.alloc m2 lo hi = (m2', b2) /\
+        Mem.inject mi' m1' m2' /\
+        mem_sim mi mi' m1 m1' m2 m2' /\
+        mi' b1 = Some (b2, 0%Z).
+intros0 Halloc Hinj.
+fwd eapply Mem.alloc_parallel_inject with (lo2 := lo) (hi2 := hi) as HH; eauto.
+  { lia. } { lia. }
+  destruct HH as (mi' & m2' & b2 & ? & ? & ? & ? & ?).
+
+fwd eapply Mem.nextblock_alloc with (m1 := m1); eauto.
+fwd eapply Mem.alloc_result with (m1 := m1); eauto.
+fwd eapply Mem.nextblock_alloc with (m1 := m2); eauto.
+fwd eapply Mem.alloc_result with (m1 := m2); eauto.
+rewrite <- Pos.add_1_l in *.
+
+exists mi', m2', b2. split; [|split]; [..|split]; eauto.
+unfold mem_sim. split; [|split]; [..|split]; eauto.
+
+- intros.
+  assert (b = b1). { subst b1. lia. }
+  subst b.
+  exists b2, 0%Z. split; eauto. subst. split; lia.
+
+- intros.
+  assert (b <> b1). { subst b1. lia. }
+  eauto.
+
+- lia.
+- lia.
+Qed.
+
+End MEM_SIM.
+
 
 Record opaque_oper_impl {atys rty} := MkOpaqueOperImpl {
         oo_denote : hlist type_denote atys -> type_denote rty;
@@ -92,7 +188,8 @@ Record opaque_oper_impl {atys rty} := MkOpaqueOperImpl {
             exists mi' m2' ret',
                 oo_denote_mem_effect ge m1' args' = Some (m2', ret') /\
                 Mem.inject mi' m2 m2' /\
-                Val.inject mi' ret ret';
+                Val.inject mi' ret ret' /\
+                mem_sim mi mi' m1 m2 m1' m2';
 
         (* simulation proofs *)
         oo_sim_source : forall G (h : hlist func_type_denote G) vs,
@@ -223,7 +320,7 @@ simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _ _  _ _ _ _  _ _ _ _ _).
 - (* mem_inject *)
   intros. simpl in *. repeat (break_match_hyp; try discriminate; []). subst. inject_some.
   do 3 on >Forall2, invc. do 2 on >Val.inject, invc.
-  eexists mi, _, _. split; eauto.
+  eexists mi, _, _. split; eauto using mem_sim_refl.
 
 
 - intros. simpl.
@@ -357,10 +454,8 @@ simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _ _  _ _ _ _  _ _ _ _ _).
 
   (* TODO: pull this out as a lemma about build_constr *)
 
-  fwd eapply Mem.alloc_parallel_inject with (lo2 := (-4)%Z) (hi2 := 4%Z) as HH; eauto.
-    { lia. }
-    { simpl. lia. }
-    destruct HH as (mi' & m1' & b' & ? & ? & ? & ? & ?).
+  fwd eapply alloc_mem_sim as HH; eauto.
+    destruct HH as (mi' & m1' & b' & ? & ? & ? & ?).
 
   fwd eapply Mem.store_mapped_inject with (m1 := m1) as HH; eauto.
     destruct HH as (m2' & ? & ?).
@@ -369,7 +464,14 @@ simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _ _  _ _ _ _  _ _ _ _ _).
     destruct HH as (m3' & ? & ?).
 
   eexists mi', m3', _.
-  split; eauto.
+  split; cycle 1.
+    { split; [|split]; eauto.
+      eapply mem_sim_compose; cycle 1.
+        { eapply mem_sim_refl; symmetry; eapply Mem.nextblock_store; eauto. }
+      eapply mem_sim_compose; cycle 1.
+        { eapply mem_sim_refl; symmetry; eapply Mem.nextblock_store; eauto. }
+      eauto. }
+
   unfold build_constr.
   simpl in *.
   repeat (on _, fun H => rewrite H; simpl).
@@ -519,7 +621,8 @@ Lemma opaque_oper_mem_inject : forall A B (ge : Genv.t A B) m1 args m2 ret,
     exists mi' m2' ret',
         opaque_oper_denote_mem_effect ge m1' args' = Some (m2', ret') /\
         Mem.inject mi' m2 m2' /\
-        Val.inject mi' ret ret'.
+        Val.inject mi' ret ret' /\
+        mem_sim mi mi' m1 m2 m1' m2'.
 intros. unfold opaque_oper_denote_mem_effect in *.
 clearbody impl'. destruct impl' as (? & ? & impl'').
 eapply (oo_mem_inject impl''); eauto.
