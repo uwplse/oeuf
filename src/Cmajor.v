@@ -12,6 +12,7 @@ Require Import compcert.common.Switch.
 Require Import oeuf.TraceSemantics.
 Require Import oeuf.HighValues.
 Require Import oeuf.AllValues.
+Require Import oeuf.OpaqueOps.
 
 Require Import List.
 Import ListNotations.
@@ -38,6 +39,7 @@ Inductive stmt : Type :=
   | Sstore : memory_chunk -> expr -> expr -> stmt
   | Scall : option ident -> signature -> expr -> list expr -> stmt
   | ScallSpecial : option ident -> signature -> ident -> list expr -> stmt (* malloc *)
+  | SopaqueOp : ident -> opaque_oper_name -> list expr -> stmt
   | Sseq: stmt -> stmt -> stmt
   | Sswitch: bool -> expr -> list (Z * nat) -> nat -> stmt (* exit n blocks *)
   | Sblock: stmt -> stmt (* neccessary for switch to work *)
@@ -223,6 +225,12 @@ Inductive step: state -> trace -> state -> Prop :=
       step (State f (Sbuiltin optid ef bl) k sp e m)
          t (State f Sskip k sp (set_optvar optid vres e) m')
          *)
+
+  | step_opaque_op : forall id op args vargs vret f k sp e m m',
+      eval_exprlist e m sp args vargs ->
+      opaque_oper_denote_mem_effect op m vargs = Some (m', vret) ->
+      step (State f (SopaqueOp id op args) k sp e m)
+        E0 (State f Sskip k sp (PTree.set id vret e) m')
 
   | step_seq: forall f s1 s2 k sp e m,
       step (State f (Sseq s1 s2) k sp e m)
