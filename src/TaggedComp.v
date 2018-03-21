@@ -56,7 +56,7 @@ Definition compile_value (v : HighestValues.value) : HigherValue.value :=
                 HigherValue.Constr (Utopia.constructor_index ctor) (go_list args)
         | HighestValues.Close fname free =>
                 HigherValue.Close fname (go_list free)
-        | HighestValues.Opaque _ _ => HigherValue.Constr 0 []
+        | HighestValues.Opaque oty ov => HigherValue.Opaque oty ov
         end in go v.
 
 Definition compile_value_list :=
@@ -287,11 +287,11 @@ intros0 Hcomp.
 - subst bv. simpl. refold_compile_value.
   econstructor; eauto.
 
-- admit. (* opaque case *)
+- subst bv. simpl. econstructor.
 
 - subst bvs. constructor.
 - subst bvs. simpl. eauto.
-Admitted.
+Qed.
 
 
 Theorem compile_I_expr : forall ae be,
