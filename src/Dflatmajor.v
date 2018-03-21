@@ -226,7 +226,7 @@ Inductive step: state -> trace -> state -> Prop :=
            t (State f Sskip k sp (PTree.set id vres e) m' z)
   | step_opaque_op : forall id op args vargs vret f k sp e m z m',
       eval_exprlist e m sp args vargs ->
-      opaque_oper_denote_mem_effect op ge m vargs = Some (m', vret) ->
+      opaque_oper_denote_mem_effect op m vargs = Some (m', vret) ->
       step (State f (SopaqueOp id op args) k sp e m z)
         E0 (State f Sskip k sp (PTree.set id vret e) m' z)
   | step_seq: forall f s1 s2 k sp e m z,
