@@ -1048,23 +1048,6 @@ induction vs; destruct vs'; split; intro HH; invc HH; econstructor; eauto.
 - rewrite -> IHvs. eauto.
 Qed.
 
-Definition Plt_dec : forall a b, ({ a < b } + { a >= b })%positive.
-intros. destruct (a ?= b)%positive eqn:?.
-- right. rewrite Pos.compare_eq_iff in *. lia.
-- left. rewrite Pos.compare_lt_iff in *. lia.
-- right. rewrite Pos.compare_gt_iff in *. lia.
-Defined.
-
-Definition pos_range_dec : forall min max x,
-    ({ x >= min /\ x < max } + { x < min \/ x >= max })%positive.
-intros.
-destruct (Plt_dec x min), (Plt_dec x max).
-- right. left. auto.
-- right. left. auto.
-- left. split; auto.
-- right. right. auto.
-Defined.
-
 Lemma mem_sim_stack_frame_wf : forall b sz mi mi' m1 m1' m2 m2',
     stack_frame_wf b sz mi m2 -> 
     mem_sim mi mi' m1 m1' m2 m2' ->
@@ -1082,7 +1065,7 @@ split; [|split].
 
 - intros.
   destruct (pos_range_dec (Mem.nextblock m1) (Mem.nextblock m1') b').
-  + break_and. fwd eapply Hnew as HH; eauto. destruct HH as (b'' & delta' & ? & ? & ?).
+  + break_and. fwd eapply Hnew as HH; eauto. destruct HH as (b'' & ? & ? & ?).
     assert (b'' <> b) by congruence. congruence.
   + fwd eapply Hold as HH; eauto. rewrite HH. clear HH. eauto.
 
@@ -1149,10 +1132,35 @@ split; [|split]; [..|split].
     assert (b < Mem.nextblock m1)%positive.  { eapply Hdomain; eauto. }
     rewrite Hold; eauto.
 
-  + unfold meminj_injective in *. admit. (* mi' new mappings must be injective *)
+  + unfold meminj_injective in *. intros.
+    destruct (pos_range_dec (Mem.nextblock m1) (Mem.nextblock m1') b1);
+      destruct (pos_range_dec (Mem.nextblock m1) (Mem.nextblock m1') b2).
 
-  + unfold same_offsets, MemInjProps.same_offsets in *.
-    admit. (* mi' new mappings must have delta = 0 *)
+    * (* b1 and b2 are both new *) break_and; eauto.
+
+    * (* b1 is new, b2 is old *) exfalso.
+      (* b1 is a new block, so it maps to an RHS new block under mi'. *)
+      break_and. fwd eapply (Hnew b1) as HH; eauto. destruct HH as (b1' & ? & ? & ?).
+        replace b1' with b in * by congruence.
+      (* b2 is an old block, so its mapping under mi' is the same as under mi.
+       * But all blocks in the range of mi are old (RHS) blocks. *)
+      rewrite (Hold b2) in * by eauto.
+      fwd eapply (Hrange _); eauto.
+
+    * (* b1 is old, b2 is new *) exfalso.
+      break_and. fwd eapply (Hnew b2) as HH; eauto. destruct HH as (b2' & ? & ? & ?).
+        replace b2' with b in * by congruence.
+      rewrite (Hold b1) in * by eauto.
+      fwd eapply (Hrange _); eauto.
+
+    * (* b1 and b2 are both old *) rewrite Hold in * by eauto. eauto.
+
+  + unfold same_offsets, MemInjProps.same_offsets in *. intros.
+    destruct (pos_range_dec (Mem.nextblock m1) (Mem.nextblock m1') b).
+
+    * (* new *) break_and. fwd eapply Hnew as HH; eauto. destruct HH as (b'' & ? & ?).
+      congruence.
+    * (* old *) rewrite Hold in * by auto. eauto.
 
 - unfold total_inj in *.
   intros0 Hload.
@@ -1163,8 +1171,7 @@ split; [|split]; [..|split].
     rewrite Hold; eauto.
 
   + (* new block *)
-    fwd eapply Hnew as HH; eauto. destruct HH as (b' & delta & ? & ? & ?).
-    assert (delta = 0) by admit. subst delta.
+    fwd eapply Hnew as HH; eauto. destruct HH as (b' & ? & ? & ?).
     eauto.
 
 - unfold minimal_inj_domain in *. intros.
@@ -1178,13 +1185,13 @@ split; [|split]; [..|split].
 
 - unfold minimal_inj_range in *. intros.
   destruct (pos_range_dec (Mem.nextblock m1) (Mem.nextblock m1') b).
-  + break_and. fwd eapply Hnew as HH; eauto. destruct HH as (b'' & delta' & ? & ? & ?).
+  + break_and. fwd eapply Hnew as HH; eauto. destruct HH as (b'' & ? & ? & ?).
     replace b' with b'' by congruence. eauto.
   + rewrite Hold in *; eauto.
     unfold Mem.valid_block, Plt in *.
     fwd eapply Hrange; eauto. lia.
 
-Admitted.
+Qed.
 
 
 Lemma single_step_correct:

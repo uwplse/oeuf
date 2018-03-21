@@ -60,17 +60,47 @@ Definition closure_sig_higher v :=
     | _ => None
     end.
 
+Definition Plt_dec : forall a b, ({ a < b } + { a >= b })%positive.
+intros. destruct (a ?= b)%positive eqn:?.
+- right. rewrite Pos.compare_eq_iff in *. lia.
+- left. rewrite Pos.compare_lt_iff in *. lia.
+- right. rewrite Pos.compare_gt_iff in *. lia.
+Defined.
+
+Definition pos_range_dec : forall min max x,
+    ({ x >= min /\ x < max } + { x < min \/ x >= max })%positive.
+intros.
+destruct (Plt_dec x min), (Plt_dec x max).
+- right. left. auto.
+- right. left. auto.
+- left. split; auto.
+- right. right. auto.
+Defined.
+
+
+
 Definition mem_sim (mi mi' : block -> option (block * Z)) m1 m1' m2 m2' :=
+    (* mi' maps new blocks on the left to new blocks on the right. *)
     (forall b,
         b >= Mem.nextblock m1 ->
         b < Mem.nextblock m1' ->
-        exists b' delta,
-            mi' b = Some (b', delta) /\
+        exists b',
+            mi' b = Some (b', 0%Z) /\
             b' >= Mem.nextblock m2 /\
             b' < Mem.nextblock m2') /\
+    (* mi' behaves like mi on old blocks on the left. *)
     (forall b,
         b < Mem.nextblock m1 \/ b >= Mem.nextblock m1' ->
         mi' b = mi b) /\
+    (* The new mappings introduced by mi' are injective. *)
+    (forall b1 b2 b' delta1 delta2,
+        b1 >= Mem.nextblock m1 ->
+        b1 < Mem.nextblock m1' ->
+        b2 >= Mem.nextblock m1 ->
+        b2 < Mem.nextblock m1' ->
+        mi' b1 = Some (b', delta1) ->
+        mi' b2 = Some (b', delta2) ->
+        b1 = b2) /\
     Mem.nextblock m1 <= Mem.nextblock m1' /\
     Mem.nextblock m2 <= Mem.nextblock m2'.
 
@@ -78,9 +108,10 @@ Lemma mem_sim_refl : forall mi m1 m1' m2 m2',
     Mem.nextblock m1 = Mem.nextblock m1' ->
     Mem.nextblock m2 = Mem.nextblock m2' ->
     mem_sim mi mi m1 m1' m2 m2'.
-intros0 Hnext1 Hnext2. split; [|split]; [..|split]; intros.
+intros0 Hnext1 Hnext2. repeat apply conj; intros.
 - exfalso. rewrite <- Hnext1 in *. lia.
 - reflexivity.
+- exfalso. rewrite <- Hnext1 in *. lia.
 - rewrite Hnext1. lia.
 - rewrite Hnext2. lia.
 Qed.
@@ -91,22 +122,46 @@ Lemma mem_sim_compose : forall mi mi' mi'' m1 m1' m1'' m2 m2' m2'',
     mem_sim mi' mi'' m1' m1'' m2' m2'' ->
     mem_sim mi mi'' m1 m1'' m2 m2''.
 unfold mem_sim. intros0 Hsim Hsim'.
-destruct Hsim as (Hnew & Hold & Hext1 & Hext2).
-destruct Hsim' as (Hnew' & Hold' & Hext1' & Hext2').
-split; [|split]; [..|split]; intros.
+destruct Hsim as (Hnew & Hold & Hinj & Hext1 & Hext2).
+destruct Hsim' as (Hnew' & Hold' & Hinj' & Hext1' & Hext2').
+repeat apply conj; intros.
 
 - assert (HH : b >= Mem.nextblock m1' \/ b < Mem.nextblock m1'). { lia. } destruct HH.
-  + destruct (Hnew' ?? ** ** ) as (b' & delta & ? & ? & ?).
-    exists b', delta. split; [|split]; eauto. lia.
-  + destruct (Hnew ?? ** ** ) as (b' & delta & ? & ? & ?).
+  + destruct (Hnew' ?? ** ** ) as (b' & ? & ? & ?).
+    exists b'. repeat apply conj; eauto. lia.
+  + destruct (Hnew ?? ** ** ) as (b' & ? & ? & ?).
     fwd eapply Hold' as HH; eauto.
-    exists b', delta. split; [|split]; eauto.
+    exists b'. repeat apply conj; eauto.
     * congruence.
     * lia.
 
 - eapply eq_trans.
   + eapply Hold'. break_or; [left; lia | right; eauto].
   + eapply Hold. break_or; [left; eauto | right; lia].
+
+- destruct (Plt_dec b1 (Mem.nextblock m1')), (Plt_dec b2 (Mem.nextblock m1')).
+
+  + rewrite Hold' in *; eauto.
+
+  + exfalso.
+    (* impossible.  b1 is old, b2 is new, so they can't both map to b'. *)
+    rewrite (Hold' b1) in *; eauto.
+    fwd eapply (Hnew b1) as HH; eauto. destruct HH as (b1' & ? & ? & ?).
+    fwd eapply (Hnew' b2) as HH; eauto. destruct HH as (b2' & ? & ? & ?).
+    assert (b1' = b2') by congruence.
+    assert (b1' < b2') by lia.
+    subst b1'. lia.
+
+  + exfalso.
+    (* impossible.  b1 is old, b2 is new, so they can't both map to b'. *)
+    rewrite (Hold' b2) in *; eauto.
+    fwd eapply (Hnew' b1) as HH; eauto. destruct HH as (b1' & ? & ? & ?).
+    fwd eapply (Hnew b2) as HH; eauto. destruct HH as (b2' & ? & ? & ?).
+    assert (b1' = b2') by congruence.
+    assert (b1' > b2') by lia.
+    subst b1'. lia.
+
+  + eauto.
 
 - lia.
 - lia.
@@ -131,17 +186,22 @@ fwd eapply Mem.nextblock_alloc with (m1 := m2); eauto.
 fwd eapply Mem.alloc_result with (m1 := m2); eauto.
 rewrite <- Pos.add_1_l in *.
 
-exists mi', m2', b2. split; [|split]; [..|split]; eauto.
-unfold mem_sim. split; [|split]; [..|split]; eauto.
+exists mi', m2', b2. repeat apply conj; eauto.
+unfold mem_sim. repeat apply conj; eauto.
 
 - intros.
   assert (b = b1). { subst b1. lia. }
   subst b.
-  exists b2, 0%Z. split; eauto. subst. split; lia.
+  exists b2. split; eauto. subst. split; lia.
 
 - intros.
   assert (b <> b1). { subst b1. lia. }
   eauto.
+
+- intros b1' b2'. intros.
+  assert (b1' = Mem.nextblock m1) by (zify; lia).
+  assert (b2' = Mem.nextblock m1) by (zify; lia).
+  congruence.
 
 - lia.
 - lia.
