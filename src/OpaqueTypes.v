@@ -62,7 +62,10 @@ Record opaque_type_impl {oty} := MkOpaqueTypeImpl {
         ot_value_inject ov cv m ->
         Mem.mem_inj mi m m' ->
         (forall b, Mem.valid_block m b -> mi b = Some (b, 0%Z)) ->
-        Val.inject mi cv cv
+        Val.inject mi cv cv;
+    ot_ptr_block_valid : forall ov m b ofs,
+        ot_value_inject ov (Vptr b ofs) m ->
+        Mem.valid_block m b
 }.
 
 Implicit Arguments opaque_type_impl [].
@@ -70,7 +73,7 @@ Implicit Arguments opaque_type_impl [].
 
 
 Definition impl_int : opaque_type_impl Oint.
-simple refine (MkOpaqueTypeImpl _  _  _ _ _ _ _).
+simple refine (MkOpaqueTypeImpl _  _  _ _ _ _ _ _).
 
 - exact (fun ov cv m => cv = Vint ov).
 
@@ -83,6 +86,8 @@ simple refine (MkOpaqueTypeImpl _  _  _ _ _ _ _).
 - intros. simpl in *. exists cv. subst cv. split; eauto.
 
 - intros. simpl in *. subst cv. eauto. 
+
+- intros. simpl in *. discriminate.
 Defined.
 
 
@@ -143,6 +148,13 @@ Lemma opaque_type_mem_inj_strict : forall mi m m' cv ov,
     Val.inject mi cv cv.
 intros. unfold opaque_type_value_inject in *.
 eapply (ot_mem_inj_strict impl); eauto.
+Qed.
+
+Lemma opaque_type_ptr_block_valid : forall ov m b ofs,
+    opaque_type_value_inject ov (Vptr b ofs) m ->
+    Mem.valid_block m b.
+intros. unfold opaque_type_value_inject in *.
+eapply (ot_ptr_block_valid impl); eauto.
 Qed.
 
 End BY_NAME.

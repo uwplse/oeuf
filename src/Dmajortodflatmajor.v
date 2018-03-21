@@ -64,8 +64,8 @@ Definition stack_frame_wf (b : block) (stacksize : Z) (mi : meminj) (m : mem) : 
 
 (* This says that our injection maps every old block to something new *)
 Definition total_inj (mi : meminj) (m : mem) : Prop :=
-  forall c b ofs v,
-    Mem.load c m b ofs = Some v ->
+  forall b,
+    Mem.valid_block m b ->
     exists b',
       mi b = Some (b',0).
 
@@ -557,10 +557,7 @@ Lemma total_inj_store :
 Proof.
   intros. unfold total_inj in *.
   intros.
-  app Mem.load_valid_access (Mem.load c0).
-  app Mem.store_valid_access_2 Mem.valid_access.
-  clear H3. app Mem.valid_access_load Mem.valid_access.
-  clear H2. app H0 (Mem.load c0).
+  fwd eapply Mem.store_valid_block_2; eauto.
 Qed.
 
 Lemma minimal_inj_domain_store :
@@ -603,9 +600,9 @@ Proof.
   app Mem.store_valid_access_3 Mem.store.
   app Mem.valid_access_implies Mem.valid_access.
   clear H2.
-  app Mem.valid_access_load Mem.valid_access.
-  edestruct H. eauto.
-  eexists. exists 0. app H (Mem.load c m b ofs).
+  fwd eapply Mem.valid_access_valid_block; eauto.
+  destruct (H ?? ** ) as (b' & ?).
+  exists b', 0. eauto.
   econstructor; eauto.
 Qed.
 
@@ -771,12 +768,17 @@ Proof.
   break_if; simpl; eauto; congruence.
 
   (* total_inj *)
+  {
   unfold total_inj in *.
   intros.
-  destruct (eq_block b0 b). eauto.
-  eapply H4; eauto.
-  erewrite <- Mem.load_alloc_unchanged; eauto.
-  eauto with mem.
+  unfold Mem.valid_block, Plt in *.
+  fwd eapply Mem.nextblock_alloc with (m1 := m) as HH; eauto.
+    rewrite HH in *. clear HH.
+  rewrite Pplus_one_succ_l in *.
+  break_if. { eexists. eauto. }
+  eapply H4.
+  fwd eapply Mem.alloc_result with (m1 := m); eauto. subst b. zify. lia.
+  }
 
   (* minimal_inj_domain *)
   unfold minimal_inj_domain.
@@ -789,9 +791,6 @@ Proof.
   unfold minimal_inj_range in *.
   intros. break_if. inv H9. eauto with mem.
   eauto with mem.
-  
-  Unshelve.
-  econstructor.
 Qed.
 
 Lemma alloc_store_inject :
@@ -1049,6 +1048,144 @@ induction vs; destruct vs'; split; intro HH; invc HH; econstructor; eauto.
 - rewrite -> IHvs. eauto.
 Qed.
 
+Definition Plt_dec : forall a b, ({ a < b } + { a >= b })%positive.
+intros. destruct (a ?= b)%positive eqn:?.
+- right. rewrite Pos.compare_eq_iff in *. lia.
+- left. rewrite Pos.compare_lt_iff in *. lia.
+- right. rewrite Pos.compare_gt_iff in *. lia.
+Defined.
+
+Definition pos_range_dec : forall min max x,
+    ({ x >= min /\ x < max } + { x < min \/ x >= max })%positive.
+intros.
+destruct (Plt_dec x min), (Plt_dec x max).
+- right. left. auto.
+- right. left. auto.
+- left. split; auto.
+- right. right. auto.
+Defined.
+
+Lemma mem_sim_stack_frame_wf : forall b sz mi mi' m1 m1' m2 m2',
+    stack_frame_wf b sz mi m2 -> 
+    mem_sim mi mi' m1 m1' m2 m2' ->
+    Mem.mem_inj inject_id m2 m2' ->
+    stack_frame_wf b sz mi' m2'.
+intros0 Hwf Hsim Hid.
+unfold stack_frame_wf, mem_sim in *.
+destruct Hwf as (Hrange & Hmapped & Hvalid).
+destruct Hsim as (Hnew & Hold & Hnext1 & Hnext2).
+
+split; [|split].
+
+- change 0 with (0 + 0)%Z. replace sz with (sz + 0)%Z by lia.
+  eapply Mem.range_perm_inj; eauto.
+
+- intros.
+  destruct (pos_range_dec (Mem.nextblock m1) (Mem.nextblock m1') b').
+  + break_and. fwd eapply Hnew as HH; eauto. destruct HH as (b'' & delta' & ? & ? & ?).
+    assert (b'' <> b) by congruence. congruence.
+  + fwd eapply Hold as HH; eauto. rewrite HH. clear HH. eauto.
+
+- unfold Mem.valid_block, Plt in *. lia.
+Qed.
+
+Lemma mem_sim_val_inject : forall v v' mi mi' m1 m1' m2 m2',
+    wf_mem mi m1 m2 ->
+    Val.inject mi v v' ->
+    mem_sim mi mi' m1 m1' m2 m2' ->
+    Val.inject mi' v v'.
+intros0 Hwf Hval Hsim; invc Hval; econstructor; eauto.
+
+unfold wf_mem, mem_sim, minimal_inj_domain in *.
+destruct Hwf as (Hinj & Htotal & Hdomain & Hrange).
+destruct Hsim as (Hnew & Hold & Hnext1 & Hnext2).
+
+fwd eapply Hdomain; eauto. unfold Mem.valid_block, Plt in *.
+rewrite Hold; eauto.
+Qed.
+
+Lemma mem_sim_env_inj : forall e e' mi mi' m1 m1' m2 m2',
+    wf_mem mi m1 m2 ->
+    env_inj mi e e' ->
+    mem_sim mi mi' m1 m1' m2 m2' ->
+    env_inj mi' e e'.
+intros0 Hwf Henv Hsim.
+unfold env_inj in *.
+intros.
+fwd eapply Henv as HH; eauto. destruct HH as (v' & ? & ?).
+fwd eapply mem_sim_val_inject; eauto.
+Qed.
+
+Lemma mem_sim_match_cont : forall k k' mi mi' m1 m1' m2 m2',
+    match_cont k k' mi m2 ->
+    wf_mem mi m1 m2 ->
+    mem_sim mi mi' m1 m1' m2 m2' ->
+    Mem.mem_inj inject_id m2 m2' ->
+    match_cont k k' mi' m2'.
+induction 1; intros0 Hwf Hsim Hid.
+- econstructor.
+- econstructor; eauto.
+- econstructor; eauto.
+- econstructor; eauto.
+  + eapply mem_sim_env_inj; eauto.
+  + eapply mem_sim_stack_frame_wf; eauto.
+Qed.
+
+Lemma mem_sim_wf_mem : forall mi mi' m1 m1' m2 m2',
+    wf_mem mi m1 m2 ->
+    mem_sim mi mi' m1 m1' m2 m2' ->
+    wf_mem mi' m1' m2'.
+intros0 Hwf Hsim.
+unfold wf_mem, mem_sim in *.
+destruct Hwf as (Hinj & Htotal & Hdomain & Hrange).
+destruct Hsim as (Hnew & Hold & Hnext1 & Hnext2).
+split; [|split]; [..|split].
+
+- unfold wf_inj. destruct Hinj as (Hglobals & Hmeminj & Hoffsets).
+  split; [|split].
+
+  + unfold globals_inj_same, MemInjProps.globals_inj_same in *.
+    intros. fwd eapply Hglobals as HH; eauto.
+    assert (b < Mem.nextblock m1)%positive.  { eapply Hdomain; eauto. }
+    rewrite Hold; eauto.
+
+  + unfold meminj_injective in *. admit. (* mi' new mappings must be injective *)
+
+  + unfold same_offsets, MemInjProps.same_offsets in *.
+    admit. (* mi' new mappings must have delta = 0 *)
+
+- unfold total_inj in *.
+  intros0 Hload.
+  unfold Mem.valid_block, Plt in *.
+  destruct (Plt_dec b (Mem.nextblock m1)).
+
+  + (* old block *)
+    rewrite Hold; eauto.
+
+  + (* new block *)
+    fwd eapply Hnew as HH; eauto. destruct HH as (b' & delta & ? & ? & ?).
+    assert (delta = 0) by admit. subst delta.
+    eauto.
+
+- unfold minimal_inj_domain in *. intros.
+  destruct (pos_range_dec (Mem.nextblock m1) (Mem.nextblock m1') b).
+  + break_and. fwd eapply Hnew; eauto.
+  + rewrite Hold in *; eauto.
+    unfold Mem.valid_block, Plt in *.
+    break_or; eauto.
+    * lia.
+    * exfalso. fwd eapply Hdomain; eauto. lia.
+
+- unfold minimal_inj_range in *. intros.
+  destruct (pos_range_dec (Mem.nextblock m1) (Mem.nextblock m1') b).
+  + break_and. fwd eapply Hnew as HH; eauto. destruct HH as (b'' & delta' & ? & ? & ?).
+    replace b' with b'' by congruence. eauto.
+  + rewrite Hold in *; eauto.
+    unfold Mem.valid_block, Plt in *.
+    fwd eapply Hrange; eauto. lia.
+
+Admitted.
+
 
 Lemma single_step_correct:
   forall S1 t S2, Dmajor.step ge S1 t S2 ->
@@ -1168,42 +1305,50 @@ Proof.
       app H6 (e ! id0).
       eexists; split; eauto.
 
+      (* given that the values inject under `mi`, show they inject under `mi'` *)
+
       invp (Val.inject mi v x2);
       econstructor; eauto.
+      (* pointer case.  the LHS pointer maps to the RHS pointer under `mi`.
+       * now we much show the LHS maps to the RHS under `mi'`. *)
       find_rewrite.
       break_match; try congruence.
+
+      (* we're now in the case where the LHS pointer block is the same as the
+       * newly allocated block. *)
+      exfalso.
 
       subst.
       match goal with
       | [ H : wf_mem mi m m', H2 : Mem.alloc m _ _ = _, H3 : mi _ = _ |- _ ] => clear -H H2 H3
       end.
-      unfold wf_mem in *;
-        unfold wf_inj in *;
-        break_and.
-      unfold minimal_inj_domain in *.
 
-      app Mem.alloc_result Mem.alloc.
-      app H1 (mi b0). clear H1.
+      assert (b0 = Mem.nextblock m).  { eapply Mem.alloc_result. eauto. }
+      clear H11.
 
-      subst b0. unfold Mem.valid_block in *.
-      app Plt_ne Plt.
-      congruence.
+      unfold wf_mem, minimal_inj_domain in *. break_and.
+      fwd eapply H2; eauto.
+      unfold Mem.valid_block, Plt in *.
+      subst. lia.
     } 
 
   * (* opaque op *)
     fwd eapply opaque_oper_mem_inject as HH; eauto.
       { unfold wf_mem, wf_inj in *. break_and. auto. }
       { rewrite <- val_inject_list_forall2. eauto. }
-      destruct HH as (mi' & m2' & ret' & ? & ? & ?).
+      destruct HH as (mi' & m2' & ret' & ? & ? & ? & ?).
+
+    assert (Mem.mem_inj inject_id m' m2').
+      { eapply opaque_oper_mem_inj_id; eauto. }
 
     eexists. split.
     eapply plus_one. econstructor; eauto.
     econstructor; eauto.
-    - admit. (* stack_frame_wf *)
-    - admit. (* highest_block *)
-    - admit. (* match_cont *)
-    - eapply env_inj_set; eauto. admit. (* env_inj - reuse proof block above *)
-    - admit. (* wf_mem *)
+    - eapply mem_sim_stack_frame_wf; eauto.
+    - unfold mem_sim in *. break_and. unfold Ple in *. lia.
+    - eapply mem_sim_match_cont; eauto.
+    - eapply env_inj_set; eauto. eapply mem_sim_env_inj; eauto.
+    - eapply mem_sim_wf_mem; eauto.
 
   * eexists; split; try eapply plus_one; econstructor; eauto.
     econstructor; eauto.
@@ -1247,7 +1392,7 @@ Proof.
 
     Unshelve.
     repeat (econstructor; eauto).
-Admitted.
+Qed.
 
 Lemma genv_next_add_globals :
   forall {F V} l (ge : @Genv.t F V),
@@ -1310,13 +1455,10 @@ Proof.
   intros. break_match_hyp; try congruence.
   unfold total_inj. intros.
   unfold Mem.flat_inj.
-  app Mem.load_valid_access Mem.load.
-  eapply Mem.valid_access_implies in H0;
-    try eapply Mem.valid_access_valid_block in H0;
-    try solve [econstructor; eauto].
-  unfold Mem.valid_block in *.
-  exists b.
-  break_match; congruence.
+  {
+  break_match; eauto.
+  exfalso. unfold Mem.valid_block in *. eauto.
+  }
   unfold minimal_inj_domain. intros. destruct x.
   unfold Mem.flat_inj in *.
   unfold Mem.valid_block. break_match_hyp; congruence.
@@ -1434,13 +1576,9 @@ Proof.
   intros. unfold Mem.flat_inj in *.
   break_match_hyp; try congruence.
   split. unfold total_inj.
-  intros. eapply Mem.load_valid_access in H3.
-  eapply Mem.valid_access_implies in H3.
-  eapply Mem.valid_access_valid_block in H3.
-  unfold Mem.valid_block in *.
+  intros.
   exists b. unfold Mem.flat_inj.
   break_match; try congruence.
-  solve [econstructor].
   split.
   unfold minimal_inj_domain. intros.
   unfold Mem.flat_inj in *. unfold Mem.valid_block.
