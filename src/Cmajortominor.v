@@ -301,11 +301,13 @@ Proof.
     eapply find_funct_transf; eauto.
     eapply funsig_transf; eauto.
     econstructor; eauto.
+
   * (* opaque *)
     fwd eapply eval_exprlist_transf; eauto.
-    fwd eapply opaque_oper_sim_cminor as HH; eauto.
-    all: admit.
-    
+    eexists; split.
+    eapply opaque_oper_sim_cminor; eauto.
+    econstructor; eauto.
+
   * (* seq *)
     simpl.
     eexists; split; [eapply plus_one | ..]; try econstructor; eauto.
@@ -331,7 +333,7 @@ Proof.
   * (* call external *)
     eapply external_call_transf in H; eauto.
     eexists; split; [eapply plus_one | ..]; try econstructor; eauto.
-Admitted.    
+Qed.    
 
 Lemma init_mem_transf :
   forall m,

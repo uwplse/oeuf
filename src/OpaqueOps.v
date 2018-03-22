@@ -6,7 +6,6 @@ Require Import compcert.common.Values.
 Require Import compcert.common.Memory.
 Require Import compcert.common.Globalenvs.
 Require Import compcert.common.AST.
-Require Import compcert.common.Smallstep.
 Require Import compcert.common.Events.
 Require Import compcert.backend.Cminor.
 
@@ -19,6 +18,7 @@ Require Import oeuf.MemFacts.
 Require Import oeuf.MemInjProps.
 
 Require Import oeuf.OpaqueTypes.
+Require Import oeuf.FullSemantics.
 
 Require Import oeuf.SourceValues.
 Require oeuf.HighestValues.
@@ -282,12 +282,11 @@ Record opaque_oper_impl {atys rty} := MkOpaqueOperImpl {
                 oo_denote_mem_effect m args' = Some (m', ret') /\
                 HighValues.value_inject ge m' ret ret';
         oo_sim_cminor : forall (ge : genv) f id e m m' sp k,
-            forall argvs0 args argvs retv,
-            oo_denote_mem_effect m argvs0 = Some (m', retv) ->
+            forall args argvs retv,
+            oo_denote_mem_effect m argvs = Some (m', retv) ->
             eval_exprlist ge sp e m args argvs ->
-            Forall2 Val.lessdef argvs0 argvs ->
-            plus step ge (State f (oo_denote_cminor id args) k sp e m)
-                      E0 (State f Sskip k sp (PTree.set id retv e) m')
+            plus Cminor.step ge (State f (oo_denote_cminor id args) k sp e m)
+                             E0 (State f Sskip k sp (PTree.set id retv e) m')
     }.
 
 Implicit Arguments opaque_oper_impl [].
@@ -452,7 +451,7 @@ simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _ _ _  _ _ _ _  _ _ _ _ _ _).
 
 - intros. simpl in *.
   repeat (break_match_hyp; try discriminate; []). subst. inject_some.
-  do 3 on >Forall2, invc.  do 3 on >eval_exprlist, invc.  do 2 on >Val.lessdef, invc.
+  do 3 on >eval_exprlist, invc.
   eapply plus_one. econstructor; eauto. econstructor; eauto.
 
 Defined.
@@ -765,12 +764,11 @@ eapply (oo_sim_mem_effect impl''); eauto.
 Qed.
 
 Lemma opaque_oper_sim_cminor : forall (ge : genv) f id e m m' sp k,
-    forall argvs0 args argvs retv,
-    opaque_oper_denote_mem_effect m argvs0 = Some (m', retv) ->
+    forall args argvs retv,
+    opaque_oper_denote_mem_effect m argvs = Some (m', retv) ->
     eval_exprlist ge sp e m args argvs ->
-    Forall2 Val.lessdef argvs0 argvs ->
-    plus step ge (State f (opaque_oper_denote_cminor id args) k sp e m)
-              E0 (State f Sskip k sp (PTree.set id retv e) m').
+    plus Cminor.step ge (State f (opaque_oper_denote_cminor id args) k sp e m)
+                     E0 (State f Sskip k sp (PTree.set id retv e) m').
 intros0 Hmv HH. unfold opaque_oper_denote_mem_effect, opaque_oper_denote_cminor in *.
 clearbody impl'. destruct impl' as (? & ? & impl'').
 eapply (oo_sim_cminor impl''); eauto.
