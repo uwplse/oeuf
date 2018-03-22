@@ -191,6 +191,10 @@ Inductive constr_name :=
 | CAscii
 .
 
+Definition constr_name_eq_dec (cn1 cn2 : constr_name) : {cn1 = cn2} + {cn1 <> cn2}.
+  decide equality.
+Defined.
+
 (* Index of each constructor within its type *)
 (* each constructor of the same type must have a unique index within that type *)
 Definition constructor_index ctor : nat :=
@@ -719,3 +723,22 @@ inversion 1.  erewrite <- type_constr_index; eassumption.
 Qed.
 
   
+
+(* Induction scheme for type_name that gives you an induction hypothesis for
+   each type contained in `tyn`.  For example, an `N` may contain a `positive`,
+   so the `N` case provides an induction hypothesis `P Tpositive`. *)
+Definition type_name_containment_rect (P : type_name -> Type)
+    (Hnat :         P Tnat)
+    (Hbool :        P Tbool)
+    (Hlist :        forall tyn, P tyn -> P (Tlist tyn))
+    (Hunit :        P Tunit)
+    (Hpair :        forall tyn1 tyn2, P tyn1 -> P tyn2 -> P (Tpair tyn1 tyn2))
+    (Hoption :      forall tyn, P tyn -> P (Toption tyn))
+    (Hpositive :    P Tpositive)
+    (HN :           P Tpositive -> P TN)
+    (HZ :           P Tpositive -> P TZ)
+    (Hascii :       P Tbool -> P Tascii) :
+    forall tyn, P tyn.
+induction tyn; eauto.
+Defined.
+

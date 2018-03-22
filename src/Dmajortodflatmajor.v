@@ -16,6 +16,9 @@ Require compcert.backend.SelectLong.
 Require oeuf.TraceSemantics.
 Require Import oeuf.FullSemantics.
 Require Import oeuf.OeufMem.
+Require Import oeuf.OpaqueTypes.
+Require Import oeuf.OpaqueOps.
+Require oeuf.MemInjProps.
 
 Require Import oeuf.Dmajor.
 Require Import oeuf.Dflatmajor.
@@ -24,6 +27,7 @@ Require Import StructTact.StructTactics.
 Require Import StructTact.Util.
 
 Require Import oeuf.EricTact.
+Require Import oeuf.StuartTact.
 
 Definition transf_prog (p : Dmajor.program) : Errors.res Dmajor.program :=
   if (list_norepet_dec ident_eq (prog_defs_names p)) then
@@ -60,8 +64,8 @@ Definition stack_frame_wf (b : block) (stacksize : Z) (mi : meminj) (m : mem) : 
 
 (* This says that our injection maps every old block to something new *)
 Definition total_inj (mi : meminj) (m : mem) : Prop :=
-  forall c b ofs v,
-    Mem.load c m b ofs = Some v ->
+  forall b,
+    Mem.valid_block m b ->
     exists b',
       mi b = Some (b',0).
 
@@ -84,7 +88,7 @@ Definition env_inj (mi : meminj) (e e' : env) : Prop :=
       e' ! id = Some v' /\ Val.inject mi v v'.
 
 (* globals aren't moved around *)
-Definition globals_inj_same := HighValues.globals_inj_same ge.
+Definition globals_inj_same := MemInjProps.globals_inj_same ge.
 
 (* yet another useful property for a mapping function *)
 Definition meminj_injective (mi : meminj) : Prop :=
@@ -94,7 +98,7 @@ Definition meminj_injective (mi : meminj) : Prop :=
     b1 = b2.
 
 (* nothing is moved around within blocks *)
-Definition same_offsets := HighValues.same_offsets.
+Definition same_offsets := MemInjProps.same_offsets.
 
 (* conglomeration props *)
 Definition wf_inj (mi : meminj) : Prop :=
@@ -290,6 +294,7 @@ Proof.
 Qed.
 
 
+(* Actually returns the successor of the highest block.  Sorry! *)
 Fixpoint highest_block (c : Dflatmajor.cont) : block :=
   match c with
   | Kstop => 1%positive
@@ -298,7 +303,7 @@ Fixpoint highest_block (c : Dflatmajor.cont) : block :=
   | Kcall _ _ sp _ k =>
     let h := highest_block k in
     match sp with
-    | Vptr b _ => Pos.max b h
+    | Vptr b _ => Pos.max (Pos.succ b) h
     | _ => h
     end
   end.
@@ -320,15 +325,15 @@ Inductive match_cont : Dmajor.cont -> Dflatmajor.cont -> meminj -> mem -> Prop :
     match_cont k k' mi m ->
     env_inj mi e e' ->
     stack_frame_wf b (fn_stackspace f) mi m ->
-    Plt (highest_block k') b ->
+    Ple (highest_block k') b ->
     match_cont (Dmajor.Kcall oid f e k) (Dflatmajor.Kcall oid f (Vptr b Int.zero) e' k') mi m.
 
 Inductive match_states : Dmajor.state -> Dflatmajor.state -> Prop :=
 | match_state : forall f s k k' b e e' m m' z mi,
     Mem.inject mi m m' ->
     stack_frame_wf b (fn_stackspace f) mi m' ->
-    Plt (highest_block k') b ->
-    Plt (highest_block k') (Mem.nextblock m') ->
+    Ple (highest_block k') b ->
+    Ple (highest_block k') (Mem.nextblock m') ->
     match_cont k k' mi m' ->
     env_inj mi e e' ->
     wf_mem mi m m' ->
@@ -337,7 +342,7 @@ Inductive match_states : Dmajor.state -> Dflatmajor.state -> Prop :=
       (Dflatmajor.State f s k' (Vptr b Int.zero) e' m' z)
 | match_callstate : forall f args args' k k' m m' z mi,
     Mem.inject mi m m' ->
-    Plt (highest_block k') (Mem.nextblock m') ->
+    Ple (highest_block k') (Mem.nextblock m')->
     match_cont k k' mi m' ->
     wf_mem mi m m' ->
     Val.inject_list mi args args' ->
@@ -346,7 +351,7 @@ Inductive match_states : Dmajor.state -> Dflatmajor.state -> Prop :=
       (Dflatmajor.Callstate f args' k' m' z)
 | match_returnstate : forall v v' k k' m m' z mi,
     Mem.inject mi m m' ->
-    Plt (highest_block k') (Mem.nextblock m') ->
+    Ple (highest_block k') (Mem.nextblock m') ->
     match_cont k k' mi m' ->
     wf_mem mi m m' ->
     Val.inject mi v v' ->
@@ -372,30 +377,30 @@ Proof.
   induction 1; intros; simpl; eauto; try solve [econstructor; eauto].
 Qed.
 
-Lemma Plt_pos_max_r :
+Lemma Ple_pos_max_r :
   forall x y z,
-    Plt (Pos.max x y) z ->
-    Plt y z.
+    Ple (Pos.max x y) z ->
+    Ple y z.
 Proof.
   intros.
   destruct (Pos.max_spec x y);
     break_and;
   rewrite H1 in *; eauto.
-  unfold Plt in *.
-  eapply Pos.le_lt_trans; eauto.
+  unfold Ple in *.
+  eapply Pos.le_trans; eauto.
 Qed.
   
-Lemma Plt_pos_max_l :
+Lemma Ple_pos_max_l :
   forall x y z,
-    Plt (Pos.max x y) z ->
-    Plt x z.
+    Ple (Pos.max x y) z ->
+    Ple x z.
 Proof.
   intros.
   destruct (Pos.max_spec x y);
     break_and;
   rewrite H1 in *; eauto.
-  unfold Plt in *.
-  eapply Pos.le_lt_trans; eauto.
+  unfold Ple in *.
+  eapply Pos.le_trans; eauto.
   eapply Pos.lt_eq_cases; eauto.
 Qed.
 
@@ -416,25 +421,35 @@ Proof.
     solve [eauto with mem].
 Qed.
 
+Lemma Ple_succ_ne : forall n m, Ple (Pos.succ n) m -> n <> m.
+intros.
+eapply Plt_ne.
+eapply Plt_Ple_trans.
+- eapply Plt_succ.
+- eauto.
+Qed.
+
+
+Require Import Psatz.
 
 (* If we free a block higher than the largest stack block, stack is still well formed *)
 Lemma match_cont_free_stack_frame :
   forall k k' m' x b lo hi mi,
     match_cont k k' mi m' ->
     Mem.free m' b lo hi = Some x ->
-    Plt (highest_block k') b ->
+    Ple (highest_block k') b ->
     match_cont k k' mi x.
 Proof.
   induction 1; intros; try solve [ econstructor; eauto].
   simpl in H4.
   assert (b0 <> b).
   {
-    eapply Plt_pos_max_l in H4.
-    eapply Plt_ne in H4; congruence.
+    eapply Ple_pos_max_l in H4.
+    eapply Ple_succ_ne in H4; congruence.
   }
   econstructor; eauto.
   eapply IHmatch_cont; eauto.
-  eapply Plt_pos_max_r; eauto.
+  eapply Ple_pos_max_r; eauto.
   unfold stack_frame_wf in *.
   break_and. split; eauto.
   unfold Mem.range_perm in *. intros.
@@ -465,17 +480,20 @@ Proof.
   split.
   intros. break_match; eauto.
 
-  intro.
-  unfold Mem.range_perm in H.
-  specialize (H 0).
-  unfold Mem.valid_block in *.
-  app Mem.alloc_result Mem.alloc.
-  subst b0.
-  match goal with
-  | [ H : Some _ = Some _ |- _ ] => inv H
-  end.
-  app Plt_ne Plt.
-  eauto with mem.
+  {
+    intro.
+    unfold Mem.range_perm in H.
+    specialize (H 0).
+    unfold Mem.valid_block in *.
+    app Mem.alloc_result Mem.alloc.
+    subst b0.
+    match goal with
+    | [ H : Some _ = Some _ |- _ ] => inv H
+    end.
+    app Plt_ne Plt.
+  }
+
+  { eauto with mem. }
 
   unfold stack_frame_wf in *.
   break_and. split.
@@ -539,10 +557,7 @@ Lemma total_inj_store :
 Proof.
   intros. unfold total_inj in *.
   intros.
-  app Mem.load_valid_access (Mem.load c0).
-  app Mem.store_valid_access_2 Mem.valid_access.
-  clear H3. app Mem.valid_access_load Mem.valid_access.
-  clear H2. app H0 (Mem.load c0).
+  fwd eapply Mem.store_valid_block_2; eauto.
 Qed.
 
 Lemma minimal_inj_domain_store :
@@ -585,9 +600,9 @@ Proof.
   app Mem.store_valid_access_3 Mem.store.
   app Mem.valid_access_implies Mem.valid_access.
   clear H2.
-  app Mem.valid_access_load Mem.valid_access.
-  edestruct H. eauto.
-  eexists. exists 0. app H (Mem.load c m b ofs).
+  fwd eapply Mem.valid_access_valid_block; eauto.
+  destruct (H ?? ** ) as (b' & ?).
+  exists b', 0. eauto.
   econstructor; eauto.
 Qed.
 
@@ -728,7 +743,7 @@ Proof.
 
   (* globals_inj_same *)
   unfold globals_inj_same in *.
-  unfold HighValues.globals_inj_same in *.
+  unfold MemInjProps.globals_inj_same in *.
   intros. eapply H2 in H9.
   break_if; congruence.
 
@@ -748,17 +763,22 @@ Proof.
   eapply H7; eauto.
 
   (* same_offsets *)
-  unfold same_offsets. unfold HighValues.same_offsets.
+  unfold same_offsets. unfold MemInjProps.same_offsets.
   intros.
   break_if; simpl; eauto; congruence.
 
   (* total_inj *)
+  {
   unfold total_inj in *.
   intros.
-  destruct (eq_block b0 b). eauto.
-  eapply H4; eauto.
-  erewrite <- Mem.load_alloc_unchanged; eauto.
-  eauto with mem.
+  unfold Mem.valid_block, Plt in *.
+  fwd eapply Mem.nextblock_alloc with (m1 := m) as HH; eauto.
+    rewrite HH in *. clear HH.
+  rewrite Pplus_one_succ_l in *.
+  break_if. { eexists. eauto. }
+  eapply H4.
+  fwd eapply Mem.alloc_result with (m1 := m); eauto. subst b. zify. lia.
+  }
 
   (* minimal_inj_domain *)
   unfold minimal_inj_domain.
@@ -771,9 +791,6 @@ Proof.
   unfold minimal_inj_range in *.
   intros. break_if. inv H9. eauto with mem.
   eauto with mem.
-  
-  Unshelve.
-  econstructor.
 Qed.
 
 Lemma alloc_store_inject :
@@ -1010,12 +1027,170 @@ Proof.
     find_rewrite; eauto.
 Qed.
 
-Lemma Plt_highest_block_call_cont :
+Lemma Ple_highest_block_call_cont :
   forall k x,
-    Plt (highest_block k) x ->
-    Plt (highest_block (call_cont k)) x.
+    Ple (highest_block k) x ->
+    Ple (highest_block (call_cont k)) x.
 Proof.
   induction k; intros; simpl; auto.
+Qed.
+
+Lemma Ple_trans_succ : forall n m, Ple n m -> Ple n (Pos.succ m).
+intros.
+eapply Ple_trans; eauto.
+eapply Ple_succ.
+Qed.
+
+Lemma val_inject_list_forall2 : forall mi vs vs',
+    Val.inject_list mi vs vs' <-> Forall2 (Val.inject mi) vs vs'.
+induction vs; destruct vs'; split; intro HH; invc HH; econstructor; eauto.
+- rewrite <- IHvs. eauto.
+- rewrite -> IHvs. eauto.
+Qed.
+
+Lemma mem_sim_stack_frame_wf : forall b sz mi mi' m1 m1' m2 m2',
+    stack_frame_wf b sz mi m2 -> 
+    mem_sim mi mi' m1 m1' m2 m2' ->
+    Mem.mem_inj inject_id m2 m2' ->
+    stack_frame_wf b sz mi' m2'.
+intros0 Hwf Hsim Hid.
+unfold stack_frame_wf, mem_sim in *.
+destruct Hwf as (Hrange & Hmapped & Hvalid).
+destruct Hsim as (Hnew & Hold & Hnext1 & Hnext2).
+
+split; [|split].
+
+- change 0 with (0 + 0)%Z. replace sz with (sz + 0)%Z by lia.
+  eapply Mem.range_perm_inj; eauto.
+
+- intros.
+  destruct (pos_range_dec (Mem.nextblock m1) (Mem.nextblock m1') b').
+  + break_and. fwd eapply Hnew as HH; eauto. destruct HH as (b'' & ? & ? & ?).
+    assert (b'' <> b) by congruence. congruence.
+  + fwd eapply Hold as HH; eauto. rewrite HH. clear HH. eauto.
+
+- unfold Mem.valid_block, Plt in *. lia.
+Qed.
+
+Lemma mem_sim_val_inject : forall v v' mi mi' m1 m1' m2 m2',
+    wf_mem mi m1 m2 ->
+    Val.inject mi v v' ->
+    mem_sim mi mi' m1 m1' m2 m2' ->
+    Val.inject mi' v v'.
+intros0 Hwf Hval Hsim; invc Hval; econstructor; eauto.
+
+unfold wf_mem, mem_sim, minimal_inj_domain in *.
+destruct Hwf as (Hinj & Htotal & Hdomain & Hrange).
+destruct Hsim as (Hnew & Hold & Hnext1 & Hnext2).
+
+fwd eapply Hdomain; eauto. unfold Mem.valid_block, Plt in *.
+rewrite Hold; eauto.
+Qed.
+
+Lemma mem_sim_env_inj : forall e e' mi mi' m1 m1' m2 m2',
+    wf_mem mi m1 m2 ->
+    env_inj mi e e' ->
+    mem_sim mi mi' m1 m1' m2 m2' ->
+    env_inj mi' e e'.
+intros0 Hwf Henv Hsim.
+unfold env_inj in *.
+intros.
+fwd eapply Henv as HH; eauto. destruct HH as (v' & ? & ?).
+fwd eapply mem_sim_val_inject; eauto.
+Qed.
+
+Lemma mem_sim_match_cont : forall k k' mi mi' m1 m1' m2 m2',
+    match_cont k k' mi m2 ->
+    wf_mem mi m1 m2 ->
+    mem_sim mi mi' m1 m1' m2 m2' ->
+    Mem.mem_inj inject_id m2 m2' ->
+    match_cont k k' mi' m2'.
+induction 1; intros0 Hwf Hsim Hid.
+- econstructor.
+- econstructor; eauto.
+- econstructor; eauto.
+- econstructor; eauto.
+  + eapply mem_sim_env_inj; eauto.
+  + eapply mem_sim_stack_frame_wf; eauto.
+Qed.
+
+Lemma mem_sim_wf_mem : forall mi mi' m1 m1' m2 m2',
+    wf_mem mi m1 m2 ->
+    mem_sim mi mi' m1 m1' m2 m2' ->
+    wf_mem mi' m1' m2'.
+intros0 Hwf Hsim.
+unfold wf_mem, mem_sim in *.
+destruct Hwf as (Hinj & Htotal & Hdomain & Hrange).
+destruct Hsim as (Hnew & Hold & Hnext1 & Hnext2).
+split; [|split]; [..|split].
+
+- unfold wf_inj. destruct Hinj as (Hglobals & Hmeminj & Hoffsets).
+  split; [|split].
+
+  + unfold globals_inj_same, MemInjProps.globals_inj_same in *.
+    intros. fwd eapply Hglobals as HH; eauto.
+    assert (b < Mem.nextblock m1)%positive.  { eapply Hdomain; eauto. }
+    rewrite Hold; eauto.
+
+  + unfold meminj_injective in *. intros.
+    destruct (pos_range_dec (Mem.nextblock m1) (Mem.nextblock m1') b1);
+      destruct (pos_range_dec (Mem.nextblock m1) (Mem.nextblock m1') b2).
+
+    * (* b1 and b2 are both new *) break_and; eauto.
+
+    * (* b1 is new, b2 is old *) exfalso.
+      (* b1 is a new block, so it maps to an RHS new block under mi'. *)
+      break_and. fwd eapply (Hnew b1) as HH; eauto. destruct HH as (b1' & ? & ? & ?).
+        replace b1' with b in * by congruence.
+      (* b2 is an old block, so its mapping under mi' is the same as under mi.
+       * But all blocks in the range of mi are old (RHS) blocks. *)
+      rewrite (Hold b2) in * by eauto.
+      fwd eapply (Hrange _); eauto.
+
+    * (* b1 is old, b2 is new *) exfalso.
+      break_and. fwd eapply (Hnew b2) as HH; eauto. destruct HH as (b2' & ? & ? & ?).
+        replace b2' with b in * by congruence.
+      rewrite (Hold b1) in * by eauto.
+      fwd eapply (Hrange _); eauto.
+
+    * (* b1 and b2 are both old *) rewrite Hold in * by eauto. eauto.
+
+  + unfold same_offsets, MemInjProps.same_offsets in *. intros.
+    destruct (pos_range_dec (Mem.nextblock m1) (Mem.nextblock m1') b).
+
+    * (* new *) break_and. fwd eapply Hnew as HH; eauto. destruct HH as (b'' & ? & ?).
+      congruence.
+    * (* old *) rewrite Hold in * by auto. eauto.
+
+- unfold total_inj in *.
+  intros0 Hload.
+  unfold Mem.valid_block, Plt in *.
+  destruct (Plt_dec b (Mem.nextblock m1)).
+
+  + (* old block *)
+    rewrite Hold; eauto.
+
+  + (* new block *)
+    fwd eapply Hnew as HH; eauto. destruct HH as (b' & ? & ? & ?).
+    eauto.
+
+- unfold minimal_inj_domain in *. intros.
+  destruct (pos_range_dec (Mem.nextblock m1) (Mem.nextblock m1') b).
+  + break_and. fwd eapply Hnew; eauto.
+  + rewrite Hold in *; eauto.
+    unfold Mem.valid_block, Plt in *.
+    break_or; eauto.
+    * lia.
+    * exfalso. fwd eapply Hdomain; eauto. lia.
+
+- unfold minimal_inj_range in *. intros.
+  destruct (pos_range_dec (Mem.nextblock m1) (Mem.nextblock m1') b).
+  + break_and. fwd eapply Hnew as HH; eauto. destruct HH as (b'' & ? & ? & ?).
+    replace b' with b'' by congruence. eauto.
+  + rewrite Hold in *; eauto.
+    unfold Mem.valid_block, Plt in *.
+    fwd eapply Hrange; eauto. lia.
+
 Qed.
 
 
@@ -1070,7 +1245,7 @@ Proof.
     eapply wf_mem_store; eauto.
     rewrite Z.add_0_r in *.
     assumption.
-    
+
   * eexists; split; try eapply plus_one; econstructor; eauto.
     destruct vfp; simpl in *; try congruence.
     unfold Genv.find_funct in *.
@@ -1089,8 +1264,9 @@ Proof.
     simpl.
     unfold stack_frame_wf in *.
     break_and. unfold Mem.valid_block in *.
-    eapply Plt_pos_max; eauto.
+    { rewrite <- Pos.le_succ_l in *. eapply Pos.max_lub; eauto. }
     econstructor; eauto.
+
   * invp external_call.
     invp Val.inject.
     app alloc_store_inject Mem.store.
@@ -1110,7 +1286,7 @@ Proof.
 
     erewrite Mem.nextblock_store; try eapply H13.
     eapply Mem.nextblock_alloc in H12.
-    rewrite H12. eapply Plt_trans_succ; eauto.
+    rewrite H12. eapply Ple_trans_succ; eauto.
     
     eapply match_cont_alloc_store; eauto.
     eapply wf_mem_alloc_not_mapped; eauto.
@@ -1136,27 +1312,50 @@ Proof.
       app H6 (e ! id0).
       eexists; split; eauto.
 
+      (* given that the values inject under `mi`, show they inject under `mi'` *)
+
       invp (Val.inject mi v x2);
       econstructor; eauto.
+      (* pointer case.  the LHS pointer maps to the RHS pointer under `mi`.
+       * now we much show the LHS maps to the RHS under `mi'`. *)
       find_rewrite.
       break_match; try congruence.
+
+      (* we're now in the case where the LHS pointer block is the same as the
+       * newly allocated block. *)
+      exfalso.
 
       subst.
       match goal with
       | [ H : wf_mem mi m m', H2 : Mem.alloc m _ _ = _, H3 : mi _ = _ |- _ ] => clear -H H2 H3
       end.
-      unfold wf_mem in *;
-        unfold wf_inj in *;
-        break_and.
-      unfold minimal_inj_domain in *.
 
-      app Mem.alloc_result Mem.alloc.
-      app H1 (mi b0). clear H1.
+      assert (b0 = Mem.nextblock m).  { eapply Mem.alloc_result. eauto. }
+      clear H11.
 
-      subst b0. unfold Mem.valid_block in *.
-      app Plt_ne Plt.
-      congruence.
+      unfold wf_mem, minimal_inj_domain in *. break_and.
+      fwd eapply H2; eauto.
+      unfold Mem.valid_block, Plt in *.
+      subst. lia.
     } 
+
+  * (* opaque op *)
+    fwd eapply opaque_oper_mem_inject as HH; eauto.
+      { unfold wf_mem, wf_inj in *. break_and. auto. }
+      { rewrite <- val_inject_list_forall2. eauto. }
+      destruct HH as (mi' & m2' & ret' & ? & ? & ? & ?).
+
+    assert (Mem.mem_inj inject_id m' m2').
+      { eapply opaque_oper_mem_inj_id; eauto. }
+
+    eexists. split.
+    eapply plus_one. econstructor; eauto.
+    econstructor; eauto.
+    - eapply mem_sim_stack_frame_wf; eauto.
+    - unfold mem_sim in *. break_and. unfold Ple in *. lia.
+    - eapply mem_sim_match_cont; eauto.
+    - eapply env_inj_set; eauto. eapply mem_sim_env_inj; eauto.
+    - eapply mem_sim_wf_mem; eauto.
 
   * eexists; split; try eapply plus_one; econstructor; eauto.
     econstructor; eauto.
@@ -1167,22 +1366,25 @@ Proof.
   * app free_stack_frame stack_frame_wf.
     eexists; split; try eapply plus_one; econstructor; eauto.
     erewrite Mem.nextblock_free; eauto.
-    eapply Plt_highest_block_call_cont; eauto.
+    eapply Ple_highest_block_call_cont; eauto.
     eapply match_call_cont; eauto.
     eapply match_cont_free_stack_frame; eauto.
     eapply wf_mem_free_right; eauto.
   * app free_stack_frame stack_frame_wf.
     eexists; split; try eapply plus_one; econstructor; eauto; try eapply match_call_cont; eauto.
     erewrite Mem.nextblock_free; eauto.
-    eapply Plt_highest_block_call_cont; eauto.
+    eapply Ple_highest_block_call_cont; eauto.
     eapply match_cont_free_stack_frame; eauto.
     eapply wf_mem_free_right; eauto.
   * app (alloc_stack_frame (fn_stackspace f)) wf_mem.
-    eexists; split; try eapply plus_one; econstructor; eauto.
+    eexists; split; try eapply plus_one.
+    econstructor; eauto.
 
     app Mem.alloc_result Mem.alloc. subst. eauto.
-    app Mem.nextblock_alloc Mem.alloc. find_rewrite.
-    eapply Plt_trans_succ; eauto.
+    app Mem.nextblock_alloc Mem.alloc.
+
+    econstructor; eauto.
+    { find_rewrite. eapply Ple_trans_succ; eauto. }
     
     eapply match_cont_alloc; eauto.
     
@@ -1192,7 +1394,7 @@ Proof.
     
   * inv H3.
     eexists; split; try eapply plus_one; try econstructor; eauto.
-    simpl in H2. eapply Plt_pos_max_r in H2. eauto.
+    simpl in H2. eapply Ple_pos_max_r in H2. eauto.
     eapply env_inj_set_optvar; eauto.
 
     Unshelve.
@@ -1217,21 +1419,6 @@ Proof.
   reflexivity.
   rewrite (Pos.add_comm (Pos.of_nat (S n)) 1) at 2.
   repeat rewrite Pos.add_assoc. reflexivity.
-Qed.
-
-Lemma init_mem_nextblock :
-  forall m,
-    Genv.init_mem prog = Some m ->
-    Plt 1%positive (Mem.nextblock m).
-Proof.
-  intros.
-  app Genv.init_mem_genv_next Genv.init_mem.
-  unfold Genv.globalenv in *.
-  rewrite genv_next_add_globals in H; eauto.
-  simpl in *.  
-  rewrite <- H.
-  break_match; try econstructor; eauto.
-  eapply non_empty.
 Qed.
 
 Lemma alloc_wf_mem :
@@ -1263,7 +1450,7 @@ Lemma wf_mem_refl :
 Proof.
   intros. unfold wf_mem. unfold wf_inj.
   repeat split.
-  unfold globals_inj_same. unfold HighValues.globals_inj_same. intros. unfold Mem.flat_inj.
+  unfold globals_inj_same. unfold MemInjProps.globals_inj_same. intros. unfold Mem.flat_inj.
   destruct H0.
   app Genv.find_funct_ptr_not_fresh Genv.find_funct_ptr.
   unfold Mem.valid_block in *. break_match; try congruence.
@@ -1271,17 +1458,14 @@ Proof.
   unfold Mem.valid_block in *. break_match; try congruence.
   unfold meminj_injective. intros. unfold Mem.flat_inj in *.
   repeat break_match_hyp; try congruence.
-  unfold same_offsets. unfold HighValues.same_offsets. unfold Mem.flat_inj.
+  unfold same_offsets. unfold MemInjProps.same_offsets. unfold Mem.flat_inj.
   intros. break_match_hyp; try congruence.
   unfold total_inj. intros.
   unfold Mem.flat_inj.
-  app Mem.load_valid_access Mem.load.
-  eapply Mem.valid_access_implies in H0;
-    try eapply Mem.valid_access_valid_block in H0;
-    try solve [econstructor; eauto].
-  unfold Mem.valid_block in *.
-  exists b.
-  break_match; congruence.
+  {
+  break_match; eauto.
+  exfalso. unfold Mem.valid_block in *. eauto.
+  }
   unfold minimal_inj_domain. intros. destruct x.
   unfold Mem.flat_inj in *.
   unfold Mem.valid_block. break_match_hyp; congruence.
@@ -1320,35 +1504,22 @@ Proof.
   auto.
 Qed.
 
-Lemma value_inject_not_empty :
-  forall m hv lv,
-    HighValues.value_inject ge m hv lv ->
-    Plt 1%positive (Mem.nextblock m).
-Proof.
-  intros. inv H;
-  unfold Mem.loadv in *;
-  app Mem.load_valid_access Mem.load;
-  try eapply Mem.valid_access_implies in H0;
-  try eapply Mem.valid_access_valid_block in H0;
-  try solve [econstructor];
-  unfold Mem.valid_block in *;
-  destruct (Mem.nextblock m); simpl;  
-  unfold Plt in *; unfold Pos.lt in *; simpl;
-    unfold Pos.compare in *; simpl in *; try reflexivity;
-      break_match_hyp; try congruence.
-Qed.
-
 Lemma value_inject_val_inject :
   forall m hv lv,
     HighValues.value_inject ge m hv lv ->
+    Mem.mem_inj (Mem.flat_inj (Mem.nextblock m)) m m ->
     Val.inject (Mem.flat_inj (Mem.nextblock m)) lv lv.
 Proof.
   intros.
   unfold Mem.flat_inj.
-  inv H; unfold Mem.loadv in *;
-    eapply Mem.load_valid_access in H0;
-    eapply Mem.valid_access_implies in H0;
-    try eapply Mem.valid_access_valid_block in H0;
+  inv H; cycle 2.
+    { (* opaque case *)
+      eapply opaque_type_mem_inj_strict; eauto.
+      intros. unfold Mem.valid_block in *. break_if; try contradiction. reflexivity. }
+  all: unfold Mem.loadv in *;
+    eapply Mem.load_valid_access in H1;
+    eapply Mem.valid_access_implies in H1;
+    try eapply Mem.valid_access_valid_block in H1;
     try solve [econstructor];
     unfold Mem.valid_block in *;
     econstructor; eauto;
@@ -1368,29 +1539,35 @@ Lemma meminj_value_inject :
 Proof.
   intros.
   exists (Mem.flat_inj (Mem.nextblock m)).
+
+  assert (Hmi : Mem.inject (Mem.flat_inj (Mem.nextblock m)) m m).
+  { 
+    eapply Mem.neutral_inject.
+
+    simpl. econstructor; eauto.
+    intros.
+    unfold Mem.flat_inj in *. break_match_hyp; try congruence. inv H3.
+    rewrite Z.add_0_r. assumption.
+    intros.
+    unfold Mem.flat_inj in *. break_match_hyp; try congruence. inv H3.
+    eapply Z.divide_0_r.
+    intros.
+    unfold Mem.flat_inj in *. break_match_hyp; try congruence. inv H3.
+    rewrite Z.add_0_r.
+    destruct (ZMap.get ofs (Mem.mem_contents m) !! b2) eqn:?; econstructor; eauto.
+    destruct v; econstructor; eauto.
+    eapply H1 in Heqm0; eauto.
+    break_match; try congruence. reflexivity.
+    rewrite Int.add_zero. reflexivity.
+  }
+
   split.
-  eapply Mem.neutral_inject.
-  
-  simpl. econstructor; eauto.
-  intros.
-  unfold Mem.flat_inj in *. break_match_hyp; try congruence. inv H3.
-  rewrite Z.add_0_r. assumption.
-  intros.
-  unfold Mem.flat_inj in *. break_match_hyp; try congruence. inv H3.
-  eapply Z.divide_0_r.
-  intros.
-  unfold Mem.flat_inj in *. break_match_hyp; try congruence. inv H3.
-  rewrite Z.add_0_r.
-  destruct (ZMap.get ofs (Mem.mem_contents m) !! b2) eqn:?; econstructor; eauto.
-  destruct v; econstructor; eauto.
-  eapply H1 in Heqm0; eauto.
-  break_match; try congruence. reflexivity.
-  rewrite Int.add_zero. reflexivity.
+  eauto.
 
   split.
   unfold wf_mem.
   split. unfold wf_inj.
-  split. unfold globals_inj_same. unfold HighValues.globals_inj_same. intros.
+  split. unfold globals_inj_same. unfold MemInjProps.globals_inj_same. intros.
   unfold Mem.flat_inj. break_match; try congruence.
 
   destruct H3. unfold Genv.find_funct_ptr in *.
@@ -1402,17 +1579,13 @@ Proof.
   
   split. unfold meminj_injective. intros.
   unfold Mem.flat_inj in *. repeat (break_match_hyp; try congruence).
-  unfold same_offsets. unfold HighValues.same_offsets.
+  unfold same_offsets. unfold MemInjProps.same_offsets.
   intros. unfold Mem.flat_inj in *.
   break_match_hyp; try congruence.
   split. unfold total_inj.
-  intros. eapply Mem.load_valid_access in H3.
-  eapply Mem.valid_access_implies in H3.
-  eapply Mem.valid_access_valid_block in H3.
-  unfold Mem.valid_block in *.
+  intros.
   exists b. unfold Mem.flat_inj.
   break_match; try congruence.
-  solve [econstructor].
   split.
   unfold minimal_inj_domain. intros.
   unfold Mem.flat_inj in *. unfold Mem.valid_block.
@@ -1423,8 +1596,8 @@ Proof.
   break_match_hyp; try congruence.
   simpl. repeat (econstructor; eauto).
 
-  eapply value_inject_val_inject; eauto.
-  eapply value_inject_val_inject; eauto.
+  eapply value_inject_val_inject; eauto using Mem.mi_inj.
+  eapply value_inject_val_inject; eauto using Mem.mi_inj.
 Qed.
 
 
@@ -1439,9 +1612,9 @@ Proof.
   copy H1.
   eapply meminj_value_inject in H1; try eapply H0; eauto.
   break_exists; repeat break_and.
-  split; econstructor; eauto; simpl;
-    try eapply value_inject_not_empty; eauto;
-      try solve [econstructor; eauto].
+  split; econstructor; eauto; simpl.
+  - eapply Pos.le_1_l.
+  - econstructor.
 Qed.
 
 Theorem fsim' :

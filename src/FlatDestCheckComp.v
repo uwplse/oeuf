@@ -38,6 +38,7 @@ Definition compile : A.stmt -> B.stmt :=
         | A.MkConstr dst tag args => B.MkConstr dst tag (map go_expr args)
         | A.Switch dst cases => B.Switch dst (go_list cases)
         | A.MkClose dst fname free => B.MkClose dst fname (map go_expr free)
+        | A.OpaqueOp dst op args => B.OpaqueOp dst op (map go_expr args)
         | A.Assign dst src => B.Assign dst (go_expr src)
         end in go.
 
@@ -101,6 +102,9 @@ Inductive I_stmt : A.stmt -> B.stmt -> Prop :=
 | IMkClose : forall dst fname afree bfree,
         Forall2 I_expr afree bfree ->
         I_stmt (A.MkClose dst fname afree) (B.MkClose dst fname bfree)
+| IOpaqueOp : forall dst op aargs bargs,
+        Forall2 I_expr aargs bargs ->
+        I_stmt (A.OpaqueOp dst op aargs) (B.OpaqueOp dst op bargs)
 | IAssign : forall dst asrc bsrc,
         I_expr asrc bsrc ->
         I_stmt (A.Assign dst asrc) (B.Assign dst bsrc)
@@ -305,6 +309,14 @@ simpl in *; A.refold_all_dests.
 
 - (* MkClose *)
   eexists. split. eapply B.SCloseDone; eauto.
+    { eapply in_keys_lookup_none. simpl. eauto using disjoint_head_r. }
+  i_ctor.
+    { eapply cons_disjoint_l.
+      - repeat break_and. on _, invc_using disjoint_cons_inv_l. auto.
+      - eapply tail_disjoint_r. eauto. }
+
+- (* OpaqueOp *)
+  eexists. split. eapply B.SOpaqueOpDone; eauto.
     { eapply in_keys_lookup_none. simpl. eauto using disjoint_head_r. }
   i_ctor.
     { eapply cons_disjoint_l.

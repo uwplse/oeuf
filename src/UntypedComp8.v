@@ -34,7 +34,7 @@ Definition compile_expr :=
         | AS.MkConstr ctor args => B.MkConstr ctor (go_list args)
         | AS.MkClose fname free => B.MkClose fname (go_list free)
         | AS.Elim ty cases target => B.Elim ty (go_list cases) (go target)
-        | AS.OpaqueOp op args => B.Arg (* FIXME *)
+        | AS.OpaqueOp op args => B.OpaqueOp op (go_list args)
         end in go.
 
 Definition compile_expr_list :=
@@ -71,6 +71,9 @@ Inductive I_expr : AS.expr -> B.expr -> Prop :=
         Forall2 I_expr acases bcases ->
         I_expr atarget btarget ->
         I_expr (AS.Elim ty acases atarget) (B.Elim ty bcases btarget)
+| IOpaqueOp : forall op aargs bargs,
+        Forall2 I_expr aargs bargs ->
+        I_expr (AS.OpaqueOp op aargs) (B.OpaqueOp op bargs)
 .
 Hint Resolve IValue.
 
@@ -99,6 +102,13 @@ Inductive I_cont : AS.cont -> (value -> B.state) -> Prop :=
         I_cont ak bk ->
         I_cont (AS.KClose fname avs aes al ak)
                (fun v => B.Run (B.MkClose fname (bvs ++ B.Value v :: bes)) bl bk)
+| IKOpaqueOp : forall op  avs aes al ak  bvs bes bl bk,
+        Forall2 I_expr avs bvs ->
+        Forall2 I_expr aes bes ->
+        al = bl ->
+        I_cont ak bk ->
+        I_cont (AS.KOpaqueOp op avs aes al ak)
+               (fun v => B.Run (B.OpaqueOp op (bvs ++ B.Value v :: bes)) bl bk)
 | IKElim : forall ty  acases al ak  bcases bl bk,
         Forall2 I_expr acases bcases ->
         al = bl ->
@@ -129,6 +139,7 @@ Lemma I_run_cont : forall av ak bv bk,
     I_cont ak bk ->
     I (AS.run_cont ak av) (bk bv).
 intros0 IIval IIcont; invc IIcont; simpl; try solve [repeat i_ctor].
+- i_ctor. i_ctor. i_lem Forall2_app.
 - i_ctor. i_ctor. i_lem Forall2_app.
 - i_ctor. i_ctor. i_lem Forall2_app.
 Qed.
@@ -268,6 +279,15 @@ all: try on (I_expr _ be), invc.
   i_lem I_run_cont.
 
 
+- on _, invc_using Forall2_3part_inv.
+  eexists. split. i_lem B.SOpaqueOpStep.
+  i_ctor. i_ctor.
+
+- fwd eapply I_expr_map_value; eauto. subst.
+  eexists. split. i_lem B.SOpaqueOpDone.
+  i_lem I_run_cont.
+
+
 - eexists. split. i_lem B.SElimTarget.
   i_ctor. i_ctor.
 
@@ -280,8 +300,6 @@ Qed.
 
 
 
-Lemma admit_ A : A. Admitted.
-
 Lemma compile_I_expr : forall a b,
     compile_expr a = b ->
     I_expr a b.
@@ -290,8 +308,6 @@ mut_induction a using AS.expr_rect_mut' with
         compile_expr_list a = b ->
         Forall2 I_expr a b);
 [ intros0 Hcomp; subst b; simpl in *; fold compile_expr_list; try i_ctor.. | ].
-
-- apply admit_.
 
 - finish_mut_induction compile_I_expr using list.
 Qed exporting.

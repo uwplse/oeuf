@@ -17,6 +17,7 @@ Module V1 := HigherValue.
 Module V2 := HighValues.
 
 Require oeuf.MatchValues.
+Require Import oeuf.OpaqueOps.
 
 Add Printing Constructor A.frame.
 Add Printing Constructor B.frame.
@@ -67,6 +68,8 @@ Definition compile : A.stmt -> option B.stmt :=
                 Some (B.Switch dst (numbered 0 cases'))
         | A.MkClose dst fname free =>
                 Some (B.MkClose dst fname (map go_expr free))
+        | A.OpaqueOp dst op args =>
+                Some (B.OpaqueOp dst op (map go_expr args))
         | A.Assign dst src => Some (B.Assign dst (go_expr src))
         end in go.
 
@@ -127,6 +130,9 @@ Inductive I_stmt : A.stmt -> B.stmt -> Prop :=
 | IMkClose : forall dst fname afree bfree,
         Forall2 I_expr afree bfree ->
         I_stmt (A.MkClose dst fname afree) (B.MkClose dst fname bfree)
+| IOpaqueOp : forall dst op aargs bargs,
+        Forall2 I_expr aargs bargs ->
+        I_stmt (A.OpaqueOp dst op aargs) (B.OpaqueOp dst op bargs)
 | IAssign : forall dst asrc bsrc,
         I_expr asrc bsrc ->
         I_stmt (A.Assign dst asrc) (B.Assign dst bsrc)
@@ -408,6 +414,13 @@ simpl in *.
   eexists. split. eapply B.SCloseDone; eauto.
   i_ctor. i_lem set_I_frame. i_ctor.
 
+- (* OpaqueOp *)
+  fwd eapply eval_sim_forall; eauto. break_exists. break_and.
+  fwd eapply opaque_oper_sim_high as HH; eauto. destruct HH as (bv & ? & ?).
+
+  eexists. split. eapply B.SOpaqueOpDone; eauto.
+  i_ctor.
+
 - (* MakeCall *)
   fwd eapply Forall2_nth_error_ex with (xs := AE) as HH; eauto.
     destruct HH as ([bbody bret] & ? & ?).
@@ -486,6 +499,7 @@ mut_induction av using HigherValue.value_rect_mut' with
 - invc Apub. i_ctor.
 - invc Apub. i_ctor. { rewrite nat_pos_nat. eauto. }
   fwd i_lem Forall2_length. congruence.
+- invc Apub. i_ctor.
 - auto.
 - invc Apub. i_ctor.
 
@@ -507,6 +521,7 @@ mut_induction bv using HighValues.value_rect_mut' with
 - invc Bpub. i_ctor.
 - invc Bpub. i_ctor. { rewrite nat_pos_nat in *. eauto. }
   fwd i_lem Forall2_length. congruence.
+- invc Bpub. i_ctor.
 - auto.
 - invc Bpub. i_ctor.
 

@@ -7,6 +7,7 @@ Require Import oeuf.Monads.
 
 Require Export oeuf.HigherValue.
 Require Import oeuf.AllValues.
+Require Import oeuf.OpaqueOps.
 Require Import oeuf.ListLemmas.
 
 Inductive insn :=
@@ -17,6 +18,7 @@ Inductive insn :=
 | MkConstr (dst : nat) (tag : nat) (args : list nat)
 | Switch (dst : nat) (cases : list (list insn))
 | MkClose (dst : nat) (f : function_name) (free : list nat)
+| OpaqueOp (dst : nat) (op : opaque_oper_name) (args : list nat)
 | Copy (dst : nat) (src : nat)
 .
 
@@ -74,6 +76,11 @@ Inductive sstep (E : env) : state -> state -> Prop :=
         Forall2 (fun l v => local f l = Some v) free vs ->
         sstep E (Run (MkClose dst fname free :: is) f k)
                 (Run is (set f dst (Close fname vs)) k)
+| SOpaqueOpDone : forall dst op args is f k vs v,
+        Forall2 (fun l v => local f l = Some v) args vs ->
+        opaque_oper_denote_higher op vs = Some v ->
+        sstep E (Run (OpaqueOp dst op args :: is) f k)
+                (Run is (set f dst v) k)
 
 | SMakeCall : forall dst fl a is f k  fname free arg body ret,
         local f fl = Some (Close fname free) ->
@@ -189,6 +196,7 @@ Definition insn_rect_mut
     (HConstr :  forall dst tag args, P (MkConstr dst tag args))
     (HSwitch :  forall dst cases, Pll cases -> P (Switch dst cases))
     (HClose :   forall dst fname free, P (MkClose dst fname free))
+    (HOpaqueOp : forall dst op args, P (OpaqueOp dst op args))
     (HCopy :    forall dst src, P (Copy dst src))
     (Hnil :     Pl [])
     (Hcons :    forall i is, P i -> Pl is -> Pl (i :: is))
@@ -214,6 +222,7 @@ Definition insn_rect_mut
         | MkConstr dst tag args => HConstr dst tag args
         | Switch dst cases => HSwitch dst cases (go_list_list cases)
         | MkClose dst fname free => HClose dst fname free
+        | OpaqueOp dst op args => HOpaqueOp dst op args
         | Copy dst src => HCopy dst src
         end in go i.
 
@@ -226,10 +235,11 @@ Definition insn_ind' (P : insn -> Prop)
     (HConstr :  forall dst tag args, P (MkConstr dst tag args))
     (HSwitch :  forall dst cases, Forall (Forall P) cases -> P (Switch dst cases))
     (HClose :   forall dst fname free, P (MkClose dst fname free))
+    (HOpaqueOp : forall dst op args, P (OpaqueOp dst op args))
     (HCopy :    forall dst src, P (Copy dst src))
     (i : insn) : P i :=
     ltac:(refine (@insn_rect_mut P (Forall P) (Forall (Forall P))
-        HArg HSelf HDeref HCall HConstr HSwitch HClose HCopy _ _ _ _ i); eauto).
+        HArg HSelf HDeref HCall HConstr HSwitch HClose HOpaqueOp HCopy _ _ _ _ i); eauto).
 
 Definition insn_list_rect_mut
         (P : insn -> Type)
@@ -242,6 +252,7 @@ Definition insn_list_rect_mut
     (HConstr :  forall dst tag args, P (MkConstr dst tag args))
     (HSwitch :  forall dst cases, Pll cases -> P (Switch dst cases))
     (HClose :   forall dst fname free, P (MkClose dst fname free))
+    (HOpaqueOp : forall dst op args, P (OpaqueOp dst op args))
     (HCopy :    forall dst src, P (Copy dst src))
     (Hnil :     Pl [])
     (Hcons :    forall i is, P i -> Pl is -> Pl (i :: is))
@@ -249,7 +260,8 @@ Definition insn_list_rect_mut
     (Hcons2 :   forall is iss, Pl is -> Pll iss -> Pll (is :: iss))
     (is : list insn) : Pl is :=
     let go := insn_rect_mut P Pl Pll
-            HArg HSelf HDeref HCall HConstr HSwitch HClose HCopy Hnil Hcons Hnil2 Hcons2 in
+            HArg HSelf HDeref HCall HConstr HSwitch HClose HOpaqueOp HCopy
+            Hnil Hcons Hnil2 Hcons2 in
     let fix go_list is :=
         match is as is_ return Pl is_ with
         | [] => Hnil
@@ -267,5 +279,6 @@ Definition dest e :=
     | MkConstr dst _ _ => dst
     | Switch dst _ => dst
     | MkClose dst _ _ => dst
+    | OpaqueOp dst _ _ => dst
     | Copy dst _ => dst
     end.

@@ -87,6 +87,10 @@ Definition compile : A.insn -> state_option (list nat) B.insn :=
             popn nfree >>= fun free =>
             push dst >>= fun _ =>
             pure (B.MkClose dst fname (rev free))
+        | A.OpaqueOp dst op nargs =>
+            popn nargs >>= fun args =>
+            push dst >>= fun _ =>
+            pure (B.OpaqueOp dst op (rev args))
         | A.Copy dst =>
             pop >>= fun src =>
             push dst >>= fun _ =>
@@ -163,6 +167,10 @@ Inductive I_insn : A.insn -> B.insn -> list nat -> list nat -> Prop :=
         length free = nfree ->
         I_insn (A.MkClose dst fname nfree) (B.MkClose dst fname (rev free))
                (free ++ stk) (dst :: stk)
+| IOpaqueOp : forall dst op nargs args stk,
+        length args = nargs ->
+        I_insn (A.OpaqueOp dst op nargs) (B.OpaqueOp dst op (rev args))
+               (args ++ stk) (dst :: stk)
 | ICopy : forall dst src stk,
         I_insn (A.Copy dst) (B.Copy dst src)
                (src :: stk) (dst :: stk)
@@ -270,6 +278,8 @@ try solve [econstructor; eauto].
   constructor. eauto.
 - rewrite <- firstn_skipn with (l := s) at 2. econstructor.
   rewrite firstn_length. lia.
+- rewrite <- firstn_skipn with (l := s) at 2. econstructor.
+  rewrite firstn_length. lia.
 - fwd eapply check_and_rewind_state_eq; eauto. subst.
   on _, apply_lem check_and_rewind_ok.
   fwd eapply compile_case_list_state_eq; eauto.
@@ -338,18 +348,6 @@ Ltac stk_simpl := compute [
     B.pop B.push B.pop_push  B.arg B.self B.stack B.locals
     ] in *.
 
-(*
-Lemma lookup_some_same : forall A xs k (x : A) k' x',
-    lookup xs k = Some x ->
-    ~ In k' (keys xs) ->
-    lookup ((k', x') :: xs) k = Some x.
-intros0 Hlook Hin. simpl.
-break_if.
-- eapply lookup_some_in_keys in Hlook. subst k'. exfalso. eauto.
-- eauto.
-Qed.
-*)
-
 Lemma push_I_frame : forall af bf l v,
     I_frame af bf ->
     I_frame (A.push af l v) (B.push bf l v).
@@ -374,118 +372,13 @@ eapply push_I_frame, pop_I_frame; eauto.
 Qed.
 Hint Resolve pop_push_I_frame.
 
-(*
-Lemma disjoint_cons_l_not_in_r : forall A (xs ys : list A) x,
-    disjoint (x :: xs) ys ->
-    ~ In x ys.
-intros0 Hxy. invc Hxy. on >Forall, invc. eauto.
-Qed.
-Hint Resolve disjoint_cons_l_not_in_r.
-
-Lemma disjoint_cons_r_not_in_l : forall A (xs ys : list A) y,
-    disjoint xs (y :: ys) ->
-    ~ In y xs.
-intros0 Hxy. eapply disjoint_sym in Hxy. 
-eauto using disjoint_cons_l_not_in_r.
-Qed.
-Hint Resolve disjoint_cons_r_not_in_l.
-
-Lemma I_keys_move : forall xs y ys,
-    I_keys xs (y :: ys) ->
-    I_keys (y :: xs) ys.
-intros0 II. invc II. constructor.
-- constructor; eauto.
-- on (distinct (_ :: _)), invc. auto.
-- on (distinct (_ :: _)), invc. eapply cons_disjoint_l; eauto.
-Qed.
-Hint Resolve I_keys_move.
-
-Lemma I_keys_sym : forall xs ys,
-    I_keys xs ys ->
-    I_keys ys xs.
-intros0 II. invc II. constructor; eauto. eauto using disjoint_sym.
-Qed.
-
-Lemma I_keys_move' : forall xs x ys,
-    I_keys (x :: xs) ys ->
-    I_keys xs (x :: ys).
-intros0 II. eauto using I_keys_sym, I_keys_move.
-Qed.
-Hint Resolve I_keys_move'.
-
-Lemma I_keys_r_not_in_l : forall xs y ys,
-    I_keys xs (y :: ys) ->
-    ~ In y xs.
-inversion 1. eauto using disjoint_cons_r_not_in_l.
-Qed.
-
-Lemma I_keys_r_not_in_r : forall xs y ys,
-    I_keys xs (y :: ys) ->
-    ~ In y ys.
-inversion 1. on (distinct (_ :: _)), invc. auto.
-Qed.
-
-Lemma I_keys_cons_r_inv : forall xs y ys
-        (P : _ -> _ -> _ -> Prop),
-    (I_keys xs ys ->
-        ~ In y xs ->
-        ~ In y ys ->
-        P xs y ys) ->
-    I_keys xs (y :: ys) -> P xs y ys.
-intros0 HP II.
-eapply HP.
-- invc II. on (distinct (_ :: _)), invc. constructor; eauto.
-- eauto using I_keys_r_not_in_l.
-- eauto using I_keys_r_not_in_r.
-Qed.
-
-Lemma cons_I_keys_l : forall x xs ys,
-    I_keys xs ys ->
-    ~ In x xs ->
-    ~ In x ys ->
-    I_keys (x :: xs) ys.
-intros0 II Hinl Hinr.
-invc II. constructor; eauto.
-constructor; eauto.
-Qed.
-Hint Resolve cons_I_keys_l.
-
-Lemma cons_I_keys_r : forall y xs ys,
-    I_keys xs ys ->
-    ~ In y xs ->
-    ~ In y ys ->
-    I_keys xs (y :: ys).
-intros0 II Hinl Hinr.
-invc II. constructor; eauto.
-constructor; eauto.
-Qed.
-Hint Resolve cons_I_keys_r.
-
-Lemma I_frame_stack_local : forall af bf idx v,
-    nth_error (A.stack af) idx = Some v ->
-    I_frame af bf ->
-    B.stack_local bf idx = Some v.
-intros0 Hnth II. invc II. unfold B.stack_local. simpl in *.
-fwd eapply Forall2_nth_error_ex; eauto. break_exists. break_and.
-find_rewrite.
-unfold B.local. simpl. auto.
-Qed.
-
-Lemma A_top_nth_error : forall af v,
-    A.top af = v ->
-    length (A.stack af) >= 1 ->
-    nth_error (A.stack af) 0 = Some v.
-intros0 Htop Hlen.
-destruct af. destruct stack.
-  { simpl in *. lia. }
-unfold A.top in Htop. simpl in *. congruence.
-Qed.
-*)
 
 Lemma I_insn_stack_effect : forall ai bi s s',
     I_insn ai bi s s' ->
     s' = B.dest bi :: skipn (B.pop_count bi) s.
 intros0 II; invc II; simpl; try reflexivity.
+- rewrite skipn_app by (rewrite rev_length; lia).
+  rewrite rev_length. replace (_ - _) with 0 by lia. reflexivity.
 - rewrite skipn_app by (rewrite rev_length; lia).
   rewrite rev_length. replace (_ - _) with 0 by lia. reflexivity.
 - rewrite skipn_app by (rewrite rev_length; lia).
@@ -502,6 +395,7 @@ Lemma I_insn_pop_count_eq : forall ai bi s s',
     I_insn ai bi s s' ->
     A.pop_count ai = B.pop_count bi.
 inversion 1; simpl; try reflexivity.
+- rewrite rev_length. eauto.
 - rewrite rev_length. eauto.
 - rewrite rev_length. eauto.
 Qed.
@@ -625,6 +519,11 @@ simpl in *.
 
 - (* MkClose *)
   eexists. split. eapply B.SCloseDone; simpl; eauto.
+    { subst. rewrite firstn_app, firstn_all in * by lia. eauto. }
+  use_I_tail.
+
+- (* OpaqueOp *)
+  eexists. split. eapply B.SOpaqueOpDone; simpl; eauto.
     { subst. rewrite firstn_app, firstn_all in * by lia. eauto. }
   use_I_tail.
 

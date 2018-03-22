@@ -29,6 +29,8 @@ Definition compile : A.expr -> list B.insn :=
         | A.Switch cases => [B.Switch (go_list cases)]
         | A.MkClose fname free =>
                 map B.Block (go_list free) ++ [B.MkClose fname (length free)]
+        | A.OpaqueOp op args =>
+                map B.Block (go_list args) ++ [B.OpaqueOp op (length args)]
         end in go.
 
 Definition compile_list :=
@@ -87,6 +89,11 @@ Inductive I_expr : (* stk *) list value -> A.expr -> list B.insn -> Prop :=
         Forall2 (I_expr []) es codes ->
         I_expr (rev vs) (A.MkClose fname (map A.Value vs ++ es))
                         (map B.Block codes ++ [B.MkClose fname (length vs + length es)])
+
+| IOpaqueOp : forall fname vs es codes,
+        Forall2 (I_expr []) es codes ->
+        I_expr (rev vs) (A.OpaqueOp fname (map A.Value vs ++ es))
+                        (map B.Block codes ++ [B.OpaqueOp fname (length vs + length es)])
 .
 
 Inductive I : A.state -> B.state -> Prop :=
@@ -121,6 +128,8 @@ try solve [econstructor; eauto].
   eapply IMkConstr with (vs := []); eauto.
 - (* MkClose *)
   eapply IMkClose with (vs := []); eauto.
+- (* OpaqueOp *)
+  eapply IOpaqueOp with (vs := []); eauto.
 Qed.
 
 Lemma compile_list_I_expr : forall a b,
@@ -315,6 +324,36 @@ all: try solve [exfalso; eauto].
   eexists. split. eapply B.SConstrDone.
     { rw_stk. rewrite rev_length. reflexivity. }
   rw_stk. rewrite rev_involutive.  eauto.
+
+- (* OpaqueOpStep *)
+  assert (Forall (fun e => ~ A.is_value e) es0) by eauto.
+  fwd eapply annoying_list_lemma; eauto.  break_and.
+  subst es0.  on (Forall2 _ (_ :: _) _), invc.  simpl in *.
+
+  eexists. split. eapply B.SBlock.
+  i_ctor. i_ctor.
+    change (A.Value v :: es) with (map A.Value [v] ++ es).
+      rewrite app_assoc. rewrite <- map_app.
+    replace (_ + S _) with (length (vs0 ++ [v]) + length es); cycle 1.
+      { rewrite app_length. simpl. lia. }
+    simpl. rw_stk. change (v :: rev vs0) with (rev [v] ++ rev vs0). rewrite <- rev_app_distr.
+  i_ctor.
+
+- (* OpaqueOpDone *)
+  assert (Forall (fun e => ~ A.is_value e) es0) by eauto.
+  fwd eapply A_map_value_is_value with (vs := vs) as HH; eauto.
+  on (_ = map A.Value vs), fun H => rewrite <- H in *.
+  on _, invc_using Forall_app_inv.
+  destruct es0; cycle 1.
+    { repeat on (Forall _ (_ :: _)), invc. exfalso. eauto. }
+  on (Forall2 _ [] _), invc.
+  simpl in *.  rewrite Nat.add_0_r in *.  rewrite app_nil_r in *.
+  fwd eapply map_inj; try eassumption.  { injection 1. eauto. } subst vs0.
+
+  eexists. split. eapply B.SOpaqueOpDone.
+    { rw_stk. rewrite rev_length. reflexivity. }
+    { rw_stk. rewrite rev_involutive. eauto. }
+  eauto.
 
 - (* CallL *)
   eexists. split. eapply B.SBlock.

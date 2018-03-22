@@ -7,6 +7,7 @@ Require Import oeuf.Monads.
 
 Require Export oeuf.HigherValue.
 Require Import oeuf.AllValues.
+Require Import oeuf.OpaqueOps.
 Require Import oeuf.ListLemmas.
 
 Inductive stmt :=
@@ -19,6 +20,7 @@ Inductive stmt :=
 | MkConstr (dst : nat) (tag : nat) (args : list nat)
 | Switch (dst : nat) (cases : list stmt)
 | MkClose (dst : nat) (f : function_name) (free : list nat)
+| OpaqueOp (dst : nat) (op : opaque_oper_name) (args : list nat)
 | Copy (dst : nat) (src : nat)
 .
 
@@ -83,6 +85,11 @@ Inductive sstep (E : env) : state -> state -> Prop :=
         Forall2 (fun l v => local f l = Some v) free vs ->
         sstep E (Run (MkClose dst fname free ) f k)
                 (Run Skip (set f dst (Close fname vs)) k)
+| SOpaqueOpDone : forall dst op args f k vs v,
+        Forall2 (fun l v => local f l = Some v) args vs ->
+        opaque_oper_denote_higher op vs = Some v ->
+        sstep E (Run (OpaqueOp dst op args) f k)
+                (Run Skip (set f dst v) k)
 
 | SMakeCall : forall dst fl a f k  fname free arg body ret,
         local f fl = Some (Close fname free) ->
@@ -205,6 +212,7 @@ Definition stmt_rect_mut
     (HConstr :  forall dst tag args, P (MkConstr dst tag args))
     (HSwitch :  forall dst cases, Pl cases -> P (Switch dst cases))
     (HClose :   forall dst fname free, P (MkClose dst fname free))
+    (HOpaqueOp : forall dst op args, P (OpaqueOp dst op args))
     (HCopy :    forall dst src, P (Copy dst src))
     (Hnil :     Pl [])
     (Hcons :    forall i is, P i -> Pl is -> Pl (i :: is))
@@ -225,6 +233,7 @@ Definition stmt_rect_mut
         | MkConstr dst tag args => HConstr dst tag args
         | Switch dst cases => HSwitch dst cases (go_list cases)
         | MkClose dst fname free => HClose dst fname free
+        | OpaqueOp dst op args => HOpaqueOp dst op args
         | Copy dst src => HCopy dst src
         end in go i.
 
@@ -239,7 +248,8 @@ Definition stmt_ind' (P : stmt -> Prop)
     (HConstr :  forall dst tag args, P (MkConstr dst tag args))
     (HSwitch :  forall dst cases, Forall P cases -> P (Switch dst cases))
     (HClose :   forall dst fname free, P (MkClose dst fname free))
+    (HOpaqueOp : forall dst op args, P (OpaqueOp dst op args))
     (HCopy :    forall dst src, P (Copy dst src))
     (i : stmt) : P i :=
     ltac:(refine (@stmt_rect_mut P (Forall P)
-        HSkip HSeq HArg HSelf HDeref HCall HConstr HSwitch HClose HCopy _ _ i); eauto).
+        HSkip HSeq HArg HSelf HDeref HCall HConstr HSwitch HClose HOpaqueOp HCopy _ _ i); eauto).
