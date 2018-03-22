@@ -1,9 +1,14 @@
 Require Import Psatz.
 Require Import ZArith.
 
+Require Import compcert.lib.Maps.
 Require Import compcert.common.Values.
 Require Import compcert.common.Memory.
 Require Import compcert.common.Globalenvs.
+Require Import compcert.common.AST.
+Require Import compcert.common.Smallstep.
+Require Import compcert.common.Events.
+Require Import compcert.backend.Cminor.
 
 Require Import oeuf.Common.
 Require Import oeuf.HList.
@@ -209,7 +214,6 @@ Qed.
 
 End MEM_SIM.
 
-
 Record opaque_oper_impl {atys rty} := MkOpaqueOperImpl {
         oo_denote : hlist type_denote atys -> type_denote rty;
         oo_denote_source : forall {G}, hlist (value G) atys -> value G rty;
@@ -217,7 +221,7 @@ Record opaque_oper_impl {atys rty} := MkOpaqueOperImpl {
         oo_denote_higher : list HigherValue.value -> option HigherValue.value;
         oo_denote_high : list HighValues.value -> option HighValues.value;
         oo_denote_mem_effect : mem -> list val -> option (mem * val);
-        (* TODO: oo_denote_low *)
+        oo_denote_cminor : ident -> list Cminor.expr -> Cminor.stmt;
 
         (* properties *)
         (* "No fabricated closures."  Every closure in the output must be
@@ -276,7 +280,14 @@ Record opaque_oper_impl {atys rty} := MkOpaqueOperImpl {
             oo_denote_high args = Some ret ->
             exists m' ret',
                 oo_denote_mem_effect m args' = Some (m', ret') /\
-                HighValues.value_inject ge m' ret ret'
+                HighValues.value_inject ge m' ret ret';
+        oo_sim_cminor : forall (ge : genv) f id e m m' sp k,
+            forall argvs0 args argvs retv,
+            oo_denote_mem_effect m argvs0 = Some (m', retv) ->
+            eval_exprlist ge sp e m args argvs ->
+            Forall2 Val.lessdef argvs0 argvs ->
+            plus step ge (State f (oo_denote_cminor id args) k sp e m)
+                      E0 (State f Sskip k sp (PTree.set id retv e) m')
     }.
 
 Implicit Arguments opaque_oper_impl [].
@@ -328,7 +339,7 @@ Qed.
 
 
 Definition impl_add : opaque_oper_impl [Opaque Oint; Opaque Oint] (Opaque Oint).
-simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _ _  _ _ _ _  _ _ _ _ _).
+simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _ _ _  _ _ _ _  _ _ _ _ _ _).
 
 - exact (fun args => Int.add (hhead args) (hhead (htail args))).
 - refine (fun G args =>
@@ -357,6 +368,11 @@ simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _ _  _ _ _ _  _ _ _ _ _).
     match args with
     | [Vint x; Vint y] => Some (m, Vint (Int.add x y))
     | _ => None
+    end).
+- refine (fun id args =>
+    match args with
+    | [x; y] => Sassign id (Ebinop Cminor.Oadd x y)
+    | _ => Sskip
     end).
 
 
@@ -434,6 +450,11 @@ simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _ _  _ _ _ _  _ _ _ _ _).
   do 2 eexists; split; eauto.
   do 2 econstructor; eauto.
 
+- intros. simpl in *.
+  repeat (break_match_hyp; try discriminate; []). subst. inject_some.
+  do 3 on >Forall2, invc.  do 3 on >eval_exprlist, invc.  do 2 on >Val.lessdef, invc.
+  eapply plus_one. econstructor; eauto. econstructor; eauto.
+
 Defined.
 
 
@@ -447,7 +468,7 @@ Qed.
 
 
 Definition impl_test : opaque_oper_impl [Opaque Oint] (ADT Tbool).
-simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _ _  _ _ _ _  _ _ _ _ _).
+simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _ _ _  _ _ _ _  _ _ _ _ _ _).
 
 - exact (fun args => Int.eq (hhead args) Int.zero).
 - refine (fun G args =>
@@ -486,6 +507,7 @@ simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _ _  _ _ _ _  _ _ _ _ _).
             end
     | _ => None
     end).
+- admit.
 
 
 - (* no_fab_clos_higher *)
@@ -586,7 +608,10 @@ simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _ _  _ _ _ _  _ _ _ _ _).
   exists m', ret'. split; eauto.
   find_rewrite. reflexivity.
 
-Defined.
+- admit.
+
+(*Defined.*)
+Admitted.
 
 
 Definition get_opaque_oper_impl {atys rty} (op : opaque_oper atys rty) :
@@ -638,6 +663,9 @@ Definition opaque_oper_denote_high :=
 Definition opaque_oper_denote_mem_effect :=
     let '(existT _ atys (existT _ rty impl)) := impl' in
     oo_denote_mem_effect impl.
+Definition opaque_oper_denote_cminor :=
+    let '(existT _ atys (existT _ rty impl)) := impl' in
+    oo_denote_cminor impl.
 
 
 Lemma opaque_oper_no_fab_clos_higher : forall args ret,
@@ -734,6 +762,18 @@ Lemma opaque_oper_sim_mem_effect : forall A B (ge : Genv.t A B) m args args' ret
 intros0 Hmv HH. unfold opaque_oper_denote_high, opaque_oper_denote_mem_effect in *.
 clearbody impl'. destruct impl' as (? & ? & impl'').
 eapply (oo_sim_mem_effect impl''); eauto.
+Qed.
+
+Lemma opaque_oper_sim_cminor : forall (ge : genv) f id e m m' sp k,
+    forall argvs0 args argvs retv,
+    opaque_oper_denote_mem_effect m argvs0 = Some (m', retv) ->
+    eval_exprlist ge sp e m args argvs ->
+    Forall2 Val.lessdef argvs0 argvs ->
+    plus step ge (State f (opaque_oper_denote_cminor id args) k sp e m)
+              E0 (State f Sskip k sp (PTree.set id retv e) m').
+intros0 Hmv HH. unfold opaque_oper_denote_mem_effect, opaque_oper_denote_cminor in *.
+clearbody impl'. destruct impl' as (? & ? & impl'').
+eapply (oo_sim_cminor impl''); eauto.
 Qed.
 
 End BY_NAME.
