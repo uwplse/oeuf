@@ -8,13 +8,18 @@ Require Import compcert.common.Globalenvs.
 Require Import compcert.common.Memory.
 Require Import compcert.common.Events.
 Require Import compcert.common.Switch.
-(*Require Import compcert.common.Smallstep.*)
+Require Import compcert.common.Smallstep.
 
 Require Import compcert.backend.Cminor.
 Require Import oeuf.Cmajor.
 
+Require Import oeuf.OpaqueOps.
+
 Require Import StructTact.StructTactics.
 Require Import StructTact.Util.
+
+Require Import oeuf.StuartTact.
+Require Import oeuf.EricTact.
 
 Definition transf_const (c : Cmajor.constant) : Cminor.constant :=
   match c with
@@ -39,6 +44,7 @@ Fixpoint transf_stmt (s : Cmajor.stmt) : Cminor.stmt :=
   | ScallSpecial oi sig fn exps =>
           let f := Cminor.Econst (Cminor.Oaddrsymbol fn Int.zero) in
           Cminor.Scall oi sig f (map transf_expr exps)
+  | SopaqueOp id op args => opaque_oper_denote_cminor op id (map transf_expr args)
   | Sseq s1 s2 => Cminor.Sseq (transf_stmt s1) (transf_stmt s2)
   | Sswitch b exp l n => Cminor.Sswitch b (transf_expr exp) l n
   | Sexit n => Cminor.Sexit n
@@ -71,10 +77,6 @@ Let ge := Genv.globalenv prog.
 Let tge := Genv.globalenv tprog.
 Hypothesis TRANSF : transf_prog prog = tprog.
 
-(* extensionally equal environments *)
-Definition env_lessdef (e1 e2: env) : Prop :=
-  forall id v1, e1!id = Some v1 -> exists v2, e2!id = Some v2 /\ Val.lessdef v1 v2.
-
 Inductive match_cont: Cmajor.cont -> Cminor.cont -> Prop :=
   | match_cont_stop:
       match_cont Cmajor.Kstop Cminor.Kstop
@@ -86,37 +88,30 @@ Inductive match_cont: Cmajor.cont -> Cminor.cont -> Prop :=
       transf_stmt s = s' ->
       match_cont k k' ->
       match_cont (Cmajor.Kseq s k) (Cminor.Kseq s' k')
-  | match_cont_call: forall id f sp e k f' e' k',
+  | match_cont_call: forall id f sp e k f' k',
       transf_function f = f' ->
       match_cont k k' ->
-      env_lessdef e e' ->
-      match_cont (Cmajor.Kcall id f sp e k) (Cminor.Kcall id f' sp e' k').
+      match_cont (Cmajor.Kcall id f sp e k) (Cminor.Kcall id f' sp e k').
 
 Inductive match_states : Cmajor.state -> Cminor.state -> Prop :=
-  | match_state: forall f f' s k s' k' sp e m e' m'
+  | match_state: forall f f' s k s' k' sp e m
         (TF: transf_function f = f')
         (TS: transf_stmt s = s')
-        (MC: match_cont k k')
-        (LD: env_lessdef e e')
-        (ME: Mem.extends m m'),
+        (MC: match_cont k k'),
       match_states
         (Cmajor.State f s k sp e m)
-        (Cminor.State f' s' k' sp e' m')
-  | match_callstate: forall f f' args args' k k' m m'
+        (Cminor.State f' s' k' sp e m)
+  | match_callstate: forall f f' args k k' m
         (TF: transf_fundef f = f')
-        (MC: match_cont k k')
-        (LD: Val.lessdef_list args args')
-        (ME: Mem.extends m m'),
+        (MC: match_cont k k'),
       match_states
         (Cmajor.Callstate f args k m)
-        (Cminor.Callstate f' args' k' m')
-  | match_returnstate: forall v v' k k' m m'
-        (MC: match_cont k k')
-        (LD: Val.lessdef v v')
-        (ME: Mem.extends m m'),
+        (Cminor.Callstate f' args k' m)
+  | match_returnstate: forall v k k' m
+        (MC: match_cont k k'),
       match_states
         (Cmajor.Returnstate v k m)
-        (Cminor.Returnstate v' k' m').
+        (Cminor.Returnstate v k' m).
 
 Remark call_cont_commut:
   forall k k', match_cont k k' -> match_cont (Cmajor.call_cont k) (Cminor.call_cont k').
@@ -160,89 +155,30 @@ Qed.
 Lemma eval_expr_transf :
   forall sp a e m v,
     Cmajor.eval_expr ge e m sp a v ->
-    forall e' m',
-      env_lessdef e e' ->
-      Mem.extends m m' ->
-      exists v',
-        Cminor.eval_expr tge sp e' m' (transf_expr a) v' /\ Val.lessdef v v'.
+    Cminor.eval_expr tge sp e m (transf_expr a) v.
 Proof.
-  induction a; intros.
-  * inv H.
-    unfold env_lessdef in *.
-    apply H0 in H3. break_exists. break_and.
-    eexists.
-    split. econstructor.
-    eassumption. assumption.
-  * inversion H.
-    eapply eval_const_transf in H3.
-    eexists; split; simpl; econstructor; eauto.
-  * inv H.
-    eapply IHa1 in H4; eauto.
-    eapply IHa2 in H6; eauto.
-    clear IHa1 IHa2.
-    repeat break_exists; repeat break_and.
-    exists (Val.add x0 x). split.
-    simpl. econstructor; eauto.
-    eapply Val.add_lessdef; eauto.
-  * inv H. eapply IHa in H4; eauto.
-    break_exists. break_and.
-    clear IHa.
-    simpl.
-    eapply Mem.loadv_extends in H6; eauto.
-    break_exists; break_and. 
-    exists x0. split; eauto.
-    econstructor; eauto.
+  induction a; intros; try solve [inv H; econstructor; eauto].
+
+  - inversion H. econstructor. eapply eval_const_transf; eauto.
 Qed.
 
 Lemma eval_exprlist_transf :
   forall a sp e m v,
     Cmajor.eval_exprlist ge e m sp a v ->
-    forall e' m',
-      env_lessdef e e' ->
-      Mem.extends m m' ->
-      exists v',
-        Cminor.eval_exprlist tge sp e' m' (map transf_expr a) v' /\ Val.lessdef_list v v'.
+    Cminor.eval_exprlist tge sp e m (map transf_expr a) v.
 Proof.
-  induction a; intros.
-  inversion H. subst v. eexists; split; econstructor; eauto.
-  inversion H.
-  remember tprog. subst.
-  eapply IHa in H6; eauto.
-  repeat break_exists; repeat break_and.
-  eapply eval_expr_transf in H4; eauto.
-  repeat break_exists; repeat break_and.
-  eexists; split; try econstructor; eauto.
+induction 1; econstructor; eauto using eval_expr_transf.
 Qed.  
 
-Lemma env_lessdef_set :
-  forall id v v' e e',
-    Val.lessdef v v' ->
-    env_lessdef e e' ->
-    env_lessdef (PTree.set id v e) (PTree.set id v' e').
-Proof.
-  intros.
-  unfold env_lessdef in *.
-  intros.
-  destruct (peq id id0); subst.
-  rewrite PTree.gss in *. eexists; split; eauto. congruence.
-  rewrite PTree.gso in * by congruence.
-  apply H0 in H1. break_exists; break_and.
-  eexists; split; eauto.
-Qed.
-
 Lemma find_funct_transf :
-  forall vf vf',
-    Val.lessdef vf vf' ->
-    forall fd,
-      Genv.find_funct ge vf = Some fd ->
-      Genv.find_funct tge vf' = Some (transf_fundef fd).
+  forall vf fd,
+  Genv.find_funct ge vf = Some fd ->
+  Genv.find_funct tge vf = Some (transf_fundef fd).
 Proof.
   intros.
-  remember H0 as H1. clear HeqH1.
-  eapply Genv.find_funct_transf in H0; eauto.
-  instantiate (1 := transf_fundef) in H0.
-  inv H. unfold tge. assumption.
-  simpl in H1. congruence.
+  on _, eapply_lem Genv.find_funct_transf.
+  instantiate (1 := transf_fundef) in H.
+  inv H. unfold tge. simpl. reflexivity.
 Qed.
 
 Lemma find_funct_ptr_transf :
@@ -295,22 +231,38 @@ Qed.
 Lemma external_call_transf :
   forall ef vargs m t vres m',
     external_call ef ge vargs m t vres m' ->
-    forall m0 vargs0,
-      Val.lessdef_list vargs vargs0 ->
-      Mem.extends m m0 ->
-      exists vres0 m0',
-        external_call ef tge vargs0 m0 t vres0 m0' /\ Mem.extends m' m0' /\ Val.lessdef vres vres0.
+    external_call ef tge vargs m t vres m'.
 Proof.
   intros.
-  eapply external_call_mem_extends in H1; eauto.
-  repeat break_exists; repeat break_and.
-  exists x. exists x0.
-  split.
-  eapply external_call_symbols_preserved; eauto.
-  eapply find_symbol_transf.
-  eapply public_symbol_transf.
-  eapply find_var_info_transf.
-  split; assumption.
+
+  assert (forall id, Senv.find_symbol tge id = Senv.find_symbol ge id).
+    { unfold Senv.find_symbol. simpl. intros.
+      unfold ge, tge. subst tprog. unfold transf_prog. simpl.
+      eapply Genv.find_symbol_transf. }
+
+  assert (forall id, Senv.public_symbol tge id = Senv.public_symbol ge id).
+    { unfold Senv.public_symbol. simpl. eapply public_symbol_transf. }
+  
+  assert (forall b, Senv.block_is_volatile tge b = Senv.block_is_volatile ge b).
+    { unfold Senv.block_is_volatile. simpl.
+      unfold ge, tge. subst tprog. unfold transf_prog. simpl.
+      eapply Genv.block_is_volatile_transf. }
+
+  destruct ef; simpl in *; eapply ec_symbols_preserved; try eassumption; eauto.
+  - eapply external_functions_properties.
+  - eapply external_functions_properties.
+  - eapply volatile_load_ok.
+  - eapply volatile_store_ok.
+  - eapply extcall_malloc_ok.
+  - eapply extcall_free_ok.
+  - eapply extcall_memcpy_ok.
+  - eapply extcall_annot_ok.
+  - eapply extcall_annot_val_ok.
+  - eapply inline_assembly_properties.
+  - eapply extcall_debug_ok.
+
+Unshelve.
+econstructor.
 Qed.
 
 Lemma match_call_cont :
@@ -321,117 +273,75 @@ Proof.
   induction 1; intros; simpl; try econstructor; eauto.
 Qed.
 
-Lemma env_lessdef_set_locals :
-  forall e e',
-    env_lessdef e e' ->
-    forall l,
-      env_lessdef (set_locals l e) (Cminor.set_locals l e').
-Proof.
-  induction l; intros.
-  simpl. assumption.
-  simpl. eapply env_lessdef_set; eauto.
-Qed.
-
-Lemma env_lessdef_set_params :
-  forall ids vs vs',
-    Val.lessdef_list vs vs' ->
-    env_lessdef (set_params vs ids) (Cminor.set_params vs' ids).
-Proof.
-  induction ids; intros.
-  simpl. unfold env_lessdef. intros. rewrite PTree.gempty in H0. congruence.
-  inversion H. remember tprog. subst. simpl. eapply env_lessdef_set; eauto.
-  simpl. eapply env_lessdef_set; eauto.
-Qed.
-
 Lemma single_step_correct:
   forall S1 t S2, Cmajor.step ge S1 t S2 ->
   forall T1, match_states S1 T1 ->
-   (exists T2, Cminor.step tge T1 t T2 /\ match_states S2 T2).
+   (exists T2, TraceSemantics.plus Cminor.step tge T1 t T2 /\ match_states S2 T2).
 Proof.
+  pose proof FullSemantics.plus_one as plus_one.
+
   induction 1; intros; invp match_states;
-    try solve [simpl; inv MC; eexists; split; try econstructor; eauto];
+    try solve [simpl; inv MC; eexists; split; [eapply plus_one | ..];
+        try econstructor; eauto];
     remember tprog; subst.
   * (* return *)
-    eapply Mem.free_parallel_extends in ME; eauto.
-    break_exists. break_and.
-    eexists; split; try econstructor; eauto.
+    eexists; split; [eapply plus_one | ..]; econstructor; eauto.
     eapply is_call_cont_transf; eauto.
   * (* assign *)
-    eapply eval_expr_transf in H; eauto.
-    break_exists. break_and.
-    eexists; split; try econstructor; eauto.
-    eapply env_lessdef_set; eauto.
+    eexists; split; [eapply plus_one | ..]; try econstructor; eauto.
+    eapply eval_expr_transf; eauto.
   * (* store *)
     eapply eval_expr_transf in H; eauto.
     eapply eval_expr_transf in H0; eauto.
-    repeat break_exists; repeat break_and.
-    eapply Mem.storev_extends in ME; eauto.
-    repeat break_exists; repeat break_and.
-    eexists; split; try econstructor; eauto.
+    eexists; split; [eapply plus_one | ..]; try econstructor; eauto.
   * (* call *)
     eapply eval_expr_transf in H; eauto.
     eapply eval_exprlist_transf in H0; eauto.
-    repeat break_exists; repeat break_and.
-    eexists; split; try econstructor; eauto; simpl.
+    eexists; split; [eapply plus_one | ..]; try econstructor; eauto; simpl.
     eapply find_funct_transf; eauto.
     eapply funsig_transf; eauto.
     econstructor; eauto.
+  * (* opaque *)
+    fwd eapply eval_exprlist_transf; eauto.
+    fwd eapply opaque_oper_sim_cminor as HH; eauto.
+    all: admit.
+    
   * (* seq *)
     simpl.
-    eexists; split; try econstructor; eauto.
+    eexists; split; [eapply plus_one | ..]; try econstructor; eauto.
     econstructor; eauto.
   * (* block *)
     simpl in *.
-    eexists; split; try econstructor; eauto; simpl; eauto.
+    eexists; split; [eapply plus_one | ..]; try econstructor; eauto; simpl; eauto.
     econstructor; eauto.
   * (* switch *)
     simpl.
     eapply eval_expr_transf in H; eauto.
-    break_exists; break_and.
-    eexists; split; try econstructor; eauto; simpl; eauto.
-    inv H0; inv H2; econstructor; eauto.
+    eexists; split; [eapply plus_one | ..]; try econstructor; eauto; simpl; eauto.
   * (* return *)
     simpl.
-    eapply Mem.free_parallel_extends in H; eauto.
-    break_exists; break_and.
-    eexists; split; try econstructor; eauto; simpl; eauto.
+    eexists; split; [eapply plus_one | ..]; try econstructor; eauto; simpl; eauto.
     eapply match_call_cont; eauto.
   * (* return *)
     eapply eval_expr_transf in H; eauto.
-    eapply Mem.free_parallel_extends in H0; eauto.
-    repeat (break_exists; break_and).
-    eexists; split; try econstructor; eauto; simpl; eauto.
+    eexists; split; [eapply plus_one | ..]; try econstructor; eauto; simpl; eauto.
     eapply match_call_cont; eauto.
   * (* call internal *)
-    eapply Mem.alloc_extends in H; eauto.
-    break_exists. break_and.
-    eexists; split; try econstructor; eauto; simpl; eauto.
-    eapply env_lessdef_set_locals.
-    eapply env_lessdef_set_params; eauto.
-    omega.
-    simpl. omega.
+    eexists; split; [eapply plus_one | ..]; try econstructor; eauto; simpl; eauto.
   * (* call external *)
     eapply external_call_transf in H; eauto.
-    repeat break_exists; repeat break_and.
-    eexists; split; try econstructor; eauto; simpl; eauto.
-  * (* return *)
-    inversion MC. remember tprog. subst.
-    eexists; split; try econstructor; eauto; simpl; eauto.
-    destruct optid. simpl. eapply env_lessdef_set; eauto.
-    simpl. assumption.
-Qed.    
+    eexists; split; [eapply plus_one | ..]; try econstructor; eauto.
+Admitted.    
 
 Lemma init_mem_transf :
   forall m,
     Genv.init_mem prog = Some m ->
-    exists m',
-      Genv.init_mem tprog = Some m' /\ Mem.extends m m'.
+    Genv.init_mem tprog = Some m.
 Proof.
   intros.
   eapply Genv.init_mem_transf in H.
   unfold transf_prog in TRANSF. rewrite <- TRANSF.
-  exists m. split; eauto.
-  eapply Mem.extends_refl.
+  simpl. eauto.
 Qed.
 
 
@@ -442,25 +352,19 @@ Lemma match_final_state :
     cminor_final_state tprog s2 r.
 Proof.
   intros.
-  remember find_funct_ptr_transf as Hft.
-  clear HeqHft.
-  remember find_symbol_transf as Hst.
-  clear HeqHst.
-  inv H0. inv H.
-  assert (exists b ofs, v' = Vptr b ofs) by (inv H1; eauto).
-  repeat break_exists; subst.
-  inv LD.
-  inv MC.
+  pose proof find_funct_ptr_transf as Hft.
+  pose proof find_symbol_transf as Hst.
+  seal TRANSF.
+  on >final_state, invc.
+  on >match_states, invc. on >match_cont, invc.
+  unseal TRANSF.
   econstructor; eauto.
-  eapply HighValues.value_inject_mem_extends; eauto.
-  eapply HighValues.value_inject_swap_ge; try eassumption.
-  intros. eapply Hft in H3. eauto.
-  intros. rewrite Hst. eauto.
-
-  destruct prog. simpl.
-  eauto using HighValues.transf_public_value.
+  - eapply HighValues.value_inject_swap_ge; eauto.
+    + intros. rewrite find_symbol_transf. eauto.
+  - subst tprog. eapply HighValues.transf_public_value. eauto.
 Qed.
 
+(* TODO *)
 Lemma is_callstate_match :
   forall st fv av,
     TraceSemantics.is_callstate (Cminor_semantics tprog) fv av st ->
@@ -468,50 +372,40 @@ Lemma is_callstate_match :
       match_states st' st /\ TraceSemantics.is_callstate (semantics prog) fv av st'.
 Proof.
   intros. inversion H.
-  remember no_new_functions as Hnn.
-  remember find_symbol_transf as Hfs.
+  pose proof no_new_functions as Hnn.
+  pose proof find_symbol_transf as Hfs.
   eapply no_new_functions in H3. break_exists. break_and.
   destruct x;  simpl in H13; try congruence.
-  eexists; split; econstructor; try eapply Mem.extends_refl; try eassumption.
-  econstructor.
-  econstructor. econstructor.
-  econstructor. eapply Val.lessdef_refl.
-  econstructor.
-  eapply HighValues.value_inject_swap_ge. eauto.
-  intros.
-  eapply Hnn in H14. break_exists; break_and; eauto.
-  intros.
-  erewrite <- Hfs; eauto.
-  eapply HighValues.value_inject_swap_ge. eauto.
-  intros.
-  eapply Hnn in H14. break_exists; break_and; eauto.
-  intros.
-  erewrite <- Hfs; eauto.
-  erewrite <- Hfs; eauto.
-  subst. destruct f; destruct fn; simpl in *.
-  unfold transf_function in H13. simpl in H13. inv H13. 
-  eauto.
-  unfold HighValues.global_blocks_valid in *.
-  unfold transf_prog in TRANSF.
-  erewrite HighValues.genv_next_transf in *; eauto.
-
-  rewrite <- TRANSF. simpl. reflexivity.
-  rewrite <- TRANSF in *. simpl in *.  eauto using HighValues.transf_public_value'.
-  rewrite <- TRANSF in *. simpl in *.  eauto using HighValues.transf_public_value'.
+  eexists; split; econstructor; try eassumption.
+  - econstructor.
+  - eapply HighValues.value_inject_swap_ge; eauto.
+    + intros. fwd eapply Hnn as HH; eauto. destruct HH as (? & ? & ?). eauto.
+    + intros. rewrite <- Hfs. eauto.
+  - eapply HighValues.value_inject_swap_ge; eauto.
+    + intros. fwd eapply Hnn as HH; eauto. destruct HH as (? & ? & ?). eauto.
+    + intros. rewrite <- Hfs. eauto.
+  - rewrite <- Hfs. eauto.
+  - unfold transf_function in H13. inv H13. simpl in *. eauto.
+  - unfold HighValues.global_blocks_valid in *.
+    erewrite HighValues.genv_next_transf in *; eauto.
+    (* note: p_ast/cm_ast coercions are in effect here *)
+    destruct prog, tprog. simpl in *. inv TRANSF. eauto.
+  - rewrite <- TRANSF in *. simpl in *.  eauto using HighValues.transf_public_value'.
+  - rewrite <- TRANSF in *. simpl in *.  eauto using HighValues.transf_public_value'.
 Qed.
 
 Theorem fsim :
   TraceSemantics.forward_simulation (Cmajor.semantics prog) (Cminor_semantics tprog).
 Proof.
   intros.
-  eapply TraceSemantics.forward_simulation_step with (match_states := match_states).
+  eapply TraceSemantics.forward_simulation_plus with (match_states := match_states).
   instantiate (1 := eq).
   - intros. eapply is_callstate_match; eauto.
     congruence.
   - intros. eapply match_final_state in H0; eauto.
   - simpl. auto.
   - simpl. intros. tauto.
-  - eapply single_step_correct; eauto.
+  - eapply single_step_correct.
 Qed.
 
 
