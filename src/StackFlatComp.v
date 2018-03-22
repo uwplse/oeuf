@@ -32,6 +32,7 @@ Definition compile : A.insn -> B.insn :=
         | A.MkConstr tag nargs => B.MkConstr tag nargs
         | A.Switch cases => B.Switch (go_list_list cases)
         | A.MkClose fname nfree => B.MkClose fname nfree
+        | A.OpaqueOp op nargs => B.OpaqueOp op nargs
         end in go.
 
 Definition compile_list :=
@@ -77,6 +78,7 @@ Inductive I_insn : A.insn -> B.insn -> Prop :=
         Forall2 (Forall2 I_insn) acases bcases ->
         I_insn (A.Switch acases) (B.Switch bcases)
 | IMkClose : forall fname nfree, I_insn (A.MkClose fname nfree) (B.MkClose fname nfree)
+| IOpaqueOp : forall op nargs, I_insn (A.OpaqueOp op nargs) (B.OpaqueOp op nargs)
 .
 
 Inductive I_frame : A.frame -> B.frame -> Prop :=
@@ -295,6 +297,12 @@ simpl in *; try subst.
     { simpl. rewrite app_length. lia. }
   i_ctor. i_ctor. remvar (rev _) as args. i_lem pop_push_I_cont.
     { f_equal. simpl. rewrite firstn_app, firstn_all by auto. reflexivity. }
+
+- (* OpaqueOp *)
+  eexists. split. eapply B.SOpaqueOpDone; eauto using eq_refl.
+    { simpl. rewrite app_length. lia. }
+    { simpl. rewrite firstn_app, firstn_all by eauto. eauto. }
+  i_ctor. i_ctor. i_lem pop_push_I_cont.
 
 - (* MakeCall *)
   fwd eapply Forall2_nth_error_ex as HH; eauto.  destruct HH as (bbody & ? & ?).

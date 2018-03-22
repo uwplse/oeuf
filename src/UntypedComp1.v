@@ -741,8 +741,7 @@ all: fix_existT; subst.
 - eexists. split.
   simpl. fold (@compile_expr_list G L vtys). unfold es0. rewrite compile_hmap_value.
   i_lem B.SOpaqueOpDone.
-  + erewrite <- opaque_oper_highest_sim. reflexivity.
-    eapply A.genv_denote; assumption.
+  + eapply opaque_oper_sim_highest; eauto.
   + simpl. fold (@compile_value_list G vtys). reflexivity.
 
 Qed.
@@ -943,8 +942,9 @@ all: on (compile_expr _ = _), invc.
   on _, invc_using compile_expr_list_map_value_inv.
   eexists. split. i_lem @A.SOpaqueOpDone.
   + simpl.
-    rewrite <- opaque_oper_highest_sim in * by eauto using SourceLifted.genv_denote.
-    on (Some _ = Some v'), invc.  reflexivity.
+    remember (opaque_oper_denote_source _ _) as rv.
+    symmetry in Heqrv. eapply opaque_oper_sim_highest in Heqrv; eauto.
+    congruence.
 
 - fold (@compile_expr_list G L case_tys) in *.
 

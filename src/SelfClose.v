@@ -7,6 +7,8 @@ Require Import oeuf.Utopia.
 Require Import oeuf.Monads.
 Require Export oeuf.HigherValue.
 Require Import oeuf.AllValues.
+Require Import oeuf.OpaqueOps.
+Require oeuf.Tagged. (* for nfree_ok_value *)
 
 Definition function_name := nat.
 
@@ -19,6 +21,7 @@ Inductive expr :=
 | MkConstr (tag : nat) (args : list expr)
 | Elim (loop : expr) (cases : list expr) (target : expr)
 | MkClose (f : function_name) (free : list expr)
+| OpaqueOp (op : opaque_oper_name) (args : list expr)
 .
 
 Definition env := list expr.
@@ -74,6 +77,16 @@ Inductive sstep (E : env) : state -> state -> Prop :=
 | SConstrDone : forall fname vs a s k,
         let es := map Value vs in
         sstep E (Run (MkConstr fname es) a s k) (k (Constr fname vs))
+
+| SOpaqueOpStep : forall op vs e es a s k,
+        Forall is_value vs ->
+        ~ is_value e ->
+        sstep E (Run (OpaqueOp op (vs ++ [e] ++ es)) a s k)
+                (Run e a s (fun v => Run (OpaqueOp op (vs ++ [Value v] ++ es)) a s k))
+| SOpaqueOpDone : forall op vs a s k v,
+        let es := map Value vs in
+        opaque_oper_denote_higher op vs = Some v ->
+        sstep E (Run (OpaqueOp op es) a s k) (k v)
 
 | SCallL : forall e1 e2 a s k,
         ~ is_value e1 ->
@@ -167,6 +180,7 @@ Definition expr_rect_mut
     (HElim :    forall loop cases target,
         P loop -> Pl cases -> P target -> P (Elim loop cases target))
     (HClose :   forall f free, Pl free -> P (MkClose f free))
+    (HOpaqueOp : forall o args, Pl args -> P (OpaqueOp o args))
     (Hnil :     Pl [])
     (Hcons :    forall e es, P e -> Pl es -> Pl (e :: es))
     (e : expr) : P e :=
@@ -186,15 +200,16 @@ Definition expr_rect_mut
         | Elim loop cases target =>
                 HElim loop cases target (go loop) (go_list cases) (go target)
         | MkClose f free => HClose f free (go_list free)
+        | OpaqueOp o args => HOpaqueOp o args (go_list args)
         end in go e.
 
 Definition expr_rect_mut'
         (P : expr -> Type)
         (Pl : list expr -> Type)
-    HValue HArg HSelf HDeref HCall HConstr HElim HClose Hnil Hcons
+    HValue HArg HSelf HDeref HCall HConstr HElim HClose HOpaqueOp Hnil Hcons
     : (forall e, P e) * (forall es, Pl es) :=
     let go := expr_rect_mut P Pl
-        HValue HArg HSelf HDeref HCall HConstr HElim HClose Hnil Hcons
+        HValue HArg HSelf HDeref HCall HConstr HElim HClose HOpaqueOp Hnil Hcons
     in
     let fix go_list es :=
         match es as es_ return Pl es_ with
@@ -214,9 +229,10 @@ Definition expr_ind' (P : expr -> Prop)
     (HElim :    forall loop cases target,
         P loop -> Forall P cases -> P target -> P (Elim loop cases target))
     (HClose :   forall f free, Forall P free -> P (MkClose f free))
+    (HOpaqueOp : forall o args, Forall P args -> P (OpaqueOp o args))
     (e : expr) : P e :=
     ltac:(refine (@expr_rect_mut P (Forall P)
-        HValue HArg HSelf HDeref HCall HConstr HElim HClose _ _ e); eauto).
+        HValue HArg HSelf HDeref HCall HConstr HElim HClose HOpaqueOp _ _ e); eauto).
 
 
 Definition expr_eq_dec : forall (x y : expr), { x = y } + { x <> y }.
@@ -234,6 +250,7 @@ destruct ys + destruct y; try solve [right; discriminate | left; eauto].
   destruct (IHx3 y2); try solve [right; congruence].
   left. congruence.
 - (* MkClose *) destruct (eq_nat_dec f f0), (IHx free0); left + right; congruence.
+- (* OpaqueOp *) destruct (opaque_oper_name_eq_dec o op), (IHx args0); left + right; congruence.
 
 - (* cons *) destruct (IHx e), (IHx0 ys); left + right; congruence.
 Defined.
@@ -243,27 +260,8 @@ Defined.
 
 (* nfree_ok *)
 
-Definition nfree_ok_value nfrees : value -> Prop :=
-    let fix go v :=
-        let fix go_list vs :=
-            match vs with
-            | [] => True
-            | v :: vs => go v /\ go_list vs
-            end in
-        match v with
-        | Constr _ args => go_list args
-        | Close fname free =>
-                nth_error nfrees fname = Some (length free) /\
-                go_list free
-        end in go.
-
-Definition nfree_ok_value_list nfrees :=
-    let go := nfree_ok_value nfrees in
-    let fix go_list vs :=
-        match vs with
-        | [] => True
-        | v :: vs => go v /\ go_list vs
-        end in go_list.
+Notation nfree_ok_value := Tagged.nfree_ok_value.
+Notation nfree_ok_value_list := Tagged.nfree_ok_value_list.
 
 Ltac refold_nfree_ok_value nfrees :=
     fold (nfree_ok_value_list nfrees) in *.
@@ -289,6 +287,7 @@ Definition nfree_ok nfrees : expr -> Prop :=
         | MkClose fname free =>
                 nth_error nfrees fname = Some (length free) /\
                 go_list free
+        | OpaqueOp _ args => go_list args
         end in go.
 
 Definition nfree_ok_list nfrees :=
@@ -315,27 +314,7 @@ Inductive nfree_ok_state nfrees : state -> Prop :=
 | NfosStop : forall v, nfree_ok_state nfrees (Stop v). 
 
 
-Definition check_nfree_ok_value : forall nfrees v,
-    { nfree_ok_value nfrees v } + { ~ nfree_ok_value nfrees v }.
-intros ? ?.
-induction v using value_rect_mut with
-    (Pl := fun vs =>
-        { nfree_ok_value_list nfrees vs } +
-        { ~ nfree_ok_value_list nfrees vs }).
-all: try solve [left; constructor].
-
-- (* Constr *) simpl. refold_nfree_ok_value nfrees. assumption.
-- (* Close *)
-  destruct (nth_error nfrees fname) as [nfree | ] eqn:?; cycle 1.
-    { right. inversion 1.  congruence. }
-  destruct (eq_nat_dec (length free) nfree), IHv;
-    simpl; refold_nfree_ok_value nfrees; try subst nfree;
-    try solve [left; eauto | right; inversion 1; eauto + congruence].
-
-- (* cons *)
-  destruct IHv, IHv0; simpl; refold_nfree_ok_value nfrees;
-    solve [left; eauto | right; inversion 1; eauto].
-Defined.
+Notation check_nfree_ok_value := Tagged.check_nfree_ok_value.
 
 Definition check_nfree_ok : forall nfrees e,
     { nfree_ok nfrees e } + { ~ nfree_ok nfrees e }.
@@ -376,16 +355,6 @@ all: try solve [left; eauto | right; inversion 1; eauto].
 Defined.
 
 
-
-Lemma nfree_ok_value_list_Forall : forall nfrees es,
-    nfree_ok_value_list nfrees es <->
-    Forall (nfree_ok_value nfrees) es.
-induction es; split; intro HH; simpl in *.
-- constructor.
-- constructor.
-- invc HH. constructor; tauto.
-- invc HH. constructor; tauto.
-Qed.
 
 Lemma nfree_ok_list_Forall : forall nfrees es,
     nfree_ok_list nfrees es <->
@@ -428,13 +397,13 @@ invc STEP; invc II.
 - (* SDerefinateConstr *)
   on _, eapply_.
   simpl in *. refold_nfree_ok_value nfrees.
-  on _, rewrite_fwd nfree_ok_value_list_Forall.
+  on _, rewrite_fwd Tagged.nfree_ok_value_list_Forall.
   eapply Forall_nth_error; [ | eauto ]; eauto.
 
 - (* SDerefinateClose *)
   on _, eapply_.
   simpl in *. refold_nfree_ok_value nfrees. break_and.
-  on _, rewrite_fwd nfree_ok_value_list_Forall.
+  on _, rewrite_fwd Tagged.nfree_ok_value_list_Forall.
   eapply Forall_nth_error; [ | eauto ]; eauto.
 
 - (* SCloseStep *)
@@ -450,7 +419,7 @@ invc STEP; invc II.
   simpl in *. refold_nfree_ok nfrees. refold_nfree_ok_value nfrees. break_and.
   subst es.
   split.  { rewrite map_length in *. auto. }
-  eapply nfree_ok_value_list_Forall, nfree_ok_list_map_value, nfree_ok_list_Forall. auto.
+  eapply Tagged.nfree_ok_value_list_Forall, nfree_ok_list_map_value, nfree_ok_list_Forall. auto.
 
 - (* SConstrStep *)
   simpl in *. refold_nfree_ok nfrees. break_and.
@@ -463,7 +432,21 @@ invc STEP; invc II.
   on _, eapply_.
   simpl in *. refold_nfree_ok nfrees. refold_nfree_ok_value nfrees. break_and.
   subst es.
-  eapply nfree_ok_value_list_Forall, nfree_ok_list_map_value, nfree_ok_list_Forall. auto.
+  eapply Tagged.nfree_ok_value_list_Forall, nfree_ok_list_map_value, nfree_ok_list_Forall. auto.
+
+- (* SOpaqueOpStep *)
+  simpl in *. refold_nfree_ok nfrees. break_and.
+  on _, rewrite_fwd nfree_ok_list_Forall.  on _, invc_using Forall_3part_inv.
+  i_ctor. i_ctor.
+  simpl. refold_nfree_ok nfrees.
+  eapply nfree_ok_list_Forall. i_lem Forall_app.
+
+- (* SOpaqueOpDone *)
+  on _, eapply_.
+  simpl in *. refold_nfree_ok nfrees. refold_nfree_ok_value nfrees. break_and.
+  subst es.
+  eapply Tagged.opaque_oper_denote_higher_nfree_ok_value; eauto.
+  eapply Tagged.nfree_ok_value_list_Forall, nfree_ok_list_map_value, nfree_ok_list_Forall. auto.
 
 - (* SCallL *)
   simpl in *. break_and.
@@ -498,12 +481,13 @@ Lemma public_value_nfree_ok : forall Ameta v,
     nfree_ok_value (map m_nfree Ameta) v.
 induction v using value_ind'; intros0 Hpub; invc Hpub.
 - simpl. refold_nfree_ok_value (map m_nfree Ameta).
-  eapply nfree_ok_value_list_Forall.
+  eapply Tagged.nfree_ok_value_list_Forall.
   list_magic_on (args, tt).
 - simpl. refold_nfree_ok_value (map m_nfree Ameta).
   split.
   + erewrite map_nth_error; [ | eauto ]. congruence.
-  + eapply nfree_ok_value_list_Forall.
+  + eapply Tagged.nfree_ok_value_list_Forall.
     list_magic_on (free, tt).
+- constructor.
 Qed.
 

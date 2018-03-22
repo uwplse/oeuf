@@ -9,6 +9,9 @@ Require Import StructTact.Assoc.
 Require Import oeuf.Monads.
 Require Import oeuf.Forall3.
 
+Require Import compcert.lib.Coqlib.
+Local Close Scope Z_scope.
+
 
 (* nat <= *)
 
@@ -369,6 +372,29 @@ Lemma Forall2_nth_error_ex' : forall A B (P : A -> B -> Prop) xs ys i y,
 intros0 Hfa Hnth.
 eapply Forall2_swap in Hfa.
 fwd eapply Forall2_nth_error_ex; eauto.
+Qed.
+
+Lemma Forall2_imp : forall {A B} (P Q : A -> B -> Prop) xs ys,
+    Forall2 P xs ys ->
+    (forall x y, P x y -> Q x y) ->
+    Forall2 Q xs ys.
+induction xs; destruct ys; intros0 Hfa Himp; invc Hfa; econstructor; eauto.
+Qed.
+
+Lemma Forall2_conj : forall {A B} (P Q : A -> B -> Prop) xs ys,
+    Forall2 P xs ys ->
+    Forall2 Q xs ys ->
+    Forall2 (fun x y => P x y /\ Q x y) xs ys.
+induction xs; destruct ys; intros0 Hfa1 Hfa2; invc Hfa1; invc Hfa2; econstructor; eauto.
+Qed.
+
+Lemma Forall2_conj_inv : forall A B (P Q : A -> B -> Prop) xs ys (M : Prop),
+    (Forall2 P xs ys ->
+        Forall2 Q xs ys ->
+        M) ->
+    Forall2 (fun x y => P x y /\ Q x y) xs ys -> M.
+intros0 HM Hfa.
+eapply HM; eapply Forall2_imp with (1 := Hfa); intros; firstorder.
 Qed.
 
 
@@ -1538,6 +1564,36 @@ erewrite numbered_nth_error_fst;
   eauto using numbered_nth_error_snd.
 Qed.
 
+
+
+
+(* zip *)
+
+Fixpoint zip {A B} (a : list A) (b : list B) : list (A * B) :=
+  match a,b with
+  | f :: r, x :: y => (f,x) :: zip r y
+  | _,_ => nil
+  end.
+
+Lemma zip_nth_error : forall A B (xs : list A) (ys : list B) n xy,
+    nth_error (zip xs ys) n = Some xy ->
+    nth_error xs n = Some (fst xy) /\
+    nth_error ys n = Some (snd xy).
+induction xs; destruct ys, n; intros0 Hzip; simpl in *; try discriminate.
+- inject_some. split; reflexivity.
+- eapply IHxs; eauto.
+Qed.
+
+
+
+
+(* list_forall2 <-> Forall2 *)
+
+Lemma list_forall2_Forall2 : forall A B (P : A -> B -> Prop) xs ys,
+    list_forall2 P xs ys <-> Forall2 P xs ys.
+induction xs; destruct ys; split; intro HH; invc HH; econstructor; eauto.
+all: firstorder.
+Qed.
 
 
 

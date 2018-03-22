@@ -18,6 +18,7 @@ Delimit Scope string_scope with string.
 Local Notation "s1 ++ s2" := (String.append s1 s2) : string_scope.
 Require oeuf.FlatIntTag oeuf.Fmajor.
 Require oeuf.MatchValues.
+Require Import oeuf.OpaqueOps.
 
 Close Scope Z_scope.
 
@@ -208,6 +209,11 @@ Definition compile :=
                     <$> get_id (IkVar dst)
                     <*> get_id (IkFunc fname)
                     <*> go_expr_list free
+        | A.OpaqueOp dst op args =>
+                B.SopaqueOp
+                    <$> get_id (IkVar dst)
+                    <*> Some op
+                    <*> go_expr_list args
         | A.Assign dst src => B.Sassign <$> get_id (IkVar dst) <*> go_expr src
         end in go.
 
@@ -333,6 +339,11 @@ Inductive I_stmt : A.stmt -> B.stmt -> Prop :=
         Forall2 I_expr afree bfree ->
         I_stmt (A.MkClose adst afname afree)
                (B.SmakeClose bdst bfname bfree)
+| IOpaqueOp : forall adst op aargs bdst bargs,
+        I_id (IkVar adst) bdst ->
+        Forall2 I_expr aargs bargs ->
+        I_stmt (A.OpaqueOp adst op aargs)
+               (B.SopaqueOp bdst op bargs)
 | IAssign : forall adst ae bdst be,
         I_id (IkVar adst) bdst ->
         I_expr ae be ->
@@ -1218,6 +1229,40 @@ Hint Resolve set_switch_target_I_frame.
 
 Hint Constructors MatchValues.mv_fmajor.
 
+Definition fname_map M a b := I_id M (IkFunc (pred (Pos.to_nat a))) b.
+
+Lemma I_value_change_only_fnames : forall M av bv,
+    I_value M av bv <->
+    change_only_fnames (fname_map M) av bv.
+intro M.
+mut_induction av using value_rect_mut' with
+    (Pl := fun avs => forall bvs,
+        Forall2 (I_value M) avs bvs <->
+        Forall2 (change_only_fnames (fname_map M)) avs bvs);
+[ intros; simpl in *; fold (change_only_fnames_list (fname_map M)) in *.. | ].
+
+- split; intro HH; destruct bv; invc HH.
+  + split; eauto. rewrite change_only_fnames_list_Forall. rewrite <- IHav. eauto.
+  + constructor. rewrite IHav. rewrite <- change_only_fnames_list_Forall. eauto.
+
+- split; intro HH; destruct bv; invc HH.
+  + split; eauto. rewrite change_only_fnames_list_Forall. rewrite <- IHav. eauto.
+  + constructor; eauto. rewrite IHav. rewrite <- change_only_fnames_list_Forall. eauto.
+
+- split; intro HH; destruct bv; invc HH.
+  + eauto.
+  + fix_existT. constructor.
+
+- split; intro HH; destruct bvs; invc HH; constructor.
+
+- split; intro HH; destruct bvs; invc HH.
+  + econstructor; [ rewrite <- IHav | rewrite <- IHav0 ]; eauto.
+  + econstructor; [ rewrite IHav | rewrite IHav0 ]; eauto.
+
+- finish_mut_induction I_value_change_only_fnames using list.
+Qed exporting.
+  
+
 Lemma eval_sim : forall M af ae av bf be,
     I_frame M af bf ->
     I_expr M ae be ->
@@ -1368,6 +1413,15 @@ simpl in *.
 
   eexists. split. eapply B.step_make_close; eauto.
   i_ctor. i_lem set_I_frame. i_ctor. rewrite nat_pos_nat. auto.
+
+- (* OpaqueOp *)
+  fwd eapply eval_sim_forall as HH; eauto.  destruct HH as (bvs & ? & ?).
+  fwd eapply opaque_oper_change_fnames_high as HH; eauto.
+    { eapply I_value_change_only_fnames_list. eauto. }
+    destruct HH as (ret' & ? & ?).
+  eexists. split. eapply B.step_opaque_op; eauto.
+  i_ctor. i_lem set_I_frame.
+  eapply I_value_change_only_fnames. eauto.
 
 - (* MakeCall *)
   fwd eapply eval_sim with (ae := fe) as HH; eauto.  destruct HH as (bfe & ? & ?).

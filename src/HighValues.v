@@ -20,8 +20,11 @@ Require Import StructTact.StructTactics.
 Require Import StructTact.Util.
 
 Require Import oeuf.Metadata.
+Require Import oeuf.OpaqueTypes.
+Require Import oeuf.MemInjProps.
 
 Require Import oeuf.EricTact.
+Require Import oeuf.StuartTact.
 
 (* Computation will be over higher level values, i.e. Constr and Close *)
 (* We will need a way to relate those to lower level values *)
@@ -34,13 +37,16 @@ Inductive value :=
 | Constr (tag : int) (args : list value) (* A constructor applied to some values *)
 (* At this level we have a Z tag  *)
 (* corresponds with lower level switch semantics nicely *)
-| Close (f : function_name) (free : list value). (* a closure value *)
+| Close (f : function_name) (free : list value) (* a closure value *)
 (* free is the list of values closed over, referred to inside as upvars *)
+| Opaque (ty : opaque_type_name) (v : opaque_type_denote ty)
+.
 
 (* Thanks Stuart *)
 Definition value_rect_mut (P : value -> Type) (Pl : list value -> Type)
            (HConstr : forall tag args, Pl args -> P (Constr tag args))
            (HClose : forall fname args, Pl args -> P (Close fname args))
+           (HOpaque :  forall ty v, P (Opaque ty v))
     (Hnil :     Pl [])
     (Hcons :    forall e es, P e -> Pl es -> Pl (e :: es))
     (v : value) : P v :=
@@ -53,6 +59,7 @@ Definition value_rect_mut (P : value -> Type) (Pl : list value -> Type)
         match v as v_ return P v_ with
         | Constr tag args => HConstr tag args (go_list args)
         | Close f args => HClose f args (go_list args)
+        | Opaque ty v => HOpaque ty v
         end in go v.
 
 Definition value_rect_mut'
@@ -60,6 +67,7 @@ Definition value_rect_mut'
         (Pl : list value -> Type)
     (HConstr :  forall tag args, Pl args -> P (Constr tag args))
     (HClose :   forall fname free, Pl free -> P (Close fname free))
+    (HOpaque :  forall ty v, P (Opaque ty v))
     (Hnil :     Pl [])
     (Hcons :    forall v vs, P v -> Pl vs -> Pl (v :: vs)) :
     (forall v, P v) * (forall vs, Pl vs) :=
@@ -72,6 +80,7 @@ Definition value_rect_mut'
         match v as v_ return P v_ with
         | Constr tag args => HConstr tag args (go_list args)
         | Close fname free => HClose fname free (go_list free)
+        | Opaque ty v => HOpaque ty v
         end in
     let fix go_list vs :=
         match vs as vs_ return Pl vs_ with
@@ -84,9 +93,10 @@ Definition value_rect_mut'
 Definition value_ind' (P : value -> Prop) 
            (HConstr : forall tag args, Forall P args -> P (Constr tag args))
            (HClose : forall fname args, Forall P args -> P (Close fname args))
+           (HOpaque :  forall ty v, P (Opaque ty v))
     (v : value) : P v :=
     ltac:(refine (@value_rect_mut P (Forall P)
-        HConstr HClose _ _ v); eauto).
+        HConstr HClose HOpaque _ _ v); eauto).
 
 
 (* given an address, addresses of the nested values *)
@@ -133,21 +143,12 @@ Inductive value_inject {A B} (ge : Genv.t A B) (m : mem) : value -> val -> Prop 
       Genv.find_symbol ge fname = Some bcode -> (* name we have points to same code *)
       load_all (arg_addrs b (Int.add ofs (Int.repr 4)) values) m = Some l' -> (* one more deref for args *)
       (forall a b, In (a,b) l' -> value_inject ge m a b) -> (* all args inject *)
-      value_inject ge m (Close fname values) (Vptr b ofs).
+      value_inject ge m (Close fname values) (Vptr b ofs)
+| inj_opaque : forall oty ov cv,
+        opaque_type_value_inject oty ov cv m ->
+        value_inject ge m (Opaque oty ov) cv
+.
 
-
-(* nothing is moved around within blocks *)
-Definition same_offsets (mi : meminj) : Prop :=
-  forall b b' delta,
-    mi b = Some (b',delta) ->
-    delta = 0.
-
-(* globals aren't moved around *)
-Definition globals_inj_same {F V} (ge : Genv.t F V) (mi : meminj) : Prop :=
-  forall b f v,
-    (Genv.find_funct_ptr ge b = Some f \/
-    Genv.find_var_info ge b = Some v) ->
-    mi b = Some (b,0).
 
 Lemma load_all_inject :
     forall l b ofs k args b' mi m m',
@@ -213,7 +214,13 @@ Lemma value_val_inject :
       globals_inj_same ge mi ->
       value_inject ge m' v v0.
 Proof.
-  induction v using value_ind'; intros;
+  induction v using value_ind'; intros; cycle 2.
+
+  { on >@value_inject, invc. fix_existT.  subst. econstructor.
+    on >Mem.inject, invc.  eapply opaque_type_value_val_inject; eauto. }
+
+
+  all: try solve [inv H]; (* handle opaque *)
     inv H0; inv H1;
       app Mem.loadv_inject Mem.loadv;
       inv H7; app H3 (mi b); subst delta;
@@ -265,6 +272,7 @@ Proof.
   econstructor; eauto.
   eapply H5 in H0.
   break_exists.
+  econstructor; eauto.
   econstructor; eauto.
 Qed.
 
@@ -371,23 +379,28 @@ Proof.
     subst.
     invc H.
     eapply IHl in Heqo0; eauto.
-    app Mem.loadv_extends Mem.loadv.
-    break_exists; break_and. eexists; split.
-    simpl. repeat collapse_match. reflexivity.
-    Focus 2. intros. eapply H0. simpl. right. assumption.
-    
-    intros. simpl in H7. destruct H7.
-    Focus 2. eapply H6. assumption.
 
-    invc H7.
-    assert (value_inject ge m' a v1). {
-      eapply H2. simpl. left. auto.
-    }
-    assert (v1 = b) by (inv H7; inv H5; congruence). subst.
-    assumption.
+    + app Mem.loadv_extends Mem.loadv.
+      break_exists; break_and. eexists; split.
+        { simpl. repeat collapse_match. reflexivity. }
 
+      intros. simpl in H7. destruct H7; cycle 1.
+        { eapply H6. assumption. }
+      invc H7.
+      assert (value_inject ge m' a v1). {
+        eapply H2. simpl. left. auto.
+      }
+      assert (v1 = b). {
+        inv H7; inv H5; try congruence.
+        - (* opaque case *)
+          on >@value_inject, invc.
+          fwd eapply opaque_type_inject_defined; eauto.  congruence.
+      } subst.
+      assumption.
 
-    intros. eapply H2. simpl. right. auto.
+    + intros. eapply H0. simpl. right. assumption.
+
+    + intros. eapply H2. simpl. right. auto.
 Qed.
 
 Lemma load_all_result_decomp :
@@ -441,8 +454,20 @@ Proof.
                                                    list_forall2 (value_inject ge m') vs vs'
                                         ); intros;
     inv H;
-    try solve [econstructor; eauto];
-    app Mem.loadv_extends Mem.loadv;
+    try solve [econstructor; eauto].
+
+  Focus 3. {
+    on >Mem.extends, invc. on >@value_inject, invc. fix_existT. subst.
+    assert (same_offsets inject_id).
+      { unfold same_offsets, inject_id. simpl. intros. congruence. }
+    econstructor.
+    eapply opaque_type_value_val_inject; eauto.
+    - destruct v'; econstructor; eauto.
+      + reflexivity.
+      + rewrite Int.add_zero. reflexivity.
+  } Unfocus.
+
+  all: app Mem.loadv_extends Mem.loadv;
     app (@load_all_extends F V) load_all;
   try solve [econstructor; eauto;
              inv H3; eauto].
@@ -526,12 +551,14 @@ Definition size_bytes (v : value) : Z :=
   match v with
   | Close _ l => (4 * Z.of_nat (length l)) + 4
   | Constr _ l => (4 * Z.of_nat (length l)) + 4
+  | Opaque _ _ => 0
   end.
 
 Definition rest (v : value ) : list value :=
   match v with
   | Close _ l => l
   | Constr _ l => l
+  | Opaque _ _ => []
   end.
 
 Fixpoint store_list (b : block) (ofs : Z) (l : list val) (m : mem) : option mem :=
@@ -556,6 +583,7 @@ Definition first_byte {A B} (ge : Genv.t A B) (v : value) : option val :=
     | None => None
     end
   | Constr tag _ => Some (Vint tag)
+  | Opaque _ _ => None
   end.
 
 Definition store_value {A B} (ge : Genv.t A B) (v : value) (m : mem) (l : list val) : option (val * mem) :=
@@ -581,12 +609,6 @@ Ltac clean :=
   | [ H : False |- _ ] => inv H
   end; try congruence.
 
-Fixpoint zip {A B} (a : list A) (b : list B) : list (A * B) :=
-  match a,b with
-  | f :: r, x :: y => (f,x) :: zip r y
-  | _,_ => nil
-  end.
-
 
 
 Definition meta_map := list (ident * metadata).
@@ -600,7 +622,8 @@ Inductive public_value {F V} (P : AST.program F V) (M : meta_map) : value -> Pro
         Forall (public_value P M) free ->
         In (fname, m) M ->
         length free = m_nfree m ->
-        public_value P M (Close fname free).
+        public_value P M (Close fname free)
+| PvOpaque : forall ty v, public_value P M (Opaque ty v).
 
 Lemma prog_public_public_value : forall F V F' V'
         (p : AST.program F V) (p' : AST.program F' V') M,
@@ -667,3 +690,67 @@ intros.
 eapply prog_public_public_value'; try eassumption.
 symmetry. eauto using transform_partial_program_public.
 Qed.
+
+
+
+
+Definition change_only_fnames (P : function_name -> function_name -> Prop) :
+        value -> value -> Prop :=
+    let fix go v1 v2 :=
+        let fix go_list vs1 vs2 :=
+            match vs1, vs2 with
+            | [], [] => True
+            | v1 :: vs1, v2 :: vs2 => go v1 v2 /\ go_list vs1 vs2
+            | _, _ => False
+            end in
+        match v1, v2 with
+        | Constr tag1 args1, Constr tag2 args2 =>
+                tag1 = tag2 /\ go_list args1 args2
+        | Close f1 free1, Close f2 free2 =>
+                P f1 f2 /\ go_list free1 free2
+        | Opaque oty1 ov1, Opaque oty2 ov2 =>
+                existT _ oty1 ov1 = existT _ oty2 ov2
+        | _, _ => False
+        end in go.
+
+Definition change_only_fnames_list (P : function_name -> function_name -> Prop) :=
+    let go := change_only_fnames P in
+    let fix go_list vs1 vs2 :=
+        match vs1, vs2 with
+        | [], [] => True
+        | v1 :: vs1, v2 :: vs2 => go v1 v2 /\ go_list vs1 vs2
+        | _, _ => False
+        end in go_list.
+
+Ltac refold_change_only_fnames P := fold (change_only_fnames P) in *.
+
+Lemma change_only_fnames_list_Forall : forall P vs1 vs2,
+    change_only_fnames_list P vs1 vs2 <->
+    Forall2 (change_only_fnames P) vs1 vs2.
+induction vs1; destruct vs2; split; intro HH; invc HH.
+- constructor.
+- constructor.
+- constructor; eauto. firstorder.
+- constructor; eauto. firstorder.
+Qed.
+
+
+
+Lemma ptr_block_valid : forall A B (ge : Genv.t A B) m hv b ofs,
+    value_inject ge m hv (Vptr b ofs) ->
+    Mem.valid_block m b.
+inversion 1.
+
+- eapply Mem.valid_access_valid_block.
+  eapply Mem.valid_access_implies.
+  + eapply Mem.load_valid_access. eauto.
+  + constructor.
+
+- eapply Mem.valid_access_valid_block.
+  eapply Mem.valid_access_implies.
+  + eapply Mem.load_valid_access. eauto.
+  + constructor.
+
+- eapply opaque_type_ptr_block_valid; eauto.
+Qed.
+

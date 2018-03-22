@@ -49,6 +49,7 @@ Fixpoint transf_stmt (alloc : ident) (s : Dmajor.stmt) : Cmajor.stmt :=
   | Scall oi sig exp exps => Cmajor.Scall oi sig (transf_expr exp) (map transf_expr exps)
   | Salloc id exp =>
     Cmajor.Scall (Some id) (ef_sig EF_malloc) (Cmajor.Econst (Cmajor.Oaddrsymbol alloc Int.zero)) (transf_expr exp :: nil)
+  | SopaqueOp id op args => Cmajor.SopaqueOp id op (map transf_expr args)
   | Sseq s1 s2 => Cmajor.Sseq (transf_stmt alloc s1) (transf_stmt alloc s2)
   | Sswitch b exp l n => Cmajor.Sswitch b (transf_expr exp) l n
   | Sblock s => Cmajor.Sblock (transf_stmt alloc s)

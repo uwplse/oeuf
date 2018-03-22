@@ -46,6 +46,7 @@ Definition shift_case : A.expr -> option B.expr :=
         | A.MkConstr tag args => B.MkConstr tag <$> go_list args
         | A.Elim _ _ _ => None
         | A.MkClose f free => B.MkClose f <$> go_list free
+        | A.OpaqueOp op args => B.OpaqueOp op <$> go_list args
         end in go.
 
 Definition shift_case_list : list A.expr -> option (list B.expr) :=
@@ -140,6 +141,7 @@ Definition compile base nfree : A.expr -> state_option _ B.expr :=
         | A.Elim loop cases target =>
                 B.Elim <$> go loop <*> compile_cases base nfree cases <*> go target
         | A.MkClose fname free => B.MkClose fname <$> go_list free
+        | A.OpaqueOp op args => B.OpaqueOp op <$> go_list args
         end in go.
 
 Definition compile_list base nfree : list A.expr -> state_option _ (list B.expr) :=
@@ -247,6 +249,9 @@ Inductive I_expr (BE : B.env) nfree : list value -> A.expr -> B.expr -> Prop :=
 | IMkClose : forall bextra fname aargs bargs,
         Forall2 (I_expr BE nfree bextra) aargs bargs ->
         I_expr BE nfree bextra (A.MkClose fname aargs) (B.MkClose fname bargs)
+| IOpaqueOp : forall bextra op aargs bargs,
+        Forall2 (I_expr BE nfree bextra) aargs bargs ->
+        I_expr BE nfree bextra (A.OpaqueOp op aargs) (B.OpaqueOp op bargs)
 
 | IDerefArg : forall bextra v n,
         nth_error bextra 0 = Some v ->
@@ -875,6 +880,21 @@ all: try on (I_expr _ _ _ _ be), invc.
   eexists. split. eapply B.SPlusOne; i_lem B.SConstrDone.
   eauto.
 
+- (* SOpaqueOpStep *)
+  destruct (Forall2_app_inv_l _ _ **) as (? & ? & ? & ? & ?).
+  on (Forall2 _ (_ :: _) _), invc.
+  rename x into b_vs. rename y into b_e. rename l' into b_es.
+
+  eexists. split. eapply B.SPlusOne; i_lem B.SOpaqueOpStep.
+  + list_magic_on (vs, (b_vs, tt)).
+  + i_ctor. i_ctor. i_ctor.
+    i_lem Forall2_app. i_ctor. i_ctor.
+
+- (* SOpaqueOpDone *)
+  fwd eapply I_expr_map_value; eauto. subst.
+  eexists. split. eapply B.SPlusOne; i_lem B.SOpaqueOpDone.
+  eauto.
+
 - (* SCallL *)
   eexists. split. eapply B.SPlusOne; i_lem B.SCallL.
   i_ctor. i_ctor. i_ctor. i_ctor.
@@ -1136,6 +1156,7 @@ induction v using value_ind'; intros0 Hcomp Hpub; invc Hpub.
 - i_ctor.
   + i_lem compile_cu_fname_meta.
   + list_magic_on (free, tt).
+- i_ctor.
 Qed.
 
 Lemma compile_cu_public_value' : forall A Ameta B Bmeta v,
@@ -1147,6 +1168,7 @@ induction v using value_ind'; intros0 Hcomp Hpub; invc Hpub.
 - i_ctor.
   + i_lem compile_cu_fname_meta'.
   + list_magic_on (free, tt).
+- i_ctor.
 Qed.
 
 Lemma env_ok_nth_error : forall A B NFREES fname abody bbody nfree,

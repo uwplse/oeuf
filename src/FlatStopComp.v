@@ -38,6 +38,7 @@ Definition compile : A.stmt -> B.stmt :=
         | A.MkConstr dst tag args => B.MkConstr dst tag (map go_expr args)
         | A.Switch dst cases => B.Switch dst (go_list cases)
         | A.MkClose dst fname free => B.MkClose dst fname (map go_expr free)
+        | A.OpaqueOp dst op args => B.OpaqueOp dst op (map go_expr args)
         | A.Assign dst src => B.Assign dst (go_expr src)
         end in go.
 
@@ -93,6 +94,9 @@ Inductive I_stmt : A.stmt -> B.stmt -> Prop :=
 | IMkClose : forall dst fname afree bfree,
         Forall2 I_expr afree bfree ->
         I_stmt (A.MkClose dst fname afree) (B.MkClose dst fname bfree)
+| IOpaqueOp : forall dst op aargs bargs,
+        Forall2 I_expr aargs bargs ->
+        I_stmt (A.OpaqueOp dst op aargs) (B.OpaqueOp dst op bargs)
 | IAssign : forall dst asrc bsrc,
         I_expr asrc bsrc ->
         I_stmt (A.Assign dst asrc) (B.Assign dst bsrc)
@@ -262,6 +266,11 @@ simpl in *.
 - (* MkClose *)
   eexists. split. eapply B.SCloseDone; eauto.
     { instantiate (1 := vs). list_magic_on (free, (bfree, (vs, tt))). }
+  i_ctor.
+
+- (* OpaqueOp *)
+  eexists. split. eapply B.SOpaqueOpDone; eauto.
+    { list_magic_on (args, (bargs, (vs, tt))). }
   i_ctor.
 
 - (* MakeCall *)
