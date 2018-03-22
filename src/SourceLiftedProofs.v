@@ -511,7 +511,7 @@ intros0 Hstep. inv Hstep.
 
 - simpl. refold_expr_hlist_denote g l. refold_value_hlist_denote g.
   unfold es.  rewrite expr_hlist_denote_is_hmap. rewrite hmap_hmap.
-  simpl. rewrite opaque_oper_source_sim. reflexivity.
+  simpl. rewrite opaque_oper_sim_source. reflexivity.
 Qed.
 
 
