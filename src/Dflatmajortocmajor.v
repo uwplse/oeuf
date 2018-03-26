@@ -69,23 +69,6 @@ Definition transf_fundef (alloc : ident) (fd : Dmajor.fundef) : res Cmajor.funde
   OK (AST.transf_fundef (transf_function alloc) fd).
 
 
-(*Definition new_globs (bump : ident) (alloc : ident) : list (ident * globdef Cmajor.fundef unit) := nil.*)
-                                                           
-
-(*Fixpoint largest_id (x : ident) (l : list ident) : ident :=
-  match l with
-  | nil => x
-  | f :: r =>
-    if plt x f then largest_id f r else largest_id x r
-  end.
-
-Definition largest_id_prog (prog : Dmajor.program) : ident :=
-  largest_id (1%positive) (map fst (prog_defs prog)).*)
-
-Axiom register_ident_as_malloc : positive -> positive.
-Axiom register_ident_as_malloc_is_id : forall p, register_ident_as_malloc p = p.
-Extract Inlined Constant register_ident_as_malloc => "Camlcoq.register_ident_as_malloc".
-
 Definition transf_prog_malloc (prog : Dmajor.program) (malloc_id : ident) : res Cmajor.program :=
   do ast' <- transform_partial_program (transf_fundef malloc_id) prog ;
   OK (Cmajor.MkProgram ast' (Dmajor.p_meta prog)).
