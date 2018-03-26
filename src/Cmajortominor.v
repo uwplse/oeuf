@@ -8,6 +8,7 @@ Require Import compcert.common.Globalenvs.
 Require Import compcert.common.Memory.
 Require Import compcert.common.Events.
 Require Import compcert.common.Switch.
+Require Import compcert.common.Errors.
 Require Import compcert.common.Smallstep.
 
 Require Import compcert.backend.Cminor.
@@ -35,7 +36,7 @@ Fixpoint transf_expr (e : Cmajor.expr) : Cminor.expr :=
   | Eload mc exp => Cminor.Eload mc (transf_expr exp)
   end.
 
-Fixpoint transf_stmt (s : Cmajor.stmt) : Cminor.stmt :=
+Fixpoint transf_stmt malloc_id (s : Cmajor.stmt) : Cminor.stmt :=
   match s with
   | Sskip => Cminor.Sskip
   | Sassign id exp => Cminor.Sassign id (transf_expr exp)
@@ -44,29 +45,81 @@ Fixpoint transf_stmt (s : Cmajor.stmt) : Cminor.stmt :=
   | ScallSpecial oi sig fn exps =>
           let f := Cminor.Econst (Cminor.Oaddrsymbol fn Int.zero) in
           Cminor.Scall oi sig f (map transf_expr exps)
-  | SopaqueOp id op args => opaque_oper_denote_cminor op id (map transf_expr args)
-  | Sseq s1 s2 => Cminor.Sseq (transf_stmt s1) (transf_stmt s2)
+  | SopaqueOp id op args =>
+          opaque_oper_denote_cminor op malloc_id id (map transf_expr args)
+  | Sseq s1 s2 => Cminor.Sseq (transf_stmt malloc_id s1) (transf_stmt malloc_id s2)
   | Sswitch b exp l n => Cminor.Sswitch b (transf_expr exp) l n
   | Sexit n => Cminor.Sexit n
-  | Sblock s => Cminor.Sblock (transf_stmt s)
+  | Sblock s => Cminor.Sblock (transf_stmt malloc_id s)
   | Sreturn (Some exp) => Cminor.Sreturn (Some (transf_expr exp))
   | Sreturn None => Cminor.Sreturn None
   end.
 
-Definition transf_function (f : Cmajor.function) : Cminor.function :=
+Definition transf_function malloc_id (f : Cmajor.function) : Cminor.function :=
   Cminor.mkfunction (fn_sig f)
                     (fn_params f)
                     (fn_vars f)
                     (fn_stackspace f)
-                    (transf_stmt (fn_body f)).
+                    (transf_stmt malloc_id (fn_body f)).
 
-Definition transf_fundef (fd : Cmajor.fundef) : Cminor.fundef :=
-  AST.transf_fundef transf_function fd.
+Definition transf_fundef malloc_id (fd : Cmajor.fundef) : Cminor.fundef :=
+  AST.transf_fundef (transf_function malloc_id) fd.
 
-Definition transf_prog (prog : Cmajor.program) : Cminor_program :=
+
+
+
+Fixpoint find_malloc_id (l : list (ident * globdef fundef unit)) : option ident :=
+  match l with
+  | nil => None
+  | (id,(Gfun (External ef))) :: l' => if external_function_eq ef EF_malloc then Some id else find_malloc_id l'
+  | (id,_) :: l' => find_malloc_id l'
+  end.
+
+Lemma find_malloc_some :
+  forall l id,
+    find_malloc_id l = Some id ->
+    In (id,Gfun (External EF_malloc)) l.
+Proof.
+  induction l; intros.
+  simpl in H. inv H.
+  simpl in H. destruct a.
+  repeat (break_match_hyp; try congruence); subst.
+  simpl. right. eauto.
+  inv H. simpl. left. reflexivity.
+  simpl. right. eauto.
+  simpl. right. eauto.
+Qed.
+
+Lemma find_malloc_id_malloc :
+  forall prog malloc_id,
+    find_malloc_id (prog_defs prog) = Some malloc_id ->
+    list_norepet (prog_defs_names prog) ->
+    exists b,
+      Genv.find_symbol (Genv.globalenv prog) malloc_id = Some b /\
+      Genv.find_funct_ptr (Genv.globalenv prog) b = Some (External EF_malloc).
+Proof.
+  intros.
+  
+  eapply find_malloc_some in H.
+  eapply Genv.find_funct_ptr_exists in H; eauto.
+  
+Qed.
+
+Require Import String.
+
+Definition transf_prog_malloc malloc_id (prog : Cmajor.program) : Cminor_program :=
   MkCminorProgram
-    (AST.transform_program transf_fundef prog)
+    (AST.transform_program (transf_fundef malloc_id) prog)
     (Cmajor.p_meta prog).
+
+Definition transf_prog (prog : Cmajor.program) : res Cminor_program :=
+  match find_malloc_id (prog_defs prog) with
+  | Some malloc_id => OK (transf_prog_malloc malloc_id prog)
+  | None => Error (MSG "No EF_malloc found in program"%string :: nil)
+  end.
+
+
+
 
 
 Section PRESERVATION.
@@ -75,7 +128,27 @@ Variable prog: Cmajor.program.
 Variable tprog: Cminor_program.
 Let ge := Genv.globalenv prog.
 Let tge := Genv.globalenv tprog.
-Hypothesis TRANSF : transf_prog prog = tprog.
+Hypothesis TRANSF0 : transf_prog prog = OK tprog.
+
+Definition malloc_id_sig :
+    { malloc_id | find_malloc_id (prog_defs prog) = Some malloc_id }.
+destruct (find_malloc_id (prog_defs prog)) eqn:?; eauto.
+
+- exfalso.
+  unfold transf_prog in TRANSF0.
+  break_match; try discriminate.
+Defined.
+
+Definition malloc_id := proj1_sig malloc_id_sig.
+
+Lemma TRANSF : transf_prog_malloc malloc_id prog = tprog.
+unfold transf_prog in *.
+pose proof TRANSF0 as TRANSF0'.
+rewrite (proj2_sig malloc_id_sig) in TRANSF0'.
+invc TRANSF0'.
+reflexivity.
+Qed.
+
 
 Inductive match_cont: Cmajor.cont -> Cminor.cont -> Prop :=
   | match_cont_stop:
@@ -85,24 +158,24 @@ Inductive match_cont: Cmajor.cont -> Cminor.cont -> Prop :=
         match_cont k k' ->
         match_cont (Cmajor.Kblock k) (Cminor.Kblock k')
   | match_cont_seq: forall s s' k k',
-      transf_stmt s = s' ->
+      transf_stmt malloc_id s = s' ->
       match_cont k k' ->
       match_cont (Cmajor.Kseq s k) (Cminor.Kseq s' k')
   | match_cont_call: forall id f sp e k f' k',
-      transf_function f = f' ->
+      transf_function malloc_id f = f' ->
       match_cont k k' ->
       match_cont (Cmajor.Kcall id f sp e k) (Cminor.Kcall id f' sp e k').
 
 Inductive match_states : Cmajor.state -> Cminor.state -> Prop :=
   | match_state: forall f f' s k s' k' sp e m
-        (TF: transf_function f = f')
-        (TS: transf_stmt s = s')
+        (TF: transf_function malloc_id f = f')
+        (TS: transf_stmt malloc_id s = s')
         (MC: match_cont k k'),
       match_states
         (Cmajor.State f s k sp e m)
         (Cminor.State f' s' k' sp e m)
   | match_callstate: forall f f' args k k' m
-        (TF: transf_fundef f = f')
+        (TF: transf_fundef malloc_id f = f')
         (MC: match_cont k k'),
       match_states
         (Cmajor.Callstate f args k m)
@@ -116,7 +189,7 @@ Inductive match_states : Cmajor.state -> Cminor.state -> Prop :=
 Remark call_cont_commut:
   forall k k', match_cont k k' -> match_cont (Cmajor.call_cont k) (Cminor.call_cont k').
 Proof.
-  induction 1; simpl; auto. constructor. constructor; auto.
+  induction 1; simpl; auto. constructor. econstructor; eauto.
 Qed.
 
 Lemma is_call_cont_transf :
@@ -173,18 +246,19 @@ Qed.
 Lemma find_funct_transf :
   forall vf fd,
   Genv.find_funct ge vf = Some fd ->
-  Genv.find_funct tge vf = Some (transf_fundef fd).
+  Genv.find_funct tge vf = Some (transf_fundef malloc_id fd).
 Proof.
   intros.
   on _, eapply_lem Genv.find_funct_transf.
-  instantiate (1 := transf_fundef) in H.
-  inv H. unfold tge. simpl. reflexivity.
+  instantiate (1 := transf_fundef malloc_id) in H.
+  inv H. unfold tge. simpl.
+  rewrite <- TRANSF. simpl. reflexivity.
 Qed.
 
 Lemma find_funct_ptr_transf :
   forall b f,
     Genv.find_funct_ptr ge b = Some f ->
-    Genv.find_funct_ptr tge b = Some (transf_fundef f).
+    Genv.find_funct_ptr tge b = Some (transf_fundef malloc_id f).
 Proof.
   intros.
   unfold tge. rewrite <- TRANSF.
@@ -195,16 +269,16 @@ Lemma no_new_functions :
   forall b tf,
     Genv.find_funct_ptr tge b = Some tf ->
     exists f,
-      Genv.find_funct_ptr ge b = Some f /\ (transf_fundef f) = tf.
+      Genv.find_funct_ptr ge b = Some f /\ (transf_fundef malloc_id f) = tf.
 Proof.
   intros.
-  unfold tge in *. subst tprog. unfold transf_prog in *.
+  unfold tge in *. rewrite <- TRANSF in *. unfold transf_prog_malloc in *.
   eapply Genv.find_funct_ptr_rev_transf; eauto.
 Qed.
 
 Lemma funsig_transf :
   forall fd,
-    Cminor.funsig (transf_fundef fd) = funsig fd.
+    Cminor.funsig (transf_fundef malloc_id fd) = funsig fd.
 Proof.
   intros. destruct fd; simpl; reflexivity.
 Qed.
@@ -237,7 +311,7 @@ Proof.
 
   assert (forall id, Senv.find_symbol tge id = Senv.find_symbol ge id).
     { unfold Senv.find_symbol. simpl. intros.
-      unfold ge, tge. subst tprog. unfold transf_prog. simpl.
+      unfold ge, tge. rewrite <- TRANSF. unfold transf_prog_malloc. simpl.
       eapply Genv.find_symbol_transf. }
 
   assert (forall id, Senv.public_symbol tge id = Senv.public_symbol ge id).
@@ -245,7 +319,7 @@ Proof.
   
   assert (forall b, Senv.block_is_volatile tge b = Senv.block_is_volatile ge b).
     { unfold Senv.block_is_volatile. simpl.
-      unfold ge, tge. subst tprog. unfold transf_prog. simpl.
+      unfold ge, tge. rewrite <- TRANSF. unfold transf_prog_malloc. simpl.
       eapply Genv.block_is_volatile_transf. }
 
   destruct ef; simpl in *; eapply ec_symbols_preserved; try eassumption; eauto.
@@ -283,7 +357,7 @@ Proof.
   induction 1; intros; invp match_states;
     try solve [simpl; inv MC; eexists; split; [eapply plus_one | ..];
         try econstructor; eauto];
-    remember tprog; subst.
+    subst.
   * (* return *)
     eexists; split; [eapply plus_one | ..]; econstructor; eauto.
     eapply is_call_cont_transf; eauto.
@@ -342,7 +416,7 @@ Lemma init_mem_transf :
 Proof.
   intros.
   eapply Genv.init_mem_transf in H.
-  unfold transf_prog in TRANSF. rewrite <- TRANSF.
+  rewrite <- TRANSF.
   simpl. eauto.
 Qed.
 
@@ -356,17 +430,14 @@ Proof.
   intros.
   pose proof find_funct_ptr_transf as Hft.
   pose proof find_symbol_transf as Hst.
-  seal TRANSF.
   on >final_state, invc.
   on >match_states, invc. on >match_cont, invc.
-  unseal TRANSF.
   econstructor; eauto.
   - eapply HighValues.value_inject_swap_ge; eauto.
     + intros. rewrite find_symbol_transf. eauto.
-  - subst tprog. eapply HighValues.transf_public_value. eauto.
+  - rewrite <- TRANSF. eapply HighValues.transf_public_value. eauto.
 Qed.
 
-(* TODO *)
 Lemma is_callstate_match :
   forall st fv av,
     TraceSemantics.is_callstate (Cminor_semantics tprog) fv av st ->
@@ -391,7 +462,7 @@ Proof.
   - unfold HighValues.global_blocks_valid in *.
     erewrite HighValues.genv_next_transf in *; eauto.
     (* note: p_ast/cm_ast coercions are in effect here *)
-    destruct prog, tprog. simpl in *. inv TRANSF. eauto.
+    rewrite <- TRANSF. reflexivity.
   - rewrite <- TRANSF in *. simpl in *.  eauto using HighValues.transf_public_value'.
   - rewrite <- TRANSF in *. simpl in *.  eauto using HighValues.transf_public_value'.
 Qed.
@@ -412,6 +483,3 @@ Qed.
 
 
 End PRESERVATION.
-
-
-

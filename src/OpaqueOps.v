@@ -221,7 +221,7 @@ Record opaque_oper_impl {atys rty} := MkOpaqueOperImpl {
         oo_denote_higher : list HigherValue.value -> option HigherValue.value;
         oo_denote_high : list HighValues.value -> option HighValues.value;
         oo_denote_mem_effect : mem -> list val -> option (mem * val);
-        oo_denote_cminor : ident -> list Cminor.expr -> Cminor.stmt;
+        oo_denote_cminor : ident -> ident -> list Cminor.expr -> Cminor.stmt;
 
         (* properties *)
         (* "No fabricated closures."  Every closure in the output must be
@@ -281,11 +281,12 @@ Record opaque_oper_impl {atys rty} := MkOpaqueOperImpl {
             exists m' ret',
                 oo_denote_mem_effect m args' = Some (m', ret') /\
                 HighValues.value_inject ge m' ret ret';
-        oo_sim_cminor : forall (ge : genv) f id e m m' sp k,
+        oo_sim_cminor : forall (ge : genv) f malloc_id id e m m' sp k,
             forall args argvs retv,
             oo_denote_mem_effect m argvs = Some (m', retv) ->
             eval_exprlist ge sp e m args argvs ->
-            plus Cminor.step ge (State f (oo_denote_cminor id args) k sp e m)
+            (* TODO: premise stating that malloc_id is really malloc *)
+            plus Cminor.step ge (State f (oo_denote_cminor malloc_id id args) k sp e m)
                              E0 (State f Sskip k sp (PTree.set id retv e) m')
     }.
 
@@ -368,7 +369,7 @@ simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _ _ _  _ _ _ _  _ _ _ _ _ _).
     | [Vint x; Vint y] => Some (m, Vint (Int.add x y))
     | _ => None
     end).
-- refine (fun id args =>
+- refine (fun _malloc_id id args =>
     match args with
     | [x; y] => Sassign id (Ebinop Cminor.Oadd x y)
     | _ => Sskip
@@ -763,11 +764,11 @@ clearbody impl'. destruct impl' as (? & ? & impl'').
 eapply (oo_sim_mem_effect impl''); eauto.
 Qed.
 
-Lemma opaque_oper_sim_cminor : forall (ge : genv) f id e m m' sp k,
+Lemma opaque_oper_sim_cminor : forall (ge : genv) f malloc_id id e m m' sp k,
     forall args argvs retv,
     opaque_oper_denote_mem_effect m argvs = Some (m', retv) ->
     eval_exprlist ge sp e m args argvs ->
-    plus Cminor.step ge (State f (opaque_oper_denote_cminor id args) k sp e m)
+    plus Cminor.step ge (State f (opaque_oper_denote_cminor malloc_id id args) k sp e m)
                      E0 (State f Sskip k sp (PTree.set id retv e) m').
 intros0 Hmv HH. unfold opaque_oper_denote_mem_effect, opaque_oper_denote_cminor in *.
 clearbody impl'. destruct impl' as (? & ? & impl'').
