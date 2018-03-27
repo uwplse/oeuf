@@ -113,10 +113,14 @@ Definition transf_prog_malloc malloc_id (prog : Cmajor.program) : Cminor_program
     (Cmajor.p_meta prog).
 
 Definition transf_prog (prog : Cmajor.program) : res Cminor_program :=
-  match find_malloc_id (prog_defs prog) with
-  | Some malloc_id => OK (transf_prog_malloc malloc_id prog)
-  | None => Error (MSG "No EF_malloc found in program"%string :: nil)
-  end.
+  if list_norepet_dec peq (prog_defs_names prog) then
+    match find_malloc_id (prog_defs prog) with
+    | Some malloc_id => OK (transf_prog_malloc malloc_id prog)
+    | None => Error (MSG "No EF_malloc found in program"%string :: nil)
+    end
+  else
+    Error (MSG "program idents have repeats in them" :: nil).
+
 
 
 
@@ -130,23 +134,72 @@ Let ge := Genv.globalenv prog.
 Let tge := Genv.globalenv tprog.
 Hypothesis TRANSF0 : transf_prog prog = OK tprog.
 
+
 Definition malloc_id_sig :
     { malloc_id | find_malloc_id (prog_defs prog) = Some malloc_id }.
 destruct (find_malloc_id (prog_defs prog)) eqn:?; eauto.
 
 - exfalso.
   unfold transf_prog in TRANSF0.
-  break_match; try discriminate.
+  do 2 (break_match; try discriminate).
 Defined.
 
 Definition malloc_id := proj1_sig malloc_id_sig.
+
 
 Lemma TRANSF : transf_prog_malloc malloc_id prog = tprog.
 unfold transf_prog in *.
 pose proof TRANSF0 as TRANSF0'.
 rewrite (proj2_sig malloc_id_sig) in TRANSF0'.
-invc TRANSF0'.
-reflexivity.
+destruct (list_norepet_dec _ _) in TRANSF0'; try discriminate.
+unfold malloc_id. congruence.
+Qed.
+
+
+Lemma malloc_fp_ex :
+    exists fp,
+        Genv.find_symbol tge malloc_id = Some fp /\
+        Genv.find_funct_ptr tge fp = Some (External EF_malloc).
+fwd eapply find_malloc_id_malloc as HH; eauto.
+  { eapply (proj2_sig malloc_id_sig). }
+  { pose proof TRANSF0 as TRANSF0'. unfold transf_prog in TRANSF0'.
+    break_if; eauto || discriminate. }
+  destruct HH as (fp & ? & ?).
+
+exists fp.
+unfold tge. rewrite <- TRANSF. simpl. split.
+- rewrite Genv.find_symbol_transf. eauto.
+- erewrite Genv.find_funct_ptr_transf; eauto. reflexivity.
+Qed.
+
+Definition malloc_fp_sig :
+    { fp |
+        Genv.find_symbol tge malloc_id = Some fp /\
+        Genv.find_funct_ptr tge fp = Some (External EF_malloc) }.
+pose proof malloc_fp_ex.
+
+destruct (Genv.find_symbol tge malloc_id) as [fp | ] eqn:?.
+- exists fp. split; eauto.
+  break_exists. break_and. inject_some. eauto.
+- exfalso. break_exists. break_and. discriminate.
+Defined.
+
+Definition malloc_fp := proj1_sig malloc_fp_sig.
+
+Lemma malloc_find_symbol : Genv.find_symbol tge malloc_id = Some malloc_fp.
+destruct (proj2_sig malloc_fp_sig). auto.
+Qed.
+
+Lemma malloc_find_funct_ptr :
+    Genv.find_funct_ptr tge malloc_fp = Some (External EF_malloc).
+destruct (proj2_sig malloc_fp_sig). auto.
+Qed.
+
+Lemma malloc_find_funct :
+    Genv.find_funct tge (Vptr malloc_fp Int.zero) = Some (External EF_malloc).
+simpl. break_if.
+- eapply malloc_find_funct_ptr.
+- congruence.
 Qed.
 
 
@@ -380,6 +433,8 @@ Proof.
     fwd eapply eval_exprlist_transf; eauto.
     eexists; split.
     eapply opaque_oper_sim_cminor; eauto.
+      { eapply malloc_find_symbol. }
+      { eapply malloc_find_funct. }
     econstructor; eauto.
 
   * (* seq *)

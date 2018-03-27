@@ -281,11 +281,13 @@ Record opaque_oper_impl {atys rty} := MkOpaqueOperImpl {
             exists m' ret',
                 oo_denote_mem_effect m args' = Some (m', ret') /\
                 HighValues.value_inject ge m' ret ret';
-        oo_sim_cminor : forall (ge : genv) f malloc_id id e m m' sp k,
+        oo_sim_cminor : forall (ge : genv) f malloc_id id e m m' sp k fp,
             forall args argvs retv,
             oo_denote_mem_effect m argvs = Some (m', retv) ->
             eval_exprlist ge sp e m args argvs ->
-            (* TODO: premise stating that malloc_id is really malloc *)
+            Genv.find_symbol ge malloc_id = Some fp ->
+            Genv.find_funct ge (Vptr fp Int.zero) = Some (External EF_malloc) ->
+            (* TODO: need a premise that the `args` exprs don't touch `e ! id` *)
             plus Cminor.step ge (State f (oo_denote_cminor malloc_id id args) k sp e m)
                              E0 (State f Sskip k sp (PTree.set id retv e) m')
     }.
@@ -507,7 +509,14 @@ simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _ _ _  _ _ _ _  _ _ _ _ _ _).
             end
     | _ => None
     end).
-- admit.
+- refine (fun malloc_id id args =>
+    match args with
+    | [e] =>
+            Sifthenelse (Ebinop (Ocmpu Ceq) e (Econst (Ointconst Int.zero)))
+                (build_constr_cminor malloc_id id Int.zero [])
+                (build_constr_cminor malloc_id id Int.one [])
+    | _ => Sskip
+    end).
 
 
 - (* no_fab_clos_higher *)
@@ -608,10 +617,35 @@ simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _ _ _  _ _ _ _  _ _ _ _ _ _).
   exists m', ret'. split; eauto.
   find_rewrite. reflexivity.
 
-- admit.
+- intros. simpl in *.
+  do 5 (break_match_hyp; try discriminate).  on (_ * _)%type, fun H => destruct H.
+  do 2 on >eval_exprlist, invc.
+  inject_some.
 
-(*Defined.*)
-Admitted.
+  eapply plus_left. 3: eapply E0_E0_E0. {
+    econstructor.
+    - econstructor; eauto.
+        { econstructor. simpl. reflexivity. }
+      simpl. unfold Val.cmpu. simpl. reflexivity.
+    - simpl.
+      instantiate (1 := Int.eq i Int.zero).
+      destruct (Int.eq _ _); econstructor.
+  }
+
+  replace (if Int.eq i _ then _ else _) with
+      (build_constr_cminor malloc_id id
+        (if Int.eq i Int.zero then Int.zero else Int.one) []); cycle 1.
+    { destruct (Int.eq _ _); reflexivity. }
+
+  eapply plus_star. eapply build_constr_cminor_effect.
+  + eauto.
+  + econstructor.
+  + econstructor.
+  + rewrite Zlength_correct. simpl. eapply max_arg_count_big. lia.
+  + eauto.
+  + eauto.
+
+Defined.
 
 
 Definition get_opaque_oper_impl {atys rty} (op : opaque_oper atys rty) :
@@ -764,10 +798,12 @@ clearbody impl'. destruct impl' as (? & ? & impl'').
 eapply (oo_sim_mem_effect impl''); eauto.
 Qed.
 
-Lemma opaque_oper_sim_cminor : forall (ge : genv) f malloc_id id e m m' sp k,
+Lemma opaque_oper_sim_cminor : forall (ge : genv) f malloc_id id e m m' sp k fp,
     forall args argvs retv,
     opaque_oper_denote_mem_effect m argvs = Some (m', retv) ->
     eval_exprlist ge sp e m args argvs ->
+    Genv.find_symbol ge malloc_id = Some fp ->
+    Genv.find_funct ge (Vptr fp Int.zero) = Some (External EF_malloc) ->
     plus Cminor.step ge (State f (opaque_oper_denote_cminor malloc_id id args) k sp e m)
                      E0 (State f Sskip k sp (PTree.set id retv e) m').
 intros0 Hmv HH. unfold opaque_oper_denote_mem_effect, opaque_oper_denote_cminor in *.
