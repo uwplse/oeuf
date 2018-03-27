@@ -13,7 +13,7 @@ Require Import compcert.common.Memory.
 Require Import compcert.common.Events.
 Require Import compcert.common.Errors.
 Require Import compcert.common.Switch.
-(*Require Import compcert.common.Smallstep.*)
+Require Import compcert.backend.Cminor.
 
 Require Import StructTact.StructTactics.
 Require Import StructTact.Util.
@@ -25,6 +25,7 @@ Require Import oeuf.ListLemmas.
 Require Import oeuf.HighValues.
 Require Import oeuf.OpaqueTypes.
 Require Import oeuf.Monads.
+Require Import oeuf.FullSemantics.
 
 
 Lemma pos_lt_neq :
@@ -993,9 +994,26 @@ eapply build_constr_inject'; eauto.
 Qed.
 
 
+Definition val_defined_dec a : { a <> Vundef } + { ~ a <> Vundef }.
+destruct a; left + right; congruence.
+Defined.
+
+Definition require {A B} : { A } + { B } -> option A.
+destruct 1; left + right; solve [eauto].
+Defined.
+
+Lemma require_decidable : forall A,
+    forall (dec : { A } + { ~ A }),
+    A ->
+    exists pf, require dec = Some pf.
+destruct dec; intro; try contradiction.
+eexists. reflexivity.
+Qed.
+
 Local Open Scope option_monad.
 Definition build_constr m tag args :=
     let '(m, b) := Mem.alloc m (-4) ((1 + Zlength args) * 4) in
+    require (Forall_dec _ val_defined_dec args) >>= fun Hargdef =>
     Mem.store Mint32 m b (-4) (Vint (Int.repr ((1 + Zlength args) * 4))) >>= fun m =>
     Mem.store Mint32 m b 0 (Vint tag) >>= fun m =>
     store_multi Mint32 m b 4 args >>= fun m =>
@@ -1015,6 +1033,16 @@ all: rewrite Hlen_eq in *.
 all: eauto.
 Qed.
 
+Lemma require_bind_eq : forall (A : Prop) B (k : A -> option B) rhs,
+    forall (dec : { A } + { ~ A }),
+    A ->
+    (forall pf, k pf = rhs) ->
+    require dec >>= k = rhs.
+intros0 HA Hk.
+destruct dec; [ | contradiction ].
+simpl. eauto.
+Qed.
+    
 Lemma build_constr_ok : forall A B (ge : Genv.t A B) m1 tag args hargs,
     Forall2 (value_inject ge m1) hargs args ->
     Zlength args <= max_arg_count ->
@@ -1032,6 +1060,9 @@ eexists _, _.
 split; eauto.
 unfold build_constr.
 on _, fun H => (rewrite H; clear H).
+eapply require_bind_eq.
+  { list_magic_on (hargs, (args, tt)). eauto using value_inject_defined. }
+  intro.
 on _, fun H => (rewrite H; clear H; simpl).
 on _, fun H => (rewrite H; clear H; simpl).
 on _, fun H => (rewrite H; clear H; simpl).
@@ -1058,6 +1089,340 @@ rewrite <- inject_id_compose_self. eapply Mem.mem_inj_compose with (m2 := m1).
   eapply store_new_block_mem_inj_id; eauto.
   eapply Mem.mext_inj, Mem.extends_refl.
 Qed.
+
+Definition cm_func f := Econst (Oaddrsymbol f Int.zero).
+Definition cm_malloc_sig := ef_sig EF_malloc.
+Definition cm_int i := Econst (Ointconst (Int.repr i)).
+
+Section BUILD_CONSTR_CMINOR.
+
+Local Notation "A + B" := (Ebinop Oadd A B) : expr_scope.
+Local Notation "A <-call ( B , C , D )" := (Scall (Some A) B C D) (at level 70).
+Local Notation "A <- B" := (Sassign A B) (at level 70).
+Local Notation "A ;; B" := (Sseq A B) (at level 50).
+
+Delimit Scope expr_scope with expr.
+
+Fixpoint store_args_cminor base args off :=
+    match args with
+    | [] => Sskip
+    | arg :: args =>
+            Sstore Mint32 (base + cm_int off)%expr arg ;;
+            store_args_cminor base args (off + 4)
+    end.
+
+Lemma valid_pointer_mem_inj_id : forall m m' b ofs,
+    Mem.valid_pointer m b ofs = true ->
+    Mem.mem_inj inject_id m m' ->
+    Mem.valid_pointer m' b ofs = true.
+intros0 Hvalid Hmem.
+unfold Mem.valid_pointer in *.
+destruct (Mem.perm_dec m _ _ _ _); try discriminate.
+fwd eapply Mem.mi_perm; try eassumption. { reflexivity. }
+destruct (Mem.perm_dec m' _ _ _ _); try reflexivity.
+
+exfalso.
+rewrite Z.add_0_r in *. eauto.
+Qed.
+
+Lemma weak_valid_pointer_mem_inj_id : forall m m' b ofs,
+    (Mem.valid_pointer m b ofs || Mem.valid_pointer m b (ofs - 1)) = true ->
+    Mem.mem_inj inject_id m m' ->
+    (Mem.valid_pointer m' b ofs || Mem.valid_pointer m' b (ofs - 1)) = true.
+intros.
+rewrite orb_true_iff in *.
+break_or; [left | right]; eapply valid_pointer_mem_inj_id; eauto.
+Qed.
+
+Lemma cmpu_bool_mem_inj_id : forall m m' cmp a b r,
+    Val.cmpu_bool (Mem.valid_pointer m) cmp a b = Some r ->
+    Mem.mem_inj inject_id m m' ->
+    Val.cmpu_bool (Mem.valid_pointer m') cmp a b = Some r.
+intros0 Hcmpu Hmem.
+destruct a, b; try discriminate; simpl in *.
+
+- eauto.
+
+- break_match_hyp; try discriminate.
+  rewrite andb_true_iff in *. break_and. find_rewrite. simpl.
+  erewrite weak_valid_pointer_mem_inj_id; eauto.
+
+- break_match_hyp; try discriminate.
+  rewrite andb_true_iff in *. break_and. find_rewrite. simpl.
+  erewrite weak_valid_pointer_mem_inj_id; eauto.
+
+- break_if.
+
+  + break_match_hyp; try discriminate.
+    rewrite andb_true_iff in *. break_and.
+    do 2 erewrite weak_valid_pointer_mem_inj_id by eauto.
+    simpl. eauto.
+
+  + break_match_hyp; try discriminate.
+    rewrite andb_true_iff in *. break_and.
+    do 2 erewrite valid_pointer_mem_inj_id by eauto.
+    simpl. eauto.
+
+Qed.
+
+Lemma eval_binop_mem_inj_id : forall op a b r m m',
+    eval_binop op a b m = Some r ->
+    r <> Vundef ->
+    Mem.mem_inj inject_id m m' ->
+    eval_binop op a b m' = Some r.
+destruct op; intros0 Heval Hdef Hmem; simpl; eauto.
+
+- (* Ocmpu *)
+  unfold eval_binop, Val.cmpu, Val.of_optbool in *.
+  inject_some. f_equal.
+  break_match_hyp; try (exfalso; congruence).
+  erewrite cmpu_bool_mem_inj_id; eauto.
+Qed.
+
+Lemma eval_unop_undef : forall op v v',
+    eval_unop op v = Some v' ->
+    v = Vundef ->
+    v' = Vundef.
+destruct op; intros0 Heval Hundef; subst v; simpl in *;
+  discriminate || inject_some; eauto.
+Qed.
+
+Lemma eval_binop_undef1 : forall op v1 v2 m v',
+    eval_binop op v1 v2 m = Some v' ->
+    v1 = Vundef ->
+    v' = Vundef.
+destruct op; intros0 Heval Hundef; subst v1; simpl in *;
+  discriminate || inject_some; eauto.
+Qed.
+
+Lemma eval_binop_undef2 : forall op v1 v2 m v',
+    eval_binop op v1 v2 m = Some v' ->
+    v2 = Vundef ->
+    v' = Vundef.
+destruct op; intros0 Heval Hundef; subst v2; simpl in *.
+all: destruct v1; try discriminate.
+all: invc Heval; reflexivity.
+Qed.
+
+Lemma eval_unop_defined : forall op v v',
+    eval_unop op v = Some v' ->
+    v' <> Vundef ->
+    v <> Vundef.
+intros0 Heval Hdef. contradict Hdef. eauto using eval_unop_undef.
+Qed.
+
+Lemma eval_binop_defined1 : forall op v1 v2 m v',
+    eval_binop op v1 v2 m = Some v' ->
+    v' <> Vundef ->
+    v1 <> Vundef.
+intros0 Heval Hdef. contradict Hdef. eauto using eval_binop_undef1.
+Qed.
+
+Lemma eval_binop_defined2 : forall op v1 v2 m v',
+    eval_binop op v1 v2 m = Some v' ->
+    v' <> Vundef ->
+    v2 <> Vundef.
+intros0 Heval Hdef. contradict Hdef. eauto using eval_binop_undef2.
+Qed.
+
+Lemma eval_expr_mem_inj_id : forall m m' ge sp e a b,
+    eval_expr ge sp e m a b ->
+    b <> Vundef ->
+    Mem.mem_inj inject_id m m' ->
+    eval_expr ge sp e m' a b.
+induction 1; intros0 Hdef Hmem; try solve [econstructor; eauto].
+
+- econstructor; eauto.
+  eapply IHeval_expr; eauto using eval_unop_defined.
+
+- econstructor; eauto using eval_binop_defined1, eval_binop_defined2.
+  eapply eval_binop_mem_inj_id; eauto.
+
+- destruct vaddr; try discriminate.
+  econstructor; eauto.
+  + eapply IHeval_expr; eauto. discriminate.
+  + simpl.
+    fwd eapply Mem.load_inj as HH; try eassumption. { reflexivity. }
+      destruct HH as (v' & ? & ?).
+    rewrite val_inject_id in *.
+    fwd eapply lessdef_def_eq; eauto. subst v'.
+    rewrite Z.add_0_r in *. eauto.
+Qed.
+
+Lemma eval_exprlist_mem_inj_id : forall m m' ge sp e es vs,
+    eval_exprlist ge sp e m es vs ->
+    Forall (fun v => v <> Vundef) vs ->
+    Mem.mem_inj inject_id m m' ->
+    eval_exprlist ge sp e m' es vs.
+induction 1; intros0 Hdef Hmem; invc Hdef;
+  econstructor; eauto using eval_expr_mem_inj_id.
+Qed.
+
+Lemma store_args_cminor_effect : forall m0 ge sp e m base b ofs delta es vs m' f k,
+    store_multi Mint32 m b (ofs + delta) vs = Some m' ->
+    eval_expr ge sp e m0 base (Vptr b (Int.repr ofs)) ->
+    eval_exprlist ge sp e m0 es vs ->
+    Forall (fun v => v <> Vundef) vs ->
+    Mem.mem_inj inject_id m0 m ->
+    (Mem.mem_contents m0) !! b = ZMap.init Undef ->
+    0 <= ofs ->
+    0 <= delta ->
+    ofs + delta + 4 * Zlength es <= Int.max_unsigned ->
+    star Cminor.step ge
+        (State f (store_args_cminor base es delta) k sp e m)
+     E0 (State f Sskip k sp e m').
+first_induction es; intros0 Hstore Hbase Heval Hdef Hnewblock Hmem Hmin1 Hmin2 Hmax.
+all: on >eval_exprlist, invc.
+
+  { simpl in *. inject_some. eapply star_refl. }
+
+simpl in Hstore. break_match; try discriminate.
+
+fwd eapply Zlength_nonneg with (xs := a :: es).
+
+invc Hdef.
+fwd eapply eval_expr_mem_inj_id with (a := a); eauto.
+fwd eapply eval_expr_mem_inj_id with (a := base); eauto. { discriminate. }
+fwd eapply eval_exprlist_mem_inj_id; eauto.
+
+eapply star_left with (t1 := E0) (t2 := E0); eauto.
+  { simpl. econstructor. }
+eapply star_left with (t1 := E0) (t2 := E0); eauto.
+  { econstructor.
+    - econstructor; eauto.
+      + econstructor. simpl. reflexivity.
+      + simpl. reflexivity.
+    - eauto.
+    - simpl. rewrite Int.add_unsigned.
+      rewrite Int.unsigned_repr with (z := ofs) by lia.
+      rewrite Int.unsigned_repr with (z := delta) by lia.
+      rewrite Int.unsigned_repr by lia.
+      eauto.
+  }
+eapply star_left with (t1 := E0) (t2 := E0); eauto.
+  { econstructor. }
+
+eapply (IHes m0); try eassumption.
+- rewrite Z.add_assoc. eauto.
+- eapply store_new_block_mem_inj_id; eauto.
+- lia.
+- rewrite Zlength_cons in *. unfold Z.succ in *. rewrite Z.mul_add_distr_l in *.
+  lia.
+Qed.
+
+Definition build_constr_cminor malloc_id id tag args :=
+    let sz := 4 * (1 + Zlength args) in
+    id <-call (cm_malloc_sig, cm_func malloc_id, [cm_int sz]) ;;
+    Sstore Mint32 (Evar id) (Econst (Ointconst tag)) ;;
+    store_args_cminor (Evar id) args 4.
+
+Print expr.
+
+Fixpoint expr_no_access id e :=
+    match e with
+    | Evar id' => id <> id'
+    | Econst _ => True
+    | Eunop _ a => expr_no_access id a
+    | Ebinop _ a b => expr_no_access id a /\ expr_no_access id b
+    | Eload _ a => expr_no_access id a
+    end.
+
+Check eval_expr.
+
+Definition eval_expr_no_access : forall ge sp e m a b id v,
+    eval_expr ge sp e m a b ->
+    expr_no_access id a ->
+    eval_expr ge sp (PTree.set id v e) m a b.
+induction 1; intros0 Hacc; econstructor; eauto.
+- rewrite PTree.gso; eauto.
+- invc Hacc. eauto.
+- invc Hacc. eauto.
+Qed.
+
+Definition eval_exprlist_no_access : forall ge sp e m a b id v,
+    eval_exprlist ge sp e m a b ->
+    Forall (expr_no_access id) a ->
+    eval_exprlist ge sp (PTree.set id v e) m a b.
+induction 1; intros0 Hacc; invc Hacc; econstructor; eauto using eval_expr_no_access.
+Qed.
+
+Lemma E0_E0_E0 : E0 = Eapp E0 E0.
+reflexivity.
+Qed.
+
+Lemma build_constr_cminor_effect : forall malloc_id m tag args argvs v m',
+    forall ge f id k sp e fp,
+    build_constr m tag argvs = Some (v, m') ->
+    eval_exprlist ge sp e m args argvs ->
+    Forall (expr_no_access id) args ->
+    Zlength args <= max_arg_count ->
+    Genv.find_symbol ge malloc_id = Some fp ->
+    Genv.find_funct ge (Vptr fp Int.zero) = Some (External EF_malloc) ->
+    plus Cminor.step ge
+        (State f (build_constr_cminor malloc_id id tag args) k sp e m)
+     E0 (State f Sskip k sp (PTree.set id v e) m').
+intros0 Hbuild Heval Hacc Hargc Hmsym Hmfun.
+
+unfold build_constr in Hbuild. break_match. break_bind_option. inject_some.
+
+assert (Hzlen : Zlength args = Zlength argvs).
+  { do 2 rewrite Zlength_correct. f_equal.
+    clear -Heval.  induction Heval; simpl; f_equal; eauto. }
+
+assert ((Mem.mem_contents m0) !! b = ZMap.init Undef).
+  { erewrite Mem.contents_alloc; eauto.
+    erewrite <- Mem.alloc_result; eauto.
+    erewrite PMap.gss. reflexivity. }
+
+eapply plus_left. 3: eapply E0_E0_E0. { econstructor. }
+eapply star_left. 3: eapply E0_E0_E0. { econstructor. }
+eapply star_left. 3: eapply E0_E0_E0. {
+  econstructor.
+  - econstructor. simpl. rewrite Hmsym. reflexivity.
+  - repeat econstructor.
+  - rewrite Hmfun. reflexivity.
+  - reflexivity.
+}
+eapply star_left. 3: eapply E0_E0_E0. {
+  econstructor. econstructor.
+  - rewrite Int.unsigned_repr; cycle 1.
+      { replace (4 * _) with (4 + Zlength args * 4) by ring.
+        split.
+        - fwd eapply Zlength_nonneg with (xs := args). lia.
+        - eapply max_arg_count_value_size_ok. eauto. }
+    rewrite Z.mul_comm, Hzlen. eauto.
+  - rewrite Z.mul_comm, Hzlen. eauto.
+}
+eapply star_left. 3: eapply E0_E0_E0. { econstructor. }
+eapply star_left. 3: eapply E0_E0_E0. { econstructor. }
+eapply star_left. 3: eapply E0_E0_E0. {
+  econstructor.
+  - econstructor. simpl. rewrite PTree.gss. reflexivity.
+  - econstructor. simpl. reflexivity.
+  - simpl. rewrite Int.unsigned_zero. eauto.
+}
+eapply star_left. 3: eapply E0_E0_E0. { econstructor. }
+
+eapply store_args_cminor_effect with (ofs := 0) (m0 := m0).
+- simpl. eauto.
+- econstructor. rewrite PTree.gss. reflexivity.
+- eapply eval_exprlist_mem_inj_id; cycle 1.
+  + eauto.
+  + eapply alloc_mem_inj_id; eauto.
+  + eapply eval_exprlist_no_access; eauto.
+- eauto.
+- eapply store_new_block_mem_inj_id; eauto.
+  eapply store_new_block_mem_inj_id; eauto.
+  eapply Mem.mext_inj, Mem.extends_refl.
+- eauto.
+- lia.
+- lia.
+- rewrite Z.add_0_l. rewrite Z.mul_comm.
+  eapply max_arg_count_value_size_ok. eauto.
+Qed.
+
+
+End BUILD_CONSTR_CMINOR.
 
 
 
