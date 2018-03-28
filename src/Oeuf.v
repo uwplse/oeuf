@@ -27,7 +27,7 @@ Definition transf_untyped_to_cminor (p : Untyped1.prog_type) :=
     @@@ Emajortodmajor.transf_prog
     @@@ Dmajortodflatmajor.transf_prog
     @@@ Dflatmajortocmajor.transf_prog
-    @@  Cmajortominor.transf_prog
+    @@@ Cmajortominor.transf_prog
 .
 
 Definition transf_oeuf_to_untyped1 (j : CompilationUnit.compilation_unit) : res Untyped1.prog_type :=
