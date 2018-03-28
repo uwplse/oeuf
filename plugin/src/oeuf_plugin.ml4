@@ -80,9 +80,11 @@ exception Reflect_error of string
 (*** intermediate representation for SourceLang functions ***)
 
 type ty =
-    (* the constr is a `type_name` *)
+    (* The constr is a real Gallina `Type`.  We convert it to a `type_name`
+     * later, in `emit_tyn`. *)
       ADT of Term.constr
     | Arrow of ty * ty
+    | Opaque of Term.constr
 
 type funcref =
     (* reference to a lifted lambda in the current block *)
@@ -102,6 +104,8 @@ type expr =
     | Close of ty * ty list * ty * funcref * expr list
     (* _, type_name, _, elim, _, _ *)
     | Elim of ty list * Term.constr * ty * Term.constr * expr list * expr
+    (* _, _, opaque_oper, _ *)
+    | OpaqueOp of ty list * ty * Term.constr * expr list
 
 let expr_ty e =
     match e with
@@ -110,6 +114,7 @@ let expr_ty e =
     | Constr (tyn, _, _, _, _) -> ADT tyn
     | Close (arg_ty, _, ret_ty, _, _) -> Arrow (arg_ty, ret_ty)
     | Elim (_, _, ty, _, _, _) -> ty
+    | OpaqueOp (_, ty, _, _) -> ty
 
 
 
@@ -124,6 +129,8 @@ let rec iter_tys f stk e =
             f arg_ty; List.iter f free_tys; f ret_ty
     | Elim (case_tys, _, ret_ty, _, _, _) ->
             List.iter f case_tys; f ret_ty
+    | OpaqueOp (arg_tys, ret_ty, _, _) ->
+            List.iter f arg_tys; f ret_ty
 
 
 (* arg_ty, free_tys, ret_ty, body, name, pub *)
@@ -142,6 +149,7 @@ let rec string_of_ty t =
     | ADT tyn -> Format.asprintf "%a" pp_constr tyn
     | Arrow (ty1, ty2) ->
             Format.sprintf "(%s) -> %s" (string_of_ty ty1) (string_of_ty ty2)
+    | Opaque oty -> Format.asprintf "%a" pp_constr oty
 
 let rec string_of_funcref fr =
     match fr with
@@ -170,6 +178,10 @@ let rec string_of_expr e =
                     (string_of_expr target)
                     elim_name
                     (String.concat "; " (List.map string_of_expr cases))
+        | OpaqueOp (_arg_tys, _ret_ty, op, args) ->
+                Format.asprintf "%a %s"
+                    pp_constr op
+                    (String.concat " " (List.map string_of_expr args))
     in
     Format.sprintf "(%s : %s)" base (string_of_ty (expr_ty e))
 
@@ -218,8 +230,11 @@ let pkg_sourcevalues = ["oeuf";"SourceValues"]
 let pkg_sourcelifted = ["oeuf";"SourceLifted"]
 let pkg_compilation_unit = ["oeuf";"CompilationUnit"]
 (*let pkg_fast_ascii = ["oeuf";"FastAscii"]*)
+let pkg_opaque_types = ["oeuf";"OpaqueTypes"]
 
 let pkg_binnums = ["Coq"; "Numbers"; "BinNums"]
+
+let pkg_cc_integers_int = ["compcert";"lib";"Integers";"Int"]
 
 
 type ctor_defn =
@@ -235,6 +250,12 @@ type type_defn =
     ; ename : string
     ; num_params : int
     ; ctors : ctor_defn list
+    }
+
+type opaque_type_defn =
+    { pkg : string list
+    ; name : string
+    ; rname : string
     }
 
 let simple_ctor_defn name num_fields : ctor_defn =
@@ -263,136 +284,6 @@ let type_defns : type_defn list = [
         [("nil", 0); ("cons", 2)];
     simple_type_defn pkg_datatypes "unit" 0
         [("tt", 0)];
-(*    simple_type_defn pkg_fast_ascii "ascii" 0
-    [("ascii_0",0);
-    ("ascii_1",0);
-    ("ascii_2",0);
-    ("ascii_3",0);
-    ("ascii_4",0);
-    ("ascii_5",0);
-    ("ascii_6",0);
-    ("ascii_7",0);
-    ("ascii_8",0);
-    ("ascii_9",0);
-    ("ascii_10",0);
-    ("ascii_11",0);
-    ("ascii_12",0);
-    ("ascii_13",0);
-    ("ascii_14",0);
-    ("ascii_15",0);
-    ("ascii_16",0);
-    ("ascii_17",0);
-    ("ascii_18",0);
-    ("ascii_19",0);
-    ("ascii_20",0);
-    ("ascii_21",0);
-    ("ascii_22",0);
-    ("ascii_23",0);
-    ("ascii_24",0);
-    ("ascii_25",0);
-    ("ascii_26",0);
-    ("ascii_27",0);
-    ("ascii_28",0);
-    ("ascii_29",0);
-    ("ascii_30",0);
-    ("ascii_31",0);
-    ("ascii_32",0);
-    ("ascii_33",0);
-    ("ascii_34",0);
-    ("ascii_35",0);
-    ("ascii_36",0);
-    ("ascii_37",0);
-    ("ascii_38",0);
-    ("ascii_39",0);
-    ("ascii_40",0);
-    ("ascii_41",0);
-    ("ascii_42",0);
-    ("ascii_43",0);
-    ("ascii_44",0);
-    ("ascii_45",0);
-    ("ascii_46",0);
-    ("ascii_47",0);
-    ("ascii_48",0);
-    ("ascii_49",0);
-    ("ascii_50",0);
-    ("ascii_51",0);
-    ("ascii_52",0);
-    ("ascii_53",0);
-    ("ascii_54",0);
-    ("ascii_55",0);
-    ("ascii_56",0);
-    ("ascii_57",0);
-    ("ascii_58",0);
-    ("ascii_59",0);
-    ("ascii_60",0);
-    ("ascii_61",0);
-    ("ascii_62",0);
-    ("ascii_63",0);
-    ("ascii_64",0);
-    ("ascii_65",0);
-    ("ascii_66",0);
-    ("ascii_67",0);
-    ("ascii_68",0);
-    ("ascii_69",0);
-    ("ascii_70",0);
-    ("ascii_71",0);
-    ("ascii_72",0);
-    ("ascii_73",0);
-    ("ascii_74",0);
-    ("ascii_75",0);
-    ("ascii_76",0);
-    ("ascii_77",0);
-    ("ascii_78",0);
-    ("ascii_79",0);
-    ("ascii_80",0);
-    ("ascii_81",0);
-    ("ascii_82",0);
-    ("ascii_83",0);
-    ("ascii_84",0);
-    ("ascii_85",0);
-    ("ascii_86",0);
-    ("ascii_87",0);
-    ("ascii_88",0);
-    ("ascii_89",0);
-    ("ascii_90",0);
-    ("ascii_91",0);
-    ("ascii_92",0);
-    ("ascii_93",0);
-    ("ascii_94",0);
-    ("ascii_95",0);
-    ("ascii_96",0);
-    ("ascii_97",0);
-    ("ascii_98",0);
-    ("ascii_99",0);
-    ("ascii_100",0);
-    ("ascii_101",0);
-    ("ascii_102",0);
-    ("ascii_103",0);
-    ("ascii_104",0);
-    ("ascii_105",0);
-    ("ascii_106",0);
-    ("ascii_107",0);
-    ("ascii_108",0);
-    ("ascii_109",0);
-    ("ascii_110",0);
-    ("ascii_111",0);
-    ("ascii_112",0);
-    ("ascii_113",0);
-    ("ascii_114",0);
-    ("ascii_115",0);
-    ("ascii_116",0);
-    ("ascii_117",0);
-    ("ascii_118",0);
-    ("ascii_119",0);
-    ("ascii_120",0);
-    ("ascii_121",0);
-    ("ascii_122",0);
-    ("ascii_123",0);
-    ("ascii_124",0);
-    ("ascii_125",0);
-    ("ascii_126",0);
-    ("ascii_127",0)];*)
-
 
     { pkg = pkg_datatypes
     ; name = "prod"
@@ -422,10 +313,17 @@ let type_defns : type_defn list = [
         [("Ascii", 8)]
 ]
 
+let opaque_type_defns : opaque_type_defn list = [
+    { pkg = pkg_cc_integers_int
+    ; name = "int"
+    ; rname = "int"
+    }
+]
+
 
 let tyn_map = init_once (fun () ->
     List.map
-        (fun t ->
+        (fun (t : type_defn) ->
             let denotation = resolve_symbol t.pkg t.name in
             let reflection = resolve_symbol pkg_utopia ("T" ^ t.rname) in
             (denotation, (reflection, t.num_params)))
@@ -437,6 +335,23 @@ let get_tyn c =
     match lookup_tyn c with
     | None -> raise (Reflect_error
         (Format.asprintf "no matching type_name for %a" pp_constr c))
+    | Some x -> x
+
+
+let oty_map = init_once (fun () ->
+    List.map
+        (fun (t : opaque_type_defn) ->
+            let denotation = resolve_symbol t.pkg t.name in
+            let reflection = resolve_symbol pkg_opaque_types ("O" ^ t.rname) in
+            (denotation, reflection))
+    opaque_type_defns)
+
+let lookup_oty c = constr_assoc c (oty_map ())
+
+let get_oty c =
+    match lookup_oty c with
+    | None -> raise (Reflect_error
+        (Format.asprintf "no matching opaque_type_name for %a" pp_constr c))
     | Some x -> x
 
 
@@ -548,7 +463,13 @@ let unfold_constr env c : Term.constr =
             Mod_subst.force_constr subst_body
     | _ -> c
 
+let is_some x =
+    match x with
+    | Some _ -> true
+    | None -> false
+
 let rec reflect_type env c =
+    if is_some (lookup_oty c) then Opaque c else
     match Constr.kind c with
     | Constr.Prod (_bnd, arg_ty, ret_ty) ->
             Arrow (reflect_type env arg_ty, reflect_type env ret_ty)
@@ -820,6 +741,7 @@ let reflect_block evars env c =
 
 let c_adt = init_once (fun () -> resolve_symbol pkg_sourcevalues "ADT")
 let c_arrow = init_once (fun () -> resolve_symbol pkg_sourcevalues "Arrow")
+let c_opaque = init_once (fun () -> resolve_symbol pkg_sourcevalues "Opaque")
 
 let c_tt = init_once (fun () -> resolve_symbol pkg_datatypes "tt")
 
@@ -860,6 +782,7 @@ let c_app = init_once (fun () -> resolve_symbol pkg_sourcelifted "App")
 let c_constr = init_once (fun () -> resolve_symbol pkg_sourcelifted "Constr")
 let c_close = init_once (fun () -> resolve_symbol pkg_sourcelifted "Close")
 let c_elim = init_once (fun () -> resolve_symbol pkg_sourcelifted "Elim")
+let c_opaque_op = init_once (fun () -> resolve_symbol pkg_sourcelifted "OpaqueOp")
 
 let t_compilation_unit = init_once (fun () ->
     resolve_symbol pkg_compilation_unit "compilation_unit")
@@ -961,6 +884,8 @@ let emit_map a_ty f xs =
     emit_list a_ty (List.map f xs)
 
 
+(* Turn a term of type `Type`, such as `nat`, into a reflected term of type
+ * `type_name`, such as `Tnat`. *)
 let rec emit_tyn c : Term.constr =
     match Constr.kind c with
     | Constr.App (base, params) ->
@@ -978,6 +903,7 @@ let rec emit_ty ctx ty : Term.constr =
             | ADT tyn_c -> mk c_adt [emit_tyn tyn_c]
             | Arrow (ty1, ty2) ->
                     mk c_arrow [emit_ty ctx ty1; emit_ty ctx ty2]
+            | Opaque oty_c -> mk c_opaque [get_oty oty_c]
         in
         let idx = ctx.emit_let "ty" (t_type ()) c in
         Hashtbl.add ctx.ty_cache ty idx
@@ -989,6 +915,7 @@ let rec emit_ty' ty : Term.constr =
     | ADT tyn_c -> mk c_adt [emit_tyn tyn_c]
     | Arrow (ty1, ty2) ->
             mk c_arrow [emit_ty' ty1; emit_ty' ty2]
+    | Opaque oty_c -> mk c_opaque [get_oty oty_c]
 
 let rec emit_ty_list ctx tys : Term.constr =
     if not (Hashtbl.mem ctx.ty_list_cache tys) then
@@ -1390,6 +1317,13 @@ let emit_expr gctx ctx (g_tys : fn_sig list) (l_tys : ty list) e : Term.constr =
                     elim';
                     snd (go_hlist cases);
                     go target
+                ]
+
+        | OpaqueOp (arg_tys, ret_ty, op, args) ->
+                mk c_opaque_op [
+                    g_tys_c; l_tys_c;
+                    emit_ty_list ctx arg_tys; emit_ty ctx ret_ty;
+                    op; snd (go_hlist args)
                 ]
 
         | _ -> raise (Reflect_error "unimplemented expr variant")
