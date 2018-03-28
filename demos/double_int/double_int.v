@@ -10,7 +10,7 @@ Require Import oeuf.OpaqueTypes.
 Require Import oeuf.OpaqueOps.
 
 
-Definition double_int (x : int) := Int.add x x.
+Definition double_int (x : int) := Int.shl x (Int.repr 1).
 
 Require Import OeufPlugin.OeufPlugin.
 Set Printing All.   (* don't remove this, Oeuf Reflect will break *)
