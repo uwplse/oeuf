@@ -10,11 +10,11 @@ Require Import oeuf.OpaqueTypes.
 Require Import oeuf.OpaqueOps.
 
 
-Definition double (x : int) := x.
+Definition double_int (x : int) := Int.add x x.
 
 Require Import OeufPlugin.OeufPlugin.
 Set Printing All.   (* don't remove this, Oeuf Reflect will break *)
-Time Oeuf Reflect double As double_cu.
+Time Oeuf Reflect double_int As double_cu.
 Unset Printing All.
 
 Require Import oeuf.Pretty.
