@@ -230,7 +230,6 @@ intros0 Hmi Hhdef Hvis HP Hhead Hla Hvi.
 
 fwd eapply load_all_mem_inj_id as HH; eauto.
   destruct HH as (lv' & ? & ?).
-  SearchAbout load_all.
 
 fwd eapply load_all_arg_addrs_zip with (l := l') as HH; eauto.
   destruct HH as (cvs1 & ? & ?). subst l'.
@@ -1316,7 +1315,6 @@ Definition build_constr_cminor malloc_id id tag args :=
     Sstore Mint32 (Evar id) (Econst (Ointconst tag)) ;;
     store_args_cminor (Evar id) args 4.
 
-Print expr.
 
 Fixpoint expr_no_access id e :=
     match e with
@@ -1327,7 +1325,6 @@ Fixpoint expr_no_access id e :=
     | Eload _ a => expr_no_access id a
     end.
 
-Check eval_expr.
 
 Definition eval_expr_no_access : forall ge sp e m a b id v,
     eval_expr ge sp e m a b ->
