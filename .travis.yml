@@ -21,15 +21,6 @@ before_cache:
 after_success:
    - echo "after_success"
 
-before_deploy:
-   - echo "before_deploy"
-
-deploy:
-   - echo "deploy"
-
-after_deploy:
-   - echo "after_deploy"
-
 after_script:
    - echo "after_script"
 
