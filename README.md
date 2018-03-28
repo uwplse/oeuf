@@ -1,6 +1,10 @@
 # Œuf
 Gallina frontend for CompCert. Uses Coq 8.5
 
+## Current Build Status
+![Travis Build Status]
+(https://travis-ci.org/uwplse/oeuf.svg?branch=master)
+
 ## Layout
 
 The Œuf compiler is in `src/`.  For each IR "Foo" listed in the report, the
