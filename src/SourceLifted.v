@@ -262,8 +262,6 @@ refine (
 - simpl. exact (weaken_body _ (gget_weaken _ mb')).
 Defined.
 
-Check Ascii.ascii_rect.
-
 (* denotation functions *)
 (* Extend this if you want to extend Oeuf *)
 Definition elim_denote {case_tys target_ty ty} (e : elim case_tys target_ty ty) :
