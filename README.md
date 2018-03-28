@@ -3,7 +3,7 @@ Gallina frontend for CompCert. Uses Coq 8.5
 
 ## Current Build Status
 
-![<img src="https://travis-ci.org/uwplse/oeuf.svg">](https://travis-ci.org/uwplse/oeuf)
+[![Build Status](https://travis-ci.org/uwplse/oeuf.svg)](https://travis-ci.org/uwplse/oeuf)
 
 ## Layout
 
