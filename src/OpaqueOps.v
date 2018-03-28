@@ -30,28 +30,60 @@ Require Import oeuf.MatchValues.
 Require Import oeuf.StuartTact.
 Require Import oeuf.EricTact.
 
+Require Import ProofIrrelevance.
+
 Local Open Scope option_monad.
 
 
 (* Opaque operation names and signatures *)
 
+Inductive int_unop_name : Set :=
+(* Shift by a constant.  These get special-cased because shifting by >= 32
+ * produces Vundef. *)
+| IuShlC (amt : Z)
+| IuShruC (amt : Z)
+| IuRorC (amt : Z)
+| IuNot
+.
+
+Definition int_unop_name_eq_dec (x y : int_unop_name) : { x = y } + { x <> y }.
+decide equality; eauto using Z.eq_dec.
+Defined.
+
+Inductive int_binop_name : Set :=
+| IbAnd
+| IbOr
+| IbXor
+| IbAdd
+.
+
+Definition int_binop_name_eq_dec (x y : int_binop_name) : { x = y } + { x <> y }.
+decide equality.
+Defined.
+
 Inductive opaque_oper_name : Set :=
-| ONadd
-| ONtest.
+| ONunop (op : int_unop_name)
+| ONbinop (op : int_binop_name)
+| ONtest
+| ONrepr (z : Z).
 
 Inductive opaque_oper : list type -> type -> Set :=
-| Oadd : opaque_oper [Opaque Oint; Opaque Oint] (Opaque Oint)
+| Ounop (op : int_unop_name) : opaque_oper [Opaque Oint] (Opaque Oint)
+| Obinop (op : int_binop_name) : opaque_oper [Opaque Oint; Opaque Oint] (Opaque Oint)
 | Otest : opaque_oper [Opaque Oint] (ADT Tbool)
+| Orepr (z : Z) : opaque_oper [] (Opaque Oint)
 .
 
 Definition opaque_oper_to_name {atys rty} (op : opaque_oper atys rty) : opaque_oper_name :=
     match op with
-    | Oadd => ONadd
+    | Ounop op => ONunop op
+    | Obinop op => ONbinop op
     | Otest => ONtest
+    | Orepr z => ONrepr z
     end.
 
 Definition opaque_oper_name_eq_dec (x y : opaque_oper_name) : { x = y } + { x <> y }.
-decide equality.
+decide equality; eauto using Z.eq_dec, int_unop_name_eq_dec, int_binop_name_eq_dec.
 Defined.
 
 
@@ -340,40 +372,241 @@ reflexivity.
 Qed.
 
 
-Definition impl_add : opaque_oper_impl [Opaque Oint; Opaque Oint] (Opaque Oint).
+Definition int_unop_denote op : int -> int :=
+    match op with
+    | IuShlC amt => fun x => Int.shl x (Int.repr (Z.modulo amt 32))
+    | IuShruC amt => fun x => Int.shru x (Int.repr (Z.modulo amt 32))
+    | IuRorC amt => fun x => Int.ror x (Int.repr (Z.modulo amt 32))
+    | IuNot => Int.not
+    end.
+
+Definition int_unop_to_cminor op x :=
+    let amt_const amt := Econst (Ointconst (Int.repr (Z.modulo amt 32))) in
+    match op with
+    | IuShlC amt => Ebinop Cminor.Oshl x (amt_const amt)
+    | IuShruC amt => Ebinop Cminor.Oshru x (amt_const amt)
+    | IuRorC amt =>
+            Ebinop Cminor.Oor
+                (Ebinop Cminor.Oshru x (amt_const amt))
+                (Ebinop Cminor.Oshl x (amt_const (-amt)%Z))
+    | IuNot => Eunop Cminor.Onotint x
+    end.
+
+Definition int_binop_denote op : int -> int -> int :=
+    match op with
+    | IbAnd => Int.and
+    | IbOr => Int.or
+    | IbXor => Int.xor
+    | IbAdd => Int.add
+    end.
+
+Definition int_binop_to_cminor op x y :=
+    match op with
+    | IbAnd => Ebinop Cminor.Oand x y
+    | IbOr => Ebinop Cminor.Oor x y
+    | IbXor => Ebinop Cminor.Oxor x y
+    | IbAdd => Ebinop Cminor.Oadd x y
+    end.
+
+Lemma mod_32_ltu_wordsize : forall z,
+    Int.ltu (Int.repr (z mod 32)) Int.iwordsize = true.
+intros. unfold Int.ltu. break_if; eauto.
+exfalso. cut (Int.unsigned (Int.repr (z mod 32)) < Int.unsigned Int.iwordsize)%Z.
+  { intros. lia. }
+clear.
+unfold Int.iwordsize, Int.zwordsize. simpl.
+
+fwd eapply Z.mod_pos_bound with (a := z) (b := 32%Z). { lia. } break_and.
+
+rewrite Int.unsigned_repr; cycle 1.
+  { split; eauto. eapply int_unsigned_big. lia. }
+rewrite Int.unsigned_repr; cycle 1.
+  { split; [lia|]. eapply int_unsigned_big. lia. }
+eauto.
+Qed.
+
+Definition impl_unop (op : int_unop_name) :
+    opaque_oper_impl [Opaque Oint] (Opaque Oint).
 simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _ _ _  _ _ _ _  _ _ _ _ _ _).
 
-- exact (fun args => Int.add (hhead args) (hhead (htail args))).
+- exact (fun args => int_unop_denote op (hhead args)).
+- refine (fun G args =>
+    let x := unwrap_opaque (hhead args) in
+    VOpaque (oty := Oint) (int_unop_denote op x)).
+- refine (fun args =>
+    match args with
+    | [HighestValues.Opaque Oint x] =>
+           Some (HighestValues.Opaque Oint (int_unop_denote op x))
+    | _ => None
+    end).
+- refine (fun args =>
+    match args with
+    | [HigherValue.Opaque Oint x] =>
+           Some (HigherValue.Opaque Oint (int_unop_denote op x))
+    | _ => None
+    end).
+- refine (fun args =>
+    match args with
+    | [HighValues.Opaque Oint x] =>
+           Some (HighValues.Opaque Oint (int_unop_denote op x))
+    | _ => None
+    end).
+- refine (fun m args =>
+    match args with
+    | [Vint x] => Some (m, Vint (int_unop_denote op x))
+    | _ => None
+    end).
+- refine (fun _malloc_id id args =>
+    match args with
+    | [x] => Sassign id (int_unop_to_cminor op x)
+    | _ => Sskip
+    end).
+
+
+- (* no_fab_clos_higher *)
+  intros. simpl in *.
+  repeat (break_match; try discriminate; [ ]). subst. inject_some.
+  on >HigherValue.VIn, invc; try solve [exfalso; eauto].
+  simpl in *. discriminate.
+
+- (* change_fname_high *)
+  intros. simpl in *.
+  repeat (break_match_hyp; try discriminate; [ ]).
+  repeat on >Forall2, invc. simpl in *. repeat (break_match; try contradiction).
+  fix_existT. subst. inject_some.
+  eexists; split; eauto. simpl. eauto.
+
+- (* mem_inj_id *)
+  intros. simpl in *. repeat (break_match; try discriminate; []). subst.
+  inject_some.  eapply Mem.mext_inj. eapply Mem.extends_refl.
+
+- (* mem_inject *)
+  intros. simpl in *. repeat (break_match_hyp; try discriminate; []). subst. inject_some.
+  do 2 on >Forall2, invc. do 1 on >Val.inject, invc.
+  eexists mi, _, _. split; eauto using mem_sim_refl.
+
+
+- intros. simpl.
+  rewrite hmap_hhead.
+  do 1 rewrite opaque_value_denote. reflexivity.
+
+- intros. simpl in *.
+  revert H.
+  do 1 on _, invc_using (@case_hlist_cons type). on _, invc_using (@case_hlist_nil type).
+  do 1 on _, invc_using case_value_opaque.
+  simpl. reflexivity.
+
+- intros. simpl in *.
+
+  on >Forall2, invc; try discriminate.
+  on >mv_higher, invc; try discriminate.
+  destruct oty; try discriminate.
+  on >Forall2, invc; try discriminate.
+  inject_some.
+
+  eexists. split; eauto. econstructor.
+
+- intros. simpl in *.
+
+  on >Forall2, invc; try discriminate.
+  on >mv_high, invc; try discriminate.
+  destruct oty; try discriminate.
+  on >Forall2, invc; try discriminate.
+  inject_some.
+
+  eexists. split; eauto. econstructor.
+
+- intros. simpl in *.
+
+  on >Forall2, invc; try discriminate.
+  on >@HighValues.value_inject, invc; try discriminate.
+  destruct oty; try discriminate.
+  on >Forall2, invc; try discriminate.
+  inject_some.
+
+  do 1 on >opaque_type_value_inject, invc.
+  do 2 eexists; split; eauto.
+  do 2 econstructor; eauto.
+
+- intros. simpl in *.
+  repeat (break_match_hyp; try discriminate; []). subst. inject_some.
+  do 2 on >eval_exprlist, invc.
+  eapply plus_one. econstructor; eauto.
+
+  destruct op.
+
+  + econstructor; eauto. { repeat econstructor. } simpl.
+    rewrite mod_32_ltu_wordsize. reflexivity.
+  + econstructor; eauto. { repeat econstructor. } simpl.
+    rewrite mod_32_ltu_wordsize. reflexivity.
+
+  + repeat first [eapply eval_Ebinop | eapply eval_Econst | reflexivity]; eauto.
+    simpl. do 2 rewrite mod_32_ltu_wordsize.
+
+    destruct (Z.eq_dec (amt mod 32) 0).
+
+    * find_rewrite. rewrite Z.mod_opp_l_z by (lia || eauto).
+      rewrite Int.ror_rol_neg; cycle 1.
+        { change (_ | _)%Z with (2^5 | 2^32)%Z.
+          change (2 ^ 32)%Z with (2^5 * 2^27)%Z.
+          eapply Z.divide_factor_l. }
+      change (Int.repr 0) with Int.zero.  rewrite Int.neg_zero.
+      rewrite Int.shru_zero, Int.shl_zero, Int.rol_zero.
+      simpl. rewrite Int.or_idem. reflexivity.
+
+    * simpl. rewrite Int.or_commut.
+      rewrite <- Int.or_ror; eauto using mod_32_ltu_wordsize.
+      rewrite Int.add_unsigned.
+
+      fwd eapply Z.mod_pos_bound with (a := amt) (b := 32%Z). { lia. }
+      fwd eapply Z.mod_pos_bound with (a := (-amt)%Z) (b := 32%Z). { lia. }
+      assert (32 <= Int.max_unsigned)%Z by (eapply int_unsigned_big; lia).
+
+      rewrite 2 Int.unsigned_repr by lia.
+      rewrite Z.mod_opp_l_nz by (lia || eauto).
+      unfold Int.iwordsize. change Int.zwordsize with 32%Z. f_equal. lia.
+
+  + econstructor; eauto.
+Defined.
+
+Definition impl_binop (op : int_binop_name) :
+    opaque_oper_impl [Opaque Oint; Opaque Oint] (Opaque Oint).
+simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _ _ _  _ _ _ _  _ _ _ _ _ _).
+
+- exact (fun args => int_binop_denote op (hhead args) (hhead (htail args))).
 - refine (fun G args =>
     let x := unwrap_opaque (hhead args) in
     let y := unwrap_opaque (hhead (htail args)) in
-    VOpaque (oty := Oint) (Int.add x y)).
+    VOpaque (oty := Oint) (int_binop_denote op x y)).
 - refine (fun args =>
     match args with
     | [HighestValues.Opaque Oint x;
-       HighestValues.Opaque Oint y] => Some (HighestValues.Opaque Oint (Int.add x y))
+       HighestValues.Opaque Oint y] =>
+           Some (HighestValues.Opaque Oint (int_binop_denote op x y))
     | _ => None
     end).
 - refine (fun args =>
     match args with
     | [HigherValue.Opaque Oint x;
-       HigherValue.Opaque Oint y] => Some (HigherValue.Opaque Oint (Int.add x y))
+       HigherValue.Opaque Oint y] =>
+           Some (HigherValue.Opaque Oint (int_binop_denote op x y))
     | _ => None
     end).
 - refine (fun args =>
     match args with
     | [HighValues.Opaque Oint x;
-       HighValues.Opaque Oint y] => Some (HighValues.Opaque Oint (Int.add x y))
+       HighValues.Opaque Oint y] =>
+           Some (HighValues.Opaque Oint (int_binop_denote op x y))
     | _ => None
     end).
 - refine (fun m args =>
     match args with
-    | [Vint x; Vint y] => Some (m, Vint (Int.add x y))
+    | [Vint x; Vint y] => Some (m, Vint (int_binop_denote op x y))
     | _ => None
     end).
 - refine (fun _malloc_id id args =>
     match args with
-    | [x; y] => Sassign id (Ebinop Cminor.Oadd x y)
+    | [x; y] => Sassign id (int_binop_to_cminor op x y)
     | _ => Sskip
     end).
 
@@ -455,8 +688,10 @@ simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _ _ _  _ _ _ _  _ _ _ _ _ _).
 - intros. simpl in *.
   repeat (break_match_hyp; try discriminate; []). subst. inject_some.
   do 3 on >eval_exprlist, invc.
-  eapply plus_one. econstructor; eauto. econstructor; eauto.
+  eapply plus_one. econstructor; eauto.
 
+  destruct op.
+  all: try solve [econstructor; eauto; simpl; reflexivity].
 Defined.
 
 
@@ -648,18 +883,67 @@ simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _ _ _  _ _ _ _  _ _ _ _ _ _).
 Defined.
 
 
+Definition impl_repr (z : Z) : opaque_oper_impl [] (Opaque Oint).
+simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _ _ _  _ _ _ _  _ _ _ _ _ _).
+
+- exact (fun args => Int.repr z).
+- refine (fun G args => VOpaque (oty := Oint) (Int.repr z)).
+- refine (fun args => Some (HighestValues.Opaque Oint (Int.repr z))).
+- refine (fun args => Some (HigherValue.Opaque Oint (Int.repr z))).
+- refine (fun args => Some (HighValues.Opaque Oint (Int.repr z))).
+- refine (fun m args => Some (m, Vint (Int.repr z))).
+- refine (fun _malloc_id id args => Sassign id (Econst (Ointconst (Int.repr z)))).
+
+
+- (* no_fab_clos_higher *)
+  intros. simpl in *. inject_some.
+  exfalso. on >HigherValue.VIn, invc; eauto. simpl in *. discriminate.
+
+- (* change_fname_high *)
+  intros. simpl in *. inject_some.
+  eexists. split; eauto. simpl. reflexivity. 
+
+- (* mem_inj_id *)
+  intros. simpl in *. inject_some.
+  eapply Mem.mext_inj. eapply Mem.extends_refl.
+
+- (* mem_inject *)
+  intros. simpl in *. inject_some.
+  eexists mi, _, _. split; eauto using mem_sim_refl.
+
+
+- intros. simpl. reflexivity.
+- intros. simpl in *. subst ret. simpl. reflexivity.
+- intros. simpl in *. inject_some. eexists. split; eauto. econstructor.
+- intros. simpl in *. inject_some. eexists. split; eauto. econstructor.
+- intros. simpl in *. inject_some. eexists _, _. split; eauto. do 2 econstructor.
+- intros. simpl in *. inject_some.
+  eapply plus_one. econstructor. econstructor. simpl. reflexivity.
+Defined.
+
+
+
+
+
+
+
+
 Definition get_opaque_oper_impl {atys rty} (op : opaque_oper atys rty) :
         opaque_oper_impl atys rty :=
     match op with
-    | Oadd => impl_add
+    | Ounop op => impl_unop op
+    | Obinop op => impl_binop op
     | Otest => impl_test
+    | Orepr z => impl_repr z
     end.
 
 Definition get_opaque_oper_impl' (op : opaque_oper_name) :
         { atys : list type & { rty : type & opaque_oper_impl atys rty } } :=
     match op with
-    | ONadd => existT _ _ (existT _ _ impl_add)
+    | ONunop op => existT _ _ (existT _ _ (impl_unop op))
+    | ONbinop op => existT _ _ (existT _ _ (impl_binop op))
     | ONtest => existT _ _ (existT _ _ impl_test)
+    | ONrepr z => existT _ _ (existT _ _ (impl_repr z))
     end.
 
 Lemma get_opaque_oper_impl_name : forall atys rty (op : opaque_oper atys rty),
