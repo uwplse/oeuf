@@ -1,0 +1,35 @@
+#If we can do this without sudo, the VM boots up faster
+sudo: false
+dist: trusty
+
+
+before_install:
+   - echo "before_install"
+
+install:
+   - echo "install"
+
+before_script:
+   - echo "before_script"
+
+script:
+   - echo "script"
+
+before_cache:
+   - echo "before_cache"
+
+after_success:
+   - echo "after_success"
+
+before_deploy:
+   - echo "before_deploy"
+
+deploy:
+   - echo "deploy"
+
+after_deploy:
+   - echo "after_deploy"
+
+after_script:
+   - echo "after_script"
+
