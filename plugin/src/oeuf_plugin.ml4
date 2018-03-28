@@ -231,6 +231,7 @@ let pkg_sourcelifted = ["oeuf";"SourceLifted"]
 let pkg_compilation_unit = ["oeuf";"CompilationUnit"]
 (*let pkg_fast_ascii = ["oeuf";"FastAscii"]*)
 let pkg_opaque_types = ["oeuf";"OpaqueTypes"]
+let pkg_opaque_ops = ["oeuf";"OpaqueOps"]
 
 let pkg_binnums = ["Coq"; "Numbers"; "BinNums"]
 
@@ -355,12 +356,32 @@ let get_oty c =
     | Some x -> x
 
 
+
+let opaque_heads () =
+    let ot_int = Opaque (resolve_symbol pkg_cc_integers_int "int") in
+
+    let resolve_int = resolve_symbol pkg_cc_integers_int in
+    let resolve_op = resolve_symbol pkg_opaque_ops in
+
+    let oo_int_binop name =
+        let binop = resolve_symbol pkg_opaque_ops "ONbinop" in
+        let bin_name = resolve_symbol pkg_opaque_ops ("Ib" ^ name) in
+        Constr.mkApp (binop, Array.of_list [bin_name]) in
+
+    [
+        (resolve_int "add", fun go args ->
+            OpaqueOp ([ot_int; ot_int], ot_int, resolve_op "Oadd", List.map go args))
+    ]
+
+
 type what =
       NormalFunc
     (* ctor, ct, num_params, num_fields *)
     | DataConstr of Term.constr * Term.constr * int * int
     (* base_ty, elim, num_params, num_cases *)
     | Eliminator of Term.constr * Term.constr * int * int
+    (* function *)
+    | OpaqueHead of ((Term.constr -> expr) -> Term.constr list -> expr)
 
 let what_map = init_once (fun () ->
     List.flatten (List.map (fun (t : type_defn) ->
@@ -377,6 +398,8 @@ let what_map = init_once (fun () ->
         let elim = resolve_symbol pkg_sourcelifted ("E" ^ t.ename) in
         (func, Eliminator (ty, elim, t.num_params, List.length t.ctors)))
     type_defns
+    @
+    List.map (fun (head, func) -> (head, OpaqueHead func)) (opaque_heads ())
 )
 
 let what_is_this c =
@@ -579,52 +602,7 @@ let reflect_expr ctx evars env name c : func list =
 
         | Constr.App (func, args) -> begin
             let args = Array.to_list args in
-            (* look at the head of the application, and consume some args for
-             * special handling.  then apply the result to any leftover args. *)
-            let (func, args) = match what_is_this func with
-                | NormalFunc ->
-                        let (ty_params, args) = split_while (is_type evars env) args in
-
-                        if List.length ty_params == 0 then
-                            (go' func, args)
-                        else
-                            let c' = Constr.mkApp (func, Array.of_list ty_params) in
-                            (ctx.const_closure c', args)
-
-                | DataConstr (ctor, ct, num_params, num_fields) ->
-                        (* `args` are the arguments to the Constr.
-                         * `args'` are the leftovers. *)
-                        let args' = args in
-                        let (params, args') = split_at num_params args' in
-                        let (args, args') = split_at num_fields args' in
-
-                        let arg_tys = List.map (fun arg ->
-                            let (_, ty_c) = Typing.type_of env evars arg in
-                            reflect_type env ty_c) args in
-                        (Constr (ty_c, ctor, arg_tys, ct, List.map go' args),
-                         args')
-
-                | Eliminator (base_tyn, elim, num_params, num_ctors) ->
-                        let (params, args) = split_at num_params args in
-                        let ([motive], args) = split_at 1 args in
-                        let (cases, args) = split_at num_ctors args in
-                        let ([target], args) = split_at 1 args in
-
-                        let case_tys = List.map (fun case ->
-                            let (_, ty_c) = Typing.type_of env evars case in
-                            let ty_c = Reductionops.nf_beta evars ty_c in
-                            reflect_type env ty_c) cases in
-                        let target_tyn = Constr.mkApp (base_tyn, Array.of_list params) in
-                        let env' = Environ.push_rel (Name.Anonymous, None, target_tyn) env in
-                        (* compute the return type by applying the motive to...
-                         * nothing. hope it doesn't actually use its argument! *)
-                        let ret_ty_c = Reduction.whd_betaiotazeta env'
-                            (Constr.mkApp (motive, Array.of_list [Constr.mkRel 1])) in
-                        let ret_ty = reflect_type env ret_ty_c in
-
-                        (Elim (case_tys, target_tyn, ret_ty, elim, List.map go' cases, go' target),
-                         args)
-            in
+            (* helper function for building an `App` expr *)
             let rec build_app (func : expr) (args : Term.constr list) : expr =
                 match args with
                 | [] -> func
@@ -634,7 +612,55 @@ let reflect_expr ctx evars env name c : func list =
                             func, go' arg) in
                         build_app func' args
             in
-            build_app func args
+            (* look at the head of the application, and consume some args for
+             * special handling.  then apply the result to any leftover args. *)
+            match what_is_this func with
+            | NormalFunc ->
+                    let (ty_params, args) = split_while (is_type evars env) args in
+
+                    if List.length ty_params == 0 then
+                        build_app (go' func) args
+                    else
+                        let c' = Constr.mkApp (func, Array.of_list ty_params) in
+                        build_app (ctx.const_closure c') args
+
+            | DataConstr (ctor, ct, num_params, num_fields) ->
+                    (* `args` are the arguments to the Constr.
+                     * `args'` are the leftovers. *)
+                    let args' = args in
+                    let (params, args') = split_at num_params args' in
+                    let (args, args') = split_at num_fields args' in
+
+                    let arg_tys = List.map (fun arg ->
+                        let (_, ty_c) = Typing.type_of env evars arg in
+                        reflect_type env ty_c) args in
+                    build_app
+                        (Constr (ty_c, ctor, arg_tys, ct, List.map go' args))
+                         args'
+
+            | Eliminator (base_tyn, elim, num_params, num_ctors) ->
+                    let (params, args) = split_at num_params args in
+                    let ([motive], args) = split_at 1 args in
+                    let (cases, args) = split_at num_ctors args in
+                    let ([target], args) = split_at 1 args in
+
+                    let case_tys = List.map (fun case ->
+                        let (_, ty_c) = Typing.type_of env evars case in
+                        let ty_c = Reductionops.nf_beta evars ty_c in
+                        reflect_type env ty_c) cases in
+                    let target_tyn = Constr.mkApp (base_tyn, Array.of_list params) in
+                    let env' = Environ.push_rel (Name.Anonymous, None, target_tyn) env in
+                    (* compute the return type by applying the motive to...
+                     * nothing. hope it doesn't actually use its argument! *)
+                    let ret_ty_c = Reduction.whd_betaiotazeta env'
+                        (Constr.mkApp (motive, Array.of_list [Constr.mkRel 1])) in
+                    let ret_ty = reflect_type env ret_ty_c in
+
+                    build_app
+                        (Elim (case_tys, target_tyn, ret_ty, elim, List.map go' cases, go' target))
+                        args
+
+            | OpaqueHead f -> f go' args
         end
 
         | Constr.Const (const, univ) -> ctx.const_closure c
