@@ -222,6 +222,7 @@ let rec constr_assoc c xs =
             else constr_assoc c xs
 
 let mk ctor cs : Term.constr = Constr.mkApp (ctor (), Array.of_list cs)
+let mk' ctor cs : Term.constr = Constr.mkApp (ctor, Array.of_list cs)
 
 
 let pkg_utopia = ["oeuf";"Utopia"]
@@ -363,14 +364,63 @@ let opaque_heads () =
     let resolve_int = resolve_symbol pkg_cc_integers_int in
     let resolve_op = resolve_symbol pkg_opaque_ops in
 
+    let oo_int_unop name =
+        let unop = resolve_op "Ounop" in
+        let un_name = resolve_op ("Iu" ^ name) in
+        mk' unop [un_name] in
+
+    let oo_int_unop_arg name arg =
+        let unop = resolve_op "Ounop" in
+        let un_name = resolve_op ("Iu" ^ name) in
+        mk' unop [mk' un_name [arg]] in
+
     let oo_int_binop name =
-        let binop = resolve_symbol pkg_opaque_ops "ONbinop" in
-        let bin_name = resolve_symbol pkg_opaque_ops ("Ib" ^ name) in
-        Constr.mkApp (binop, Array.of_list [bin_name]) in
+        let binop = resolve_op "Obinop" in
+        let bin_name = resolve_op ("Ib" ^ name) in
+        mk' binop [bin_name] in
+
+    let int_repr = resolve_int "repr" in
+    let unwrap_repr c =
+        match Constr.kind c with
+        | Constr.App (func, args) ->
+                if Constr.equal func int_repr then
+                    Array.get args 0 (* this should be a `Z` *)
+                else
+                    raise (Reflect_error
+                        (Format.asprintf "expected Int.repr, but got %a" pp_constr c))
+        | _ ->
+                raise (Reflect_error
+                    (Format.asprintf "expected Int.repr, but got %a" pp_constr c))
+    in
 
     [
+        (resolve_int "shl", fun go args ->
+            let [arg; repr_z] = args in
+            let z = unwrap_repr repr_z in
+            OpaqueOp ([ot_int], ot_int, oo_int_unop_arg "ShlC" z, [go arg]));
+        (resolve_int "shru", fun go args ->
+            let [arg; repr_z] = args in
+            let z = unwrap_repr repr_z in
+            OpaqueOp ([ot_int], ot_int, oo_int_unop_arg "ShruC" z, [go arg]));
+        (resolve_int "ror", fun go args ->
+            let [arg; repr_z] = args in
+            let z = unwrap_repr repr_z in
+            OpaqueOp ([ot_int], ot_int, oo_int_unop_arg "RorC" z, [go arg]));
+        (resolve_int "not", fun go args ->
+            OpaqueOp ([ot_int], ot_int, oo_int_unop "Not", List.map go args));
+
+        (resolve_int "and", fun go args ->
+            OpaqueOp ([ot_int; ot_int], ot_int, oo_int_binop "And", List.map go args));
+        (resolve_int "or", fun go args ->
+            OpaqueOp ([ot_int; ot_int], ot_int, oo_int_binop "Or", List.map go args));
+        (resolve_int "xor", fun go args ->
+            OpaqueOp ([ot_int; ot_int], ot_int, oo_int_binop "Xor", List.map go args));
         (resolve_int "add", fun go args ->
-            OpaqueOp ([ot_int; ot_int], ot_int, resolve_op "Oadd", List.map go args))
+            OpaqueOp ([ot_int; ot_int], ot_int, oo_int_binop "Add", List.map go args));
+
+        (resolve_int "repr", fun go args ->
+            let [arg] = args in
+            OpaqueOp ([], ot_int, mk' (resolve_op "Orepr") [arg], []))
     ]
 
 

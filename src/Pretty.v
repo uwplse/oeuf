@@ -1395,31 +1395,106 @@ End value.
 
 Module opaque_oper.
 
+Import oeuf.OpaqueOps.
+
   Definition to_tree {l ty} (o : OpaqueOps.opaque_oper l ty) : tree symbol.t :=
     match o with
-    | OpaqueOps.Oadd => atom (symbol.of_string_unsafe "add")
-    | OpaqueOps.Otest => atom (symbol.of_string_unsafe "test")
+    | Ounop (IuShlC z) =>
+            node [atom (symbol.of_string_unsafe "unop_shlc"); atom (Z_to_symbol z)]
+    | Ounop (IuShruC z) =>
+            node [atom (symbol.of_string_unsafe "unop_shruc"); atom (Z_to_symbol z)]
+    | Ounop (IuRorC z) =>
+            node [atom (symbol.of_string_unsafe "unop_rorc"); atom (Z_to_symbol z)]
+    | Ounop IuNot => node [atom (symbol.of_string_unsafe "unop_not")]
+    | Obinop IbAnd => node [atom (symbol.of_string_unsafe "binop_and")]
+    | Obinop IbOr => node [atom (symbol.of_string_unsafe "binop_or")]
+    | Obinop IbXor => node [atom (symbol.of_string_unsafe "binop_xor")]
+    | Obinop IbAdd => node [atom (symbol.of_string_unsafe "binop_add")]
+    | Otest => node [atom (symbol.of_string_unsafe "test")]
+    | Orepr z => node [atom (symbol.of_string_unsafe "repr"); atom (Z_to_symbol z)]
     end.
 
   Definition from_tree (t : tree symbol.t)
     : option {l : list type & {ty : type & OpaqueOps.opaque_oper l ty}} :=
     match t with
-    | atom s =>
-      if symbol.eq_dec s (symbol.of_string_unsafe "add")
-      then Some (_, (_, OpaqueOps.Oadd))
-      else if symbol.eq_dec s (symbol.of_string_unsafe "test")
-      then Some (_, (_, OpaqueOps.Otest))
-      else None
+    | node (atom tag :: l) =>
+
+            if symbol.eq_dec tag (symbol.of_string_unsafe "unop_shlc") then
+                match l with
+                | [atom s_z] =>
+                        Some ([Opaque Oint], (Opaque Oint,
+                            Ounop (IuShlC (Z_from_symbol s_z))))
+                | _ => None end
+
+            else if symbol.eq_dec tag (symbol.of_string_unsafe "unop_shruc") then
+                match l with
+                | [atom s_z] =>
+                        Some ([Opaque Oint], (Opaque Oint,
+                            Ounop (IuShruC (Z_from_symbol s_z))))
+                | _ => None end
+
+            else if symbol.eq_dec tag (symbol.of_string_unsafe "unop_rorc") then
+                match l with
+                | [atom s_z] =>
+                        Some ([Opaque Oint], (Opaque Oint,
+                            Ounop (IuRorC (Z_from_symbol s_z))))
+                | _ => None end
+
+            else if symbol.eq_dec tag (symbol.of_string_unsafe "unop_not") then
+                match l with
+                | [] => Some ([Opaque Oint], (Opaque Oint, Ounop IuNot))
+                | _ => None end
+
+            else if symbol.eq_dec tag (symbol.of_string_unsafe "binop_and") then
+                match l with
+                | [] => Some ([Opaque Oint; Opaque Oint], (Opaque Oint, Obinop IbAnd))
+                | _ => None end
+
+            else if symbol.eq_dec tag (symbol.of_string_unsafe "binop_or") then
+                match l with
+                | [] => Some ([Opaque Oint; Opaque Oint], (Opaque Oint, Obinop IbOr))
+                | _ => None end
+
+            else if symbol.eq_dec tag (symbol.of_string_unsafe "binop_xor") then
+                match l with
+                | [] => Some ([Opaque Oint; Opaque Oint], (Opaque Oint, Obinop IbXor))
+                | _ => None end
+
+            else if symbol.eq_dec tag (symbol.of_string_unsafe "binop_add") then
+                match l with
+                | [] => Some ([Opaque Oint; Opaque Oint], (Opaque Oint, Obinop IbAdd))
+                | _ => None end
+
+            else if symbol.eq_dec tag (symbol.of_string_unsafe "test") then
+                match l with
+                | [] => Some ([Opaque Oint], (ADT Tbool, Otest))
+                | _ => None end
+
+            else if symbol.eq_dec tag (symbol.of_string_unsafe "repr") then
+                match l with
+                | [atom s_z] =>
+                        Some ([], (Opaque Oint,
+                            Orepr (Z_from_symbol s_z)))
+                | _ => None end
+
+            else None
+
     | _ => None
     end.
 
   Lemma to_from_tree : forall l ty (o : OpaqueOps.opaque_oper l ty),
       from_tree (to_tree o) = Some (l, (ty, o)).
-  Proof. destruct o; simpl; auto. Qed.
+  Proof.
+      destruct o; try destruct op; simpl; auto.
+      all: rewrite Z_to_from_symbol; auto.
+  Qed.
 
   Lemma to_tree_wf : forall l ty (o : OpaqueOps.opaque_oper l ty),
       Forall symbol.wf (to_tree o).
-  Proof. destruct o; simpl; auto. Qed.
+  Proof.
+      destruct o; try destruct op; simpl; auto.
+      all: econstructor; eauto using Z_to_symbol_wf.
+  Qed.
   Hint Resolve to_tree_wf.
 End opaque_oper.
 
