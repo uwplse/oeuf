@@ -10,29 +10,13 @@ Require Import oeuf.OpaqueTypes.
 Require Import oeuf.OpaqueOps.
 
 
-Definition double x := Int.add x x.
-
-Print Oint.
-
-Definition double_expr : expr [] [Opaque Oint] (Opaque Oint) :=
-    OpaqueOp Oadd (hcons (Var Here) (hcons (Var Here) hnil)).
-
-Definition double_body : body_expr [] (Opaque Oint, [], Opaque Oint) :=
-    double_expr.
-
-Definition double_genv : genv [(Opaque Oint, [], Opaque Oint)] :=
-    GenvCons double_body GenvNil.
-
-Open Scope string_scope.
-Definition double_cu := {|
-        types := _;
-        exprs := double_genv;
-        names := ["double_int"]; (* `double` is a reserved word in C *)
-        nfrees := [0]
-        |}.
-
+Definition double (x : int) := x.
 
 Require Import OeufPlugin.OeufPlugin.
+Set Printing All.   (* don't remove this, Oeuf Reflect will break *)
+Time Oeuf Reflect double As double_cu.
+Unset Printing All.
+
 Require Import oeuf.Pretty.
 From PrettyParsing Require Import PrettyParsing.
 
