@@ -1,13 +1,16 @@
 #If we can do this without sudo, the VM boots up faster
 sudo: false
+os: linux
 dist: trusty
 
+#setting it to C seems to keep it from doing extra work
 language: c
 
 before_install:
    - echo "before_install"
 
 install:
+   - ./scripts/install_coq85.sh
    - echo "install"
 
 before_script:
@@ -18,6 +21,10 @@ script:
 
 before_cache:
    - echo "before_cache"
+
+cache:
+  directories:
+    - $HOME/.cache/coq
 
 after_success:
    - echo "after_success"
