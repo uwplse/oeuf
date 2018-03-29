@@ -15,8 +15,9 @@ before_install:
    - echo "before_install"
 
 install:
-   - opam update
+   - opam --version
    - opam init -y --comp=4.06.1
+   - opam update
    - eval $(opam config env)
    - ocaml -version
    - ./scripts/install_coq85.sh
