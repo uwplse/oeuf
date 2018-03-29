@@ -7,21 +7,26 @@ dist: trusty
 language: c
 
 addons:
-  apt:
-    packages:
+  apt : 
+    sources:
+      - sourceline : 'ppa:avsm/ppa' 
+    packages : 
       - opam
-
+      
 before_install:
    - echo "before_install"
 
 install:
+   - echo "install"
    - opam --version
    - opam init -y --comp=4.06.1
    - opam update
    - eval $(opam config env)
    - ocaml -version
    - ./scripts/install_coq85.sh
-   - echo "install"
+   - cd $HOME
+   - git clone "git@github.com:uwplse/StructTact.git"
+   - git clone "git@github.com:wilcoxjay/PrettyParsing.git"
 
 before_script:
    - echo "before_script"
