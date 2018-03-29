@@ -9,13 +9,14 @@ language: c
 addons:
   apt:
     packages:
-      - ocaml
-      - camlp5
+      - opam
 
 before_install:
    - echo "before_install"
 
 install:
+   - opam init -y
+   - eval $(opam config env)
    - ocaml -version
    - ./scripts/install_coq85.sh
    - echo "install"
@@ -30,9 +31,10 @@ before_cache:
    - echo "before_cache"
 
 cache:
+  apt: true
   directories:
     - $HOME/.cache/coq
-  apt:
+    - $HOME/.opam
 
 after_success:
    - echo "after_success"
