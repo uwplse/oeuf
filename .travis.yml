@@ -16,6 +16,8 @@ before_install:
 
 install:
    - opam init -y
+   - opam update
+   - opam switch 4.06.1
    - eval $(opam config env)
    - ocaml -version
    - ./scripts/install_coq85.sh
@@ -33,7 +35,7 @@ before_cache:
 cache:
   apt: true
   directories:
-    - $HOME/.cache/coq
+    - $HOME/.cache/bin
     - $HOME/.opam
 
 after_success:
