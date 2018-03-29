@@ -6,6 +6,13 @@ dist: trusty
 #setting it to C seems to keep it from doing extra work
 language: c
 
+notifications:
+  slack:
+    on_success: always
+    on_failure: always
+  email: false
+  
+
 addons:
   apt : 
     sources:
@@ -19,7 +26,7 @@ before_install:
 install:
    - echo "install"
    - opam --version
-   - opam init -y --comp=4.06.1
+   - opam init -y --comp=4.02.3
    - opam update
    - eval $(opam config env)
    - ocaml -version
