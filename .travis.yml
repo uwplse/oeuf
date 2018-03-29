@@ -10,7 +10,7 @@ addons:
   apt:
     packages:
       - ocaml
-
+      - camlp5
 
 before_install:
    - echo "before_install"
