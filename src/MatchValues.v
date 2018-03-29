@@ -116,6 +116,7 @@ Inductive id_key :=
 | IkFunc (fname : nat)
 | IkRuntime (name : String.string)
 | IkMalloc
+| IkScratch (n : nat)
 .
 
 Definition id_key_eq_dec (a b : id_key) : { a = b } + { a <> b }.
