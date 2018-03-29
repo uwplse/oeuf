@@ -6,6 +6,12 @@ dist: trusty
 #setting it to C seems to keep it from doing extra work
 language: c
 
+addons:
+  apt:
+    packages:
+      - ocaml
+
+
 before_install:
    - echo "before_install"
 
@@ -25,6 +31,7 @@ before_cache:
 cache:
   directories:
     - $HOME/.cache/coq
+  apt:
 
 after_success:
    - echo "after_success"
