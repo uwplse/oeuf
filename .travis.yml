@@ -16,6 +16,7 @@ before_install:
    - echo "before_install"
 
 install:
+   - ocaml -version
    - ./scripts/install_coq85.sh
    - echo "install"
 
