@@ -23,6 +23,7 @@ install:
    - opam update
    - eval $(opam config env)
    - ocaml -version
+   - opam install camlp5
    - ./scripts/install_coq85.sh
    - cd $HOME
    - git clone "git@github.com:uwplse/StructTact.git"
