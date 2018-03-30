@@ -4,7 +4,8 @@ set -evuo pipefail
 IFS=$'\n\t'
 
 
-if ! [ -x "$(command -v ocamlc)" ]; then
+#only run if coq not around
+if ! [ -x "$(command -v coqc)" ]; then
 
     opam init -y --comp=4.02.3
     opam update
