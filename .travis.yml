@@ -29,10 +29,12 @@ before_install:
 
 install:
    - echo "install"
+   - pushd $HOME
    - ./scripts/install_ocaml.sh
    - ./scripts/install_coq85.sh
    - ./scripts/build_struct_tact.sh
    - ./scripts/build_pretty_parsing.sh
+   - popd
 
 before_script:
    - echo "before_script"
