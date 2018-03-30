@@ -11,7 +11,7 @@ if ! [ -x "$(command -v coqc)" ]; then
     tar -xvf coq-8.5pl3.tar.gz
     pushd coq-8.5pl3
     ./configure -bindir ~/.cache/bin -libdir ~/.cache/lib -configdir ~/.cache/config -datadir ~/.cache/data -mandir ~/.cache/man -docdir ~/.cache/doc -emacslib ~/.cache/emacs -coqdocdir ~/.cache/coqdoc
-    make
+    make -j2
     make install
     popd
     popd

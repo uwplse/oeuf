@@ -30,7 +30,6 @@ install:
    - ./scripts/install_ocaml.sh
    - eval $(opam config env)
    - ./scripts/install_coq85.sh
-   - cp $HOME/.cache/coq/coq-8.5pl3/coqc $HOME/.cache/bin/
    - cd $HOME
    # - git clone "git@github.com:uwplse/StructTact.git"
    # - git clone "git@github.com:wilcoxjay/PrettyParsing.git"
