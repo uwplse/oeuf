@@ -10,9 +10,10 @@ if ! [ -x "$(command -v coqc)" ]; then
     pushd $HOME/.cache/coq
     tar -xvf coq-8.5pl3.tar.gz
     pushd coq-8.5pl3
-    ./configure -local -bindir ~/.cache/bin
+    ./configure -bindir ~/.cache/bin -libdir ~/.cache/lib -configdir /dev/null -datadir /dev/null -mandir /dev/null -docdir /dev/null -emacslib /dev/null -coqdocdir /dev/null
     make
     make install
     popd
     popd
+
 fi

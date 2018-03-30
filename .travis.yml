@@ -8,11 +8,12 @@ language: c
 
 notifications:
   slack:
+    rooms:
+      - uw-cse:NtqlntTgcEYOs5LRTK9zhSoJ#oeuf
     on_success: always
     on_failure: always
   email: false
   
-
 addons:
   apt : 
     sources:
@@ -26,12 +27,8 @@ before_install:
 
 install:
    - echo "install"
-   - opam --version
-   - opam init -y --comp=4.02.3
-   - opam update
+   - ./scripts/install_ocaml.sh
    - eval $(opam config env)
-   - ocaml -version
-   - opam install camlp5
    - ./scripts/install_coq85.sh
    - cp $HOME/.cache/coq/coq-8.5pl3/coqc $HOME/.cache/bin/
    - cd $HOME
@@ -42,6 +39,10 @@ before_script:
    - echo "before_script"
 
 script:
+   - which ocaml
+   - ocaml -version
+   - which coqc
+   - coqc --version
    - echo "script"
 
 before_cache:
@@ -50,7 +51,9 @@ before_cache:
 cache:
   apt: true
   directories:
+    - $HOME/.cache/lib
     - $HOME/.cache/bin
+    - $HOME/.cache/coq
     - $HOME/.opam
 
 after_success:
