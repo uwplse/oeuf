@@ -31,8 +31,10 @@ install:
    - echo "install"
    - ./scripts/install_ocaml.sh
    - ./scripts/install_coq85.sh
-   - ./scripts/build_struct_tact.sh
-   - ./scripts/build_pretty_parsing.sh
+   - pushd ..
+   - ./oeuf/scripts/build_struct_tact.sh
+   - ./oeuf/scripts/build_pretty_parsing.sh
+   - popd
 
 before_script:
    - echo "before_script"

@@ -3,8 +3,6 @@
 set -evuo pipefail
 IFS=$'\n\t'
 
-pushd $HOME
-
 if [ ! -d PrettyParsing ]; then
     git clone https://github.com/wilcoxjay/PrettyParsing.git
 fi
@@ -14,5 +12,3 @@ git pull
 ./configure
 make
 popd
-popd
-
