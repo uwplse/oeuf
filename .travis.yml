@@ -28,7 +28,7 @@ before_install:
    - export PATH="$HOME/.opam/4.02.3/bin:$PATH"
 
 install:
-   - echo "install"
+   - echo "install step"
    - ./scripts/install_ocaml.sh
    - ./scripts/install_coq85.sh
    - pushd ..
