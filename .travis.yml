@@ -24,16 +24,14 @@ notifications:
       
 before_install:
    - echo "before_install"
-   - export PATH="$HOME/.cache/bin/:$PATH"
+   - export PATH="$HOME/.cache/bin:$PATH"
+   - export PATH="$HOME/.opam/4.02.3/bin:$PATH"
 
 install:
    - echo "install"
    - ./scripts/install_ocaml.sh
-   - eval $(opam config env)
    - ./scripts/install_coq85.sh
    - cd $HOME
-   # - git clone "git@github.com:uwplse/StructTact.git"
-   # - git clone "git@github.com:wilcoxjay/PrettyParsing.git"
 
 before_script:
    - echo "before_script"
@@ -41,6 +39,8 @@ before_script:
 script:
    - which coqc
    - coqc --version
+   - git clone "git@github.com:uwplse/StructTact.git"
+   - git clone "git@github.com:wilcoxjay/PrettyParsing.git"
    - echo "script"
 
 before_cache:
