@@ -10,5 +10,5 @@ fi
 pushd PrettyParsing
 git pull
 ./configure
-make
+make -j2
 popd

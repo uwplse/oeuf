@@ -11,5 +11,5 @@ fi
 pushd StructTact
 git pull
 ./configure
-make
+make -j2
 popd
