@@ -56,8 +56,8 @@ cache:
     - $HOME/.cache/bin
     - $HOME/.cache/coq
     - $HOME/.opam
-    - $HOME/../StructTact
-    - $HOME/../PrettyParsing
+    # - $HOME/../StructTact
+    # - $HOME/../PrettyParsing
 
 after_success:
    - echo "after_success"
