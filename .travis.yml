@@ -15,12 +15,12 @@ notifications:
   email: false
 
 # uncomment and rebuild if cache gets corrupted
-# addons:
-#   apt : 
-#     sources:
-#       - sourceline : 'ppa:avsm/ppa' 
-#     packages : 
-#       - opam
+addons:
+  apt : 
+    sources:
+      - sourceline : 'ppa:avsm/ppa' 
+    packages : 
+      - opam
       
 before_install:
    - echo "before_install"
