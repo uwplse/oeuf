@@ -39,8 +39,8 @@ before_script:
 script:
    - which coqc
    - coqc --version
-   - git clone "git@github.com:uwplse/StructTact.git"
-   - git clone "git@github.com:wilcoxjay/PrettyParsing.git"
+   - git clone https://github.com/uwplse/StructTact.git
+   - git clone https://github.com/wilcoxjay/PrettyParsing.git
    - echo "script"
 
 before_cache:
