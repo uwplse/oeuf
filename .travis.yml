@@ -13,13 +13,14 @@ notifications:
     on_success: always
     on_failure: always
   email: false
-  
-addons:
-  apt : 
-    sources:
-      - sourceline : 'ppa:avsm/ppa' 
-    packages : 
-      - opam
+
+# uncomment and rebuild if cache gets corrupted
+# addons:
+#   apt : 
+#     sources:
+#       - sourceline : 'ppa:avsm/ppa' 
+#     packages : 
+#       - opam
       
 before_install:
    - echo "before_install"
@@ -38,8 +39,6 @@ before_script:
    - echo "before_script"
 
 script:
-   - which ocaml
-   - ocaml -version
    - which coqc
    - coqc --version
    - echo "script"
