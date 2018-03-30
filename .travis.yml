@@ -31,16 +31,17 @@ install:
    - echo "install"
    - ./scripts/install_ocaml.sh
    - ./scripts/install_coq85.sh
-   - cd $HOME
+   - ./scripts/build_struct_tact.sh
+   - ./scripts/build_pretty_parsing.sh
 
 before_script:
    - echo "before_script"
 
 script:
+   - pwd
+   - ls
    - which coqc
    - coqc --version
-   - git clone https://github.com/uwplse/StructTact.git
-   - git clone https://github.com/wilcoxjay/PrettyParsing.git
    - echo "script"
 
 before_cache:
@@ -53,6 +54,8 @@ cache:
     - $HOME/.cache/bin
     - $HOME/.cache/coq
     - $HOME/.opam
+    - $HOME/StructTact
+    - $HOME/PrettyParsing
 
 after_success:
    - echo "after_success"
