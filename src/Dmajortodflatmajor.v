@@ -18,6 +18,7 @@ Require Import oeuf.FullSemantics.
 Require Import oeuf.OeufMem.
 Require Import oeuf.OpaqueTypes.
 Require Import oeuf.OpaqueOps.
+Require Import oeuf.MemFacts.
 Require oeuf.MemInjProps.
 
 Require Import oeuf.Dmajor.

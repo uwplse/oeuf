@@ -2,6 +2,7 @@ Require Import Psatz.
 Require Import ZArith.
 
 Require Import compcert.lib.Maps.
+Require Import compcert.lib.Coqlib.
 Require Import compcert.common.Values.
 Require Import compcert.common.Memory.
 Require Import compcert.common.Globalenvs.
@@ -173,6 +174,7 @@ Record opaque_oper_impl {atys rty} := MkOpaqueOperImpl {
             Genv.find_funct ge (Vptr fp Int.zero) = Some (External EF_malloc) ->
             length (cmcc_scratch ctx) >= num_scratch_vars ->
             Forall (fun id' => Forall (expr_no_access id') args) (cmcc_scratch ctx) ->
+            list_norepet (cmcc_scratch ctx) ->
             Forall (expr_no_access id) args ->
             plus Cminor.step ge (State f (oo_denote_cminor ctx id args) k sp e m)
                              E0 (State f Sskip k sp (PTree.set id retv e) m')
@@ -1315,6 +1317,7 @@ Lemma opaque_oper_sim_cminor : forall (ge : genv) f ctx id e m m' sp k fp,
     Genv.find_funct ge (Vptr fp Int.zero) = Some (External EF_malloc) ->
     length (cmcc_scratch ctx) >= num_scratch_vars ->
     Forall (fun id' => Forall (expr_no_access id') args) (cmcc_scratch ctx) ->
+    list_norepet (cmcc_scratch ctx) ->
     Forall (expr_no_access id) args ->
     plus Cminor.step ge (State f (opaque_oper_denote_cminor ctx id args) k sp e m)
                      E0 (State f Sskip k sp (PTree.set id retv e) m').
