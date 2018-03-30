@@ -33,8 +33,8 @@ install:
    - opam install camlp5
    - ./scripts/install_coq85.sh
    - cd $HOME
-   - git clone "git@github.com:uwplse/StructTact.git"
-   - git clone "git@github.com:wilcoxjay/PrettyParsing.git"
+   # - git clone "git@github.com:uwplse/StructTact.git"
+   # - git clone "git@github.com:wilcoxjay/PrettyParsing.git"
 
 before_script:
    - echo "before_script"

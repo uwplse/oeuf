@@ -12,7 +12,7 @@ if ! [ -x "$(command -v coqc)" ]; then
     pushd coq-8.5pl3
     ./configure -local -bindir ~/.cache/bin
     make
-    
+    make install
     popd
     popd
 fi
