@@ -15,12 +15,12 @@ notifications:
   email: false
 
 # uncomment and rebuild if cache gets corrupted
-addons:
-  apt : 
-    sources:
-      - sourceline : 'ppa:avsm/ppa' 
-    packages : 
-      - opam
+# addons:
+#   apt : 
+#     sources:
+#       - sourceline : 'ppa:avsm/ppa' 
+#     packages : 
+#       - opam
       
 before_install:
    - echo "before_install"
@@ -44,7 +44,14 @@ script:
    - ls
    - which coqc
    - coqc --version
-   - echo "script"
+   - pushd compcert
+   - ./configure ia32-linux
+   - make -j2
+   - popd
+   - ./configure
+   - make plugin
+   - make -j2
+   
 
 before_cache:
    - echo "before_cache"
