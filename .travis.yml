@@ -22,7 +22,7 @@ addons:
       
 before_install:
    - echo "before_install"
-   - export $PATH=$HOME/cache/bin:$PATH
+   - export PATH="$HOME/cache/bin:$PATH"
 
 install:
    - echo "install"
