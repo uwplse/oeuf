@@ -35,6 +35,10 @@ install:
    - ./oeuf/scripts/build_struct_tact.sh
    - ./oeuf/scripts/build_pretty_parsing.sh
    - popd
+   - pushd compcert
+   - ./configure ia32-linux
+   - make -j2
+   - popd
 
 before_script:
    - echo "before_script"
@@ -44,14 +48,9 @@ script:
    - ls
    - which coqc
    - coqc --version
-   - pushd compcert
-   - ./configure ia32-linux
-   - make -j2
-   - popd
    - ./configure
    - make plugin
    - make -j2
-   
 
 before_cache:
    - echo "before_cache"
@@ -63,6 +62,7 @@ cache:
     - $HOME/.cache/bin
     - $HOME/.cache/coq
     - $HOME/.opam
+    - $HOME/compcert
     # - $HOME/../StructTact
     # - $HOME/../PrettyParsing
 
