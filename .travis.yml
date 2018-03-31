@@ -50,7 +50,7 @@ script:
    - coqc --version
    - ./configure
    - make plugin
-   - make -j2
+   - make -j1
 
 before_cache:
    - echo "before_cache"
