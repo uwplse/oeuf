@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 
-echo NOTE: Skipping building all demos, edit configure file to enable
+#echo NOTE: Skipping building all demos, edit configure file to enable
 #DIRS=(src demos/verdi/echo shim_verif demos/sha256 demos/list_max demos/double_nat)
-DIRS=(src demos/double_int demos/sha256)
+#DIRS=(src demos/double_int demos/sha256)
+DIRS=(src demos/double_int)
 NAMESPACE_compcert=compcert
 NAMESPACE_src=oeuf
 LOCALDEPS=(compcert)
