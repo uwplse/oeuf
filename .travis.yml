@@ -51,7 +51,7 @@ script:
    - ./configure
    - make plugin
    - make -j1 || true
-   - ./_build/sanitize.sh
+   - make -j1 || true
    - make -j1
 
 before_cache:
