@@ -52,9 +52,9 @@ script:
    - coqc --version
    - ./configure
    - make plugin
-   - make -j1 || true
-   - make -j1 || true
-   - make -j1
+   # - make -j1 || true
+   # - make -j1 || true
+   # - make -j1
 
 before_cache:
    - echo "before_cache"
@@ -67,8 +67,8 @@ cache:
     - $HOME/.cache/coq
     - $HOME/.opam
     - $HOME/compcert
-    # - $HOME/../StructTact
-    # - $HOME/../PrettyParsing
+    - $HOME/../StructTact
+    - $HOME/../PrettyParsing
 
 after_success:
    - echo "after_success"
