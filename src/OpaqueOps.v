@@ -174,10 +174,14 @@ Record opaque_oper_impl {atys rty} := MkOpaqueOperImpl {
             Genv.find_funct ge (Vptr fp Int.zero) = Some (External EF_malloc) ->
             length (cmcc_scratch ctx) >= num_scratch_vars ->
             Forall (fun id' => Forall (expr_no_access id') args) (cmcc_scratch ctx) ->
-            list_norepet (cmcc_scratch ctx) ->
             Forall (expr_no_access id) args ->
-            plus Cminor.step ge (State f (oo_denote_cminor ctx id args) k sp e m)
-                             E0 (State f Sskip k sp (PTree.set id retv e) m')
+            list_norepet (cmcc_scratch ctx) ->
+            ~ In id (cmcc_scratch ctx) ->
+            exists e',
+                e' ! id = Some retv /\
+                (forall id', id' <> id -> ~ In id' (cmcc_scratch ctx) -> e' ! id' = e ! id') /\
+                plus Cminor.step ge (State f (oo_denote_cminor ctx id args) k sp e m)
+                                 E0 (State f Sskip k sp e' m')
     }.
 
 Implicit Arguments opaque_oper_impl [].
@@ -387,6 +391,9 @@ simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _ _ _  _ _ _ _  _ _ _ _ _ _).
 - intros. simpl in *.
   repeat (break_match_hyp; try discriminate; []). subst. inject_some.
   do 2 on >eval_exprlist, invc.
+  eexists. repeat eapply conj.
+    { erewrite PTree.gss. reflexivity. }
+    { intros. erewrite PTree.gso by eauto. reflexivity. }
   eapply plus_one. econstructor; eauto.
 
   destruct op.
@@ -544,6 +551,9 @@ simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _ _ _  _ _ _ _  _ _ _ _ _ _).
 - intros. simpl in *.
   repeat (break_match_hyp; try discriminate; []). subst. inject_some.
   do 3 on >eval_exprlist, invc.
+  eexists. repeat eapply conj.
+    { erewrite PTree.gss. reflexivity. }
+    { intros. erewrite PTree.gso by eauto. reflexivity. }
   eapply plus_one. econstructor; eauto.
 
   destruct op.
@@ -691,6 +701,10 @@ simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _ _ _  _ _ _ _  _ _ _ _ _ _).
   do 2 on >eval_exprlist, invc.
   inject_some.
 
+  eexists. repeat eapply conj.
+    { erewrite PTree.gss. reflexivity. }
+    { intros. erewrite PTree.gso by eauto. reflexivity. }
+
   eapply plus_left. 3: eapply E0_E0_E0. {
     econstructor.
     - econstructor; eauto.
@@ -752,6 +766,9 @@ simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _ _ _  _ _ _ _  _ _ _ _ _ _).
 - intros. simpl in *. inject_some. eexists. split; eauto. econstructor.
 - intros. simpl in *. inject_some. eexists _, _. split; eauto. do 2 econstructor.
 - intros. simpl in *. inject_some.
+  eexists. repeat eapply conj.
+    { erewrite PTree.gss. reflexivity. }
+    { intros. erewrite PTree.gso by eauto. reflexivity. }
   eapply plus_one. econstructor. econstructor. simpl. reflexivity.
 Defined.
 
@@ -830,6 +847,16 @@ eapply HS.
   break_if; try reflexivity. lia.
 Qed.
 
+Lemma int_iter_equation' : forall A f n (x : A),
+    int_iter f n x =
+    if Int.eq n Int.zero then x else int_iter f (Int.sub n Int.one) (f x).
+induction n using int_peano_rect; intros.
+- rewrite int_iter_equation. rewrite Int.eq_true. reflexivity.
+- rewrite int_iter_equation. rewrite Int.eq_false by eauto.
+  rewrite IHn. rewrite int_iter_equation with (n := Int.sub n Int.one).
+  destruct (Int.eq _ _); reflexivity.
+Qed.
+
 Lemma int_to_nat_iter : forall i,
     Z.to_nat (Int.unsigned i) = int_iter S i O.
 induction i using int_peano_rect; rewrite int_iter_equation.
@@ -886,6 +913,194 @@ eapply Mem.store_valid_block_1; eauto.
 eapply Mem.valid_new_block; eauto.
 Qed.
 
+Definition int_to_nat_loop ctx id tmp counter :=
+    (Sloop
+        (Sifthenelse (Ebinop (Ocmpu Ceq) (Evar counter) (Econst (Ointconst Int.zero)))
+            (Sexit 0)
+            (Sseq (Sseq
+                (Sassign tmp (Evar id))
+                (build_constr_cminor (cmcc_malloc_id ctx) id Int.one [Evar tmp]))
+                (Sassign counter (Ebinop
+                    Osub (Evar counter) (Econst (Ointconst Int.one))))
+            )
+        )
+    ).
+
+
+Lemma int_to_nat_loop_effect_once :
+    forall ge f k sp malloc_fp i e m m' ctx id tmp counter oldv newv,
+    Genv.find_symbol ge (cmcc_malloc_id ctx) = Some malloc_fp ->
+    Genv.find_funct ge (Vptr malloc_fp Int.zero) = Some (External EF_malloc) ->
+    (Int.unsigned i > 0)%Z ->
+    id <> tmp ->
+    id <> counter ->
+    tmp <> counter ->
+    e ! id = Some oldv ->
+    e ! counter = Some (Vint i) ->
+    build_constr m Int.one [oldv] = Some (m', newv) ->
+    let e' := PTree.set counter (Vint (Int.sub i Int.one))
+        (PTree.set id newv
+        (PTree.set tmp oldv
+        e)) in
+    plus Cminor.step ge
+        (State f (int_to_nat_loop ctx id tmp counter) k sp e m)
+     E0 (State f (int_to_nat_loop ctx id tmp counter) k sp e' m').
+intros0 Hmalloc_sym Hmalloc_funct
+    Hpos Hid_tmp Hid_counter Htmp_counter Hid_val Hcounter_val Hbuild.
+simpl.
+
+(* enter loop *)
+eapply plus_left. 3: eapply E0_E0_E0. { econstructor. }
+remember (Kseq _ _) as k_loop.
+
+(* evaluate if condition *)
+eapply star_left. 3: eapply E0_E0_E0. {
+  econstructor.
+  - econstructor; eauto.
+    + econstructor; eauto.
+    + econstructor; eauto. reflexivity.
+    + simpl. reflexivity.
+  - unfold Val.cmpu. unfold Val.cmpu_bool. unfold Int.cmpu.
+    rewrite Int.eq_false; cycle 1.
+      { intro HH. rewrite HH in Hpos. rewrite Int.unsigned_zero in Hpos. lia. }
+    econstructor.
+}
+
+rewrite Int.eq_true. simpl.
+
+(* loop body *)
+eapply star_left. 3: eapply E0_E0_E0. { econstructor. }
+eapply star_left. 3: eapply E0_E0_E0. { econstructor. }
+eapply star_left. 3: eapply E0_E0_E0. { econstructor. econstructor; eauto. }
+eapply star_left. 3: eapply E0_E0_E0. { econstructor. }
+eapply star_trans. 3: eapply E0_E0_E0. {
+  eapply plus_star. eapply build_constr_cminor_effect.
+  - eassumption.
+  - econstructor. 2: econstructor.
+    econstructor. rewrite PTree.gss; eauto.
+  - econstructor; eauto.
+  - rewrite Zlength_correct. simpl. eapply max_arg_count_big. lia.
+  - exact Hmalloc_sym.
+  - exact Hmalloc_funct.
+}
+eapply star_left. 3: eapply E0_E0_E0. { econstructor. }
+eapply star_left. 3: eapply E0_E0_E0. {
+  econstructor.  econstructor.
+  - econstructor. rewrite 2 PTree.gso by eauto. eauto.
+  - econstructor. reflexivity.
+  - simpl. reflexivity.
+}
+
+subst k_loop.
+eapply star_left. 3: eapply E0_E0_E0. { econstructor. }
+eapply star_refl.
+Qed.
+
+Lemma int_iter_some : forall A f n (x : option A),
+    f None = None ->
+    int_iter f n x <> None ->
+    x <> None.
+induction n using int_peano_rect; intros.
+- rewrite int_iter_equation, Int.eq_true in *. auto.
+- rewrite int_iter_equation, Int.eq_false in * by eauto.
+  eapply IHn; eauto. congruence.
+Qed.
+
+Lemma int_iter_some_inv : forall A f n (x : option A) z (Q : Prop),
+    (forall y,
+        x = Some y ->
+        int_iter f n (Some y) = Some z ->
+        Q) ->
+    f None = None ->
+    int_iter f n x = Some z ->
+    Q.
+intros0 HQ Hf Hiter.
+
+assert (x <> None).
+  { eapply int_iter_some with (n := n); eauto. congruence. }
+
+destruct x eqn:Hx; try congruence.
+eauto.
+Qed.
+
+
+Lemma int_to_nat_loop_effect :
+    forall ge f k sp malloc_fp ctx id tmp counter i e m m' oldv newv,
+    Genv.find_symbol ge (cmcc_malloc_id ctx) = Some malloc_fp ->
+    Genv.find_funct ge (Vptr malloc_fp Int.zero) = Some (External EF_malloc) ->
+    id <> tmp ->
+    id <> counter ->
+    tmp <> counter ->
+    e ! id = Some oldv ->
+    e ! counter = Some (Vint i) ->
+    int_iter (fun m_v => match m_v with
+        | Some (m, v) => build_constr m Int.one [v]
+        | None => None
+        end) i (Some (m, oldv)) = Some (m', newv) ->
+    exists e',
+        e' ! id = Some newv /\
+        (forall id', ~ In id' [id; tmp; counter] -> e' ! id' = e ! id') /\
+        plus Cminor.step ge
+            (State f (int_to_nat_loop ctx id tmp counter) (Kblock k) sp e m)
+         E0 (State f Sskip k sp e' m').
+induction i using int_peano_rect;
+intros0 Hmalloc_sym Hmalloc_funct
+    Hid_tmp Hid_counter Htmp_counter Hid_val Hcounter_val Hbuild.
+
+- rewrite int_iter_equation, Int.eq_true in Hbuild. inject_some.
+  exists e. repeat eapply conj.
+  + eauto.
+  + intros. reflexivity.
+  + eapply plus_left. 3: eapply E0_E0_E0. { econstructor. }
+
+    (* evaluate if condition *)
+    eapply star_left. 3: eapply E0_E0_E0. {
+      econstructor.
+      - econstructor; eauto.
+        + econstructor; eauto.
+        + econstructor; eauto. reflexivity.
+        + simpl. reflexivity.
+      - unfold Val.cmpu. unfold Val.cmpu_bool. unfold Int.cmpu.
+        rewrite Int.eq_true.  econstructor.
+    }
+
+    (* exit *)
+    rewrite Int.eq_false; cycle 1.
+      { assert (Int.unsigned Int.one <> Int.unsigned Int.zero).
+        - rewrite Int.unsigned_zero, Int.unsigned_one. lia.
+        - congruence. }
+    simpl.
+    eapply star_left. 3: eapply E0_E0_E0. { econstructor. }
+    eapply star_left. 3: eapply E0_E0_E0. { econstructor. }
+    eapply star_refl.
+
+- rewrite int_iter_equation', Int.eq_false in Hbuild by eauto.
+  invc_using int_iter_some_inv Hbuild; [ | eauto].
+  destruct y as (m1, midv).
+
+  fwd eapply int_to_nat_loop_effect_once with (id := id) (tmp := tmp) (counter := counter);
+    eauto.
+    { destruct (Int.eq i Int.zero) eqn:?.
+        { exfalso. rewrite Int.eq_false in *; eauto. discriminate. }
+      unfold Int.eq in *. destruct (zeq _ _); try discriminate.
+      rewrite Int.unsigned_zero in *.
+      fwd eapply Int.unsigned_range with (i := i). lia. }
+  remember (PTree.set counter _ _) as e'. cbv zeta in *.
+
+  fwd eapply IHi with (e := e') (m := m1) (m' := m') (oldv := midv) (newv := newv) as HH;
+    eauto.
+    { subst e'. rewrite PTree.gso, PTree.gss by eauto. reflexivity. }
+    { subst e'. rewrite PTree.gss. reflexivity. }
+    destruct HH as (e'' & ? & He'' & ?).
+
+  exists e''. repeat eapply conj; eauto.
+    { intros. rewrite He'' by auto. on (~ In id' _), fun H => simpl in H.
+      subst e'. rewrite 3 PTree.gso; eauto.
+      on (~ _), fun H => clear -H. firstorder eauto. }
+
+  eauto using plus_trans.
+Qed.
+
 Definition impl_int_to_nat : opaque_oper_impl [Opaque Oint] (ADT Tnat).
 simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _ _ _  _ _ _ _  _ _ _ _ _ _).
 
@@ -937,17 +1152,7 @@ simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _ _ _  _ _ _ _  _ _ _ _ _ _).
     | [e] => Sseq (Sseq
             (Sassign counter e)
             (build_constr_cminor (cmcc_malloc_id ctx) id Int.zero []))
-            (Sblock (Sloop
-                (Sifthenelse (Ebinop (Ocmpu Ceq) (Evar counter) (Econst (Ointconst Int.zero)))
-                    (Sexit 0)
-                    (Sseq (Sseq
-                        (Sassign tmp (Evar id))
-                        (build_constr_cminor (cmcc_malloc_id ctx) id Int.one [Evar id]))
-                        (Sassign counter (Ebinop
-                            Osub (Evar counter) (Econst (Ointconst Int.one))))
-                    )
-                )
-            ))
+            (Sblock (int_to_nat_loop ctx id tmp counter))
     | _ => Sskip
     end).
 
@@ -1114,37 +1319,70 @@ simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _ _ _  _ _ _ _  _ _ _ _ _ _).
       destruct HH as (ret'' & m'' & ? & ?).
     eauto.
 
-- admit. (*intros. simpl in *.
-  do 5 (break_match_hyp; try discriminate).  on (_ * _)%type, fun H => destruct H.
+- intros. simpl in *.
+  destruct argvs as [| argv argvs ]; [ discriminate | ].
+  destruct argv; try discriminate.
+  destruct argvs; [ | discriminate ].
   do 2 on >eval_exprlist, invc.
-  inject_some.
+  break_match; [ | exfalso; congruence ].
 
-  eapply plus_left. 3: eapply E0_E0_E0. {
-    econstructor.
-    - econstructor; eauto.
-        { econstructor. simpl. reflexivity. }
-      simpl. unfold Val.cmpu. simpl. reflexivity.
-    - simpl.
-      instantiate (1 := Int.eq i Int.zero).
-      destruct (Int.eq _ _); econstructor.
+  fwd eapply build_constr_ok with (ge := ge) (tag := Int.zero) (args := []) as HH; eauto.
+    { change (Zlength []) with 0%Z. eapply max_arg_count_big. lia. }
+    destruct HH as (v_cur & m_cur & Hbuild & ?).
+  rename H into Hiter.
+  rewrite Hbuild in Hiter.
+
+  (* this is what the env will look like when we start the loop. *)
+  set (e' := (PTree.set id v_cur
+        (PTree.set (nth 0 (cmcc_scratch ctx) 1%positive) (Vint i)
+        e))).
+
+  set (counter := nth 0 (cmcc_scratch ctx) 1%positive).
+  set (tmp := nth 1 (cmcc_scratch ctx) 1%positive).
+  assert (HH : exists scr, cmcc_scratch ctx = counter :: tmp :: scr).
+    { destruct (cmcc_scratch ctx) as [| s0 [| s1 scr ]];
+        [ exfalso; simpl in *; unfold num_scratch_vars in *; lia.. | ].
+      exists scr. reflexivity. }
+    destruct HH as (scr & Hscr).
+
+  assert (id <> counter /\ id <> tmp /\ counter <> tmp).
+    { rewrite Hscr in *.
+      on (~ In _ _), fun H => rename H into HH1.
+      on >list_norepet, fun H => rename H into HH2.
+      clear -HH1 HH2.
+      simpl in *. on >list_norepet, invc. firstorder. }
+    break_and.
+
+  fwd eapply int_to_nat_loop_effect
+    with (e := e') (id := id) (tmp := tmp) (counter := counter) as HH; eauto.
+    { subst e'. rewrite PTree.gss. reflexivity. }
+    { subst e'. rewrite PTree.gso, PTree.gss; eauto. }
+
+  destruct HH as (e'' & ? & He'' & ?).
+  exists e''. repeat eapply conj; eauto.
+    { rewrite Hscr. intros. simpl in *.
+      rewrite He'' by firstorder.
+      subst e'. rewrite 2 PTree.gso by firstorder. reflexivity. }
+
+  eapply plus_left. 3: eapply E0_E0_E0. { econstructor. }
+  eapply star_left. 3: eapply E0_E0_E0. { econstructor. }
+  eapply star_left. 3: eapply E0_E0_E0. { econstructor. eauto. }
+  eapply star_left. 3: eapply E0_E0_E0. { econstructor. }
+  eapply star_trans. 3: eapply E0_E0_E0. {
+    eapply plus_star. eapply build_constr_cminor_effect; eauto.
+    - econstructor.
+    - change (Zlength []) with 0%Z. eapply max_arg_count_big. clear. lia.
   }
+  eapply star_left. 3: eapply E0_E0_E0. { econstructor. }
+  eapply star_left. 3: eapply E0_E0_E0. { econstructor. }
 
-  replace (if Int.eq i _ then _ else _) with
-      (build_constr_cminor malloc_id id
-        (if Int.eq i Int.zero then Int.zero else Int.one) []); cycle 1.
-    { destruct (Int.eq _ _); reflexivity. }
+  (* run the loop *)
+  eapply star_trans. 3: eapply E0_E0_E0. { eapply plus_star. eassumption. }
 
-  eapply plus_star. eapply build_constr_cminor_effect.
-  + eauto.
-  + econstructor.
-  + econstructor.
-  + rewrite Zlength_correct. simpl. eapply max_arg_count_big. lia.
-  + eauto.
-  + eauto.
-    *)
+  eapply star_refl.
+Qed.
 
-(*Defined.*)
-Admitted.
+(* TODO *)
 
 
 
