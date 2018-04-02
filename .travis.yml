@@ -66,7 +66,7 @@ cache:
     - $HOME/.cache/bin
     - $HOME/.cache/coq
     - $HOME/.opam
-    - $HOME/compcert
+    - $HOME/build/uwplse/oeuf/compcert
 
 after_success:
    - echo "after_success"
