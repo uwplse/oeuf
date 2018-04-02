@@ -15,12 +15,12 @@ notifications:
   email: false
 
 # uncomment and rebuild if cache gets corrupted
-# addons:
-#   apt : 
-#     sources:
-#       - sourceline : 'ppa:avsm/ppa' 
-#     packages : 
-#       - opam
+addons:
+  apt : 
+    sources:
+      - sourceline : 'ppa:avsm/ppa' 
+    packages : 
+      - opam
       
 before_install:
    - echo "before_install"
@@ -67,8 +67,6 @@ cache:
     - $HOME/.cache/coq
     - $HOME/.opam
     - $HOME/compcert
-    - $HOME/../StructTact
-    - $HOME/../PrettyParsing
 
 after_success:
    - echo "after_success"
