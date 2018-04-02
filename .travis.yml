@@ -26,6 +26,8 @@ before_install:
    - echo "before_install"
    - export PATH="$HOME/.cache/bin:$PATH"
    - export PATH="$HOME/.opam/4.02.3/bin:$PATH"
+   - ocaml -version
+   - coqc --version
 
 install:
    - echo "install step"
