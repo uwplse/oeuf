@@ -55,13 +55,13 @@ Record opaque_type_impl {oty} := MkOpaqueTypeImpl {
     ot_value_32bit : forall ov cv m,
         ot_value_inject ov cv m ->
         Val.load_result Mint32 cv = cv;
-    ot_mem_inj : forall mi m m' cv ov,
-        ot_value_inject ov cv m ->
-        Mem.mem_inj mi m m' ->
-        (forall b, Mem.valid_block m b -> mi b <> None) ->
-        exists cv',
-            ot_value_inject ov cv' m' /\
-            Val.inject mi cv cv';
+    (* ot_mem_inj : forall mi m m' cv ov, *)
+    (*     ot_value_inject ov cv m -> *)
+    (*     Mem.mem_inj mi m m' -> *)
+    (*     (forall b, Mem.valid_block m b -> mi b <> None) -> *)
+    (*     exists cv', *)
+    (*         ot_value_inject ov cv' m' /\ *)
+    (*         Val.inject mi cv cv'; *)
     ot_mem_inj_strict : forall mi m m' cv ov,
         ot_value_inject ov cv m ->
         Mem.mem_inj mi m m' ->
@@ -77,7 +77,7 @@ Implicit Arguments opaque_type_impl [].
 
 
 Definition impl_int : opaque_type_impl Oint.
-simple refine (MkOpaqueTypeImpl _  _  _ _ _ _ _ _).
+simple refine (MkOpaqueTypeImpl _  _  _ _ _ _ _).
 
 - exact (fun ov cv m => cv = Vint ov).
 
@@ -87,15 +87,13 @@ simple refine (MkOpaqueTypeImpl _  _  _ _ _ _ _ _).
 
 - intros. simpl in *. subst cv. reflexivity.
 
-- intros. simpl in *. exists cv. subst cv. split; eauto.
-
 - intros. simpl in *. subst cv. eauto. 
 
 - intros. simpl in *. discriminate.
 Defined.
 
 Definition impl_double : opaque_type_impl Odouble.
-  simple refine (MkOpaqueTypeImpl _ _ _ _ _ _ _ _).
+  simple refine (MkOpaqueTypeImpl _ _ _ _ _ _ _).
   
   - intros ov cv m.
     exact (exists b,
@@ -109,18 +107,27 @@ Definition impl_double : opaque_type_impl Odouble.
       try congruence.
     inversion H6. subst.
     exists b2.
+    unfold same_offsets in *.
+    remember H4 as Hmi.
+    clear HeqHmi.
+    eapply H2 in H4. subst delta.
     eexists.
-    split. Focus 2.
+    split.
+    reflexivity.
     eapply Mem.load_inj in H3; eauto.
     break_exists.
     break_and.
     inversion H0. subst.
     rewrite <- H.
     f_equal.
-    instantiate (1 := (Int.add x0 (Int.repr delta))).
-    admit.
-
+    rewrite Int.add_unsigned.
+    fold Int.zero.
+    rewrite Int.unsigned_zero.
+    rewrite Int.unsigned_repr.
     reflexivity.
+    rewrite Z.add_0_r.
+    eapply Int.unsigned_range_2.
+
   - intros. simpl in H.
     repeat break_exists.
     repeat break_and.
@@ -133,30 +140,6 @@ Definition impl_double : opaque_type_impl Odouble.
 
     reflexivity.
 
-  - intros. simpl in *.
-    repeat break_exists.
-    break_and.
-
-    assert (Mem.valid_block m x).
-    eapply Mem.valid_access_valid_block.
-    eapply Mem.valid_access_implies.
-    eapply Mem.load_valid_access; eauto.
-    econstructor.
-    eapply H1 in H3. destruct (mi x) eqn:?; try congruence.
-    destruct p.
-    clear H3. clear H1.
-    eapply Mem.load_inj in H2; eauto.
-    break_exists.
-    break_and.
-    inversion H2. subst.
-    eexists. split. eexists.
-    eexists.
-    split. reflexivity.
-    rewrite <- H1. f_equal.
-    instantiate (1 := (Int.add x0 (Int.repr z))).
-    admit.
-    
-    econstructor; eauto.
 
   - intros.
     simpl in H.
@@ -192,8 +175,7 @@ Definition impl_double : opaque_type_impl Odouble.
     eapply Mem.valid_access_implies.
     eapply Mem.load_valid_access; eauto.
     econstructor.
-
-Admitted.
+Defined.
   
 Definition get_opaque_type_impl oty :=
     match oty with
@@ -234,16 +216,16 @@ intros. unfold opaque_type_value_inject in *.
 eapply (ot_value_32bit impl); eauto.
 Qed.
 
-Lemma opaque_type_mem_inj : forall mi m m' cv ov,
-    opaque_type_value_inject ov cv m ->
-    Mem.mem_inj mi m m' ->
-    (forall b, Mem.valid_block m b -> mi b <> None) ->
-    exists cv',
-        opaque_type_value_inject ov cv' m' /\
-        Val.inject mi cv cv'.
-intros. unfold opaque_type_value_inject in *.
-eapply (ot_mem_inj impl); eauto.
-Qed.
+(* Lemma opaque_type_mem_inj : forall mi m m' cv ov, *)
+(*     opaque_type_value_inject ov cv m -> *)
+(*     Mem.mem_inj mi m m' -> *)
+(*     (forall b, Mem.valid_block m b -> mi b <> None) -> *)
+(*     exists cv', *)
+(*         opaque_type_value_inject ov cv' m' /\ *)
+(*         Val.inject mi cv cv'. *)
+(* intros. unfold opaque_type_value_inject in *. *)
+(* eapply (ot_mem_inj impl); eauto. *)
+(* Qed. *)
 
 Lemma opaque_type_mem_inj_strict : forall mi m m' cv ov,
     opaque_type_value_inject ov cv m ->
