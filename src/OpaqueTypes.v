@@ -2,6 +2,7 @@ Require Import compcert.common.AST.
 Require Import compcert.common.Values.
 Require Import compcert.common.Memory.
 Require Import oeuf.SafeInt.
+Require Import oeuf.SafeDouble.
 
 Require Import ZArith.
 
@@ -12,6 +13,7 @@ Require Import oeuf.StuartTact.
 
 Inductive opaque_type_name : Set :=
 | Oint
+| Odouble
 .
 
 Definition opaque_type_name_eq_dec (n1 n2 : opaque_type_name) :
@@ -24,12 +26,14 @@ Hint Resolve opaque_type_name_eq_dec : eq_dec.
 Definition opaque_type_denote oty : Type :=
     match oty with
     | Oint => int
+    | Odouble => float
     end.
 
 Definition opaque_type_denote_eq_dec oty (x y : opaque_type_denote oty) :
         { x = y } + { x <> y }.
 destruct oty; simpl in x, y.
 - eapply Int.eq_dec.
+- eapply Float.eq_dec.
 Defined.
 
 
@@ -90,12 +94,112 @@ simple refine (MkOpaqueTypeImpl _  _  _ _ _ _ _ _).
 - intros. simpl in *. discriminate.
 Defined.
 
+Definition impl_double : opaque_type_impl Odouble.
+  simple refine (MkOpaqueTypeImpl _ _ _ _ _ _ _ _).
+  
+  - intros ov cv m.
+    exact (exists b,
+              exists ofs,
+                cv = Vptr b ofs /\
+                Mem.load Mfloat64 m b (Int.unsigned ofs) = Some (Vfloat ov)).
+  - intros. simpl in *.
+    repeat break_exists.
+    repeat break_and.
+    on >Val.inject, invc;
+      try congruence.
+    inversion H6. subst.
+    exists b2.
+    eexists.
+    split. Focus 2.
+    eapply Mem.load_inj in H3; eauto.
+    break_exists.
+    break_and.
+    inversion H0. subst.
+    rewrite <- H.
+    f_equal.
+    instantiate (1 := (Int.add x0 (Int.repr delta))).
+    admit.
 
+    reflexivity.
+  - intros. simpl in H.
+    repeat break_exists.
+    repeat break_and.
+    congruence.
+
+  - intros. simpl in H.
+    repeat break_exists.
+    break_and.
+    subst cv.
+
+    reflexivity.
+
+  - intros. simpl in *.
+    repeat break_exists.
+    break_and.
+
+    assert (Mem.valid_block m x).
+    eapply Mem.valid_access_valid_block.
+    eapply Mem.valid_access_implies.
+    eapply Mem.load_valid_access; eauto.
+    econstructor.
+    eapply H1 in H3. destruct (mi x) eqn:?; try congruence.
+    destruct p.
+    clear H3. clear H1.
+    eapply Mem.load_inj in H2; eauto.
+    break_exists.
+    break_and.
+    inversion H2. subst.
+    eexists. split. eexists.
+    eexists.
+    split. reflexivity.
+    rewrite <- H1. f_equal.
+    instantiate (1 := (Int.add x0 (Int.repr z))).
+    admit.
+    
+    econstructor; eauto.
+
+  - intros.
+    simpl in H.
+    repeat break_exists.
+    break_and. subst cv.
+    
+    assert (Mem.valid_block m x).
+    eapply Mem.valid_access_valid_block.
+    eapply Mem.valid_access_implies.
+    eapply Mem.load_valid_access; eauto.
+    econstructor.
+
+    eapply H1 in H.
+    econstructor; eauto.
+    unfold Int.add.
+    rewrite Int.unsigned_repr.
+    rewrite Z.add_0_r.
+    rewrite Int.repr_unsigned.
+    reflexivity.
+    unfold Int.max_unsigned.
+    unfold Int.modulus.
+    simpl.
+    omega.
+
+  - intros.
+    simpl in H.
+    repeat break_exists.
+    break_and.
+    inversion H.
+    subst.
+    
+    eapply Mem.valid_access_valid_block.
+    eapply Mem.valid_access_implies.
+    eapply Mem.load_valid_access; eauto.
+    econstructor.
+
+Admitted.
+  
 Definition get_opaque_type_impl oty :=
     match oty with
     | Oint => impl_int
+    | Odouble => impl_double
     end.
-
 
 
 Section BY_NAME.
