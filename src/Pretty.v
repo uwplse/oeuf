@@ -1184,56 +1184,104 @@ Module int.
 End int.
 
 
+Module bool.
+
+  Definition to_tree (b : bool) : tree symbol.t :=
+    if b then atom (symbol.of_string_unsafe "true")
+    else atom (symbol.of_string_unsafe "false").
+
+  Definition from_tree (t : tree symbol.t) : bool :=
+    match t with
+    | atom s =>
+      if symbol.eq_dec s (symbol.of_string_unsafe "true")
+      then true
+      else false
+    | _ => false
+    end.
+
+  Lemma to_from_tree :
+    forall b,
+      from_tree (to_tree b) = b.
+  Proof.
+    intros; destruct b; reflexivity.
+  Qed.
+
+  Lemma to_tree_wf :
+    forall b,
+      Forall symbol.wf (to_tree b).
+  Proof.
+    intros; destruct b; econstructor; eauto.
+  Qed.
+  Hint Resolve to_tree_wf.
+End bool.
+
 Module double.
 
-  (* Print Floats.float. *)
-  (* Print Fappli_IEEE_bits.binary64. *)
-  (* Print Fappli_IEEE.binary_float. *)
-
-  (* Print atom. *)
-  (* Print symbol.t. *)
-
-  (* Check Fappli_IEEE.B754_zero. *)
-  (* Check Fappli_IEEE.B754_nan. *)
-  
   Definition to_tree (f : Floats.float) : tree symbol.t :=
     match f with
     | Fappli_IEEE.B754_zero _ _ b =>
-      if b then atom (symbol.of_string_unsafe "float_zero_t")
-      else atom (symbol.of_string_unsafe "float_zero_f")
+      node ((atom (symbol.of_string_unsafe "float_zero")) :: (bool.to_tree b) :: nil)
     | Fappli_IEEE.B754_infinity _ _ b =>
-      if b then atom (symbol.of_string_unsafe "float_inf_t")
-      else atom (symbol.of_string_unsafe "float_inf_f")
+      node ((atom (symbol.of_string_unsafe "float_inf")) :: (bool.to_tree b) :: nil)
     | Fappli_IEEE.B754_nan _ _ b _ =>
-      if b then atom (symbol.of_string_unsafe "NAN_t")
-      else atom (symbol.of_string_unsafe "NAN_f")
+      node ((atom (symbol.of_string_unsafe "float_NAN")) :: (bool.to_tree b) :: nil)
     | Fappli_IEEE.B754_finite _ _ b m e _ =>
-      (*let bs := if b then "_t" else "_f" in*)
-      atom (Z_to_symbol e)
+      node ((atom (symbol.of_string_unsafe "float_fin")) :: (bool.to_tree b) :: (atom (pos_to_symbol m)) :: (atom (Z_to_symbol e)) :: nil)
     end.
 
+  Lemma nan_pl_53 :
+    Fappli_IEEE.nan_pl 53.
+  Proof.
+    exists BinNums.xH.
+    simpl.
+    unfold Fappli_IEEE.nan_pl.
+    unfold BinInt.Z.ltb.
+    simpl.
+    reflexivity.
+  Qed.
 
   Definition from_tree (t : tree symbol.t) : option Floats.float :=
     match t with
-    (*| atom s => Some (Integers.Int.repr (Z_from_symbol s))*)
+    | node ((atom tag) :: b :: nil) =>
+      if symbol.eq_dec tag (symbol.of_string_unsafe "float_zero")
+      then Some (Fappli_IEEE.B754_zero 53 1024 (bool.from_tree b))
+      else
+        if symbol.eq_dec tag (symbol.of_string_unsafe "float_inf")
+        then Some (Fappli_IEEE.B754_infinity 53 1024 (bool.from_tree b))
+        else
+          if symbol.eq_dec tag (symbol.of_string_unsafe "float_NAN")
+          then Some (Fappli_IEEE.B754_nan 53 1024 (bool.from_tree b) nan_pl_53)
+          else
+            None
+        
     | _ => None
     end.
 
   Lemma to_from_tree : forall i, from_tree (to_tree i) = Some i.
   Proof.
+    intros.
+    destruct i; simpl;
+      try rewrite bool_to_from_tree; eauto.
+
+    admit. (* idk *)
+    admit.
   Admitted.
 
   Lemma to_tree_wf:
     forall i, Forall symbol.wf (to_tree i).
   Proof.
-  Admitted.
-
+    intros.
+    unfold to_tree.
+    destruct i; simpl;
+      econstructor; eauto.
+    repeat (econstructor; eauto using pos_to_symbol_wf).
+    eapply Z_to_symbol_wf.
+  Qed.
   Hint Resolve to_tree_wf.
 End double.
 
 Module opaque_type_denote.
 
-  
   Definition to_tree {oty} : opaque_type_denote oty -> tree symbol.t :=
     match oty with
     | Oint => int.to_tree
