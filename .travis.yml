@@ -15,12 +15,12 @@ notifications:
   email: false
 
 # uncomment and rebuild if cache gets corrupted
-# addons:
-#   apt : 
-#     sources:
-#       - sourceline : 'ppa:avsm/ppa' 
-#     packages : 
-#       - opam
+addons:
+  apt : 
+    sources:
+      - sourceline : 'ppa:avsm/ppa' 
+    packages : 
+      - opam
       
 before_install:
    - echo "before_install"
@@ -39,7 +39,7 @@ install:
    - popd
    - pushd compcert
    - ./configure ia32-linux
-   - make -j2
+   - make proof -j2
    - popd
 
 before_script:
