@@ -475,6 +475,9 @@ simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _ _ _  _ _ _ _  _ _ _ _ _ _).
   repeat on >Forall2, invc. simpl in *. repeat (break_match; try contradiction).
   fix_existT. subst. inject_some.
   eexists; split; eauto. simpl. eauto.
+  fix_existT. subst. inject_some.
+  eexists; split; eauto. simpl. eauto.
+  congruence. congruence.
 
 - (* mem_inj_id *)
   intros. simpl in *. repeat (break_match; try discriminate; []). subst.
@@ -567,6 +570,15 @@ simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _ _ _  _ _ _ _  _ _ _ _ _ _).
       unfold Int.iwordsize. change Int.zwordsize with 32%Z. f_equal. lia.
 
   + econstructor; eauto.
+
+    Unshelve.
+    
+    repeat econstructor; eauto.
+    instantiate (1 := 0%Z).
+    omega.
+    unfold Int.modulus.
+    unfold two_power_nat.
+    simpl. omega.
 Defined.
 
 Definition impl_binop (op : int_binop_name) :
@@ -623,6 +635,12 @@ simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _ _ _  _ _ _ _  _ _ _ _ _ _).
   repeat on >Forall2, invc. simpl in *. repeat (break_match; try contradiction).
   fix_existT. subst. inject_some.
   eexists; split; eauto. simpl. eauto.
+  fix_existT. subst. inject_some.
+  eexists; split; eauto. simpl. eauto.
+  congruence. congruence.
+  fix_existT. subst. inject_some.
+  eexists; split; eauto. simpl. eauto.
+  congruence. congruence.
 
 - (* mem_inj_id *)
   intros. simpl in *. repeat (break_match; try discriminate; []). subst.
@@ -692,6 +710,21 @@ simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _ _ _  _ _ _ _  _ _ _ _ _ _).
 
   destruct op.
   all: try solve [econstructor; eauto; simpl; reflexivity].
+
+  Unshelve.
+    repeat econstructor; eauto.
+    instantiate (1 := 0%Z).
+    omega.
+    unfold Int.modulus.
+    unfold two_power_nat.
+    simpl. omega.
+    repeat econstructor; eauto.
+    instantiate (1 := 0%Z).
+    omega.
+    unfold Int.modulus.
+    unfold two_power_nat.
+    simpl. omega.
+  
 Defined.
 
 

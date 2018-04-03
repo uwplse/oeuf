@@ -52,9 +52,7 @@ script:
    - coqc --version
    - ./configure
    - make plugin
-   - make -j1 || true
-   - make -j1 || true
-   - make -j1
+   - make proof -j2
 
 before_cache:
    - echo "before_cache"

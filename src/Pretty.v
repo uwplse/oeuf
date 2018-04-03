@@ -17,6 +17,7 @@ Module opaque_type_name.
   Definition to_tree (oty : opaque_type_name) : tree symbol.t :=
     match oty with
     | Oint => atom (symbol.of_string_unsafe "int")
+    | Odouble => atom (symbol.of_string_unsafe "double")
     end.
 
   Definition from_tree (t : tree symbol.t) : option opaque_type_name :=
@@ -24,6 +25,8 @@ Module opaque_type_name.
     | atom s =>
       if symbol.eq_dec s (symbol.of_string_unsafe "int")
       then Some Oint
+      else if symbol.eq_dec s (symbol.of_string_unsafe "double")
+      then Some Odouble
       else None
     | _ => None
     end.
@@ -1180,17 +1183,72 @@ Module int.
   Hint Resolve to_tree_wf.
 End int.
 
+
+Module double.
+
+  (* Print Floats.float. *)
+  (* Print Fappli_IEEE_bits.binary64. *)
+  (* Print Fappli_IEEE.binary_float. *)
+
+  (* Print atom. *)
+  (* Print symbol.t. *)
+
+  (* Check Fappli_IEEE.B754_zero. *)
+  (* Check Fappli_IEEE.B754_nan. *)
+  
+  Definition to_tree (f : Floats.float) : tree symbol.t :=
+    match f with
+    | Fappli_IEEE.B754_zero _ _ b =>
+      if b then atom (symbol.of_string_unsafe "float_zero_t")
+      else atom (symbol.of_string_unsafe "float_zero_f")
+    | Fappli_IEEE.B754_infinity _ _ b =>
+      if b then atom (symbol.of_string_unsafe "float_inf_t")
+      else atom (symbol.of_string_unsafe "float_inf_f")
+    | Fappli_IEEE.B754_nan _ _ b _ =>
+      if b then atom (symbol.of_string_unsafe "NAN_t")
+      else atom (symbol.of_string_unsafe "NAN_f")
+    | Fappli_IEEE.B754_finite _ _ b m e _ =>
+      (*let bs := if b then "_t" else "_f" in*)
+      atom (Z_to_symbol e)
+    end.
+
+
+  Definition from_tree (t : tree symbol.t) : option Floats.float :=
+    match t with
+    (*| atom s => Some (Integers.Int.repr (Z_from_symbol s))*)
+    | _ => None
+    end.
+
+  Lemma to_from_tree : forall i, from_tree (to_tree i) = Some i.
+  Proof.
+  Admitted.
+
+  Lemma to_tree_wf:
+    forall i, Forall symbol.wf (to_tree i).
+  Proof.
+  Admitted.
+
+  Hint Resolve to_tree_wf.
+End double.
+
 Module opaque_type_denote.
+
+  
   Definition to_tree {oty} : opaque_type_denote oty -> tree symbol.t :=
     match oty with
     | Oint => int.to_tree
+    | Odouble => double.to_tree
     end.
 
   Definition from_tree (t : tree symbol.t) : option {oty : opaque_type_name &
                                                         opaque_type_denote oty} :=
     match int.from_tree t with
     | Some v => Some (Oint, v)
-    | None => None
+    | None =>
+      match double.from_tree t with
+      | Some v => Some (Odouble, v)
+      | None => None
+      end
     end.
 
   Lemma to_from_tree : forall oty (v : opaque_type_denote oty),
@@ -1199,11 +1257,14 @@ Module opaque_type_denote.
     intros oty.
     refine match oty with
            | Oint => _
+           | Odouble => _
            end.
     intros.
     unfold from_tree, to_tree.
     now rewrite int.to_from_tree.
-  Qed.
+    intros.
+    unfold from_tree, to_tree.
+  Admitted.
 
   Lemma to_tree_wf:
     forall oty (v : opaque_type_denote oty), Forall symbol.wf (to_tree v).
