@@ -45,6 +45,7 @@ Inductive int_unop_name : Set :=
 | IuShruC (amt : Z)
 | IuRorC (amt : Z)
 | IuNot
+| IuNeg
 .
 
 Definition int_unop_name_eq_dec (x y : int_unop_name) : { x = y } + { x <> y }.
@@ -56,6 +57,7 @@ Inductive int_binop_name : Set :=
 | IbOr
 | IbXor
 | IbAdd
+| IbSub
 .
 
 Definition int_binop_name_eq_dec (x y : int_binop_name) : { x = y } + { x <> y }.
@@ -238,6 +240,7 @@ Definition int_unop_denote op : int -> int :=
     | IuShruC amt => fun x => Int.shru x (Int.repr (Z.modulo amt 32))
     | IuRorC amt => fun x => Int.ror x (Int.repr (Z.modulo amt 32))
     | IuNot => Int.not
+    | IuNeg => Int.neg
     end.
 
 Definition int_unop_to_cminor op x :=
@@ -250,6 +253,7 @@ Definition int_unop_to_cminor op x :=
                 (Ebinop Cminor.Oshru x (amt_const amt))
                 (Ebinop Cminor.Oshl x (amt_const (-amt)%Z))
     | IuNot => Eunop Cminor.Onotint x
+    | IuNeg => Eunop Cminor.Onegint x
     end.
 
 Definition int_binop_denote op : int -> int -> int :=
@@ -258,6 +262,7 @@ Definition int_binop_denote op : int -> int -> int :=
     | IbOr => Int.or
     | IbXor => Int.xor
     | IbAdd => Int.add
+    | IbSub => Int.sub
     end.
 
 Definition int_binop_to_cminor op x y :=
@@ -266,6 +271,7 @@ Definition int_binop_to_cminor op x y :=
     | IbOr => Ebinop Cminor.Oor x y
     | IbXor => Ebinop Cminor.Oxor x y
     | IbAdd => Ebinop Cminor.Oadd x y
+    | IbSub => Ebinop Cminor.Osub x y
     end.
 
 Lemma mod_32_ltu_wordsize : forall z,
@@ -430,6 +436,7 @@ simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _ _ _  _ _ _ _  _ _ _ _ _ _).
       unfold Int.iwordsize. change Int.zwordsize with 32%Z. f_equal. lia.
 
   + econstructor; eauto.
+  + econstructor; eauto.
 Defined.
 
 Definition impl_binop (op : int_binop_name) :
@@ -570,40 +577,44 @@ eapply perm_F_any.
 Qed.
 
 
+Definition int_test (x : int) : bool :=
+    if Int.eq x Int.zero then false else true.
+
 Definition impl_test : opaque_oper_impl [Opaque Oint] (ADT Tbool).
 simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _ _ _  _ _ _ _  _ _ _ _ _ _).
 
-- exact (fun args => Int.eq (hhead args) Int.zero).
+- exact (fun args => int_test (hhead args)).
 - refine (fun G args =>
     let x := unwrap_opaque (hhead args) in
     if Int.eq x Int.zero
-        then VConstr CTtrue hnil
-        else VConstr CTfalse hnil).
+        then VConstr CTfalse hnil
+        else VConstr CTtrue hnil).
 - refine (fun args =>
     match args with
     | [HighestValues.Opaque Oint x] => Some (
-           let ctor := if Int.eq x Int.zero then Ctrue else Cfalse in
+           let ctor := if Int.eq x Int.zero then Cfalse else Ctrue in
            HighestValues.Constr ctor [])
     | _ => None
     end).
 - refine (fun args =>
     match args with
     | [HigherValue.Opaque Oint x] => Some (
-           let tag := if Int.eq x Int.zero then 0 else 1 in
-           HigherValue.Constr tag [])
+            (* remember, true is 0 and false is 1 *)
+            let tag := if Int.eq x Int.zero then 1 else 0 in
+            HigherValue.Constr tag [])
     | _ => None
     end).
 - refine (fun args =>
     match args with
     | [HighValues.Opaque Oint x] => Some (
-           let tag := if Int.eq x Int.zero then Int.zero else Int.one in
+           let tag := if Int.eq x Int.zero then Int.one else Int.zero in
            HighValues.Constr tag [])
     | _ => None
     end).
 - refine (fun m args =>
     match args with
     | [Vint x] =>
-            let tag := if Int.eq x Int.zero then Int.zero else Int.one in
+            let tag := if Int.eq x Int.zero then Int.one else Int.zero in
             build_constr m tag []
     | _ => None
     end).
@@ -611,8 +622,8 @@ simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _ _ _  _ _ _ _  _ _ _ _ _ _).
     match args with
     | [e] =>
             Sifthenelse (Ebinop (Ocmpu Ceq) e (Econst (Ointconst Int.zero)))
-                (build_constr_cminor (cmcc_malloc_id ctx) id Int.zero [])
                 (build_constr_cminor (cmcc_malloc_id ctx) id Int.one [])
+                (build_constr_cminor (cmcc_malloc_id ctx) id Int.zero [])
     | _ => Sskip
     end).
 
@@ -651,7 +662,7 @@ simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _ _ _  _ _ _ _  _ _ _ _ _ _).
 
 - intros. simpl.
   rewrite hmap_hhead.  rewrite opaque_value_denote.
-  destruct (Int.eq _ _); reflexivity.
+  unfold int_test.  destruct (Int.eq _ _); reflexivity.
 
 - intros. simpl in *.
   revert H.
@@ -690,7 +701,7 @@ simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _ _ _  _ _ _ _  _ _ _ _ _ _).
   on >opaque_type_value_inject, invc.
 
   fwd eapply build_constr_ok with (m1 := m)
-    (tag := if Int.eq ov Int.zero then Int.zero else Int.one)
+    (tag := if Int.eq ov Int.zero then Int.one else Int.zero)
     (args := []) (hargs := []) as HH; eauto.
     { rewrite Zcomplements.Zlength_nil. eapply max_arg_count_big. lia. }
     destruct HH as (ret' & m' & ? & ?).
@@ -717,7 +728,7 @@ simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _ _ _  _ _ _ _  _ _ _ _ _ _).
 
   replace (if Int.eq i _ then _ else _) with
       (build_constr_cminor (cmcc_malloc_id ctx) id
-        (if Int.eq i Int.zero then Int.zero else Int.one) []); cycle 1.
+        (if Int.eq i Int.zero then Int.one else Int.zero) []); cycle 1.
     { destruct (Int.eq _ _); reflexivity. }
 
   eapply plus_star. eapply build_constr_cminor_effect.
@@ -857,11 +868,14 @@ induction n using int_peano_rect; intros.
   destruct (Int.eq _ _); reflexivity.
 Qed.
 
+Definition int_to_nat i := Z.to_nat (Int.unsigned i).
+
 Lemma int_to_nat_iter : forall i,
-    Z.to_nat (Int.unsigned i) = int_iter S i O.
+    int_to_nat i = int_iter S i O.
 induction i using int_peano_rect; rewrite int_iter_equation.
   { rewrite Int.eq_true. reflexivity. }
 
+unfold int_to_nat in *.
 rewrite Int.eq_false by eauto.
 
 replace (Int.unsigned i) with ((1 + Int.unsigned (Int.sub i (Int.one)))%Z); cycle 1.
@@ -1104,7 +1118,7 @@ Qed.
 Definition impl_int_to_nat : opaque_oper_impl [Opaque Oint] (ADT Tnat).
 simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _ _ _  _ _ _ _  _ _ _ _ _ _).
 
-- exact (fun args => Z.to_nat (Int.unsigned (hhead args))).
+- exact (fun args => int_to_nat (hhead args)).
 - refine (fun G args =>
     let x := unwrap_opaque (hhead args) in
     int_iter (fun n => VConstr CTS (hcons n hnil)) x (VConstr CTO hnil)).
@@ -1382,8 +1396,6 @@ simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _ _ _  _ _ _ _  _ _ _ _ _ _).
   eapply star_refl.
 Qed.
 
-(* TODO *)
-
 
 
 
@@ -1555,11 +1567,15 @@ Lemma opaque_oper_sim_cminor : forall (ge : genv) f ctx id e m m' sp k fp,
     Genv.find_funct ge (Vptr fp Int.zero) = Some (External EF_malloc) ->
     length (cmcc_scratch ctx) >= num_scratch_vars ->
     Forall (fun id' => Forall (expr_no_access id') args) (cmcc_scratch ctx) ->
-    list_norepet (cmcc_scratch ctx) ->
     Forall (expr_no_access id) args ->
-    plus Cminor.step ge (State f (opaque_oper_denote_cminor ctx id args) k sp e m)
-                     E0 (State f Sskip k sp (PTree.set id retv e) m').
-intros0 Hmv HH. unfold opaque_oper_denote_mem_effect, opaque_oper_denote_cminor in *.
+    list_norepet (cmcc_scratch ctx) ->
+    ~ In id (cmcc_scratch ctx) ->
+    exists e',
+        e' ! id = Some retv /\
+        (forall id', id' <> id -> ~ In id' (cmcc_scratch ctx) -> e' ! id' = e ! id') /\
+        plus Cminor.step ge (State f (opaque_oper_denote_cminor ctx id args) k sp e m)
+                         E0 (State f Sskip k sp e' m').
+unfold opaque_oper_denote_mem_effect, opaque_oper_denote_cminor.
 clearbody impl'. destruct impl' as (? & ? & impl'').
 eapply (oo_sim_cminor impl''); eauto.
 Qed.

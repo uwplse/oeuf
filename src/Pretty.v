@@ -1406,10 +1406,12 @@ Import oeuf.OpaqueOps.
     | Ounop (IuRorC z) =>
             node [atom (symbol.of_string_unsafe "unop_rorc"); atom (Z_to_symbol z)]
     | Ounop IuNot => node [atom (symbol.of_string_unsafe "unop_not")]
+    | Ounop IuNeg => node [atom (symbol.of_string_unsafe "unop_neg")]
     | Obinop IbAnd => node [atom (symbol.of_string_unsafe "binop_and")]
     | Obinop IbOr => node [atom (symbol.of_string_unsafe "binop_or")]
     | Obinop IbXor => node [atom (symbol.of_string_unsafe "binop_xor")]
     | Obinop IbAdd => node [atom (symbol.of_string_unsafe "binop_add")]
+    | Obinop IbSub => node [atom (symbol.of_string_unsafe "binop_sub")]
     | Otest => node [atom (symbol.of_string_unsafe "test")]
     | Orepr z => node [atom (symbol.of_string_unsafe "repr"); atom (Z_to_symbol z)]
     | Oint_to_nat => node [atom (symbol.of_string_unsafe "int_to_nat")]
@@ -1446,6 +1448,11 @@ Import oeuf.OpaqueOps.
                 | [] => Some ([Opaque Oint], (Opaque Oint, Ounop IuNot))
                 | _ => None end
 
+            else if symbol.eq_dec tag (symbol.of_string_unsafe "unop_neg") then
+                match l with
+                | [] => Some ([Opaque Oint], (Opaque Oint, Ounop IuNeg))
+                | _ => None end
+
             else if symbol.eq_dec tag (symbol.of_string_unsafe "binop_and") then
                 match l with
                 | [] => Some ([Opaque Oint; Opaque Oint], (Opaque Oint, Obinop IbAnd))
@@ -1464,6 +1471,11 @@ Import oeuf.OpaqueOps.
             else if symbol.eq_dec tag (symbol.of_string_unsafe "binop_add") then
                 match l with
                 | [] => Some ([Opaque Oint; Opaque Oint], (Opaque Oint, Obinop IbAdd))
+                | _ => None end
+
+            else if symbol.eq_dec tag (symbol.of_string_unsafe "binop_sub") then
+                match l with
+                | [] => Some ([Opaque Oint; Opaque Oint], (Opaque Oint, Obinop IbSub))
                 | _ => None end
 
             else if symbol.eq_dec tag (symbol.of_string_unsafe "test") then
