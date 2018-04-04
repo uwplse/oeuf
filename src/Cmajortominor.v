@@ -145,6 +145,19 @@ induction xs; split; intro HH; simpl in *.
 Qed.
 
 
+Lemma Forall_app_l : forall A (P : A -> Prop) xs ys,
+    Forall P (xs ++ ys) ->
+    Forall P xs.
+intros0 Hfa. eapply Forall_app_inv. 2: eassumption. eauto.
+Qed.
+
+Lemma Forall_app_r : forall A (P : A -> Prop) xs ys,
+    Forall P (xs ++ ys) ->
+    Forall P ys.
+intros0 Hfa. eapply Forall_app_inv. 2: eassumption. eauto.
+Qed.
+
+
 
 
 Section TRANSF'.
@@ -162,6 +175,18 @@ Fixpoint mapm {A B} (f : A -> res B) (xs : list A) : res (list B) :=
 
 Variable ctx : cminor_codegen_context.
 
+Definition check_no_access l id :=
+    match list_find (Pos.eq_dec id) l with
+    | Some pf => Error [MSG "found use scratch variable"]
+    | None => OK tt
+    end.
+
+Definition check_no_access_opt l oi :=
+    match oi with
+    | Some id => check_no_access l id
+    | None => OK tt
+    end.
+
 Definition transf_const (c : Cmajor.constant) : Cminor.constant :=
   match c with
   | Ointconst i => Cminor.Ointconst i
@@ -171,10 +196,8 @@ Definition transf_const (c : Cmajor.constant) : Cminor.constant :=
 Fixpoint transf_expr (avoid : list ident) (e : Cmajor.expr) : res Cminor.expr :=
   match e with
   | Evar id =>
-          match list_find (Pos.eq_dec id) (cmcc_scratch ctx ++ avoid) with
-          | Some pf => Error [MSG "found use of forbidden variable"]
-          | None => OK (Cminor.Evar id)
-          end
+          do _ <- check_no_access (cmcc_scratch ctx ++ avoid) id;
+          OK (Cminor.Evar id)
   | Econst c => OK (Cminor.Econst (transf_const c))
   | Eadd e1 e2 => 
           do e1' <- transf_expr avoid e1;
@@ -189,6 +212,7 @@ Fixpoint transf_stmt (s : Cmajor.stmt) : res Cminor.stmt :=
   match s with
   | Sskip => OK Cminor.Sskip
   | Sassign id exp =>
+          do _ <- check_no_access (cmcc_scratch ctx) id;
           do exp' <- transf_expr [] exp;
           OK (Cminor.Sassign id exp')
   | Sstore mc l r =>
@@ -196,14 +220,17 @@ Fixpoint transf_stmt (s : Cmajor.stmt) : res Cminor.stmt :=
           do r' <- transf_expr [] r;
           OK (Cminor.Sstore mc l' r')
   | Scall oi sig exp exps =>
+          do _ <- check_no_access_opt (cmcc_scratch ctx) oi;
           do exp' <- transf_expr [] exp;
           do exps' <- mapm (transf_expr []) exps;
           OK (Cminor.Scall oi sig exp' exps')
   | ScallSpecial oi sig fn exps =>
+          do _ <- check_no_access_opt (cmcc_scratch ctx) oi;
           let f := Cminor.Econst (Cminor.Oaddrsymbol fn Int.zero) in
           do exps' <- mapm (transf_expr []) exps;
           OK (Cminor.Scall oi sig f exps')
   | SopaqueOp id op args =>
+          do _ <- check_no_access (cmcc_scratch ctx) id;
           do args' <- mapm (transf_expr [id]) args;
           OK (opaque_oper_denote_cminor op ctx id args')
   | Sseq s1 s2 =>
@@ -368,6 +395,9 @@ simpl. break_if.
 Qed.
 
 
+Definition match_env (e e' : env) := forall id,
+    ~ In id (cmcc_scratch ctx) ->
+    e' ! id = e ! id.
 
 Inductive match_cont: Cmajor.cont -> Cminor.cont -> Prop :=
   | match_cont_stop:
@@ -380,19 +410,21 @@ Inductive match_cont: Cmajor.cont -> Cminor.cont -> Prop :=
       transf_stmt ctx s = OK s' ->
       match_cont k k' ->
       match_cont (Cmajor.Kseq s k) (Cminor.Kseq s' k')
-  | match_cont_call: forall id f sp e k f' k',
+  | match_cont_call: forall id f sp e e' k f' k',
       transf_function ctx f = OK f' ->
+      match_env e e' ->
       match_cont k k' ->
-      match_cont (Cmajor.Kcall id f sp e k) (Cminor.Kcall id f' sp e k').
+      match_cont (Cmajor.Kcall id f sp e k) (Cminor.Kcall id f' sp e' k').
 
 Inductive match_states : Cmajor.state -> Cminor.state -> Prop :=
-  | match_state: forall f f' s k s' k' sp e m
+  | match_state: forall f f' s k s' k' sp e e' m
         (TF: transf_function ctx f = OK f')
         (TS: transf_stmt ctx s = OK s')
+        (ME: match_env e e')
         (MC: match_cont k k'),
       match_states
         (Cmajor.State f s k sp e m)
-        (Cminor.State f' s' k' sp e m)
+        (Cminor.State f' s' k' sp e' m)
   | match_callstate: forall f f' args k k' m
         (TF: transf_fundef ctx f = OK f')
         (MC: match_cont k k'),
@@ -434,6 +466,21 @@ Proof.
     exact TRANSF_PROG.
 Qed.
 
+Lemma check_no_access_ok : forall l id x,
+    check_no_access l id = OK x ->
+    ~ In id l.
+intros0 Hcheck. unfold check_no_access in Hcheck.
+break_match; try discriminate.
+rewrite list_find_None in *.  rewrite Forall_forall in *.
+unfold not in *. eauto.
+Qed.
+
+Lemma check_no_access_opt_ok : forall l id x,
+    check_no_access_opt l (Some id) = OK x ->
+    ~ In id l.
+simpl. eapply check_no_access_ok.
+Qed.
+
 Lemma eval_const_transf :
   forall sp c v,
     Cmajor.eval_constant ge sp c = Some v ->
@@ -444,15 +491,20 @@ Proof.
 Qed.
 
 Lemma eval_expr_transf :
-  forall sp a a' e m v avoid,
+  forall sp a a' e e' m v avoid,
     Cmajor.eval_expr ge e m sp a v ->
+    match_env e e' ->
     transf_expr ctx avoid a = OK a' ->
-    Cminor.eval_expr tge sp e m a' v.
+    Cminor.eval_expr tge sp e' m a' v.
 Proof.
-  induction a; intros0 Heval Htransf.
+  induction a; intros0 Heval Henv Htransf.
 
-  - simpl in Htransf. break_match; try discriminate. invc Htransf.
-    invc Heval. econstructor; eauto.
+  - simpl in Htransf. destruct (check_no_access _ _) eqn:?; try discriminate.
+    cbn [bind] in *. invc Htransf.
+    invc Heval. econstructor.
+    rewrite Henv; eauto.
+    on _, eapply_lem check_no_access_ok; eauto.
+    rewrite in_app in *. eauto.
 
   - simpl in Htransf. invc Htransf.
     invc Heval. econstructor; eauto using eval_const_transf.
@@ -470,12 +522,13 @@ Proof.
 Qed.
 
 Lemma eval_exprlist_transf :
-  forall a a' sp e m v avoid,
+  forall a a' sp e e' m v avoid,
     Cmajor.eval_exprlist ge e m sp a v ->
+    match_env e e' ->
     mapm (transf_expr ctx avoid) a = OK a' ->
-    Cminor.eval_exprlist tge sp e m a' v.
+    Cminor.eval_exprlist tge sp e' m a' v.
 Proof.
-induction a; intros0 Heval Htransf.
+induction a; intros0 Heval Henv Htransf.
 - simpl in Htransf. invc Htransf. invc Heval. econstructor.
 - simpl in Htransf.
   destruct (transf_expr _ _ _) eqn:?; try discriminate.  cbn [bind] in Htransf.
@@ -633,27 +686,17 @@ Proof.
   induction 1; intros; simpl; try econstructor; eauto.
 Qed.
 
-Lemma Forall_app_l : forall A (P : A -> Prop) xs ys,
-    Forall P (xs ++ ys) ->
-    Forall P xs.
-intros0 Hfa. eapply Forall_app_inv. 2: eassumption. eauto.
-Qed.
-
-Lemma Forall_app_r : forall A (P : A -> Prop) xs ys,
-    Forall P (xs ++ ys) ->
-    Forall P ys.
-intros0 Hfa. eapply Forall_app_inv. 2: eassumption. eauto.
-Qed.
 
 Lemma transf_expr_no_access_scratch : forall ctx avoid e e',
     transf_expr ctx avoid e = OK e' ->
     Forall (fun id => MemFacts.expr_no_access id e') (cmcc_scratch ctx).
 induction e; intros0 Htransf; simpl in Htransf.
 
-- break_match; try discriminate. invc Htransf. simpl.
-  rewrite list_find_None in *.
-  on _, eapply_lem Forall_app_l.
-  remember (cmcc_scratch _) as scr. list_magic_on (scr, tt).
+- destruct (check_no_access _ _) eqn:?; try discriminate.
+  cbn [bind] in *. invc Htransf. simpl.
+  rewrite Forall_forall. intros.
+  fwd eapply check_no_access_ok; eauto. rewrite in_app in *.
+  intro. subst. tauto.
 
 - invc Htransf.
   remember (cmcc_scratch _) as scr. list_magic_on (scr, tt).
@@ -709,10 +752,11 @@ Lemma transf_expr_no_access_avoid : forall ctx avoid e e',
     Forall (fun id => MemFacts.expr_no_access id e') avoid.
 induction e; intros0 Htransf; simpl in Htransf.
 
-- break_match; try discriminate. invc Htransf. simpl.
-  rewrite list_find_None in *.
-  on _, eapply_lem Forall_app_r.
-  list_magic_on (avoid, tt).
+- destruct (check_no_access _ _) eqn:?; try discriminate.
+  cbn [bind] in *. invc Htransf. simpl.
+  rewrite Forall_forall. intros.
+  fwd eapply check_no_access_ok; eauto. rewrite in_app in *.
+  intro. subst. tauto.
 
 - invc Htransf.
   list_magic_on (avoid, tt).
@@ -752,6 +796,39 @@ intros. rewrite Forall_Forall_pivot.
 eauto using transf_exprlist_no_access_avoid'.
 Qed.
 
+Lemma set_match_env : forall id v e e',
+    match_env e e' ->
+    match_env (PTree.set id v e) (PTree.set id v e').
+intros. unfold match_env. intros.
+rewrite 2 PTree.gsspec. break_if; eauto.
+Qed.
+Hint Resolve set_match_env.
+
+Lemma match_env_refl : forall e,
+    match_env e e.
+intros. unfold match_env. intros. reflexivity.
+Qed.
+
+Lemma set_params_match_env : forall vs params,
+    match_env (set_params vs params) (Cminor.set_params vs params).
+first_induction params; intros; simpl.
+- eapply match_env_refl.
+- destruct vs; simpl; unfold match_env in *; intros; eauto.
+Qed.
+
+Lemma set_locals_match_env : forall vars e e',
+    match_env e e' ->
+    match_env (set_locals vars e) (Cminor.set_locals vars e').
+induction vars; intros; simpl; eauto.
+Qed.
+
+Lemma set_optvar_match_env : forall optid v e e',
+    match_env e e' ->
+    match_env (set_optvar optid v e) (Cminor.set_optvar optid v e').
+intros.
+destruct optid; simpl; eauto.
+Qed.
+
 Lemma single_step_correct:
   forall S1 t S2, Cmajor.step ge S1 t S2 ->
   forall T1, match_states S1 T1 ->
@@ -777,6 +854,7 @@ Proof.
     - erewrite stackspace_transf; eauto.
 
   * (* assign *)
+    destruct (check_no_access _ _) eqn:?; try discriminate. cbn [bind] in *.
     destruct (transf_expr _ _ _) eqn:?; try discriminate. cbn [bind] in *.
     on (OK _ = OK _), invc.
 
@@ -793,6 +871,7 @@ Proof.
     - eapply eval_expr_transf; eauto.
 
   * (* call *)
+    destruct (check_no_access_opt _ _) eqn:?; try discriminate. cbn [bind] in *.
     destruct (transf_expr _ _ a) eqn:?; try discriminate. cbn [bind] in *.
     destruct (mapm _ bl) eqn:?; try discriminate. cbn [bind] in *.
     on (OK _ = OK _), invc.
@@ -806,19 +885,27 @@ Proof.
     - econstructor; eauto.
 
   * (* opaque *)
+    destruct (check_no_access _ _) eqn:?; try discriminate. cbn [bind] in *.
     destruct (mapm _ args) eqn:?; try discriminate. cbn [bind] in *.
     on (OK _ = OK _), invc.
 
     destruct (proj2_sig ctx_sig) as (? & ? & ? & ?). fold ctx in *.
 
+    fwd eapply opaque_oper_sim_cminor as HH; try eassumption.
+      { eapply eval_exprlist_transf; eauto. }
+      { eapply malloc_find_symbol. }
+      { eapply malloc_find_funct. }
+      { eapply transf_exprlist_no_access_scratch; eauto. }
+      { fwd eapply transf_exprlist_no_access_avoid as HH; eauto. invc HH. eauto. }
+      { eapply check_no_access_ok. eauto. }
+      destruct HH as (e'' & ? & ? & ?).
+
     eexists; split.
-    eapply opaque_oper_sim_cminor; eauto.
-    - eapply eval_exprlist_transf; eauto.
-    - eapply malloc_find_symbol.
-    - eapply malloc_find_funct.
-    - eapply transf_exprlist_no_access_scratch; eauto.
-    - fwd eapply transf_exprlist_no_access_avoid as HH; eauto. invc HH. eauto.
-    - econstructor; eauto.
+      { eassumption. }
+    econstructor; eauto. unfold match_env. intros.
+    rewrite PTree.gsspec. break_if.
+      { congruence. }
+      { on _, fun H => rewrite H; eauto. }
 
   * (* seq *)
     destruct (transf_stmt _ s1) eqn:?; try discriminate. cbn [bind] in *.
@@ -875,8 +962,9 @@ Proof.
 
     eexists; split; [eapply plus_one | ..]; try econstructor; eauto; simpl; eauto.
     - erewrite stackspace_transf; eauto.
-    - erewrite vars_transf, params_transf; eauto.
     - eapply body_transf. eauto.
+    - erewrite vars_transf, params_transf; eauto.
+      eapply set_locals_match_env. eapply set_params_match_env.
 
   * (* call external *)
     simpl in TF. invc TF.
@@ -886,6 +974,7 @@ Proof.
   * (* returnstate *)
     invc MC.
     eexists; split; [eapply plus_one | ..]; try econstructor; eauto.
+    - eapply set_optvar_match_env. eauto.
 Qed.
 
 Lemma init_mem_transf :
@@ -976,4 +1065,3 @@ Qed.
 
 
 End PRESERVATION.
-Locate list_norepet.
