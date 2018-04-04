@@ -1,8 +1,3 @@
-(* Andrew W. Appel and Stephen Yi-Hsien Lin,
-    May 2013, October 2013, March 2014 *)
-
-(* OEUF: modified to remove dependencies on other VST files. *)
-
 Require Import compcert.lib.Integers.
 Require Import compcert.lib.Coqlib.
 Require Import List. 
@@ -18,15 +13,7 @@ Require Import StructTact.StructTactics.
 
 
 
-Definition rel_z_int z i := Int.unsigned i = z.
-Definition rel_z_int_list zs is := Forall2 rel_z_int zs is.
-
-Definition rel_z_nat z n := Z.to_nat z = n.
-Definition rel_nat_int n i := Z.to_nat (Int.unsigned i) = n.
-
-
-Ltac small_unsigned :=
-    split; [ lia | eapply int_unsigned_big; lia ].
+(* IMPLEMENTATION *)
 
 
 Definition pair_up' {A} (l : list A) (first : option A) : list (A * A) :=
@@ -54,31 +41,12 @@ Definition intlist_to_bytelist (l : list int) : list int :=
             IHl)
         l.
 
-Lemma intlist_to_bytelist_eq : forall l,
-    rel_z_int_list (SHA256.intlist_to_Zlist l) (intlist_to_bytelist l).
-induction l; simpl.
-  { constructor. }
-
-unfold SHA256.Shr.
-repeat (eauto || econstructor).
-Qed.
-
 Definition bytes_to_int (a b c d : int) : int :=
   Int.or (Int.or (Int.or
     (Int.shl a (Int.repr 24))
     (Int.shl b (Int.repr 16)))
     (Int.shl c (Int.repr 8)))
     d.
-
-Lemma bytes_to_int_eq : forall az ai bz bi cz ci dz di,
-    rel_z_int_list [az; bz; cz; dz] [ai; bi; ci; di] ->
-    SHA256.Z_to_Int az bz cz dz = bytes_to_int ai bi ci di.
-intros0 HH. unfold rel_z_int_list in *.
-do 5 on >Forall2, invc.
-unfold rel_z_int in *. subst.
-unfold SHA256.Z_to_Int, bytes_to_int.
-rewrite 4 Int.repr_unsigned. reflexivity.
-Qed.
 
 Definition bytelist_to_intlist' (l : list ((int * int) * (int * int))) : list int :=
     list_rect (fun _ => list int)
@@ -93,6 +61,303 @@ Definition bytelist_to_intlist' (l : list ((int * int) * (int * int))) : list in
 
 Definition bytelist_to_intlist (l : list int) : list int :=
     bytelist_to_intlist' (pair_up (pair_up l)).
+
+
+Definition int_length {A} (l : list A) :=
+    list_rect (fun _ => int)
+        (Int.repr 0)
+        (fun _ _ IHl => Int.add IHl (Int.repr 1))
+        l.
+
+Definition list_repeat {A} (n : nat) (x : A) : list A :=
+    nat_rect (fun _ => list A)
+        []
+        (fun _ IHn => x :: IHn)
+        n.
+
+Definition list_repeat_int {A} (n : int) (x : A) : list A :=
+    nat_rect (fun _ => list A)
+        []
+        (fun _ IHn => x :: IHn)
+        (int_to_nat n).
+
+Definition list_app {A} (xs ys : list A) : list A :=
+    list_rect (fun _ => list A)
+        ys
+        (fun x _ IHxs => x :: IHxs)
+        xs.
+
+Definition generate_and_pad msg := 
+  let n := int_length msg in
+  let padding := Int.and (Int.neg (Int.add n (Int.repr 9))) (Int.repr 63) in
+  list_app
+    (bytelist_to_intlist
+      (list_app (list_app
+        msg
+        [Int.repr 128])
+        (list_repeat_int padding (Int.repr 0))))
+    [Int.shru n (Int.repr 29); Int.shl n (Int.repr 3)].
+
+
+
+(*ROUND FUNCTION*)
+
+Definition nthi (l: list int) (t: int) :=
+    list_rect (fun _ => int -> int)
+        (fun t => Int.repr 0)
+        (fun x l IHl => fun t => bool_rect (fun _ => int)
+            (IHl (Int.sub t (Int.repr 1)))      (* true case - t <> 0 *)
+            (x)                                 (* false case - t = 0 *)
+            (int_test t))
+        l t.
+
+
+
+
+Definition nthi_K256 t :=
+    nthi
+        [Int.repr 1116352408; Int.repr 1899447441; Int.repr 3049323471; Int.repr 3921009573; 
+         Int.repr  961987163; Int.repr 1508970993; Int.repr 2453635748; Int.repr 2870763221; 
+         Int.repr 3624381080; Int.repr  310598401; Int.repr  607225278; Int.repr 1426881987; 
+         Int.repr 1925078388; Int.repr 2162078206; Int.repr 2614888103; Int.repr 3248222580; 
+         Int.repr 3835390401; Int.repr 4022224774; Int.repr  264347078; Int.repr  604807628; 
+         Int.repr  770255983; Int.repr 1249150122; Int.repr 1555081692; Int.repr 1996064986; 
+         Int.repr 2554220882; Int.repr 2821834349; Int.repr 2952996808; Int.repr 3210313671; 
+         Int.repr 3336571891; Int.repr 3584528711; Int.repr  113926993; Int.repr  338241895; 
+         Int.repr  666307205; Int.repr  773529912; Int.repr 1294757372; Int.repr 1396182291; 
+         Int.repr 1695183700; Int.repr 1986661051; Int.repr 2177026350; Int.repr 2456956037; 
+         Int.repr 2730485921; Int.repr 2820302411; Int.repr 3259730800; Int.repr 3345764771; 
+         Int.repr 3516065817; Int.repr 3600352804; Int.repr 4094571909; Int.repr  275423344; 
+         Int.repr  430227734; Int.repr  506948616; Int.repr  659060556; Int.repr  883997877; 
+         Int.repr  958139571; Int.repr 1322822218; Int.repr 1537002063; Int.repr 1747873779; 
+         Int.repr 1955562222; Int.repr 2024104815; Int.repr 2227730452; Int.repr 2361852424; 
+         Int.repr 2428436474; Int.repr 2756734187; Int.repr 3204031479; Int.repr 3329325298]
+    t.
+
+
+(*functions used for round function*)
+Definition Ch (x y z : int) : int :=
+  Int.xor (Int.and x y) (Int.and (Int.not x) z).
+
+Definition Maj (x y z : int) : int :=
+  Int.xor (Int.xor (Int.and x z) (Int.and y z) ) (Int.and x y).
+
+Definition Sigma_0 (x : int) : int := 
+  Int.xor (Int.xor
+    (Int.ror x (Int.repr 2))
+    (Int.ror x (Int.repr 13)))
+    (Int.ror x (Int.repr 22)).
+Definition Sigma_1 (x : int) : int := 
+  Int.xor (Int.xor
+    (Int.ror x (Int.repr 6))
+    (Int.ror x (Int.repr 11)))
+    (Int.ror x (Int.repr 25)).
+Definition sigma_0 (x : int) : int := 
+  Int.xor (Int.xor
+    (Int.ror x (Int.repr 7))
+    (Int.ror x (Int.repr 18)))
+    (Int.shru x (Int.repr 3)).
+Definition sigma_1 (x : int) : int := 
+  Int.xor (Int.xor
+    (Int.ror x (Int.repr 17))
+    (Int.ror x (Int.repr 19)))
+    (Int.shru x (Int.repr 10)).
+
+
+(* Produce the list [n - 1; n - 2; ...; 0].  This is useful for doing
+ * Peano-style recursion on ints. *)
+Function int_count_rev (n : int)
+        {measure (fun n => Z.to_nat (Int.unsigned n)) n} : list int :=
+    if Int.eq n Int.zero then
+        []
+    else
+        let n' := Int.sub n Int.one in
+        n' :: int_count_rev n'.
+Proof.
+    intros.
+eapply Z2Nat.inj_lt.
+  { fwd eapply Int.unsigned_range. break_and. eassumption. }
+  { fwd eapply Int.unsigned_range. break_and. eassumption. }
+
+rewrite int_nonzero_pred by eauto. lia.
+Qed.
+
+
+Definition list_rev' {A} (xs : list A) (acc : list A) : list A :=
+    list_rect (fun _ => list A -> list A)
+        (fun acc => acc)
+        (fun x xs IHxs acc => IHxs (x :: acc))
+        xs acc.
+
+Definition list_rev {A} (xs : list A) : list A :=
+    list_rev' xs [].
+
+
+
+Definition W_iter (M : int -> int) (t : int) (rest : list int) : int :=
+    bool_rect (fun _ => int)
+        (M t)
+        (Int.add (Int.add (sigma_1 (SHA256.nthi rest 1)) (SHA256.nthi rest 6))
+                 (Int.add (sigma_0 (SHA256.nthi rest 14)) (SHA256.nthi rest 15)))
+        (Int.ltu t (Int.repr 16)).
+
+Definition W_list (M : int -> int) (ts : list int) : list int :=
+    list_rect (fun _ => list int)
+        ([W_iter M (Int.repr 0) []])
+        (fun t ts IHts => W_iter M (Int.add t Int.one) IHts :: IHts)
+        ts.
+
+Definition W (M : int -> int) (t : int) : int :=
+    nthi (W_list M (int_count_rev t)) (Int.repr 0).
+
+
+
+
+(*registers that represent intermediate and final hash values*)
+
+Definition registers := (int * int * int * int * int * int * int * int)%type.
+
+Definition rnd_function (x : registers) (k : int) (w : int) : registers :=
+    prod_rect (fun _ => registers) (fun abcdefg h =>
+    prod_rect (fun _ => registers) (fun abcdef g =>
+    prod_rect (fun _ => registers) (fun abcde f =>
+    prod_rect (fun _ => registers) (fun abcd e =>
+    prod_rect (fun _ => registers) (fun abc d =>
+    prod_rect (fun _ => registers) (fun ab c =>
+    prod_rect (fun _ => registers) (fun a b =>
+        (Int.add (Int.add (Int.add (Int.add (Int.add h (Sigma_1 e)) (Ch e f g)) k) w)
+                 (Int.add (Sigma_0 a) (Maj a b c)),
+         a, b, c,
+         Int.add d (Int.add (Int.add (Int.add (Int.add h (Sigma_1 e)) (Ch e f g)) k) w),
+         e, f, g)
+    ) ab) abc) abcd) abcde) abcdef) abcdefg) x.
+
+Definition init_registers : registers := 
+    (Int.repr 1779033703, Int.repr 3144134277, Int.repr 1013904242, Int.repr 2773480762,
+     Int.repr 1359893119, Int.repr 2600822924, Int.repr  528734635, Int.repr 1541459225).
+
+Definition Round_list (regs : registers) (M : int -> int) (ts : list int) : registers :=
+    list_rect (fun _ => registers)
+        regs
+        (fun t ts IHts => rnd_function IHts (nthi_K256 t) (W M t))
+        ts.
+
+Definition Round (regs : registers) (M : int -> int) (t : int) : registers :=
+    Round_list regs M (int_count_rev t).
+
+
+Definition hash_block (r : registers) (block : list int) : registers :=
+    prod_rect (fun _ => registers) (fun abcdefg0 h0 =>
+    prod_rect (fun _ => registers) (fun abcdef0 g0 =>
+    prod_rect (fun _ => registers) (fun abcde0 f0 =>
+    prod_rect (fun _ => registers) (fun abcd0 e0 =>
+    prod_rect (fun _ => registers) (fun abc0 d0 =>
+    prod_rect (fun _ => registers) (fun ab0 c0 =>
+    prod_rect (fun _ => registers) (fun a0 b0 =>
+    prod_rect (fun _ => registers) (fun abcdefg1 h1 =>
+    prod_rect (fun _ => registers) (fun abcdef1 g1 =>
+    prod_rect (fun _ => registers) (fun abcde1 f1 =>
+    prod_rect (fun _ => registers) (fun abcd1 e1 =>
+    prod_rect (fun _ => registers) (fun abc1 d1 =>
+    prod_rect (fun _ => registers) (fun ab1 c1 =>
+    prod_rect (fun _ => registers) (fun a1 b1 =>
+        (Int.add a0 a1,
+         Int.add b0 b1,
+         Int.add c0 c1,
+         Int.add d0 d1,
+         Int.add e0 e1,
+         Int.add f0 f1,
+         Int.add g0 g1,
+         Int.add h0 h1)
+    ) ab1) abc1) abcd1) abcde1) abcdef1) abcdefg1) (Round r (nthi block) (Int.repr 64))
+    ) ab0) abc0) abcd0) abcde0) abcdef0) abcdefg0) r.
+
+
+Definition pairs_to_list_16 x : list int :=
+    prod_rect (fun _ => list int) (fun x0 x1 =>
+
+    prod_rect (fun _ => list int) (fun x00 x01 =>
+    prod_rect (fun _ => list int) (fun x10 x11 =>
+
+    prod_rect (fun _ => list int) (fun x000 x001 =>
+    prod_rect (fun _ => list int) (fun x010 x011 =>
+    prod_rect (fun _ => list int) (fun x100 x101 =>
+    prod_rect (fun _ => list int) (fun x110 x111 =>
+
+    prod_rect (fun _ => list int) (fun x0000 x0001 =>
+    prod_rect (fun _ => list int) (fun x0010 x0011 =>
+    prod_rect (fun _ => list int) (fun x0100 x0101 =>
+    prod_rect (fun _ => list int) (fun x0110 x0111 =>
+    prod_rect (fun _ => list int) (fun x1000 x1001 =>
+    prod_rect (fun _ => list int) (fun x1010 x1011 =>
+    prod_rect (fun _ => list int) (fun x1100 x1101 =>
+    prod_rect (fun _ => list int) (fun x1110 x1111 =>
+
+    [x0000; x0001; x0010; x0011;
+     x0100; x0101; x0110; x0111;
+     x1000; x1001; x1010; x1011;
+     x1100; x1101; x1110; x1111]
+
+    ) x111) x110) x101) x100) x011) x010) x001) x000
+    ) x11) x10) x01) x00
+    ) x1) x0
+    ) x.
+
+Definition hash_blocks' (r : registers) (blks : list _) : registers :=
+    list_rect (fun _ => registers -> registers)
+        (fun r => r)
+        (fun blk blks IHblks r => IHblks (hash_block r (pairs_to_list_16 blk)))
+        blks r.
+
+Definition hash_blocks (r : registers) (msg : list int) : registers :=
+    hash_blocks' r (pair_up (pair_up (pair_up (pair_up msg)))).
+
+Definition SHA_256 (str : list int) : list int :=
+    prod_rect (fun _ => list int) (fun abcdefg h =>
+    prod_rect (fun _ => list int) (fun abcdef g =>
+    prod_rect (fun _ => list int) (fun abcde f =>
+    prod_rect (fun _ => list int) (fun abcd e =>
+    prod_rect (fun _ => list int) (fun abc d =>
+    prod_rect (fun _ => list int) (fun ab c =>
+    prod_rect (fun _ => list int) (fun a b =>
+    intlist_to_bytelist [a; b; c; d; e; f; g; h]
+    ) ab) abc) abcd) abcde) abcdef) abcdefg)
+    (hash_blocks init_registers (generate_and_pad str)).
+
+
+
+
+(* PROOF *)
+
+
+Definition rel_z_int z i := Int.unsigned i = z.
+Definition rel_z_int_list zs is := Forall2 rel_z_int zs is.
+
+Definition rel_z_nat z n := Z.to_nat z = n.
+Definition rel_nat_int n i := Z.to_nat (Int.unsigned i) = n.
+
+
+Ltac small_unsigned :=
+    split; [ lia | eapply int_unsigned_big; lia ].
+
+Lemma intlist_to_bytelist_eq : forall l,
+    rel_z_int_list (SHA256.intlist_to_Zlist l) (intlist_to_bytelist l).
+induction l; simpl.
+  { constructor. }
+
+unfold SHA256.Shr.
+repeat (eauto || econstructor).
+Qed.
+
+Lemma bytes_to_int_eq : forall az ai bz bi cz ci dz di,
+    rel_z_int_list [az; bz; cz; dz] [ai; bi; ci; di] ->
+    SHA256.Z_to_Int az bz cz dz = bytes_to_int ai bi ci di.
+intros0 HH. unfold rel_z_int_list in *.
+do 5 on >Forall2, invc.
+unfold rel_z_int in *. subst.
+unfold SHA256.Z_to_Int, bytes_to_int.
+rewrite 4 Int.repr_unsigned. reflexivity.
+Qed.
 
 Lemma bytelist_to_intlist_eq : forall zl il,
     rel_z_int_list zl il ->
@@ -109,17 +374,6 @@ erewrite bytes_to_int_eq; eauto; cycle 1.
 f_equal. eauto.
 Qed.
 
-
-
-
-(* PREPROCESSING: CONVERTING STRINGS TO PADDED MESSAGE BLOCKS *)
-
-Definition int_length {A} (l : list A) :=
-    list_rect (fun _ => int)
-        (Int.repr 0)
-        (fun _ _ IHl => Int.add IHl (Int.repr 1))
-        l.
-
 Lemma int_length_eq : forall A (l : list A),
     Zlength l <= Int.max_unsigned ->
     rel_z_int (Zlength l) (int_length l).
@@ -134,22 +388,10 @@ induction l; intros; simpl.
   + fwd eapply Zlength_nonneg with (xs := l). lia.
 Qed.
 
-Definition list_repeat {A} (n : nat) (x : A) : list A :=
-    nat_rect (fun _ => list A)
-        []
-        (fun _ IHn => x :: IHn)
-        n.
-
 Lemma list_repeat_eq : forall A n (x : A),
     Coqlib.list_repeat n x = list_repeat n x.
 induction n; intros; simpl; congruence.
 Qed.
-
-Definition list_repeat_int {A} (n : int) (x : A) : list A :=
-    nat_rect (fun _ => list A)
-        []
-        (fun _ IHn => x :: IHn)
-        (int_to_nat n).
 
 Lemma list_repeat_int_eq : forall A n i (x : A),
     rel_nat_int n i ->
@@ -158,27 +400,10 @@ intros. unfold list_repeat_int. fold (list_repeat (int_to_nat i) x).
 unfold int_to_nat, rel_nat_int in *. subst. reflexivity.
 Qed.
 
-Definition list_app {A} (xs ys : list A) : list A :=
-    list_rect (fun _ => list A)
-        ys
-        (fun x _ IHxs => x :: IHxs)
-        xs.
-
 Lemma list_app_eq : forall A (xs ys : list A),
     xs ++ ys = list_app xs ys.
 induction xs; intros; simpl; congruence.
 Qed.
-
-Definition generate_and_pad msg := 
-  let n := int_length msg in
-  let padding := Int.and (Int.neg (Int.add n (Int.repr 9))) (Int.repr 63) in
-  list_app
-    (bytelist_to_intlist
-      (list_app (list_app
-        msg
-        [Int.repr 128])
-        (list_repeat_int padding (Int.repr 0))))
-    [Int.shru n (Int.repr 29); Int.shl n (Int.repr 3)].
 
 Lemma Zlist_to_intlist_Zlength : forall xs,
     (Zlength xs mod 4 = 0) ->
@@ -400,19 +625,6 @@ repeat rewrite <- list_app_eq. f_equal.
     change 8 with (2^3). congruence.
 Qed.
 
-
-
-(*ROUND FUNCTION*)
-
-Definition nthi (l: list int) (t: int) :=
-    list_rect (fun _ => int -> int)
-        (fun t => Int.repr 0)
-        (fun x l IHl => fun t => bool_rect (fun _ => int)
-            (IHl (Int.sub t (Int.repr 1)))      (* true case - t <> 0 *)
-            (x)                                 (* false case - t = 0 *)
-            (int_test t))
-        l t.
-
 Lemma int_test_false : forall i,
     rel_z_int 0 i ->
     int_test i = false.
@@ -427,8 +639,6 @@ Lemma int_test_true : forall z i,
 intros0 Hrel Hne. unfold int_test, Int.eq. rewrite Hrel. rewrite Int.unsigned_zero.
 rewrite zeq_false by eauto. reflexivity.
 Qed.
-
-
 
 Lemma nthi_eq : forall l tz ti,
     rel_z_int tz ti ->
@@ -460,61 +670,11 @@ induction l; intros; simpl.
     rewrite Nat2Z.inj_succ. unfold Z.succ. lia.
 Qed.
 
-
-Definition nthi_K256 t :=
-    nthi
-        [Int.repr 1116352408; Int.repr 1899447441; Int.repr 3049323471; Int.repr 3921009573; 
-         Int.repr  961987163; Int.repr 1508970993; Int.repr 2453635748; Int.repr 2870763221; 
-         Int.repr 3624381080; Int.repr  310598401; Int.repr  607225278; Int.repr 1426881987; 
-         Int.repr 1925078388; Int.repr 2162078206; Int.repr 2614888103; Int.repr 3248222580; 
-         Int.repr 3835390401; Int.repr 4022224774; Int.repr  264347078; Int.repr  604807628; 
-         Int.repr  770255983; Int.repr 1249150122; Int.repr 1555081692; Int.repr 1996064986; 
-         Int.repr 2554220882; Int.repr 2821834349; Int.repr 2952996808; Int.repr 3210313671; 
-         Int.repr 3336571891; Int.repr 3584528711; Int.repr  113926993; Int.repr  338241895; 
-         Int.repr  666307205; Int.repr  773529912; Int.repr 1294757372; Int.repr 1396182291; 
-         Int.repr 1695183700; Int.repr 1986661051; Int.repr 2177026350; Int.repr 2456956037; 
-         Int.repr 2730485921; Int.repr 2820302411; Int.repr 3259730800; Int.repr 3345764771; 
-         Int.repr 3516065817; Int.repr 3600352804; Int.repr 4094571909; Int.repr  275423344; 
-         Int.repr  430227734; Int.repr  506948616; Int.repr  659060556; Int.repr  883997877; 
-         Int.repr  958139571; Int.repr 1322822218; Int.repr 1537002063; Int.repr 1747873779; 
-         Int.repr 1955562222; Int.repr 2024104815; Int.repr 2227730452; Int.repr 2361852424; 
-         Int.repr 2428436474; Int.repr 2756734187; Int.repr 3204031479; Int.repr 3329325298]
-    t.
-
 Lemma nthi_K256_eq : forall tz ti,
     rel_z_int tz ti ->
     SHA256.nthi SHA256.K256 tz = nthi_K256 ti.
 eapply nthi_eq. 
 Qed.
-
-
-(*functions used for round function*)
-Definition Ch (x y z : int) : int :=
-  Int.xor (Int.and x y) (Int.and (Int.not x) z).
-
-Definition Maj (x y z : int) : int :=
-  Int.xor (Int.xor (Int.and x z) (Int.and y z) ) (Int.and x y).
-
-Definition Sigma_0 (x : int) : int := 
-  Int.xor (Int.xor
-    (Int.ror x (Int.repr 2))
-    (Int.ror x (Int.repr 13)))
-    (Int.ror x (Int.repr 22)).
-Definition Sigma_1 (x : int) : int := 
-  Int.xor (Int.xor
-    (Int.ror x (Int.repr 6))
-    (Int.ror x (Int.repr 11)))
-    (Int.ror x (Int.repr 25)).
-Definition sigma_0 (x : int) : int := 
-  Int.xor (Int.xor
-    (Int.ror x (Int.repr 7))
-    (Int.ror x (Int.repr 18)))
-    (Int.shru x (Int.repr 3)).
-Definition sigma_1 (x : int) : int := 
-  Int.xor (Int.xor
-    (Int.ror x (Int.repr 17))
-    (Int.ror x (Int.repr 19)))
-    (Int.shru x (Int.repr 10)).
 
 Lemma Sigma_0_eq : forall x,
     SHA256.Sigma_0 x = Sigma_0 x.
@@ -535,9 +695,6 @@ Lemma sigma_1_eq : forall x,
     SHA256.sigma_1 x = sigma_1 x.
 intros. reflexivity.
 Qed.
-
-
-(* word function *)
 
 Definition W_iter0 (M : Z -> int) (t : Z) (rest : list int) : int :=
   if zlt t 16 
@@ -630,58 +787,6 @@ replace (t - 0)%nat with t by lia.
 reflexivity.
 Qed.
 
-
-
-(* Produce the list [0; 1; ...; n - 1]. *)
-Function int_count' (n : int) (acc : list int)
-        {measure (fun n => Z.to_nat (Int.unsigned n)) n} : list int :=
-    if Int.eq n Int.zero then
-        acc
-    else
-        let n' := Int.sub n Int.one in
-        int_count' n' (n' :: acc).
-Proof.
-    intros.
-eapply Z2Nat.inj_lt.
-  { fwd eapply Int.unsigned_range. break_and. eassumption. }
-  { fwd eapply Int.unsigned_range. break_and. eassumption. }
-
-rewrite int_nonzero_pred by eauto. lia.
-Qed.
-
-Definition int_count n := int_count' n [].
-
-
-(* Produce the list [n - 1; n - 2; ...; 0].  This is useful for doing
- * Peano-style recursion on ints. *)
-Function int_count_rev (n : int)
-        {measure (fun n => Z.to_nat (Int.unsigned n)) n} : list int :=
-    if Int.eq n Int.zero then
-        []
-    else
-        let n' := Int.sub n Int.one in
-        n' :: int_count_rev n'.
-Proof.
-    intros.
-eapply Z2Nat.inj_lt.
-  { fwd eapply Int.unsigned_range. break_and. eassumption. }
-  { fwd eapply Int.unsigned_range. break_and. eassumption. }
-
-rewrite int_nonzero_pred by eauto. lia.
-Qed.
-
-
-
-
-Definition list_rev' {A} (xs : list A) (acc : list A) : list A :=
-    list_rect (fun _ => list A -> list A)
-        (fun acc => acc)
-        (fun x xs IHxs acc => IHxs (x :: acc))
-        xs acc.
-
-Definition list_rev {A} (xs : list A) : list A :=
-    list_rev' xs [].
-
 Lemma list_rev'_eq : forall A (xs : list A) acc,
     List.rev xs ++ acc = list_rev' xs acc.
 induction xs; intros; simpl.
@@ -694,14 +799,15 @@ Lemma list_rev_eq : forall A (xs : list A),
 intros. unfold list_rev. rewrite <- list_rev'_eq. rewrite app_nil_r. reflexivity.
 Qed.
 
-
-
-Definition W_iter (M : int -> int) (t : int) (rest : list int) : int :=
-    bool_rect (fun _ => int)
-        (M t)
-        (Int.add (Int.add (sigma_1 (SHA256.nthi rest 1)) (SHA256.nthi rest 6))
-                 (Int.add (sigma_0 (SHA256.nthi rest 14)) (SHA256.nthi rest 15)))
-        (Int.ltu t (Int.repr 16)).
+Lemma succ_rel_z_int : forall z i,
+    z < Int.max_unsigned ->     (* no overflow *)
+    rel_z_int z i ->
+    rel_z_int (z + 1) (Int.add i Int.one).
+intros. unfold rel_z_int in *.
+unfold Int.add. rewrite Int.unsigned_one. find_rewrite.
+rewrite Int.unsigned_repr; eauto.
+fwd eapply (Int.unsigned_range i). unfold Int.max_unsigned in *. lia.
+Qed.
 
 Lemma W_iter_eq : forall Mz Mi tz ti rest,
     (forall z i, rel_z_int z i -> Mz z = Mi i) ->
@@ -715,22 +821,6 @@ break_if; simpl.
 - eauto.
 - reflexivity.
 Qed.
-
-Lemma succ_rel_z_int : forall z i,
-    z < Int.max_unsigned ->     (* no overflow *)
-    rel_z_int z i ->
-    rel_z_int (z + 1) (Int.add i Int.one).
-intros. unfold rel_z_int in *.
-unfold Int.add. rewrite Int.unsigned_one. find_rewrite.
-rewrite Int.unsigned_repr; eauto.
-fwd eapply (Int.unsigned_range i). unfold Int.max_unsigned in *. lia.
-Qed.
-
-Definition W_list (M : int -> int) (ts : list int) : list int :=
-    list_rect (fun _ => list int)
-        ([W_iter M (Int.repr 0) []])
-        (fun t ts IHts => W_iter M (Int.add t Int.one) IHts :: IHts)
-        ts.
 
 Lemma W_list_eq : forall Mz Mi tn tsi,
     (forall z i, rel_z_int z i -> Mz z = Mi i) ->
@@ -766,9 +856,6 @@ induction tn; intros0 HM Hmax Hlen Ht; simpl in *.
       { lia. }
       { simpl. eauto. }
 Qed.
-
-Definition W (M : int -> int) (t : int) : int :=
-    nthi (W_list M (int_count_rev t)) (Int.repr 0).
 
 Lemma int_repr_add : forall a b,
     Int.repr (a + b) = Int.add (Int.repr a) (Int.repr b).
@@ -865,31 +952,9 @@ rewrite W0_eq. eapply W_eq'; eauto.
 - rewrite Z2Nat.id by auto. auto.
 Qed.
 
-
-
-
-(*registers that represent intermediate and final hash values*)
-
-Definition registers := (int * int * int * int * int * int * int * int)%type.
-
 Definition rel_regs (r : SHA256.registers) (r' : registers) :=
     let '(a, b, c, d, e, f, g, h) := r' in
     r = [a; b; c; d; e; f; g; h].
-
-Definition rnd_function (x : registers) (k : int) (w : int) : registers :=
-    prod_rect (fun _ => registers) (fun abcdefg h =>
-    prod_rect (fun _ => registers) (fun abcdef g =>
-    prod_rect (fun _ => registers) (fun abcde f =>
-    prod_rect (fun _ => registers) (fun abcd e =>
-    prod_rect (fun _ => registers) (fun abc d =>
-    prod_rect (fun _ => registers) (fun ab c =>
-    prod_rect (fun _ => registers) (fun a b =>
-        (Int.add (Int.add (Int.add (Int.add (Int.add h (Sigma_1 e)) (Ch e f g)) k) w)
-                 (Int.add (Sigma_0 a) (Maj a b c)),
-         a, b, c,
-         Int.add d (Int.add (Int.add (Int.add (Int.add h (Sigma_1 e)) (Ch e f g)) k) w),
-         e, f, g)
-    ) ab) abc) abcd) abcde) abcdef) abcdefg) x.
 
 Lemma rnd_function_eq : forall r r' k w,
     rel_regs r r' ->
@@ -902,10 +967,6 @@ change SHA256.Ch with Ch. change SHA256.Maj with Maj.
 reflexivity.
 Qed.
 
-Definition init_registers : registers := 
-    (Int.repr 1779033703, Int.repr 3144134277, Int.repr 1013904242, Int.repr 2773480762,
-     Int.repr 1359893119, Int.repr 2600822924, Int.repr  528734635, Int.repr 1541459225).
-
 Lemma init_registers_eq :
     rel_regs SHA256.init_registers init_registers.
 unfold SHA256.init_registers, init_registers. reflexivity.
@@ -916,8 +977,6 @@ Fixpoint Round_list0 (regs : registers) (M : int -> int) (ts : list int) : regis
     | [] => regs
     | t :: ts => rnd_function (Round_list0 regs M ts) (nthi_K256 t) (W M t)
     end.
-
-Check Z.peano_ind.
 
 Lemma Round_list0_eq_induction_scheme (P : Z -> Prop)
     (Hneg : forall z, z < (-1) -> P z)
@@ -982,12 +1041,6 @@ induction tz using Round_list0_eq_induction_scheme; intros0 Hregs HM Hmax Hlen H
 
 Qed.
 
-Definition Round_list (regs : registers) (M : int -> int) (ts : list int) : registers :=
-    list_rect (fun _ => registers)
-        regs
-        (fun t ts IHts => rnd_function IHts (nthi_K256 t) (W M t))
-        ts.
-
 Lemma Round_list_eq' : forall regs M ts,
     Round_list0 regs M ts = Round_list regs M ts.
 induction ts; simpl; congruence.
@@ -1004,9 +1057,6 @@ Lemma Round_list_eq : forall regsz regsi Mz Mi tz tsi,
     rel_regs (SHA256.Round regsz Mz tz) (Round_list regsi Mi tsi).
 intros. rewrite <- Round_list_eq'. eauto using Round_list0_eq.
 Qed.
-
-Definition Round (regs : registers) (M : int -> int) (t : int) : registers :=
-    Round_list regs M (int_count_rev t).
 
 Lemma Round_eq : forall regsz regsi Mz Mi tz ti,
     rel_regs regsz regsi ->
@@ -1033,33 +1083,6 @@ eapply Round_list_eq; eauto.
   lia.
 Qed.
 
-
-Definition hash_block (r : registers) (block : list int) : registers :=
-    prod_rect (fun _ => registers) (fun abcdefg0 h0 =>
-    prod_rect (fun _ => registers) (fun abcdef0 g0 =>
-    prod_rect (fun _ => registers) (fun abcde0 f0 =>
-    prod_rect (fun _ => registers) (fun abcd0 e0 =>
-    prod_rect (fun _ => registers) (fun abc0 d0 =>
-    prod_rect (fun _ => registers) (fun ab0 c0 =>
-    prod_rect (fun _ => registers) (fun a0 b0 =>
-    prod_rect (fun _ => registers) (fun abcdefg1 h1 =>
-    prod_rect (fun _ => registers) (fun abcdef1 g1 =>
-    prod_rect (fun _ => registers) (fun abcde1 f1 =>
-    prod_rect (fun _ => registers) (fun abcd1 e1 =>
-    prod_rect (fun _ => registers) (fun abc1 d1 =>
-    prod_rect (fun _ => registers) (fun ab1 c1 =>
-    prod_rect (fun _ => registers) (fun a1 b1 =>
-        (Int.add a0 a1,
-         Int.add b0 b1,
-         Int.add c0 c1,
-         Int.add d0 d1,
-         Int.add e0 e1,
-         Int.add f0 f1,
-         Int.add g0 g1,
-         Int.add h0 h1)
-    ) ab1) abc1) abcd1) abcde1) abcdef1) abcdefg1) (Round r (nthi block) (Int.repr 64))
-    ) ab0) abc0) abcd0) abcde0) abcdef0) abcdefg0) r.
-
 Lemma hash_block_eq : forall rz ri block,
     rel_regs rz ri ->
     rel_regs (SHA256.hash_block rz block) (hash_block ri block).
@@ -1079,38 +1102,6 @@ rewrite Hrnd'.
 reflexivity.
 Qed.
 
-
-
-Definition pairs_to_list_16 x : list int :=
-    prod_rect (fun _ => list int) (fun x0 x1 =>
-
-    prod_rect (fun _ => list int) (fun x00 x01 =>
-    prod_rect (fun _ => list int) (fun x10 x11 =>
-
-    prod_rect (fun _ => list int) (fun x000 x001 =>
-    prod_rect (fun _ => list int) (fun x010 x011 =>
-    prod_rect (fun _ => list int) (fun x100 x101 =>
-    prod_rect (fun _ => list int) (fun x110 x111 =>
-
-    prod_rect (fun _ => list int) (fun x0000 x0001 =>
-    prod_rect (fun _ => list int) (fun x0010 x0011 =>
-    prod_rect (fun _ => list int) (fun x0100 x0101 =>
-    prod_rect (fun _ => list int) (fun x0110 x0111 =>
-    prod_rect (fun _ => list int) (fun x1000 x1001 =>
-    prod_rect (fun _ => list int) (fun x1010 x1011 =>
-    prod_rect (fun _ => list int) (fun x1100 x1101 =>
-    prod_rect (fun _ => list int) (fun x1110 x1111 =>
-
-    [x0000; x0001; x0010; x0011;
-     x0100; x0101; x0110; x0111;
-     x1000; x1001; x1010; x1011;
-     x1100; x1101; x1110; x1111]
-
-    ) x111) x110) x101) x100) x011) x010) x001) x000
-    ) x11) x10) x01) x00
-    ) x1) x0
-    ) x.
-
 Fixpoint hash_blocks'0 (r : registers) (blks : list _) : registers :=
     match blks with
     | [] => r
@@ -1118,15 +1109,6 @@ Fixpoint hash_blocks'0 (r : registers) (blks : list _) : registers :=
             let r' := hash_block r blk in
             hash_blocks'0 r' blks'
     end.
-
-Definition hash_blocks' (r : registers) (blks : list _) : registers :=
-    list_rect (fun _ => registers -> registers)
-        (fun r => r)
-        (fun blk blks IHblks r => IHblks (hash_block r (pairs_to_list_16 blk)))
-        blks r.
-
-Definition hash_blocks (r : registers) (msg : list int) : registers :=
-    hash_blocks' r (pair_up (pair_up (pair_up (pair_up msg)))).
 
 Lemma hash_blocks_eq : forall rz ri msg,
     rel_regs rz ri ->
@@ -1178,18 +1160,6 @@ all: try discriminate.
 }
 Qed.
 
-Definition SHA_256 (str : list int) : list int :=
-    prod_rect (fun _ => list int) (fun abcdefg h =>
-    prod_rect (fun _ => list int) (fun abcdef g =>
-    prod_rect (fun _ => list int) (fun abcde f =>
-    prod_rect (fun _ => list int) (fun abcd e =>
-    prod_rect (fun _ => list int) (fun abc d =>
-    prod_rect (fun _ => list int) (fun ab c =>
-    prod_rect (fun _ => list int) (fun a b =>
-    intlist_to_bytelist [a; b; c; d; e; f; g; h]
-    ) ab) abc) abcd) abcde) abcdef) abcdefg)
-    (hash_blocks init_registers (generate_and_pad str)).
-
 Lemma SHA_256_eq : forall strz stri,
     rel_z_int_list strz stri ->
     Zlength strz <= Int.max_unsigned ->
@@ -1208,4 +1178,3 @@ rewrite Heqr in Hblks. unfold rel_regs in Hblks.
 rewrite Hblks.
 eapply intlist_to_bytelist_eq.
 Qed.
-
