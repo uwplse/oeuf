@@ -64,9 +64,20 @@ Definition int_binop_name_eq_dec (x y : int_binop_name) : { x = y } + { x <> y }
 decide equality.
 Defined.
 
+Inductive int_cmpop_name : Set :=
+| IcEq
+| IcULt
+| IcSLt
+.
+
+Definition int_cmpop_name_eq_dec (x y : int_cmpop_name) : { x = y } + { x <> y }.
+decide equality.
+Defined.
+
 Inductive opaque_oper_name : Set :=
 | ONunop (op : int_unop_name)
 | ONbinop (op : int_binop_name)
+| ONcmpop (op : int_cmpop_name)
 | ONtest
 | ONrepr (z : Z)
 | ONint_to_nat
@@ -76,6 +87,7 @@ Inductive opaque_oper_name : Set :=
 Inductive opaque_oper : list type -> type -> Set :=
 | Ounop (op : int_unop_name) : opaque_oper [Opaque Oint] (Opaque Oint)
 | Obinop (op : int_binop_name) : opaque_oper [Opaque Oint; Opaque Oint] (Opaque Oint)
+| Ocmpop (op : int_cmpop_name) : opaque_oper [Opaque Oint; Opaque Oint] (ADT Tbool)
 | Otest : opaque_oper [Opaque Oint] (ADT Tbool)
 | Orepr (z : Z) : opaque_oper [] (Opaque Oint)
 | Oint_to_nat : opaque_oper [Opaque Oint] (ADT Tnat)
@@ -86,6 +98,7 @@ Definition opaque_oper_to_name {atys rty} (op : opaque_oper atys rty) : opaque_o
     match op with
     | Ounop op => ONunop op
     | Obinop op => ONbinop op
+    | Ocmpop op => ONcmpop op
     | Otest => ONtest
     | Orepr z => ONrepr z
     | Oint_to_nat => ONint_to_nat
@@ -93,7 +106,8 @@ Definition opaque_oper_to_name {atys rty} (op : opaque_oper atys rty) : opaque_o
     end.
 
 Definition opaque_oper_name_eq_dec (x y : opaque_oper_name) : { x = y } + { x <> y }.
-decide equality; eauto using Z.eq_dec, int_unop_name_eq_dec, int_binop_name_eq_dec.
+decide equality; eauto using Z.eq_dec,
+    int_unop_name_eq_dec, int_binop_name_eq_dec, int_cmpop_name_eq_dec.
 Defined.
 
 
@@ -282,6 +296,29 @@ Definition int_binop_to_cminor op x y :=
     | IbAdd => Ebinop Cminor.Oadd x y
     | IbSub => Ebinop Cminor.Osub x y
     end.
+
+Definition int_cmpop_denote op : int -> int -> bool :=
+    match op with
+    | IcEq => Int.eq
+    | IcULt => Int.ltu
+    | IcSLt => Int.lt
+    end.
+
+Definition int_cmpop_to_cminor op x y :=
+    match op with
+    | IcEq => Ebinop (Cminor.Ocmpu Ceq) x y
+    | IcULt => Ebinop (Cminor.Ocmpu Clt) x y
+    | IcSLt => Ebinop (Cminor.Ocmp Clt) x y
+    end.
+
+Lemma int_cmpop_cminor_effect : forall ge sp e m op x y xi yi,
+    eval_expr ge sp e m x (Vint xi) ->
+    eval_expr ge sp e m y (Vint yi) ->
+    eval_expr ge sp e m (int_cmpop_to_cminor op x y)
+        (if int_cmpop_denote op xi yi then Vtrue else Vfalse).
+destruct op; intros.
+all: econstructor; eauto.
+Qed.
 
 Lemma mod_32_ltu_wordsize : forall z,
     Int.ltu (Int.repr (z mod 32)) Int.iwordsize = true.
@@ -574,6 +611,179 @@ simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _ _ _  _ _ _ _  _ _ _ _ _ _).
 
   destruct op.
   all: try solve [econstructor; eauto; simpl; reflexivity].
+Defined.
+
+Definition impl_cmpop (op : int_cmpop_name) :
+    opaque_oper_impl [Opaque Oint; Opaque Oint] (ADT Tbool).
+simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _ _ _  _ _ _ _  _ _ _ _ _ _).
+
+- exact (fun args => int_cmpop_denote op (hhead args) (hhead (htail args))).
+- refine (fun G args =>
+    let x := unwrap_opaque (hhead args) in
+    let y := unwrap_opaque (hhead (htail args)) in
+    if int_cmpop_denote op x y
+        then VConstr CTtrue hnil
+        else VConstr CTfalse hnil).
+- refine (fun args =>
+    match args with
+    | [HighestValues.Opaque Oint x;
+       HighestValues.Opaque Oint y] => Some (
+           let ctor := if int_cmpop_denote op x y then Ctrue else Cfalse in
+           HighestValues.Constr ctor [])
+    | _ => None
+    end).
+- refine (fun args =>
+    match args with
+    | [HigherValue.Opaque Oint x;
+       HigherValue.Opaque Oint y] => Some (
+            (* remember, true is 0 and false is 1 *)
+            let tag := if int_cmpop_denote op x y then 0 else 1 in
+            HigherValue.Constr tag [])
+    | _ => None
+    end).
+- refine (fun args =>
+    match args with
+    | [HighValues.Opaque Oint x;
+       HighValues.Opaque Oint y] => Some (
+           let tag := if int_cmpop_denote op x y then Int.zero else Int.one in
+           HighValues.Constr tag [])
+    | _ => None
+    end).
+- refine (fun m args =>
+    match args with
+    | [Vint x; Vint y] =>
+            let tag := if int_cmpop_denote op x y then Int.zero else Int.one in
+            build_constr m tag []
+    | _ => None
+    end).
+- refine (fun ctx id args =>
+    match args with
+    | [x; y] =>
+            Sifthenelse (int_cmpop_to_cminor op x y)
+                (build_constr_cminor (cmcc_malloc_id ctx) id Int.zero [])
+                (build_constr_cminor (cmcc_malloc_id ctx) id Int.one [])
+    | _ => Sskip
+    end).
+
+
+- (* no_fab_clos_higher *)
+  intros. simpl in *.
+  repeat (break_match; try discriminate; [ ]). subst. inject_some.
+  on >HigherValue.VIn, invc; try solve [exfalso; eauto].
+  simpl in *. discriminate.
+
+- (* change_fname_high *)
+  intros. simpl in *.
+  repeat (break_match_hyp; try discriminate; [ ]).
+  repeat on >Forall2, invc. simpl in *. do 2 (break_match_hyp; try contradiction).
+  fix_existT. subst. inject_some.
+  eexists; split; eauto. simpl. eauto.
+
+- (* mem_inj_id *)
+  intros. simpl in *. repeat (break_match_hyp; try discriminate; []). subst. inject_some.
+  eapply build_constr_mem_inj_id; eauto.
+
+- (* mem_inject *)
+  intros. simpl in *. repeat (break_match_hyp; try discriminate; []). subst. inject_some.
+  do 3 on >Forall2, invc. do 2 on >Val.inject, invc.
+  unfold build_constr in * |-. break_match_hyp. break_bind_option. inject_some.
+  rename m2 into m3, m0 into m2, m1 into m0, m into m1.
+  rename m1' into m0'.
+
+  eapply build_constr_mem_inject; eauto.
+  unfold build_constr.
+  find_rewrite. eapply require_bind_eq. { constructor. } intro.
+  simpl. find_rewrite. simpl.
+  find_rewrite. simpl.
+  reflexivity.
+
+
+- intros. simpl.
+  rewrite hmap_hhead. rewrite hmap_htail, hmap_hhead.
+  do 2 rewrite opaque_value_denote. break_if; reflexivity.
+
+- intros. simpl in *.
+  revert H.
+  do 2 on _, invc_using (@case_hlist_cons type). on _, invc_using (@case_hlist_nil type).
+  do 2 on _, invc_using case_value_opaque.
+  simpl. break_if; reflexivity.
+
+- intros. simpl in *.
+
+  on >Forall2, invc; try discriminate.
+  on >mv_higher, invc; try discriminate.
+  destruct oty; try discriminate.
+  on >Forall2, invc; try discriminate.
+  on >mv_higher, invc; try discriminate.
+  destruct oty; try discriminate.
+  on >Forall2, invc; try discriminate.
+  inject_some.
+
+  eexists. split; eauto. econstructor; eauto.
+  break_if; reflexivity.
+
+- intros. simpl in *.
+
+  on >Forall2, invc; try discriminate.
+  on >mv_high, invc; try discriminate.
+  destruct oty; try discriminate.
+  on >Forall2, invc; try discriminate.
+  on >mv_high, invc; try discriminate.
+  destruct oty; try discriminate.
+  on >Forall2, invc; try discriminate.
+  inject_some.
+
+  eexists. split; eauto. econstructor; eauto.
+  break_if; reflexivity.
+
+- intros. simpl in *.
+
+  on >Forall2, invc; try discriminate.
+  on >@HighValues.value_inject, invc; try discriminate.
+  destruct oty; try discriminate.
+  on >Forall2, invc; try discriminate.
+  on >@HighValues.value_inject, invc; try discriminate.
+  destruct oty; try discriminate.
+  on >Forall2, invc; try discriminate.
+  inject_some.
+
+  do 2 on >opaque_type_value_inject, invc.
+       rename ov into ovx, ov0 into ovy.
+
+  fwd eapply build_constr_ok with (m1 := m)
+    (tag := if int_cmpop_denote op ovx ovy then Int.zero else Int.one)
+    (args := []) (hargs := []) as HH; eauto.
+    { rewrite Zcomplements.Zlength_nil. eapply max_arg_count_big. lia. }
+    destruct HH as (ret' & m' & ? & ?).
+  exists m', ret'. split; eauto.
+
+- intros. simpl in *.
+  do 6 (break_match_hyp; try discriminate).
+  do 3 on >eval_exprlist, invc.
+
+  eexists. repeat eapply conj.
+    { erewrite PTree.gss. reflexivity. }
+    { intros. erewrite PTree.gso by eauto. reflexivity. }
+
+  eapply plus_left. 3: eapply E0_E0_E0. {
+    econstructor.
+    - eapply int_cmpop_cminor_effect; eauto.
+    - instantiate (1 := int_cmpop_denote op i i0).
+      break_if; econstructor.
+  }
+
+  replace (if int_cmpop_denote _ _ _ then _ else _) with
+      (build_constr_cminor (cmcc_malloc_id ctx) id
+        (if int_cmpop_denote op i i0 then Int.zero else Int.one) []); cycle 1.
+    { break_if; reflexivity. }
+
+  eapply plus_star. eapply build_constr_cminor_effect.
+  + eauto.
+  + econstructor.
+  + econstructor.
+  + rewrite Zlength_correct. simpl. eapply max_arg_count_big. lia.
+  + eauto.
+  + eauto.
 Defined.
 
 
@@ -1403,7 +1613,7 @@ simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _ _ _  _ _ _ _  _ _ _ _ _ _).
   eapply star_trans. 3: eapply E0_E0_E0. { eapply plus_star. eassumption. }
 
   eapply star_refl.
-Qed.
+Defined.
 
 
 
@@ -2019,7 +2229,7 @@ simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _ _ _  _ _ _ _  _ _ _ _ _ _).
   eapply star_trans. 3: eapply E0_E0_E0. { eapply plus_star. eassumption. }
 
   eapply star_refl.
-Qed.
+Defined.
 
 
 
@@ -2032,6 +2242,7 @@ Definition get_opaque_oper_impl {atys rty} (op : opaque_oper atys rty) :
     match op with
     | Ounop op => impl_unop op
     | Obinop op => impl_binop op
+    | Ocmpop op => impl_cmpop op
     | Otest => impl_test
     | Orepr z => impl_repr z
     | Oint_to_nat => impl_int_to_nat
@@ -2043,6 +2254,7 @@ Definition get_opaque_oper_impl' (op : opaque_oper_name) :
     match op with
     | ONunop op => existT _ _ (existT _ _ (impl_unop op))
     | ONbinop op => existT _ _ (existT _ _ (impl_binop op))
+    | ONcmpop op => existT _ _ (existT _ _ (impl_cmpop op))
     | ONtest => existT _ _ (existT _ _ impl_test)
     | ONrepr z => existT _ _ (existT _ _ (impl_repr z))
     | ONint_to_nat => existT _ _ (existT _ _ (impl_int_to_nat))

@@ -1416,6 +1416,9 @@ Import oeuf.OpaqueOps.
     | Obinop IbXor => node [atom (symbol.of_string_unsafe "binop_xor")]
     | Obinop IbAdd => node [atom (symbol.of_string_unsafe "binop_add")]
     | Obinop IbSub => node [atom (symbol.of_string_unsafe "binop_sub")]
+    | Ocmpop IcEq => node [atom (symbol.of_string_unsafe "cmpop_eq")]
+    | Ocmpop IcULt => node [atom (symbol.of_string_unsafe "cmpop_ult")]
+    | Ocmpop IcSLt => node [atom (symbol.of_string_unsafe "cmpop_slt")]
     | Otest => node [atom (symbol.of_string_unsafe "test")]
     | Orepr z => node [atom (symbol.of_string_unsafe "repr"); atom (Z_to_symbol z)]
     | Oint_to_nat => node [atom (symbol.of_string_unsafe "int_to_nat")]
@@ -1481,6 +1484,21 @@ Import oeuf.OpaqueOps.
             else if symbol.eq_dec tag (symbol.of_string_unsafe "binop_sub") then
                 match l with
                 | [] => Some ([Opaque Oint; Opaque Oint], (Opaque Oint, Obinop IbSub))
+                | _ => None end
+
+            else if symbol.eq_dec tag (symbol.of_string_unsafe "cmpop_eq") then
+                match l with
+                | [] => Some ([Opaque Oint; Opaque Oint], (ADT Tbool, Ocmpop IcEq))
+                | _ => None end
+
+            else if symbol.eq_dec tag (symbol.of_string_unsafe "cmpop_ult") then
+                match l with
+                | [] => Some ([Opaque Oint; Opaque Oint], (ADT Tbool, Ocmpop IcULt))
+                | _ => None end
+
+            else if symbol.eq_dec tag (symbol.of_string_unsafe "cmpop_slt") then
+                match l with
+                | [] => Some ([Opaque Oint; Opaque Oint], (ADT Tbool, Ocmpop IcSLt))
                 | _ => None end
 
             else if symbol.eq_dec tag (symbol.of_string_unsafe "test") then
