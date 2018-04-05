@@ -1419,6 +1419,7 @@ Import oeuf.OpaqueOps.
     | Otest => node [atom (symbol.of_string_unsafe "test")]
     | Orepr z => node [atom (symbol.of_string_unsafe "repr"); atom (Z_to_symbol z)]
     | Oint_to_nat => node [atom (symbol.of_string_unsafe "int_to_nat")]
+    | Oint_to_list => node [atom (symbol.of_string_unsafe "int_to_list")]
     end.
 
   Definition from_tree (t : tree symbol.t)
@@ -1497,6 +1498,11 @@ Import oeuf.OpaqueOps.
             else if symbol.eq_dec tag (symbol.of_string_unsafe "int_to_nat") then
                 match l with
                 | [] => Some ([Opaque Oint], (ADT Tnat, Oint_to_nat))
+                | _ => None end
+
+            else if symbol.eq_dec tag (symbol.of_string_unsafe "int_to_list") then
+                match l with
+                | [] => Some ([Opaque Oint], (ADT (Tlist (Topaque Oint)), Oint_to_list))
                 | _ => None end
 
             else None

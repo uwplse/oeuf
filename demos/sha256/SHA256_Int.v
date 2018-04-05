@@ -69,12 +69,6 @@ Definition int_length {A} (l : list A) :=
         (fun _ _ IHl => Int.add IHl (Int.repr 1))
         l.
 
-Definition list_repeat {A} (n : nat) (x : A) : list A :=
-    nat_rect (fun _ => list A)
-        []
-        (fun _ IHn => x :: IHn)
-        n.
-
 Definition list_repeat_int {A} (n : int) (x : A) : list A :=
     nat_rect (fun _ => list A)
         []
@@ -164,24 +158,6 @@ Definition sigma_1 (x : int) : int :=
     (Int.shru x (Int.repr 10)).
 
 
-(* Produce the list [n - 1; n - 2; ...; 0].  This is useful for doing
- * Peano-style recursion on ints. *)
-Function int_count_rev (n : int)
-        {measure (fun n => Z.to_nat (Int.unsigned n)) n} : list int :=
-    if Int.eq n Int.zero then
-        []
-    else
-        let n' := Int.sub n Int.one in
-        n' :: int_count_rev n'.
-Proof.
-    intros.
-eapply Z2Nat.inj_lt.
-  { fwd eapply Int.unsigned_range. break_and. eassumption. }
-  { fwd eapply Int.unsigned_range. break_and. eassumption. }
-
-rewrite int_nonzero_pred by eauto. lia.
-Qed.
-
 
 Definition list_rev' {A} (xs : list A) (acc : list A) : list A :=
     list_rect (fun _ => list A -> list A)
@@ -208,7 +184,7 @@ Definition W_list (M : int -> int) (ts : list int) : list int :=
         ts.
 
 Definition W (M : int -> int) (t : int) : int :=
-    nthi (W_list M (int_count_rev t)) (Int.repr 0).
+    nthi (W_list M (int_to_list t)) (Int.repr 0).
 
 
 
@@ -243,7 +219,7 @@ Definition Round_list (regs : registers) (M : int -> int) (ts : list int) : regi
         ts.
 
 Definition Round (regs : registers) (M : int -> int) (t : int) : registers :=
-    Round_list regs M (int_count_rev t).
+    Round_list regs M (int_to_list t).
 
 
 Definition hash_block (r : registers) (block : list int) : registers :=
@@ -387,6 +363,12 @@ induction l; intros; simpl.
   rewrite Int.unsigned_repr; eauto.
   + fwd eapply Zlength_nonneg with (xs := l). lia.
 Qed.
+
+Definition list_repeat {A} (n : nat) (x : A) : list A :=
+    nat_rect (fun _ => list A)
+        []
+        (fun _ IHn => x :: IHn)
+        n.
 
 Lemma list_repeat_eq : forall A n (x : A),
     Coqlib.list_repeat n x = list_repeat n x.
@@ -866,9 +848,9 @@ eapply Int.eqmod_add; eapply Int.eqmod_mod.
 all: change Int.modulus with (2 ^ 32); lia.
 Qed.
 
-Lemma int_count_rev_nth_error : forall t i,
+Lemma int_to_list_nth_error : forall t i,
     Z.of_nat i < Int.unsigned t ->
-    nth_error (int_count_rev t) i = Some (Int.sub t (Int.repr (Z.of_nat i + 1))).
+    nth_error (int_to_list t) i = Some (Int.sub t (Int.repr (Z.of_nat i + 1))).
 induction t using int_peano_rect; intros0 Hi.
   { exfalso. pose proof (Nat2Z.is_nonneg i). rewrite Int.unsigned_zero in *. lia. }
 
@@ -876,7 +858,7 @@ assert (Int.unsigned t > 0).
   { pose proof (Nat2Z.is_nonneg i). lia. }
 assert (t <> Int.zero).
   { intro. subst. rewrite Int.unsigned_zero in *. lia. }
-rewrite int_count_rev_equation. rewrite Int.eq_false by eauto.
+rewrite int_to_list_equation. rewrite Int.eq_false by eauto.
 destruct i.
 
 - simpl. reflexivity.
@@ -892,9 +874,9 @@ destruct i.
   repeat rewrite int_repr_add. ring.
 Qed.
 
-Lemma int_count_rev_length : forall t,
-    length (int_count_rev t) = Z.to_nat (Int.unsigned t).
-induction t using int_peano_rect; rewrite int_count_rev_equation; simpl.
+Lemma int_to_list_length : forall t,
+    length (int_to_list t) = Z.to_nat (Int.unsigned t).
+induction t using int_peano_rect; rewrite int_to_list_equation; simpl.
 - rewrite Int.eq_true. reflexivity.
 - rewrite Int.eq_false by auto. simpl. rewrite IHt.
   on (t <> Int.zero), rewrite_rev (Int.repr_unsigned t). unfold Int.zero in *.
@@ -916,7 +898,7 @@ intros.  unfold W0, W.
 erewrite <- nthi_eq with (tz := 0); cycle 1. { reflexivity. }
 f_equal. erewrite <- W_list_eq; eauto.
 
-- rewrite int_count_rev_length. eauto.
+- rewrite int_to_list_length. eauto.
 
 - intros0 Hlt Hnth.
 
@@ -926,7 +908,7 @@ f_equal. erewrite <- W_list_eq; eauto.
         { eapply Nat2Z.is_nonneg. }
         { pose proof (Int.unsigned_range ti). lia. }
       rewrite Nat2Z.id. lia. }
-  rewrite int_count_rev_nth_error in Hnth by eauto. inject_some.
+  rewrite int_to_list_nth_error in Hnth by eauto. inject_some.
   unfold rel_nat_int. unfold Int.sub.
   rewrite (Int.unsigned_repr (Z.of_nat n + 1)); cycle 1.
     { rewrite Nat2Z.inj_lt in Hlt. lia. }
@@ -1070,10 +1052,10 @@ assert (tz < Int.max_unsigned).
     unfold Int.max_unsigned. lia. }
 eapply Round_list_eq; eauto.
 
-- rewrite Zlength_correct. rewrite int_count_rev_length.
+- rewrite Zlength_correct. rewrite int_to_list_length.
   rewrite Z2Nat.id; cycle 1. { pose proof (Int.unsigned_range ti). lia. }
   auto.
-- intros. rewrite int_count_rev_nth_error in *; cycle 1.
+- intros. rewrite int_to_list_nth_error in *; cycle 1.
     { unfold rel_z_int in *. lia. }
   inject_some.
   unfold rel_z_int in *.

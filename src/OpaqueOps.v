@@ -70,6 +70,7 @@ Inductive opaque_oper_name : Set :=
 | ONtest
 | ONrepr (z : Z)
 | ONint_to_nat
+| ONint_to_list
 .
 
 Inductive opaque_oper : list type -> type -> Set :=
@@ -78,6 +79,7 @@ Inductive opaque_oper : list type -> type -> Set :=
 | Otest : opaque_oper [Opaque Oint] (ADT Tbool)
 | Orepr (z : Z) : opaque_oper [] (Opaque Oint)
 | Oint_to_nat : opaque_oper [Opaque Oint] (ADT Tnat)
+| Oint_to_list : opaque_oper [Opaque Oint] (ADT (Tlist (Topaque Oint)))
 .
 
 Definition opaque_oper_to_name {atys rty} (op : opaque_oper atys rty) : opaque_oper_name :=
@@ -87,6 +89,7 @@ Definition opaque_oper_to_name {atys rty} (op : opaque_oper atys rty) : opaque_o
     | Otest => ONtest
     | Orepr z => ONrepr z
     | Oint_to_nat => ONint_to_nat
+    | Oint_to_list => ONint_to_list
     end.
 
 Definition opaque_oper_name_eq_dec (x y : opaque_oper_name) : { x = y } + { x <> y }.
@@ -1165,7 +1168,7 @@ simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _ _ _  _ _ _ _  _ _ _ _ _ _).
             (build_constr m Int.zero [])
     | _ => None
     end).
-- Check nth. refine (fun ctx id args =>
+- refine (fun ctx id args =>
     let counter := nth 0 (cmcc_scratch ctx) 1%positive in
     let tmp := nth 1 (cmcc_scratch ctx) 1%positive in
     match args with
@@ -1405,15 +1408,86 @@ Qed.
 
 
 
+Function int_iter_i {A} (f : int -> A -> A) (n : int) (x : A)
+        {measure (fun n => Z.to_nat (Int.unsigned n)) n} : A :=
+    if Int.eq n Int.zero
+        then x
+        else
+            let n' := Int.sub n Int.one in
+            f n' (int_iter_i f n' x).
+Proof.
+intros.
+
+eapply Z2Nat.inj_lt.
+  { fwd eapply Int.unsigned_range. break_and. eassumption. }
+  { fwd eapply Int.unsigned_range. break_and. eassumption. }
+
+rewrite int_nonzero_pred by eauto. lia.
+Qed.
+Arguments int_iter_i [A] f n x : rename.
+
+Lemma int_iter_i_equation' : forall A f n (x : A),
+    int_iter_i f n x =
+    if Int.eq n Int.zero then x else
+        let n' := Int.sub n Int.one in
+        int_iter_i (fun i x => f (Int.add i Int.one) x)  n' (f Int.zero x).
+induction n using int_peano_rect; intros.
+- rewrite int_iter_i_equation. rewrite Int.eq_true. reflexivity.
+- rewrite int_iter_i_equation. rewrite Int.eq_false by eauto.
+  rewrite IHn. rewrite int_iter_i_equation with (n := Int.sub n Int.one).
+  destruct (Int.eq _ _) eqn:?; try reflexivity.
+  + fwd eapply Int.eq_ok; eauto. congruence.
+  + cbv zeta. f_equal. ring.
+Qed.
+
+Lemma int_iter_i_some : forall A f n (x : option A),
+    (forall i, f i None = None) ->
+    int_iter_i f n x <> None ->
+    x <> None.
+induction n using int_peano_rect; intros.
+- rewrite int_iter_i_equation, Int.eq_true in *. auto.
+- rewrite int_iter_i_equation, Int.eq_false in * by eauto.
+  eapply IHn; eauto. congruence.
+Qed.
+
+Lemma int_iter_i_some_inv : forall A f n (x : option A) z (Q : Prop),
+    (forall y,
+        x = Some y ->
+        int_iter_i f n (Some y) = Some z ->
+        Q) ->
+    (forall i, f i None = None) ->
+    int_iter_i f n x = Some z ->
+    Q.
+intros0 HQ Hf Hiter.
+
+assert (x <> None).
+  { eapply int_iter_i_some with (n := n); eauto. congruence. }
+
+destruct x eqn:Hx; try congruence.
+eauto.
+Qed.
+
+Lemma int_iter_i_ext : forall A f f' n (x : A),
+    (forall i x, f i x = f' i x) ->
+    int_iter_i f n x = int_iter_i f' n x.
+induction n using int_peano_rect; intros0 Heq.
+all: rewrite int_iter_i_equation with (f := f).
+all: rewrite int_iter_i_equation with (f := f').
+- rewrite Int.eq_true. reflexivity.
+- rewrite Int.eq_false by eauto.
+  rewrite Heq. rewrite IHn by eauto.
+  reflexivity.
+Qed.
+
 (* Produce the list [n - 1; n - 2; ...; 0].  This is useful for doing
  * Peano-style recursion on ints. *)
-Function int_count_rev (n : int)
+Function int_to_list (n : int)
         {measure (fun n => Z.to_nat (Int.unsigned n)) n} : list int :=
     if Int.eq n Int.zero then
         []
     else
         let n' := Int.sub n Int.one in
-        n' :: int_count_rev n'.
+        n' :: int_to_list n'.
 Proof.
     intros.
 eapply Z2Nat.inj_lt.
@@ -1421,6 +1495,530 @@ eapply Z2Nat.inj_lt.
   { fwd eapply Int.unsigned_range. break_and. eassumption. }
 
 rewrite int_nonzero_pred by eauto. lia.
+Qed.
+
+Lemma int_to_list_iter : forall i,
+    int_to_list i = int_iter_i cons i nil.
+induction i using int_peano_rect; rewrite int_iter_i_equation.
+  { rewrite int_to_list_equation. rewrite Int.eq_true. reflexivity. }
+
+rewrite int_to_list_equation.
+rewrite Int.eq_false by eauto.
+f_equal.
+auto.
+Qed.
+
+Definition int_to_list_loop ctx id tmp counter max :=
+    (Sloop
+        (Sifthenelse (Ebinop (Ocmpu Ceq) (Evar counter) (Evar max))
+            (Sexit 0)
+            (Sseq (Sseq
+                (Sassign tmp (Evar id))
+                (build_constr_cminor (cmcc_malloc_id ctx) id Int.one [Evar counter; Evar tmp]))
+                (Sassign counter (Ebinop
+                    Oadd (Evar counter) (Econst (Ointconst Int.one))))
+            )
+        )
+    ).
+
+
+Lemma int_to_list_loop_effect_once :
+    forall ge f k sp malloc_fp i imax e m m' ctx id tmp counter max oldv newv,
+    Genv.find_symbol ge (cmcc_malloc_id ctx) = Some malloc_fp ->
+    Genv.find_funct ge (Vptr malloc_fp Int.zero) = Some (External EF_malloc) ->
+    (Int.unsigned i < Int.unsigned imax)%Z ->
+    list_norepet [id; counter; tmp; max] ->
+    e ! id = Some oldv ->
+    e ! counter = Some (Vint i) ->
+    e ! max = Some (Vint imax) ->
+    build_constr m Int.one [Vint i; oldv] = Some (m', newv) ->
+    let e' := PTree.set counter (Vint (Int.add i Int.one))
+        (PTree.set id newv
+        (PTree.set tmp oldv
+        e)) in
+    plus Cminor.step ge
+        (State f (int_to_list_loop ctx id tmp counter max) k sp e m)
+     E0 (State f (int_to_list_loop ctx id tmp counter max) k sp e' m').
+intros0 Hmalloc_sym Hmalloc_funct
+    Hlt Hvars Hid_val Hcounter_val Hmax_val Hbuild.
+simpl.
+
+(* enter loop *)
+eapply plus_left. 3: eapply E0_E0_E0. { econstructor. }
+remember (Kseq _ _) as k_loop.
+
+(* evaluate if condition *)
+eapply star_left. 3: eapply E0_E0_E0. {
+  econstructor.
+  - econstructor; eauto.
+    + econstructor; eauto.
+    + econstructor; eauto.
+    + simpl. reflexivity.
+  - unfold Val.cmpu. unfold Val.cmpu_bool. unfold Int.cmpu.
+    rewrite Int.eq_false; cycle 1.
+      { intro HH. subst imax. lia. }
+    econstructor.
+}
+
+rewrite Int.eq_true. simpl.
+
+(* loop body *)
+eapply star_left. 3: eapply E0_E0_E0. { econstructor. }
+eapply star_left. 3: eapply E0_E0_E0. { econstructor. }
+eapply star_left. 3: eapply E0_E0_E0. { econstructor. econstructor; eauto. }
+eapply star_left. 3: eapply E0_E0_E0. { econstructor. }
+eapply star_trans. 3: eapply E0_E0_E0. {
+  eapply plus_star. eapply build_constr_cminor_effect.
+  - eassumption.
+  - repeat eapply eval_Econs; try eapply eval_Enil.
+    + econstructor. rewrite PTree.gso; eauto.
+      repeat on >list_norepet, invc. simpl in *. intuition.
+    + econstructor. rewrite PTree.gss; eauto.
+  - repeat eapply Forall_cons; try eapply Forall_nil.
+    + simpl. repeat on >list_norepet, invc. simpl in *. intuition.
+    + simpl. repeat on >list_norepet, invc. simpl in *. intuition.
+  - rewrite Zlength_correct. simpl. eapply max_arg_count_big. lia.
+  - exact Hmalloc_sym.
+  - exact Hmalloc_funct.
+}
+eapply star_left. 3: eapply E0_E0_E0. { econstructor. }
+eapply star_left. 3: eapply E0_E0_E0. {
+  econstructor.  econstructor.
+  - econstructor. rewrite 2 PTree.gso; cycle 1.
+      { repeat on >list_norepet, invc. simpl in *. intuition. }
+      { repeat on >list_norepet, invc. simpl in *. intuition. }
+    eauto.
+  - econstructor. reflexivity.
+  - simpl. reflexivity.
+}
+
+subst k_loop.
+eapply star_left. 3: eapply E0_E0_E0. { econstructor. }
+eapply star_refl.
+Qed.
+
+Lemma int_unsigned_inj : forall a b,
+    Int.unsigned a = Int.unsigned b ->
+    a = b.
+intros.
+rewrite <- (Int.repr_unsigned a).
+rewrite <- (Int.repr_unsigned b).
+congruence.
+Qed.
+
+Lemma int_to_list_loop_effect :
+    forall ge f k sp malloc_fp ctx id tmp counter max imax irem e m m' oldv newv,
+    Genv.find_symbol ge (cmcc_malloc_id ctx) = Some malloc_fp ->
+    Genv.find_funct ge (Vptr malloc_fp Int.zero) = Some (External EF_malloc) ->
+    list_norepet [id; counter; tmp; max] ->
+    e ! id = Some oldv ->
+    e ! counter = Some (Vint (Int.sub imax irem)) ->
+    e ! max = Some (Vint imax) ->
+    (Int.unsigned irem <= Int.unsigned imax)%Z ->
+    int_iter_i (fun i m_v => match m_v with
+        | Some (m, v) => build_constr m Int.one [Vint (Int.add i (Int.sub imax irem)); v]
+        | None => None
+        end) irem (Some (m, oldv)) = Some (m', newv) ->
+    exists e',
+        e' ! id = Some newv /\
+        (forall id', ~ In id' [id; tmp; counter; max] -> e' ! id' = e ! id') /\
+        plus Cminor.step ge
+            (State f (int_to_list_loop ctx id tmp counter max) (Kblock k) sp e m)
+         E0 (State f Sskip k sp e' m').
+induction irem using int_peano_rect;
+intros0 Hmalloc_sym Hmalloc_funct
+    Hvars Hid_val Hcounter_val Hmax_val Hle Hbuild.
+
+- rewrite Int.sub_zero_l in *.
+  rewrite int_iter_i_equation, Int.eq_true in Hbuild. inject_some.
+  exists e. repeat eapply conj.
+  + eauto.
+  + intros. reflexivity.
+  + eapply plus_left. 3: eapply E0_E0_E0. { econstructor. }
+
+    (* evaluate if condition *)
+    eapply star_left. 3: eapply E0_E0_E0. {
+      econstructor.
+      - econstructor; eauto.
+        + econstructor; eauto.
+        + econstructor; eauto.
+        + simpl. reflexivity.
+      - unfold Val.cmpu. unfold Val.cmpu_bool. unfold Int.cmpu.
+        rewrite Int.eq_true.  econstructor.
+    }
+
+    (* exit *)
+    rewrite Int.eq_false; cycle 1.
+      { assert (Int.unsigned Int.one <> Int.unsigned Int.zero).
+        - rewrite Int.unsigned_zero, Int.unsigned_one. lia.
+        - congruence. }
+    simpl.
+    eapply star_left. 3: eapply E0_E0_E0. { econstructor. }
+    eapply star_left. 3: eapply E0_E0_E0. { econstructor. }
+    eapply star_refl.
+
+- rewrite int_iter_i_equation', Int.eq_false in Hbuild by eauto.
+  invc_using int_iter_i_some_inv Hbuild; [ | eauto].
+  destruct y as (m1, midv).
+
+  assert (Int.unsigned irem <> 0%Z).
+    { rewrite <- Int.unsigned_zero. intro HH. eapply int_unsigned_inj in HH. eauto. }
+
+  fwd eapply int_to_list_loop_effect_once
+      with (id := id) (tmp := tmp) (counter := counter) (max := max);
+    eauto.
+    { unfold Int.sub.
+      pose proof (Int.unsigned_range imax).  pose proof (Int.unsigned_range irem).
+      rewrite Int.unsigned_repr; cycle 1. { unfold Int.max_unsigned. lia. }
+      lia. }
+    { rewrite Int.add_zero_l in *. eauto. }
+  remember (PTree.set counter _ _) as e'. cbv zeta in *.
+
+  fwd eapply IHirem with (e := e') (m := m1) (m' := m') (oldv := midv) (newv := newv) as HH;
+    eauto.
+    { subst e'. rewrite PTree.gso, PTree.gss; eauto.
+      - repeat on >list_norepet, invc. simpl in *. intuition. }
+    { subst e'. rewrite PTree.gss. f_equal. f_equal. ring. }
+    { subst e'. rewrite 3 PTree.gso; eauto.
+      all: on >list_norepet, fun H => clear -H.
+      all: repeat on >list_norepet, invc; simpl in *; intuition. }
+    { unfold Int.sub. rewrite Int.unsigned_one.
+      pose proof (Int.unsigned_range irem).
+      rewrite Int.unsigned_repr; cycle 1. { unfold Int.max_unsigned. omega. }
+      omega. }
+    { on (int_iter_i _ _ _ = Some _), fun H => rewrite <- H.
+      eapply int_iter_i_ext. intros.
+      break_match; eauto. break_match; eauto. f_equal. f_equal. f_equal. ring. }
+    destruct HH as (e'' & ? & He'' & ?).
+
+  exists e''. repeat eapply conj; eauto.
+    { intros. rewrite He'' by auto. on (~ In id' _), fun H => simpl in H.
+      subst e'. rewrite 3 PTree.gso; eauto.
+      on (~ _), fun H => clear -H. firstorder eauto. }
+
+  eauto using plus_trans.
+Qed.
+
+Definition impl_int_to_list : opaque_oper_impl [Opaque Oint] (ADT (Tlist (Topaque Oint))).
+simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _ _ _  _ _ _ _  _ _ _ _ _ _).
+
+- exact (fun args => int_to_list (hhead args)).
+- refine (fun G args =>
+    let x := unwrap_opaque (hhead args) in
+    int_iter_i (fun i l =>
+            let iv := @VOpaque _ Oint i in
+            VConstr (CTcons (Topaque Oint)) (hcons iv (hcons l hnil)))
+        x (VConstr (CTnil (Topaque Oint)) hnil)).
+- refine (fun args =>
+    match args with
+    | [HighestValues.Opaque Oint x] => Some (int_iter_i
+            (fun i n =>
+                let iv := HighestValues.Opaque Oint i in
+                HighestValues.Constr Ccons [iv; n])
+            x
+            (HighestValues.Constr Cnil []))
+    | _ => None
+    end).
+- refine (fun args =>
+    match args with
+    | [HigherValue.Opaque Oint x] => Some (int_iter_i
+            (fun i n =>
+                let iv := HigherValue.Opaque Oint i in
+                HigherValue.Constr 1 [iv; n])
+            x
+            (HigherValue.Constr 0 []))
+    | _ => None
+    end).
+- refine (fun args =>
+    match args with
+    | [HighValues.Opaque Oint x] => Some (int_iter_i
+            (fun i n =>
+                let iv := HighValues.Opaque Oint i in
+                HighValues.Constr Int.one [iv; n])
+            x
+            (HighValues.Constr Int.zero []))
+    | _ => None
+    end).
+- refine (fun m args =>
+    match args with
+    | [Vint x] => int_iter_i
+            (fun i m_v =>
+                match m_v with
+                | Some (m, v) =>
+                        build_constr m Int.one [Vint i; v]
+                | None => None
+                end)
+            x
+            (build_constr m Int.zero [])
+    | _ => None
+    end).
+- refine (fun ctx id args =>
+    let counter := nth 0 (cmcc_scratch ctx) 1%positive in
+    let tmp := nth 1 (cmcc_scratch ctx) 1%positive in
+    let max := nth 2 (cmcc_scratch ctx) 1%positive in
+    match args with
+    | [e] => Sseq (Sseq (Sseq
+            (Sassign max e)
+            (Sassign counter (Econst (Ointconst Int.zero))))
+            (build_constr_cminor (cmcc_malloc_id ctx) id Int.zero []))
+            (Sblock (int_to_list_loop ctx id tmp counter max))
+    | _ => Sskip
+    end).
+
+
+- (* no_fab_clos_higher *)
+  intros. simpl in *.
+  repeat (break_match; try discriminate; [ ]). subst. inject_some.
+  cut (closure_sig_higher v = None). { intro. exfalso. congruence. }
+  clear dependent sig.
+  rename v1 into i.  revert i v H0. simpl.
+  induction i using int_peano_rect; rewrite int_iter_i_equation;
+    rewrite Int.eq_true + rewrite Int.eq_false; intros; eauto.
+  all: on >HigherValue.VIn, invc; eauto.
+  + contradiction.
+  + break_or; [ | break_or ]; simpl in *.
+    * break_or; try contradiction. subst v. simpl. reflexivity.
+    * eauto.
+    * contradiction.
+
+- (* change_fname_high *)
+  intros. simpl in *.
+  repeat (break_match_hyp; try discriminate; [ ]).
+  repeat on >Forall2, invc. simpl in *. break_match; try contradiction.
+  fix_existT. subst. inject_some.
+  eexists; split; eauto.
+
+  rename v into i. simpl in i.
+  induction i using int_peano_rect; rewrite int_iter_i_equation;
+    rewrite Int.eq_true + rewrite Int.eq_false; intros; eauto.
+  + repeat econstructor.
+  + repeat (eassumption || econstructor).
+
+- (* mem_inj_id *)
+  intros. simpl in *. repeat (break_match_hyp; try discriminate; []). subst. inject_some.
+  revert i m m' ret H.
+  induction i using int_peano_rect; intros ? ? ?; rewrite int_iter_i_equation;
+    rewrite Int.eq_true + rewrite Int.eq_false; intros; eauto.
+  + repeat (break_match; try discriminate). inject_some.
+    eapply build_constr_mem_inj_id; eauto.
+  + repeat ((break_match; []) || (break_match; [ | discriminate ])).
+    subst.  inject_some.
+    rewrite <- inject_id_compose_self. eapply Mem.mem_inj_compose.
+    * eapply IHi; eauto.
+    * eapply build_constr_mem_inj_id; eauto.
+
+- (* mem_inject *)
+  intros. simpl in *. repeat (break_match_hyp; try discriminate; []). subst. inject_some.
+  do 2 on >Forall2, invc. on >Val.inject, invc.
+
+  (* this is roughly `eassert` / `ecut` *)
+  fwd instantiate (1 := valid_ptr m2 ret /\
+        exists (mi' : meminj) (m2' : mem) (ret' : val),
+            valid_ptr m2' ret' /\ _ mi' m2' ret' ) as HH.
+    all: cycle 1.
+    { destruct HH as (? & (mi' & m2' & ret' & ? & HH)).
+      exists mi', m2', ret'. pattern mi', m2', ret'. exact HH. }
+  simpl.
+
+  revert i mi m1 m2 m1' ret H H0 H1.
+  induction i using int_peano_rect; intros ? ? ?.
+  all: rewrite int_iter_i_equation; rewrite Int.eq_true + rewrite Int.eq_false; intros; eauto.
+  all: rewrite int_iter_i_equation; rewrite Int.eq_true + rewrite Int.eq_false; eauto.
+
+    { split.
+        { eapply build_constr_valid_ptr. eauto. }
+      fwd eapply build_constr_mem_inject as HH; eauto.
+        destruct HH as (mi' & m2' & v2 & ? & ? & ? & ?).
+      eauto 10 using build_constr_valid_ptr. }
+
+  do 2 (break_match_hyp; try discriminate). subst.
+  fwd eapply IHi as HH; eauto.
+    destruct HH as (? & (mi' & m2' & ret' & ? & ? & ? & ? & ?)).
+  find_rewrite.
+  fwd eapply build_constr_mem_inject as HH; eauto.
+    { eapply mem_sim_same_offsets; eauto. }
+    { econstructor; eauto. econstructor. }
+    destruct HH as (mi'' & m2'' & v'' & ? & ? & ? & ?).
+  split.
+    { eapply build_constr_valid_ptr; eauto. }
+  exists mi'', m2'', v''.
+  do 4 try eapply conj.
+  + eapply build_constr_valid_ptr; eauto.
+  + eauto.
+  + eauto.
+  + eauto.
+  + eauto using mem_sim_compose.
+
+
+- intros. simpl.
+  rewrite hmap_hhead.  rewrite opaque_value_denote.
+  rewrite int_to_list_iter.
+  remember (unwrap_opaque (hhead vs)) as i. clear Heqi.
+  induction i using int_peano_rect; rewrite int_iter_i_equation.
+  all: rewrite int_iter_i_equation with (x := VConstr (CTnil _) hnil).
+  all: rewrite Int.eq_true + rewrite Int.eq_false; intros; eauto.
+  simpl. congruence.
+
+- intros. simpl in *.
+  revert H.
+  on _, invc_using (@case_hlist_cons type). on _, invc_using (@case_hlist_nil type).
+  on _, invc_using case_value_opaque.
+  simpl.
+  rename ov into i. simpl in i.
+  induction i using int_peano_rect; rewrite int_iter_i_equation.
+  all: rewrite int_iter_i_equation with (x := VConstr (CTnil _) hnil).
+  all: rewrite Int.eq_true + rewrite Int.eq_false; intros; eauto.
+  simpl. congruence.
+
+- intros. simpl in *.
+
+  on >Forall2, invc; try discriminate.
+  on >mv_higher, invc; try discriminate.
+  destruct oty; try discriminate.
+  on >Forall2, invc; try discriminate.
+  inject_some.
+
+  eexists. split; eauto.
+
+  rename ov into i. simpl in i.
+  induction i using int_peano_rect; rewrite int_iter_i_equation.
+  all: rewrite int_iter_i_equation with (x := HigherValue.Constr 0 []).
+  all: rewrite Int.eq_true + rewrite Int.eq_false; intros; eauto.
+  + econstructor; eauto.
+  + econstructor; eauto using HrOpaque.
+
+- intros. simpl in *.
+
+  on >Forall2, invc; try discriminate.
+  on >mv_high, invc; try discriminate.
+  destruct oty; try discriminate.
+  on >Forall2, invc; try discriminate.
+  inject_some.
+
+  eexists. split; eauto.
+
+  rename ov into i. simpl in i.
+  induction i using int_peano_rect; rewrite int_iter_i_equation.
+  all: rewrite int_iter_i_equation with (x := HighValues.Constr Int.zero []).
+  all: rewrite Int.eq_true + rewrite Int.eq_false; intros; eauto.
+  + econstructor; eauto.
+  + econstructor; eauto using HgOpaque.
+
+- intros. simpl in *.
+
+  on >Forall2, invc; try discriminate.
+  on >@HighValues.value_inject, invc; try discriminate.
+  destruct oty; try discriminate.
+  on >Forall2, invc; try discriminate.
+  inject_some.
+
+  on >opaque_type_value_inject, invc.
+
+  rename ov into i. simpl in i.
+  induction i using int_peano_rect; rewrite int_iter_i_equation.
+  all: rewrite int_iter_i_equation with (x := HighValues.Constr Int.zero []).
+  all: rewrite Int.eq_true + rewrite Int.eq_false; intros; eauto.
+
+  + fwd eapply build_constr_ok as HH; eauto.
+      { rewrite Zlength_nil. eapply max_arg_count_big. lia. }
+      destruct HH as (v & m2 & ? & ?).
+    eauto.
+
+  + destruct IHi as (m' & ret' & ? & ?).
+    find_rewrite.
+    fwd eapply build_constr_ok with (m1 := m') (args := [Vint _; ret']) as HH.
+      { econstructor; eauto.
+        eapply HighValues.inj_opaque with (oty := Oint). econstructor. }
+      { rewrite Zlength_correct. simpl. eapply max_arg_count_big. lia. }
+      destruct HH as (ret'' & m'' & ? & ?).
+    eauto.
+
+- intros. simpl in *.
+  destruct argvs as [| argv argvs ]; [ discriminate | ].
+  destruct argv; try discriminate.
+  destruct argvs; [ | discriminate ].
+  do 2 on >eval_exprlist, invc.
+  break_match; [ | exfalso; congruence ].
+
+                Set Default Timeout 5.
+
+  fwd eapply build_constr_ok with (ge := ge) (tag := Int.zero) (args := []) as HH; eauto.
+    { change (Zlength []) with 0%Z. eapply max_arg_count_big. lia. }
+    destruct HH as (v_cur & m_cur & Hbuild & ?).
+  rename H into Hiter.
+  rewrite Hbuild in Hiter.
+
+  set (counter := nth 0 (cmcc_scratch ctx) 1%positive).
+  set (tmp := nth 1 (cmcc_scratch ctx) 1%positive).
+  set (max := nth 2 (cmcc_scratch ctx) 1%positive).
+
+  (* this is what the env will look like when we start the loop. *)
+  set (e' :=
+        (PTree.set id v_cur
+        (PTree.set counter (Vint Int.zero)
+        (PTree.set max (Vint i)
+        e)))).
+
+  assert (HH : exists scr, cmcc_scratch ctx = counter :: tmp :: max :: scr).
+    { destruct (cmcc_scratch ctx) as [| s0 [| s1 [| s2 scr ]]];
+        [ exfalso; simpl in *; unfold num_scratch_vars in *; lia.. | ].
+      exists scr. reflexivity. }
+    destruct HH as (scr & Hscr).
+
+  assert (list_norepet [id; counter; tmp; max]).
+    { rewrite Hscr in *.
+      on (~ In _ _), fun H => rename H into HH1.
+      on >list_norepet, fun H => rename H into HH2.
+      clear -HH1 HH2.
+      change (counter :: tmp :: max :: scr) with ([counter; tmp; max] ++ scr) in *.
+      rewrite list_norepet_app in *.  rewrite in_app in *.
+      econstructor; tauto. }
+    break_and.
+
+  fwd eapply int_to_list_loop_effect
+    with (e := e') (id := id) (tmp := tmp) (counter := counter) (max := max)
+        (imax := i) (irem := i) as HH; eauto.
+    { subst e'. rewrite PTree.gss. reflexivity. }
+    { replace (Int.sub _ _) with Int.zero by ring.
+      subst e'. rewrite PTree.gso, PTree.gss; eauto.
+      on >list_norepet, fun H => clear -H.
+      - repeat on >list_norepet, invc. simpl in *. intuition. }
+    { subst e'. rewrite PTree.gso, PTree.gso, PTree.gss; eauto.
+      - on >list_norepet, fun H => clear -H.
+        repeat on >list_norepet, invc. simpl in *. intuition.
+      - on >list_norepet, fun H => clear -H.
+        repeat on >list_norepet, invc. simpl in *. intuition. }
+    { lia. }
+    { on (int_iter_i _ _ _ = Some _), fun H => rewrite <- H.
+      eapply int_iter_i_ext. intros.
+      break_match; eauto. break_match; eauto.
+      f_equal. f_equal. f_equal. ring. }
+
+  destruct HH as (e'' & ? & He'' & ?).
+  exists e''. repeat eapply conj; eauto.
+    { rewrite Hscr. intros. simpl in *.
+      rewrite He'' by firstorder.
+      subst e'. rewrite 3 PTree.gso by firstorder. reflexivity. }
+
+  eapply plus_left. 3: eapply E0_E0_E0. { econstructor. }
+  eapply star_left. 3: eapply E0_E0_E0. { econstructor. }
+  eapply star_left. 3: eapply E0_E0_E0. { econstructor. }
+  eapply star_left. 3: eapply E0_E0_E0. { econstructor. eauto. }
+  eapply star_left. 3: eapply E0_E0_E0. { econstructor. }
+  eapply star_left. 3: eapply E0_E0_E0. { econstructor. econstructor. reflexivity. }
+  eapply star_left. 3: eapply E0_E0_E0. { econstructor. }
+  eapply star_trans. 3: eapply E0_E0_E0. {
+    eapply plus_star. eapply build_constr_cminor_effect; eauto.
+    - econstructor.
+    - change (Zlength []) with 0%Z. eapply max_arg_count_big. clear. lia.
+  }
+  eapply star_left. 3: eapply E0_E0_E0. { econstructor. }
+  eapply star_left. 3: eapply E0_E0_E0. { econstructor. }
+
+  (* run the loop *)
+  eapply star_trans. 3: eapply E0_E0_E0. { eapply plus_star. eassumption. }
+
+  eapply star_refl.
 Qed.
 
 
@@ -1437,6 +2035,7 @@ Definition get_opaque_oper_impl {atys rty} (op : opaque_oper atys rty) :
     | Otest => impl_test
     | Orepr z => impl_repr z
     | Oint_to_nat => impl_int_to_nat
+    | Oint_to_list => impl_int_to_list
     end.
 
 Definition get_opaque_oper_impl' (op : opaque_oper_name) :
@@ -1447,6 +2046,7 @@ Definition get_opaque_oper_impl' (op : opaque_oper_name) :
     | ONtest => existT _ _ (existT _ _ impl_test)
     | ONrepr z => existT _ _ (existT _ _ (impl_repr z))
     | ONint_to_nat => existT _ _ (existT _ _ (impl_int_to_nat))
+    | ONint_to_list => existT _ _ (existT _ _ (impl_int_to_list))
     end.
 
 Lemma get_opaque_oper_impl_name : forall atys rty (op : opaque_oper atys rty),
