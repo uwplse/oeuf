@@ -173,8 +173,8 @@ Definition list_rev {A} (xs : list A) : list A :=
 Definition W_iter (M : int -> int) (t : int) (rest : list int) : int :=
     bool_rect (fun _ => int)
         (M t)
-        (Int.add (Int.add (sigma_1 (SHA256.nthi rest 1)) (SHA256.nthi rest 6))
-                 (Int.add (sigma_0 (SHA256.nthi rest 14)) (SHA256.nthi rest 15)))
+        (Int.add (Int.add (sigma_1 (nthi rest (Int.repr 1))) (nthi rest (Int.repr 6)))
+                 (Int.add (sigma_0 (nthi rest (Int.repr 14))) (nthi rest (Int.repr 15))))
         (Int.ltu t (Int.repr 16)).
 
 Definition W_list (M : int -> int) (ts : list int) : list int :=
@@ -801,7 +801,7 @@ unfold Int.ltu.
 rewrite Ht. rewrite (Int.unsigned_repr 16) by small_unsigned.
 break_if; simpl.
 - eauto.
-- reflexivity.
+- erewrite 4 nthi_eq; eauto. all: reflexivity.
 Qed.
 
 Lemma W_list_eq : forall Mz Mi tn tsi,
