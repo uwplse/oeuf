@@ -1240,8 +1240,8 @@ Module double.
     reflexivity.
   Qed.
 
-  Definition from_tree (t : tree symbol.t) : option Floats.float :=
-    match t with
+  Definition from_tree (t : tree symbol.t) : option Floats.float.
+    refine match t with
     | node ((atom tag) :: b :: nil) =>
       if symbol.eq_dec tag (symbol.of_string_unsafe "float_zero")
       then Some (Fappli_IEEE.B754_zero 53 1024 (bool.from_tree b))
@@ -1253,17 +1253,31 @@ Module double.
           then Some (Fappli_IEEE.B754_nan 53 1024 (bool.from_tree b) nan_pl_53)
           else
             None
-        
+    | node ((atom tag) :: b :: (atom m) :: (atom e) :: nil) =>
+      if symbol.eq_dec tag (symbol.of_string_unsafe "float_fin")
+      then
+        let pm := (pos_from_symbol m) in
+        let ze := (Z_from_symbol e) in
+        _
+      else None
     | _ => None
-    end.
+           end.
+    destruct (Fappli_IEEE.bounded 53 1024 pm ze) eqn:?.
+    exact (Some (Fappli_IEEE.B754_finite 53 1024 (bool.from_tree b) (pos_from_symbol m) (Z_from_symbol e) Heqb0)).
+    exact None.
+  Defined.
 
   Lemma to_from_tree : forall i, from_tree (to_tree i) = Some i.
   Proof.
     intros.
     destruct i; simpl;
-      try rewrite bool_to_from_tree; eauto.
+      repeat rewrite bool.to_from_tree; eauto.
 
     admit. (* idk *)
+
+    rewrite pos_to_from_symbol.
+    rewrite Z_to_from_symbol.
+
     admit.
   Admitted.
 
@@ -1277,6 +1291,7 @@ Module double.
     repeat (econstructor; eauto using pos_to_symbol_wf).
     eapply Z_to_symbol_wf.
   Qed.
+  
   Hint Resolve to_tree_wf.
 End double.
 
