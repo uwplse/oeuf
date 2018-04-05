@@ -374,7 +374,10 @@ let f := match goal with [ |- ?f target_tyn target ] => f end in
 refine match target as target_ in A.value _ (A.ADT target_tyn_)
         return f target_tyn_ target_ with
     | @A.VConstr _  target_tyn ctor arg_tys  ct args => _
-    end; intros.  clear target target_tyn0.
+    | A.VOpaque _ => _
+    end; intros; cycle 1.
+  { inversion e. }
+clear target target_tyn0.
 
 revert cases ct. pattern case_tys, target_tyn, ret_ty, e.
 let f := match goal with [ |- ?f _ _ _ _ ] => f end in
@@ -718,7 +721,9 @@ all: fix_existT; subst.
         return _ target_tyn_ target_ with
     | @A.VConstr _ target_tyn ctor arg_tys ct args => _
     | A.VClose _ _ => idProp
-    end).
+    | @A.VOpaque _ oty ov => _
+    end); cycle 1.
+      { intro e0. inversion e0. }
   intros e0 Astep.
 
   eexists. split.
@@ -785,7 +790,10 @@ Lemma compile_value_Constr_inv : forall G tyn
     compile_value av = Constr bctor bargs->
     Q av.
 intros0 HQ Hcomp.
-on _, SourceLiftedProofs.invert_nullary SourceLiftedProofs.value_adt_inv v.
+(* invert_nullary doesn't work here, when `Q` has two arguments *)
+move av at top. generalize dependent tyn. intros ? ?.
+eapply SourceLiftedProofs.value_adt_inv with (v := av); eauto; intros; cycle 1.
+  { discriminate. }
 simpl in Hcomp. fold (@compile_value_list G arg_tys) in *.
 eapply HQ; congruence.
 Qed.

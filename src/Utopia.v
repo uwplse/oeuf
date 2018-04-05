@@ -1,6 +1,7 @@
 Require Import ZArith.
 Require Import oeuf.FastAscii.
 Require Export oeuf.FastAscii.
+Require Import oeuf.OpaqueTypes.
 
 Require Import Ascii.
 
@@ -18,10 +19,12 @@ Inductive type_name :=
 | TZ
 (*| Tascii (* FastAscii *)*)
 | Tascii (* Coq's builtin ascii *)    
+| Topaque : opaque_type_name -> type_name
 .
 
 Definition type_name_eq_dec (tn1 tn2 : type_name) : {tn1 = tn2} + {tn1 <> tn2}.
   decide equality.
+  - eapply opaque_type_name_eq_dec.
 Defined.
 
 (* Denotation function for Oeuf types *)
@@ -38,6 +41,7 @@ Fixpoint type_name_denote (tyn : type_name) : Type :=
   | TZ => Z
 (*  | Tascii => FastAscii.ascii*)
   | Tascii => Ascii.ascii
+  | Topaque oty => opaque_type_denote oty
   end.
 
 (* All constructors in Oeuf *)
@@ -737,8 +741,9 @@ Definition type_name_containment_rect (P : type_name -> Type)
     (Hpositive :    P Tpositive)
     (HN :           P Tpositive -> P TN)
     (HZ :           P Tpositive -> P TZ)
-    (Hascii :       P Tbool -> P Tascii) :
-    forall tyn, P tyn.
+    (Hascii :       P Tbool -> P Tascii)
+    (Hopaque :      forall oty, P (Topaque oty))
+    : forall tyn, P tyn.
 induction tyn; eauto.
 Defined.
 

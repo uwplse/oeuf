@@ -190,10 +190,14 @@ Implicit Arguments opaque_oper_impl [].
 
 
 
-Definition unwrap_opaque {G oty} (v : value G (Opaque oty)) : opaque_type_denote oty :=
-    match v in value _ (Opaque oty_) return opaque_type_denote oty_ with
+Definition unwrap_opaque {G oty} (v : value G (Opaque oty)) : opaque_type_denote oty.
+refine (
+    match v in value _ (ADT (Topaque oty_)) return opaque_type_denote oty_ with
+    | @VConstr _ tyn _ _ ct _ => _
     | VOpaque v => v
-    end.
+    end).
+- destruct tyn; try exact idProp. inversion ct.
+Defined.
 
 Definition unwrap_opaque_hlist {G otys} (vs : hlist (value G) (map Opaque otys)) :
         hlist opaque_type_denote otys.
@@ -227,10 +231,12 @@ Lemma opaque_value_denote : forall G h oty (v : value G (Opaque oty)),
     value_denote h v = unwrap_opaque v.
 intros.
 pattern oty, v.
-refine match v as v_ in value _ (Opaque oty_) return _ oty_ v_ with
+refine match v as v_ in value _ (ADT (Topaque oty_)) return _ oty_ v_ with
+| VConstr ct _ => _
 | VOpaque v' => _
 end.
-reflexivity.
+- destruct t; try exact idProp. inversion ct.
+- reflexivity.
 Qed.
 
 
@@ -1396,6 +1402,26 @@ simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _ _ _  _ _ _ _  _ _ _ _ _ _).
   eapply star_refl.
 Qed.
 
+
+
+
+(* Produce the list [n - 1; n - 2; ...; 0].  This is useful for doing
+ * Peano-style recursion on ints. *)
+Function int_count_rev (n : int)
+        {measure (fun n => Z.to_nat (Int.unsigned n)) n} : list int :=
+    if Int.eq n Int.zero then
+        []
+    else
+        let n' := Int.sub n Int.one in
+        n' :: int_count_rev n'.
+Proof.
+    intros.
+eapply Z2Nat.inj_lt.
+  { fwd eapply Int.unsigned_range. break_and. eassumption. }
+  { fwd eapply Int.unsigned_range. break_and. eassumption. }
+
+rewrite int_nonzero_pred by eauto. lia.
+Qed.
 
 
 

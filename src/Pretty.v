@@ -55,6 +55,7 @@ Module type_name.
     | TZ              => atom (symbol.of_string_unsafe "Z")
     | Tascii         => atom (symbol.of_string_unsafe "ascii")
     (*| Tascii          => atom (symbol.of_string_unsafe "ascii")*)
+    | Topaque oty     => node [atom (symbol.of_string_unsafe "opaque"); opaque_type_name.to_tree oty]
     end.
 
 
@@ -95,6 +96,13 @@ Module type_name.
                    end
            | _ => None
            end
+      else if symbol.eq_dec s (symbol.of_string_unsafe "opaque")
+      then match l with
+           | [t] => match opaque_type_name.from_tree t with None => None
+                   | Some oty => Some (Topaque oty)
+                   end
+           | _ => None
+           end
       else None
     | _ => None
     end.
@@ -106,6 +114,7 @@ Module type_name.
     - now rewrite IHty.
     - now rewrite IHty1, IHty2.
     - now rewrite IHty.
+    - now rewrite opaque_type_name.to_from_tree_id.
   Qed.
 
   Lemma to_tree_wf:
@@ -122,7 +131,6 @@ Module type.
     match ty with
     | ADT tyn => node [atom (symbol.of_string_unsafe "ADT"); type_name.to_tree tyn]
     | Arrow ty1 ty2 => node [atom (symbol.of_string_unsafe "Arrow"); to_tree ty1; to_tree ty2]
-    | Opaque oty => node [atom (symbol.of_string_unsafe "Opaque"); opaque_type_name.to_tree oty]
     end.
 
 
@@ -139,11 +147,6 @@ Module type.
            | [t1; t2] => Arrow <$> from_tree t1 <*> from_tree t2
            | _ => None
            end
-      else if symbol.eq_dec s (symbol.of_string_unsafe "Opaque")
-      then match l with
-           | [t1] => Opaque <$> opaque_type_name.from_tree t1
-           | _ => None
-           end
       else None
     | _ => None
     end.
@@ -154,7 +157,6 @@ Module type.
     induction ty; simpl; unfold_option.
     - now rewrite type_name.to_from_tree_id.
     - now rewrite IHty1, IHty2.
-    - now rewrite opaque_type_name.to_from_tree_id.
   Qed.
 
   Lemma to_tree_wf:
@@ -691,6 +693,7 @@ Module constr_type.
         | Cascii_127, [] => Some CTascii_127
         | _,_ => None
         end*)
+      | Topaque _   => None
       end.
 
   Lemma check_constr_type_correct :
@@ -1131,6 +1134,7 @@ Module elim.
                           end end end end end end
                         | _ => None
                          end
+      | Topaque _     => None
       end.
 
   Lemma check_elim_correct :

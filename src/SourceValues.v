@@ -7,11 +7,14 @@ Require Import oeuf.OpaqueTypes.
 Inductive type :=
 | ADT : type_name -> type
 | Arrow : type -> type -> type
-| Opaque : opaque_type_name -> type
 .
 
+Definition Opaque : opaque_type_name -> type :=
+    fun oty => ADT (Topaque oty).
+
+
 Definition type_eq_dec (t1 t2 : type) : {t1 = t2} + {t1 <> t2}.
-  decide equality; auto using type_name_eq_dec, opaque_type_name_eq_dec.
+  decide equality; auto using type_name_eq_dec.
 Defined.
 Hint Resolve type_eq_dec : eq_dec.
 
@@ -193,7 +196,7 @@ Inductive value {G : list (type * list type * type)} : type -> Type :=
         value (Arrow arg_ty ret_ty)
 | VOpaque : forall {oty},
         opaque_type_denote oty ->
-        value (Opaque oty)
+        value (ADT (Topaque oty))
 .
 
 End value.
@@ -204,7 +207,6 @@ Fixpoint type_denote (ty : type) : Type :=
   match ty with
   | ADT tyn => type_name_denote tyn
   | Arrow ty1 ty2 => type_denote ty1 -> type_denote ty2
-  | Opaque oty => opaque_type_denote oty
   end.
 
 Definition func_type_denote (fty : type * list type * type) : Type :=
@@ -457,8 +459,10 @@ Lemma case_value_opaque :
 Proof.
   intros G o P H v.
   revert P H.
-  refine match v with
+  refine (match v with
+         | VConstr ct _ => _
          | VOpaque _ => _
-         end.
-  auto.
+         end).
+  - destruct t; try exact idProp. inversion ct.
+  - auto.
 Qed.
