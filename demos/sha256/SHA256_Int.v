@@ -82,6 +82,7 @@ Definition list_app {A} (xs ys : list A) : list A :=
         xs.
 
 Definition generate_and_pad msg := 
+    (*
   let n := int_length msg in
   let padding := Int.and (Int.neg (Int.add n (Int.repr 9))) (Int.repr 63) in
   list_app
@@ -91,6 +92,16 @@ Definition generate_and_pad msg :=
         [Int.repr 128])
         (list_repeat_int padding (Int.repr 0))))
     [Int.shru n (Int.repr 29); Int.shl n (Int.repr 3)].
+  *)
+  list_app
+    (bytelist_to_intlist
+      (list_app (list_app
+        msg
+        [Int.repr 128])
+        (list_repeat_int
+            (Int.and (Int.neg (Int.add (int_length msg) (Int.repr 9))) (Int.repr 63))
+            (Int.repr 0))))
+    [Int.shru (int_length msg) (Int.repr 29); Int.shl (int_length msg) (Int.repr 3)].
 
 
 
@@ -208,7 +219,8 @@ Definition rnd_function (x : registers) (k : int) (w : int) : registers :=
          e, f, g)
     ) ab) abc) abcd) abcde) abcdef) abcdefg) x.
 
-Definition init_registers : registers := 
+Definition init_registers : unit -> registers := 
+    fun _ =>
     (Int.repr 1779033703, Int.repr 3144134277, Int.repr 1013904242, Int.repr 2773480762,
      Int.repr 1359893119, Int.repr 2600822924, Int.repr  528734635, Int.repr 1541459225).
 
@@ -298,7 +310,7 @@ Definition SHA_256 (str : list int) : list int :=
     prod_rect (fun _ => list int) (fun a b =>
     intlist_to_bytelist [a; b; c; d; e; f; g; h]
     ) ab) abc) abcd) abcde) abcdef) abcdefg)
-    (hash_blocks init_registers (generate_and_pad str)).
+    (hash_blocks (init_registers tt) (generate_and_pad str)).
 
 
 
@@ -950,7 +962,7 @@ reflexivity.
 Qed.
 
 Lemma init_registers_eq :
-    rel_regs SHA256.init_registers init_registers.
+    rel_regs SHA256.init_registers (init_registers tt).
 unfold SHA256.init_registers, init_registers. reflexivity.
 Qed.
 

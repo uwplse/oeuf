@@ -84,7 +84,6 @@ type ty =
      * later, in `emit_tyn`. *)
       ADT of Term.constr
     | Arrow of ty * ty
-    | Opaque of Term.constr
 
 type funcref =
     (* reference to a lifted lambda in the current block *)
@@ -149,7 +148,6 @@ let rec string_of_ty t =
     | ADT tyn -> Format.asprintf "%a" pp_constr tyn
     | Arrow (ty1, ty2) ->
             Format.sprintf "(%s) -> %s" (string_of_ty ty1) (string_of_ty ty2)
-    | Opaque oty -> Format.asprintf "%a" pp_constr oty
 
 let rec string_of_funcref fr =
     match fr with
@@ -359,7 +357,12 @@ let get_oty c =
 
 
 let opaque_heads () =
-    let ot_int = Opaque (resolve_symbol pkg_cc_integers_int "int") in
+    let ot_int = ADT (resolve_symbol pkg_cc_integers_int "int") in
+    let ty_bool = ADT (resolve_symbol pkg_datatypes "bool") in
+    let ty_nat = ADT (resolve_symbol pkg_datatypes "nat") in
+    let ty_list_int = ADT (
+        mk' (resolve_symbol pkg_datatypes "list")
+            [resolve_symbol pkg_cc_integers_int "int"]) in
 
     let resolve_int = resolve_symbol pkg_cc_integers_int in
     let resolve_op = resolve_symbol pkg_opaque_ops in
@@ -378,6 +381,11 @@ let opaque_heads () =
         let binop = resolve_op "Obinop" in
         let bin_name = resolve_op ("Ib" ^ name) in
         mk' binop [bin_name] in
+
+    let oo_int_cmpop name =
+        let cmpop = resolve_op "Ocmpop" in
+        let cmp_name = resolve_op ("Ic" ^ name) in
+        mk' cmpop [cmp_name] in
 
     let int_repr = resolve_int "repr" in
     let unwrap_repr c =
@@ -408,6 +416,8 @@ let opaque_heads () =
             OpaqueOp ([ot_int], ot_int, oo_int_unop_arg "RorC" z, [go arg]));
         (resolve_int "not", fun go args ->
             OpaqueOp ([ot_int], ot_int, oo_int_unop "Not", List.map go args));
+        (resolve_int "neg", fun go args ->
+            OpaqueOp ([ot_int], ot_int, oo_int_unop "Neg", List.map go args));
 
         (resolve_int "and", fun go args ->
             OpaqueOp ([ot_int; ot_int], ot_int, oo_int_binop "And", List.map go args));
@@ -417,10 +427,34 @@ let opaque_heads () =
             OpaqueOp ([ot_int; ot_int], ot_int, oo_int_binop "Xor", List.map go args));
         (resolve_int "add", fun go args ->
             OpaqueOp ([ot_int; ot_int], ot_int, oo_int_binop "Add", List.map go args));
+        (resolve_int "sub", fun go args ->
+            OpaqueOp ([ot_int; ot_int], ot_int, oo_int_binop "Sub", List.map go args));
 
+        (resolve_int "eq", fun go args ->
+            OpaqueOp ([ot_int; ot_int], ty_bool, oo_int_cmpop "Eq", List.map go args));
+        (resolve_int "ltu", fun go args ->
+            OpaqueOp ([ot_int; ot_int], ty_bool, oo_int_cmpop "ULt", List.map go args));
+        (resolve_int "lt", fun go args ->
+            OpaqueOp ([ot_int; ot_int], ty_bool, oo_int_cmpop "SLt", List.map go args));
+
+        (resolve_int "zero", fun go args ->
+            let zero = mk' (resolve_symbol pkg_binnums "Z0") [] in
+            OpaqueOp ([], ot_int, mk' (resolve_op "Orepr") [zero], []));
+        (resolve_int "one", fun go args ->
+            let one_p = resolve_symbol pkg_binnums "xH" in
+            let one = mk' (resolve_symbol pkg_binnums "Zpos") [one_p] in
+            OpaqueOp ([], ot_int, mk' (resolve_op "Orepr") [one], []));
         (resolve_int "repr", fun go args ->
             let [arg] = args in
-            OpaqueOp ([], ot_int, mk' (resolve_op "Orepr") [arg], []))
+            OpaqueOp ([], ot_int, mk' (resolve_op "Orepr") [arg], []));
+
+        (resolve_op "int_test", fun go args ->
+            OpaqueOp ([ot_int], ty_bool, resolve_op "Otest", List.map go args));
+
+        (resolve_op "int_to_nat", fun go args ->
+            OpaqueOp ([ot_int], ty_nat, resolve_op "Oint_to_nat", List.map go args));
+        (resolve_op "int_to_list", fun go args ->
+            OpaqueOp ([ot_int], ty_list_int, resolve_op "Oint_to_list", List.map go args))
     ]
 
 
@@ -542,7 +576,6 @@ let is_some x =
     | None -> false
 
 let rec reflect_type env c =
-    if is_some (lookup_oty c) then Opaque c else
     match Constr.kind c with
     | Constr.Prod (_bnd, arg_ty, ret_ty) ->
             Arrow (reflect_type env arg_ty, reflect_type env ret_ty)
@@ -713,7 +746,11 @@ let reflect_expr ctx evars env name c : func list =
             | OpaqueHead f -> f go' args
         end
 
-        | Constr.Const (const, univ) -> ctx.const_closure c
+        | Constr.Const (const, univ) -> begin
+            match what_is_this c with
+            | OpaqueHead f -> f go' []
+            | _ -> ctx.const_closure c
+        end
 
         | Constr.Construct (ctor, univ) -> begin
                 match what_is_this c with
@@ -817,7 +854,7 @@ let reflect_block evars env c =
 
 let c_adt = init_once (fun () -> resolve_symbol pkg_sourcevalues "ADT")
 let c_arrow = init_once (fun () -> resolve_symbol pkg_sourcevalues "Arrow")
-let c_opaque = init_once (fun () -> resolve_symbol pkg_sourcevalues "Opaque")
+let c_t_opaque = init_once (fun () -> resolve_symbol pkg_utopia "Topaque")
 
 let c_tt = init_once (fun () -> resolve_symbol pkg_datatypes "tt")
 
@@ -963,15 +1000,18 @@ let emit_map a_ty f xs =
 (* Turn a term of type `Type`, such as `nat`, into a reflected term of type
  * `type_name`, such as `Tnat`. *)
 let rec emit_tyn c : Term.constr =
-    match Constr.kind c with
-    | Constr.App (base, params) ->
-            let (base_tyn, num_params) = get_tyn base in
-            assert (Array.length params = num_params);
-            let param_tyns = Array.map emit_tyn params in
-            Constr.mkApp (base_tyn, param_tyns)
-    | _ ->
-            let (tyn, _) = get_tyn c in
-            tyn
+    match lookup_oty c with
+    | Some oty -> Constr.mkApp (c_t_opaque (), Array.of_list [oty])
+    | None ->
+            match Constr.kind c with
+            | Constr.App (base, params) ->
+                    let (base_tyn, num_params) = get_tyn base in
+                    assert (Array.length params = num_params);
+                    let param_tyns = Array.map emit_tyn params in
+                    Constr.mkApp (base_tyn, param_tyns)
+            | _ ->
+                    let (tyn, _) = get_tyn c in
+                    tyn
 
 let rec emit_ty ctx ty : Term.constr =
     if not (Hashtbl.mem ctx.ty_cache ty) then
@@ -979,7 +1019,6 @@ let rec emit_ty ctx ty : Term.constr =
             | ADT tyn_c -> mk c_adt [emit_tyn tyn_c]
             | Arrow (ty1, ty2) ->
                     mk c_arrow [emit_ty ctx ty1; emit_ty ctx ty2]
-            | Opaque oty_c -> mk c_opaque [get_oty oty_c]
         in
         let idx = ctx.emit_let "ty" (t_type ()) c in
         Hashtbl.add ctx.ty_cache ty idx
@@ -991,7 +1030,6 @@ let rec emit_ty' ty : Term.constr =
     | ADT tyn_c -> mk c_adt [emit_tyn tyn_c]
     | Arrow (ty1, ty2) ->
             mk c_arrow [emit_ty' ty1; emit_ty' ty2]
-    | Opaque oty_c -> mk c_opaque [get_oty oty_c]
 
 let rec emit_ty_list ctx tys : Term.constr =
     if not (Hashtbl.mem ctx.ty_list_cache tys) then
