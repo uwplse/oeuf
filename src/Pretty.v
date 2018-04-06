@@ -1223,25 +1223,38 @@ Module double.
       node ((atom (symbol.of_string_unsafe "float_zero")) :: (bool.to_tree b) :: nil)
     | Fappli_IEEE.B754_infinity _ _ b =>
       node ((atom (symbol.of_string_unsafe "float_inf")) :: (bool.to_tree b) :: nil)
-    | Fappli_IEEE.B754_nan _ _ b _ =>
-      node ((atom (symbol.of_string_unsafe "float_NAN")) :: (bool.to_tree b) :: nil)
+    | Fappli_IEEE.B754_nan _ _ b npl =>
+      node ((atom (symbol.of_string_unsafe "float_NAN")) :: (bool.to_tree b) :: (atom (pos_to_symbol (proj1_sig npl))) :: nil)
     | Fappli_IEEE.B754_finite _ _ b m e _ =>
       node ((atom (symbol.of_string_unsafe "float_fin")) :: (bool.to_tree b) :: (atom (pos_to_symbol m)) :: (atom (Z_to_symbol e)) :: nil)
     end.
 
-  Lemma nan_pl_53 :
-    Fappli_IEEE.nan_pl 53.
+  (* omg this is fun... *)
+  Definition float_bounded :
+    forall pm ze,
+      option (Fappli_IEEE.bounded 53 1024 pm ze = true).
   Proof.
-    exists BinNums.xH.
-    simpl.
-    unfold Fappli_IEEE.nan_pl.
-    unfold BinInt.Z.ltb.
-    simpl.
-    reflexivity.
-  Qed.
+    intros.
+    destruct (Fappli_IEEE.bounded 53 1024 pm ze) eqn:?.
+    exact (Some (eq_refl)).
+    exact None.
+  Defined.
 
-  Definition from_tree (t : tree symbol.t) : option Floats.float.
-    refine match t with
+  Definition npl :
+    forall (p : BinNums.positive),
+      option (Fappli_IEEE.nan_pl 53).
+  Proof.
+    intros.
+    unfold Fappli_IEEE.nan_pl.
+    destruct (BinInt.Z.ltb (BinNums.Zpos (Fcore_digits.digits2_pos p)) 53) eqn:?.
+    eapply Some.
+    eexists p.
+    eapply Heqb.
+    exact None.
+  Defined.
+
+  Definition from_tree (t : tree symbol.t) : option Floats.float :=
+    match t with
     | node ((atom tag) :: b :: nil) =>
       if symbol.eq_dec tag (symbol.of_string_unsafe "float_zero")
       then Some (Fappli_IEEE.B754_zero 53 1024 (bool.from_tree b))
@@ -1249,36 +1262,70 @@ Module double.
         if symbol.eq_dec tag (symbol.of_string_unsafe "float_inf")
         then Some (Fappli_IEEE.B754_infinity 53 1024 (bool.from_tree b))
         else
-          if symbol.eq_dec tag (symbol.of_string_unsafe "float_NAN")
-          then Some (Fappli_IEEE.B754_nan 53 1024 (bool.from_tree b) nan_pl_53)
-          else
-            None
+          None
+
+    | node ((atom tag) :: b :: (atom p) :: nil) =>
+      if symbol.eq_dec tag (symbol.of_string_unsafe "float_NAN")
+      then
+        match npl (pos_from_symbol p) with
+        | Some pf => Some (Fappli_IEEE.B754_nan 53 1024 (bool.from_tree b) pf)
+        | None => None
+        end
+      else
+        None
     | node ((atom tag) :: b :: (atom m) :: (atom e) :: nil) =>
       if symbol.eq_dec tag (symbol.of_string_unsafe "float_fin")
       then
         let pm := (pos_from_symbol m) in
         let ze := (Z_from_symbol e) in
-        _
+        match (float_bounded pm ze) with
+        | Some pf => Some (Fappli_IEEE.B754_finite 53 1024 (bool.from_tree b) (pos_from_symbol m) (Z_from_symbol e) pf)
+        | _ => None              
+        end
       else None
     | _ => None
-           end.
-    destruct (Fappli_IEEE.bounded 53 1024 pm ze) eqn:?.
-    exact (Some (Fappli_IEEE.B754_finite 53 1024 (bool.from_tree b) (pos_from_symbol m) (Z_from_symbol e) Heqb0)).
-    exact None.
-  Defined.
+    end.
 
+  (* Lemma nan_pl_53 : *)
+  (*   Fappli_IEEE.nan_pl 53. *)
+  (* Proof. *)
+  (*   exists BinNums.xH. *)
+  (*   simpl. *)
+  (*   unfold Fappli_IEEE.nan_pl. *)
+  (*   unfold BinInt.Z.ltb. *)
+  (*   simpl. *)
+  (*   reflexivity. *)
+  (* Qed. *)
+
+  
   Lemma to_from_tree : forall i, from_tree (to_tree i) = Some i.
   Proof.
     intros.
     destruct i; simpl;
       repeat rewrite bool.to_from_tree; eauto.
 
-    admit. (* idk *)
+    f_equal. f_equal.
+    rewrite pos_to_from_symbol.
+    unfold npl.
+    unfold Fappli_IEEE.nan_pl in *.
+    destruct n. simpl.
+    simpl.
 
+    (* HELP ME! *)
+    admit.
+
+    
     rewrite pos_to_from_symbol.
     rewrite Z_to_from_symbol.
+    destruct (float_bounded m e) eqn:?.
 
-    admit.
+    f_equal. f_equal.
+    eapply proof_irrelevance.
+    
+    unfold float_bounded in Heqo.
+    rewrite e0 in Heqo.
+    congruence.
+
   Admitted.
 
   Lemma to_tree_wf:
@@ -1287,7 +1334,7 @@ Module double.
     intros.
     unfold to_tree.
     destruct i; simpl;
-      econstructor; eauto.
+      econstructor; eauto;
     repeat (econstructor; eauto using pos_to_symbol_wf).
     eapply Z_to_symbol_wf.
   Qed.
@@ -1314,6 +1361,13 @@ Module opaque_type_denote.
       end
     end.
 
+  Lemma int_from_double_tree :
+    forall v,
+      int.from_tree (double.to_tree v) = None.
+  Proof.
+    intros. destruct v; simpl; auto.
+  Qed.
+  
   Lemma to_from_tree : forall oty (v : opaque_type_denote oty),
       from_tree (to_tree v) = Some (oty, v).
   Proof.
@@ -1327,7 +1381,10 @@ Module opaque_type_denote.
     now rewrite int.to_from_tree.
     intros.
     unfold from_tree, to_tree.
-  Admitted.
+    rewrite int_from_double_tree.
+    rewrite double.to_from_tree.
+    reflexivity.
+  Qed.
 
   Lemma to_tree_wf:
     forall oty (v : opaque_type_denote oty), Forall symbol.wf (to_tree v).
