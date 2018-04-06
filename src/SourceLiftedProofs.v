@@ -189,7 +189,10 @@ let f := match goal with [ |- ?f target_tyn target ] => f end in
 refine match target as target_ in value _ (ADT target_tyn_)
         return f target_tyn_ target_ with
     | @VConstr _  target_tyn ctor arg_tys  ct args => _
-    end; intros.  clear target target_tyn0.
+    | VOpaque _ => _
+    end; intros; cycle 1.
+  { inversion e. }    
+clear target target_tyn0.
 
 revert cases ct. pattern case_tys, target_tyn, ret_ty, e.
 let f := match goal with [ |- ?f _ _ _ _ ] => f end in
@@ -526,21 +529,29 @@ all: try solve [inversion 1].
 intro. eapply HQ.
 Qed.
 
+Check VOpaque.
+
 Lemma value_adt_inv : forall G tyn (v : value G (ADT tyn))
-        (Q : _ -> Prop),
-    (forall ctor arg_tys (ct : constr_type ctor arg_tys tyn) args,
-        Q (VConstr ct args)) ->
-    Q v.
+        (Q : forall tyn, value G (ADT tyn) -> Prop),
+    (forall tyn ctor arg_tys (ct : constr_type ctor arg_tys tyn) args,
+        Q tyn (VConstr ct args)) ->
+    (forall oty ov,
+        Q (Topaque oty) (VOpaque ov)) ->
+    Q tyn v.
 intros until v.
 pattern tyn, v.
 refine (
     match v as v_ in value _ (ADT tyn_) return _ tyn_ v_ with
     | @VConstr _ tyn ctor arg_tys ct args => _
     | VClose _ _ => idProp
+    | @VOpaque _ oty ov => _
     end).
-clear v tyn0.
-intros ? HQ.
-eapply HQ.
+- clear v tyn0.
+  intros ? HConstr HOpaque.
+  eapply HConstr.
+- clear v.
+  intros ? HConstr HOpaque.
+  eapply HOpaque.
 Qed.
 
 Lemma value_arrow_inv : forall G arg_ty ret_ty (v : value G (Arrow arg_ty ret_ty))
@@ -640,7 +651,9 @@ destruct e; intros; simpl.
     { eexists. eapply SElimTarget. auto. }
 
   on _, invc_using expr_is_value_inv.
-  on _, invert_nullary value_adt_inv v.
+  move v at top. generalize dependent target_tyn. intros ? ?.
+  eapply value_adt_inv with (v := v); eauto; intros; cycle 1.
+    { inversion e. }
   eexists. eapply SEliminate.
 
 - rename h into args.

@@ -58,6 +58,7 @@ Module type_name.
     | TZ              => atom (symbol.of_string_unsafe "Z")
     | Tascii         => atom (symbol.of_string_unsafe "ascii")
     (*| Tascii          => atom (symbol.of_string_unsafe "ascii")*)
+    | Topaque oty     => node [atom (symbol.of_string_unsafe "opaque"); opaque_type_name.to_tree oty]
     end.
 
 
@@ -98,6 +99,13 @@ Module type_name.
                    end
            | _ => None
            end
+      else if symbol.eq_dec s (symbol.of_string_unsafe "opaque")
+      then match l with
+           | [t] => match opaque_type_name.from_tree t with None => None
+                   | Some oty => Some (Topaque oty)
+                   end
+           | _ => None
+           end
       else None
     | _ => None
     end.
@@ -109,6 +117,7 @@ Module type_name.
     - now rewrite IHty.
     - now rewrite IHty1, IHty2.
     - now rewrite IHty.
+    - now rewrite opaque_type_name.to_from_tree_id.
   Qed.
 
   Lemma to_tree_wf:
@@ -125,7 +134,6 @@ Module type.
     match ty with
     | ADT tyn => node [atom (symbol.of_string_unsafe "ADT"); type_name.to_tree tyn]
     | Arrow ty1 ty2 => node [atom (symbol.of_string_unsafe "Arrow"); to_tree ty1; to_tree ty2]
-    | Opaque oty => node [atom (symbol.of_string_unsafe "Opaque"); opaque_type_name.to_tree oty]
     end.
 
 
@@ -142,11 +150,6 @@ Module type.
            | [t1; t2] => Arrow <$> from_tree t1 <*> from_tree t2
            | _ => None
            end
-      else if symbol.eq_dec s (symbol.of_string_unsafe "Opaque")
-      then match l with
-           | [t1] => Opaque <$> opaque_type_name.from_tree t1
-           | _ => None
-           end
       else None
     | _ => None
     end.
@@ -157,7 +160,6 @@ Module type.
     induction ty; simpl; unfold_option.
     - now rewrite type_name.to_from_tree_id.
     - now rewrite IHty1, IHty2.
-    - now rewrite opaque_type_name.to_from_tree_id.
   Qed.
 
   Lemma to_tree_wf:
@@ -694,6 +696,7 @@ Module constr_type.
         | Cascii_127, [] => Some CTascii_127
         | _,_ => None
         end*)
+      | Topaque _   => None
       end.
 
   Lemma check_constr_type_correct :
@@ -1134,6 +1137,7 @@ Module elim.
                           end end end end end end
                         | _ => None
                          end
+      | Topaque _     => None
       end.
 
   Lemma check_elim_correct :
@@ -1587,12 +1591,19 @@ Import oeuf.OpaqueOps.
     | Ounop (IuRorC z) =>
             node [atom (symbol.of_string_unsafe "unop_rorc"); atom (Z_to_symbol z)]
     | Ounop IuNot => node [atom (symbol.of_string_unsafe "unop_not")]
+    | Ounop IuNeg => node [atom (symbol.of_string_unsafe "unop_neg")]
     | Obinop IbAnd => node [atom (symbol.of_string_unsafe "binop_and")]
     | Obinop IbOr => node [atom (symbol.of_string_unsafe "binop_or")]
     | Obinop IbXor => node [atom (symbol.of_string_unsafe "binop_xor")]
     | Obinop IbAdd => node [atom (symbol.of_string_unsafe "binop_add")]
+    | Obinop IbSub => node [atom (symbol.of_string_unsafe "binop_sub")]
+    | Ocmpop IcEq => node [atom (symbol.of_string_unsafe "cmpop_eq")]
+    | Ocmpop IcULt => node [atom (symbol.of_string_unsafe "cmpop_ult")]
+    | Ocmpop IcSLt => node [atom (symbol.of_string_unsafe "cmpop_slt")]
     | Otest => node [atom (symbol.of_string_unsafe "test")]
     | Orepr z => node [atom (symbol.of_string_unsafe "repr"); atom (Z_to_symbol z)]
+    | Oint_to_nat => node [atom (symbol.of_string_unsafe "int_to_nat")]
+    | Oint_to_list => node [atom (symbol.of_string_unsafe "int_to_list")]
     end.
 
   Definition from_tree (t : tree symbol.t)
@@ -1626,6 +1637,11 @@ Import oeuf.OpaqueOps.
                 | [] => Some ([Opaque Oint], (Opaque Oint, Ounop IuNot))
                 | _ => None end
 
+            else if symbol.eq_dec tag (symbol.of_string_unsafe "unop_neg") then
+                match l with
+                | [] => Some ([Opaque Oint], (Opaque Oint, Ounop IuNeg))
+                | _ => None end
+
             else if symbol.eq_dec tag (symbol.of_string_unsafe "binop_and") then
                 match l with
                 | [] => Some ([Opaque Oint; Opaque Oint], (Opaque Oint, Obinop IbAnd))
@@ -1646,6 +1662,26 @@ Import oeuf.OpaqueOps.
                 | [] => Some ([Opaque Oint; Opaque Oint], (Opaque Oint, Obinop IbAdd))
                 | _ => None end
 
+            else if symbol.eq_dec tag (symbol.of_string_unsafe "binop_sub") then
+                match l with
+                | [] => Some ([Opaque Oint; Opaque Oint], (Opaque Oint, Obinop IbSub))
+                | _ => None end
+
+            else if symbol.eq_dec tag (symbol.of_string_unsafe "cmpop_eq") then
+                match l with
+                | [] => Some ([Opaque Oint; Opaque Oint], (ADT Tbool, Ocmpop IcEq))
+                | _ => None end
+
+            else if symbol.eq_dec tag (symbol.of_string_unsafe "cmpop_ult") then
+                match l with
+                | [] => Some ([Opaque Oint; Opaque Oint], (ADT Tbool, Ocmpop IcULt))
+                | _ => None end
+
+            else if symbol.eq_dec tag (symbol.of_string_unsafe "cmpop_slt") then
+                match l with
+                | [] => Some ([Opaque Oint; Opaque Oint], (ADT Tbool, Ocmpop IcSLt))
+                | _ => None end
+
             else if symbol.eq_dec tag (symbol.of_string_unsafe "test") then
                 match l with
                 | [] => Some ([Opaque Oint], (ADT Tbool, Otest))
@@ -1656,6 +1692,16 @@ Import oeuf.OpaqueOps.
                 | [atom s_z] =>
                         Some ([], (Opaque Oint,
                             Orepr (Z_from_symbol s_z)))
+                | _ => None end
+
+            else if symbol.eq_dec tag (symbol.of_string_unsafe "int_to_nat") then
+                match l with
+                | [] => Some ([Opaque Oint], (ADT Tnat, Oint_to_nat))
+                | _ => None end
+
+            else if symbol.eq_dec tag (symbol.of_string_unsafe "int_to_list") then
+                match l with
+                | [] => Some ([Opaque Oint], (ADT (Tlist (Topaque Oint)), Oint_to_list))
                 | _ => None end
 
             else None

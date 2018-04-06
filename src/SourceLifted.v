@@ -619,7 +619,10 @@ let f := match goal with [ |- ?f target_tyn target ] => f end in
 refine match target as target_ in value _ (ADT target_tyn_)
         return f target_tyn_ target_ with
     | @VConstr _  target_tyn ctor arg_tys  ct args => _
-    end; intros.  clear target target_tyn0.
+    | VOpaque _ => _
+    end; intros; cycle 1.
+  { inversion e. }
+clear target target_tyn0.
 
 (* note: if you add any new cases here, you must also add cases to
    run_elim_denote in SourceLiftedProofs.v *)

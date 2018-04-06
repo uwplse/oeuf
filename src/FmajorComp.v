@@ -39,6 +39,7 @@ Notation IkVar := MatchValues.IkVar.
 Notation IkFunc := MatchValues.IkFunc.
 Notation IkRuntime := MatchValues.IkRuntime.
 Notation IkMalloc := MatchValues.IkMalloc.
+Notation IkScratch := MatchValues.IkScratch.
 
 Notation id_key_eq_dec := MatchValues.id_key_eq_dec.
 
@@ -94,6 +95,11 @@ Qed.
 
 (* building the mapping from id_keys to idents *)
 
+(* scratch variables used in opaque op cminor codegen *)
+Definition scratch_id_entry n := (IkScratch n, "_scratch" ++ nat_to_string n)%string.
+Definition build_scratch_id_list :=
+    map scratch_id_entry (count_up num_scratch_vars).
+
 Definition var_id_entry n := (IkVar n, "_x" ++ nat_to_string n)%string.
 
 Definition build_vars_id_list (genv : A.env) :=
@@ -114,6 +120,7 @@ Definition build_id_list' (cu : list (A.stmt * A.expr) * list metadata) :
     ; (IkSelf, "_self")
     ; (IkSwitchTarget, "_switch_target")
     ]%string
+    ++ build_scratch_id_list
     ++ build_vars_id_list (fst cu)
     ++ build_funcs_id_list (snd cu)
     ++ map fst extra_funcs.
@@ -599,6 +606,39 @@ Qed.
 
 (* properties of id_map builders *)
 
+Lemma build_scratch_id_list_IkScratch : forall n k s,
+    nth_error build_scratch_id_list n = Some (k, s) ->
+    k = IkScratch n.
+intros0 Hnth. unfold build_scratch_id_list in *.
+assert (Hlen : n < length (map scratch_id_entry (count_up num_scratch_vars))).
+  { rewrite <- nth_error_Some. congruence. }
+  rewrite map_length, count_up_length in Hlen.
+fwd eapply count_up_nth_error with (n := num_scratch_vars) (i := n) as HH; eauto.
+eapply map_nth_error with (f := scratch_id_entry) in HH.
+unfold scratch_id_entry in *. congruence.
+Qed.
+
+Lemma build_scratch_id_list_keys_norepet :
+    list_norepet (map fst build_scratch_id_list).
+intros.
+eapply nth_error_unique_list_norepet. intros0 Hn1 Hn2.
+eapply map_nth_error' in Hn1.  destruct Hn1 as ([y11 y12] & Hn1 & ?).
+eapply map_nth_error' in Hn2.  destruct Hn2 as ([y21 y22] & Hn2 & ?).
+eapply build_scratch_id_list_IkScratch in Hn1.
+eapply build_scratch_id_list_IkScratch in Hn2.
+unfold fst in *. congruence.
+Qed.
+
+Lemma scratch_keys_IkScratch : forall k,
+    In k (map fst build_scratch_id_list) ->
+    exists n, k = IkScratch n.
+intros0 Hin.
+eapply In_nth_error in Hin. destruct Hin as (? & Hin).
+eapply map_nth_error' in Hin.  destruct Hin as ([y1 y2] & Hin & ?).
+eapply build_scratch_id_list_IkScratch in Hin.
+unfold fst in *. subst. eauto.
+Qed.
+
 Lemma build_vars_id_list_IkVar : forall AE n k s,
     nth_error (build_vars_id_list AE) n = Some (k, s) ->
     k = IkVar n.
@@ -691,6 +731,8 @@ constructor.
   eapply list_norepet_append.
     { simpl. repeat constructor. all: simpl. all: intuition discriminate. }
   eapply list_norepet_append.
+    { eapply build_scratch_id_list_keys_norepet. }
+  eapply list_norepet_append.
     { eapply build_vars_id_list_keys_norepet. }
   eapply list_norepet_append.
     { eapply build_funcs_id_list_keys_norepet. }
@@ -701,6 +743,7 @@ constructor.
       eapply funcs_keys_IkFunc in Hx.
       eapply extra_keys_IkRuntime_IkMalloc in Hy.
       firstorder congruence. }
+
   eapply list_disjoint_append_r.
     { unfold list_disjoint. intros0 Hx Hy.
       eapply vars_keys_IkVar in Hx.
@@ -709,18 +752,39 @@ constructor.
     { unfold list_disjoint. intros0 Hx Hy.
       eapply vars_keys_IkVar in Hx.
       eapply extra_keys_IkRuntime_IkMalloc in Hy.
+      firstorder congruence. }
+
+  eapply list_disjoint_append_r.
+    { unfold list_disjoint. intros0 Hx Hy.
+      eapply scratch_keys_IkScratch in Hx.
+      eapply vars_keys_IkVar in Hy.
+      firstorder congruence. }
+  eapply list_disjoint_append_r.
+    { unfold list_disjoint. intros0 Hx Hy.
+      eapply scratch_keys_IkScratch in Hx.
+      eapply funcs_keys_IkFunc in Hy.
+      firstorder congruence. }
+    { unfold list_disjoint. intros0 Hx Hy.
+      eapply scratch_keys_IkScratch in Hx.
+      eapply extra_keys_IkRuntime_IkMalloc in Hy.
+      firstorder congruence. }
+
+  rewrite app_nil_r.
+  eapply list_disjoint_append_r.
+    { unfold list_disjoint. intros0 Hx Hy. simpl in Hx.
+      eapply scratch_keys_IkScratch in Hy.
       firstorder congruence. }
   eapply list_disjoint_append_r.
     { unfold list_disjoint. intros0 Hx Hy. simpl in Hx.
       eapply vars_keys_IkVar in Hy.
-      destruct Hx as [ | [ | [ | [] ] ] ]; firstorder congruence. }
+      firstorder congruence. }
   eapply list_disjoint_append_r.
     { unfold list_disjoint. intros0 Hx Hy. simpl in Hx.
       eapply funcs_keys_IkFunc in Hy.
-      destruct Hx as [ | [ | [ | [] ] ] ]; firstorder congruence. }
+      firstorder congruence. }
     { unfold list_disjoint. intros0 Hx Hy. simpl in Hx.
       eapply extra_keys_IkRuntime_IkMalloc in Hy.
-      destruct Hx as [ | [ | [ | [] ] ] ]; firstorder congruence. }
+      firstorder congruence. }
 
 - assumption.
 Qed.
@@ -1594,6 +1658,8 @@ let rec go :=
 - simpl in Hfname.
   repeat (on (_ \/ _), invc); try discriminate.
   contradiction.
+
+- eapply scratch_keys_IkScratch in Hfname. break_exists. discriminate.
 
 - eapply vars_keys_IkVar in Hfname. break_exists. discriminate.
 

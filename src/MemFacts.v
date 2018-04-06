@@ -882,6 +882,167 @@ Qed.
 
 
 
+Section MEM_SIM.
+Local Open Scope positive_scope.
+
+Definition closure_sig_higher v :=
+    match v with
+    | HigherValue.Close fname free => Some (fname, length free)
+    | _ => None
+    end.
+
+Definition Plt_dec : forall a b, ({ a < b } + { a >= b })%positive.
+intros. destruct (a ?= b)%positive eqn:?.
+- right. rewrite Pos.compare_eq_iff in *. lia.
+- left. rewrite Pos.compare_lt_iff in *. lia.
+- right. rewrite Pos.compare_gt_iff in *. lia.
+Defined.
+
+Definition pos_range_dec : forall min max x,
+    ({ x >= min /\ x < max } + { x < min \/ x >= max })%positive.
+intros.
+destruct (Plt_dec x min), (Plt_dec x max).
+- right. left. auto.
+- right. left. auto.
+- left. split; auto.
+- right. right. auto.
+Defined.
+
+
+
+Definition mem_sim (mi mi' : block -> option (block * Z)) m1 m1' m2 m2' :=
+    (* mi' maps new blocks on the left to new blocks on the right. *)
+    (forall b,
+        b >= Mem.nextblock m1 ->
+        b < Mem.nextblock m1' ->
+        exists b',
+            mi' b = Some (b', 0%Z) /\
+            b' >= Mem.nextblock m2 /\
+            b' < Mem.nextblock m2') /\
+    (* mi' behaves like mi on old blocks on the left. *)
+    (forall b,
+        b < Mem.nextblock m1 \/ b >= Mem.nextblock m1' ->
+        mi' b = mi b) /\
+    (* The new mappings introduced by mi' are injective. *)
+    (forall b1 b2 b' delta1 delta2,
+        b1 >= Mem.nextblock m1 ->
+        b1 < Mem.nextblock m1' ->
+        b2 >= Mem.nextblock m1 ->
+        b2 < Mem.nextblock m1' ->
+        mi' b1 = Some (b', delta1) ->
+        mi' b2 = Some (b', delta2) ->
+        b1 = b2) /\
+    Mem.nextblock m1 <= Mem.nextblock m1' /\
+    Mem.nextblock m2 <= Mem.nextblock m2'.
+
+Lemma mem_sim_refl : forall mi m1 m1' m2 m2',
+    Mem.nextblock m1 = Mem.nextblock m1' ->
+    Mem.nextblock m2 = Mem.nextblock m2' ->
+    mem_sim mi mi m1 m1' m2 m2'.
+intros0 Hnext1 Hnext2. repeat apply conj; intros.
+- exfalso. rewrite <- Hnext1 in *. lia.
+- reflexivity.
+- exfalso. rewrite <- Hnext1 in *. lia.
+- rewrite Hnext1. lia.
+- rewrite Hnext2. lia.
+Qed.
+
+(* Compose memory simulation "vertically", by adding more steps. *)
+Lemma mem_sim_compose : forall mi mi' mi'' m1 m1' m1'' m2 m2' m2'',
+    mem_sim mi mi' m1 m1' m2 m2' ->
+    mem_sim mi' mi'' m1' m1'' m2' m2'' ->
+    mem_sim mi mi'' m1 m1'' m2 m2''.
+unfold mem_sim. intros0 Hsim Hsim'.
+destruct Hsim as (Hnew & Hold & Hinj & Hext1 & Hext2).
+destruct Hsim' as (Hnew' & Hold' & Hinj' & Hext1' & Hext2').
+repeat apply conj; intros.
+
+- assert (HH : b >= Mem.nextblock m1' \/ b < Mem.nextblock m1'). { lia. } destruct HH.
+  + destruct (Hnew' ?? ** ** ) as (b' & ? & ? & ?).
+    exists b'. repeat apply conj; eauto. lia.
+  + destruct (Hnew ?? ** ** ) as (b' & ? & ? & ?).
+    fwd eapply Hold' as HH; eauto.
+    exists b'. repeat apply conj; eauto.
+    * congruence.
+    * lia.
+
+- eapply eq_trans.
+  + eapply Hold'. break_or; [left; lia | right; eauto].
+  + eapply Hold. break_or; [left; eauto | right; lia].
+
+- destruct (Plt_dec b1 (Mem.nextblock m1')), (Plt_dec b2 (Mem.nextblock m1')).
+
+  + rewrite Hold' in *; eauto.
+
+  + exfalso.
+    (* impossible.  b1 is old, b2 is new, so they can't both map to b'. *)
+    rewrite (Hold' b1) in *; eauto.
+    fwd eapply (Hnew b1) as HH; eauto. destruct HH as (b1' & ? & ? & ?).
+    fwd eapply (Hnew' b2) as HH; eauto. destruct HH as (b2' & ? & ? & ?).
+    assert (b1' = b2') by congruence.
+    assert (b1' < b2') by lia.
+    subst b1'. lia.
+
+  + exfalso.
+    (* impossible.  b1 is old, b2 is new, so they can't both map to b'. *)
+    rewrite (Hold' b2) in *; eauto.
+    fwd eapply (Hnew' b1) as HH; eauto. destruct HH as (b1' & ? & ? & ?).
+    fwd eapply (Hnew b2) as HH; eauto. destruct HH as (b2' & ? & ? & ?).
+    assert (b1' = b2') by congruence.
+    assert (b1' > b2') by lia.
+    subst b1'. lia.
+
+  + eauto.
+
+- lia.
+- lia.
+Qed.
+
+Lemma alloc_mem_sim : forall m1 m2 lo hi m1' b1 mi,
+    Mem.alloc m1 lo hi = (m1', b1) ->
+    Mem.inject mi m1 m2 ->
+    exists mi' m2' b2,
+        Mem.alloc m2 lo hi = (m2', b2) /\
+        Mem.inject mi' m1' m2' /\
+        mem_sim mi mi' m1 m1' m2 m2' /\
+        mi' b1 = Some (b2, 0%Z).
+intros0 Halloc Hinj.
+fwd eapply Mem.alloc_parallel_inject with (lo2 := lo) (hi2 := hi) as HH; eauto.
+  { lia. } { lia. }
+  destruct HH as (mi' & m2' & b2 & ? & ? & ? & ? & ?).
+
+fwd eapply Mem.nextblock_alloc with (m1 := m1); eauto.
+fwd eapply Mem.alloc_result with (m1 := m1); eauto.
+fwd eapply Mem.nextblock_alloc with (m1 := m2); eauto.
+fwd eapply Mem.alloc_result with (m1 := m2); eauto.
+rewrite <- Pos.add_1_l in *.
+
+exists mi', m2', b2. repeat apply conj; eauto.
+unfold mem_sim. repeat apply conj; eauto.
+
+- intros.
+  assert (b = b1). { subst b1. lia. }
+  subst b.
+  exists b2. split; eauto. subst. split; lia.
+
+- intros.
+  assert (b <> b1). { subst b1. lia. }
+  eauto.
+
+- intros b1' b2'. intros.
+  assert (b1' = Mem.nextblock m1) by (zify; lia).
+  assert (b2' = Mem.nextblock m1) by (zify; lia).
+  congruence.
+
+- lia.
+- lia.
+Qed.
+
+End MEM_SIM.
+
+
+
+
 Lemma build_constr_inject' : forall A B (ge : Genv.t A B) m0 m1 m2 m3 m4 b tag args argvs,
     Forall2 (value_inject ge m0) args argvs ->
     Zlength args <= max_arg_count ->
@@ -1016,10 +1177,10 @@ Definition build_constr m tag args :=
     Mem.store Mint32 m b (-4) (Vint (Int.repr ((1 + Zlength args) * 4))) >>= fun m =>
     Mem.store Mint32 m b 0 (Vint tag) >>= fun m =>
     store_multi Mint32 m b 4 args >>= fun m =>
-    Some (Vptr b Int.zero, m).
+    Some (m, Vptr b Int.zero).
 
 Lemma build_constr_inject : forall A B (ge : Genv.t A B) m1 m2 tag args hargs v,
-    build_constr m1 tag args = Some (v, m2) ->
+    build_constr m1 tag args = Some (m2, v) ->
     Forall2 (value_inject ge m1) hargs args ->
     Zlength args <= max_arg_count ->
     value_inject ge m2 (Constr tag hargs) v.
@@ -1046,7 +1207,7 @@ Lemma build_constr_ok : forall A B (ge : Genv.t A B) m1 tag args hargs,
     Forall2 (value_inject ge m1) hargs args ->
     Zlength args <= max_arg_count ->
     exists v m2,
-        build_constr m1 tag args = Some (v, m2) /\
+        build_constr m1 tag args = Some (m2, v) /\
         value_inject ge m2 (Constr tag hargs) v.
 intros.
 assert (Hlen_eq : length hargs = length args) by eauto using Forall2_length.
@@ -1069,7 +1230,7 @@ reflexivity.
 Qed.
 
 Lemma build_constr_mem_inj_id : forall m1 tag args v m2,
-    build_constr m1 tag args = Some (v, m2) ->
+    build_constr m1 tag args = Some (m2, v) ->
     Mem.mem_inj inject_id m1 m2.
 intros0 Hbuild.
 unfold build_constr in Hbuild. break_match. break_bind_option. inject_some.
@@ -1088,6 +1249,139 @@ rewrite <- inject_id_compose_self. eapply Mem.mem_inj_compose with (m2 := m1).
   eapply store_new_block_mem_inj_id; eauto.
   eapply Mem.mext_inj, Mem.extends_refl.
 Qed.
+
+Check store_multi.
+
+Lemma store_multi_mapped_inject : forall f chunk m1 b1 ofs vs1 m1' m2 b2 vs2,
+    Mem.inject f m1 m2 ->
+    store_multi chunk m1 b1 ofs vs1 = Some m1' ->
+    f b1 = Some (b2, 0%Z) ->
+    Forall2 (Val.inject f) vs1 vs2 ->
+    exists m2',
+        store_multi chunk m2 b2 ofs vs2 = Some m2' /\
+        Mem.inject f m1' m2'.
+first_induction vs1; intros0 Hmi Hstore Hf Hvi.
+all: invc Hvi.
+  { simpl in *. inject_some. exists m2. split; eauto. }
+
+simpl in *. break_match_hyp; try discriminate.
+rename m1' into m1'', m into m1'.
+fwd eapply Mem.store_mapped_inject with (m1 := m1) as HH; eauto.
+  destruct HH as (m2' & ? & ?).
+fwd eapply IHvs1 with (m1 := m1') as HH; eauto.
+  destruct HH as (m2'' & ? & ?).
+
+exists m2''.
+rewrite Z.add_0_r in *. find_rewrite. find_rewrite. eauto.
+Qed.
+
+Check Mem.nextblock_store.
+
+Lemma nextblock_store_multi : forall chunk m1 b ofs vs m2,
+    store_multi chunk m1 b ofs vs = Some m2 ->
+    Mem.nextblock m2 = Mem.nextblock m1.
+first_induction vs; intros0 Hstore; simpl in *.
+  { inject_some. reflexivity. }
+
+break_match; try discriminate.
+erewrite IHvs by eauto. eapply Mem.nextblock_store; eauto.
+Qed.
+
+(*
+*)
+
+
+
+Definition valid_ptr m v :=
+    match v with
+    | Vptr b _ => Mem.valid_block m b
+    | _ => True
+    end.
+
+Lemma mem_sim_valid_val_inject : forall v1 v2 mi mi' m1 m1' m2 m2',
+    Val.inject mi v1 v2 ->
+    Mem.inject mi m1 m2 ->
+    mem_sim mi mi' m1 m1' m2 m2' ->
+    valid_ptr m1 v1 ->
+    Val.inject mi' v1 v2.
+intros0 Hvi Hmi Hsim Hvalid.
+invc Hvi; try solve [econstructor; eauto].
+simpl in Hvalid.
+econstructor; eauto.
+destruct Hsim as (Hnew & Hold & Hinj & Hext1 & Hext2).
+rewrite Hold; eauto.
+Qed.
+
+Lemma mem_sim_valid_val_inject_list : forall vs1 vs2 mi mi' m1 m1' m2 m2',
+    Forall2 (Val.inject mi) vs1 vs2 ->
+    Mem.inject mi m1 m2 ->
+    mem_sim mi mi' m1 m1' m2 m2' ->
+    Forall (valid_ptr m1) vs1 ->
+    Forall2 (Val.inject mi') vs1 vs2.
+induction vs1; intros0 Hvi Hmi Hsim Hvalid; invc Hvi; invc Hvalid;
+  econstructor; eauto using mem_sim_valid_val_inject.
+Qed.
+
+Lemma build_constr_mem_inject : forall m1 tag args1 m1' v1,
+    forall mi m2 args2,
+    build_constr m1 tag args1 = Some (m1', v1) ->
+    Mem.inject mi m1 m2 ->
+    MemInjProps.same_offsets mi ->
+    Forall2 (Val.inject mi) args1 args2 ->
+    Forall (valid_ptr m1) args1 ->
+    exists mi' m2' v2,
+        build_constr m2 tag args2 = Some (m2', v2) /\
+        Mem.inject mi' m1' m2' /\
+        Val.inject mi' v1 v2 /\
+        mem_sim mi mi' m1 m1' m2 m2'.
+
+intros0 Hbuild Hmi Hoff Hvi Hvalid.
+unfold build_constr in * |-. break_match_hyp.
+rewrite Z.add_comm in *. break_bind_option. inject_some. rewrite Z.add_comm in *.
+rename m1' into m1'''', m into m1', m0 into m1'', m3 into m1'''.
+rename b into b1.
+
+fwd eapply alloc_mem_sim as HH; eauto.
+  destruct HH as (mi' & m2' & b2 & ? & ? & ? & ?).
+
+fwd eapply Mem.store_mapped_inject with (m1 := m1') as HH; eauto.
+  destruct HH as (m2'' & ? & ?).
+
+fwd eapply Mem.store_mapped_inject with (m1 := m1'') as HH; eauto.
+  destruct HH as (m2''' & ? & ?).
+
+fwd eapply store_multi_mapped_inject with (m1 := m1''') as HH; eauto.
+  { eapply mem_sim_valid_val_inject_list; eauto. }
+  destruct HH as (m2'''' & ? & ?).
+
+eexists mi', m2'''', _.
+split; cycle 1.
+  { split; [|split]; eauto.
+    eapply mem_sim_compose; cycle 1.
+      { eapply mem_sim_refl; symmetry; eapply nextblock_store_multi; eauto. }
+    eapply mem_sim_compose; cycle 1.
+      { eapply mem_sim_refl; symmetry; eapply Mem.nextblock_store; eauto. }
+    eapply mem_sim_compose; cycle 1.
+      { eapply mem_sim_refl; symmetry; eapply Mem.nextblock_store; eauto. }
+    eauto. }
+
+assert (Hzlen : Zlength args1 = Zlength args2).
+  { rewrite 2 Zlength_correct. f_equal. eauto using Forall2_length. }
+
+unfold build_constr.
+rewrite <- Hzlen. on (Mem.alloc _ _ _ = _), fun H => rewrite H.
+eapply require_bind_eq.
+  { list_magic_on (args1, (args2, tt)).
+    assert (args1_i <> Vundef).
+      { eapply Forall_nth_error with (P := fun v => v <> Vundef); eauto. }
+    on >Val.inject, invc; eauto. discriminate. }
+  intro.
+rewrite Z.add_0_r in *. on (Mem.store _ m2' _ _ _ = _), fun H => rewrite H.  simpl.
+on (Mem.store _ m2'' _ _ _ = _), fun H => rewrite H. simpl.
+on (store_multi _ m2''' _ _ _ = _), fun H => rewrite H. simpl.
+reflexivity.
+Qed.
+
 
 Definition cm_func f := Econst (Oaddrsymbol f Int.zero).
 Definition cm_malloc_sig := ef_sig EF_malloc.
@@ -1349,7 +1643,7 @@ Qed.
 
 Lemma build_constr_cminor_effect : forall malloc_id m tag args argvs v m',
     forall ge f id k sp e fp,
-    build_constr m tag argvs = Some (v, m') ->
+    build_constr m tag argvs = Some (m', v) ->
     eval_exprlist ge sp e m args argvs ->
     Forall (expr_no_access id) args ->
     Zlength args <= max_arg_count ->
@@ -1553,10 +1847,10 @@ Definition build_close {A B} (ge : Genv.t A B) m fname free :=
     Mem.store Mint32 m b (-4) (Vint (Int.repr ((1 + Zlength free) * 4))) >>= fun m =>
     Mem.store Mint32 m b 0 (Vptr bcode Int.zero) >>= fun m =>
     store_multi Mint32 m b 4 free >>= fun m =>
-    Some (Vptr b Int.zero, m).
+    Some (m, Vptr b Int.zero).
 
 Lemma build_close_inject : forall A B (ge : Genv.t A B) m1 m2 fname free hfree v,
-    build_close ge m1 fname free = Some (v, m2) ->
+    build_close ge m1 fname free = Some (m2, v) ->
     Forall2 (value_inject ge m1) hfree free ->
     Zlength free <= max_arg_count ->
     value_inject ge m2 (Close fname hfree) v.
@@ -1576,7 +1870,7 @@ Lemma build_close_ok : forall A B (ge : Genv.t A B) m1 fname free hfree,
     Forall2 (value_inject ge m1) hfree free ->
     Zlength free <= max_arg_count ->
     exists v m2,
-        build_close ge m1 fname free = Some (v, m2) /\
+        build_close ge m1 fname free = Some (m2, v) /\
         value_inject ge m2 (Close fname hfree) v.
 intros.
 assert (Hlen_eq : length hfree = length free) by eauto using Forall2_length.
@@ -1598,7 +1892,7 @@ reflexivity.
 Qed.
 
 Lemma build_close_mem_inj_id : forall A B (ge : Genv.t A B) m1 fname free v m2,
-    build_close ge m1 fname free = Some (v, m2) ->
+    build_close ge m1 fname free = Some (m2, v) ->
     Mem.mem_inj inject_id m1 m2.
 intros0 Hbuild.
 unfold build_close in Hbuild. break_match. break_bind_option. inject_some.
