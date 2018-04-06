@@ -3,6 +3,7 @@ Require Import oeuf.SourceLifted oeuf.Utopia oeuf.Monads oeuf.HList
     oeuf.CompilationUnit oeuf.ListLemmas oeuf.OpaqueTypes.
 Require Import oeuf.StuartTact.
 Import ListNotations.
+Require Import Eqdep_dec.
 
 From StructTact Require Import StructTactics.
 From PrettyParsing Require Import PrettyParsing.
@@ -1239,10 +1240,19 @@ Module double.
       option (Fappli_IEEE.bounded 53 1024 pm ze = true).
   Proof.
     intros.
-    destruct (Fappli_IEEE.bounded 53 1024 pm ze) eqn:?.
-    exact (Some (eq_refl)).
+    destruct (Bool.bool_dec (Fappli_IEEE.bounded 53 1024 pm ze) true).
+    exact (Some e).
     exact None.
   Defined.
+
+  Lemma float_bounded_correct : forall pm ze,
+      forall (pf : Fappli_IEEE.bounded 53 1024 pm ze = true),
+      float_bounded pm ze = Some pf.
+  intros. unfold float_bounded. break_match.
+  - f_equal.  eapply eq_proofs_unicity_on. clear. intros.
+    fwd eapply Bool.bool_dec as HH; destruct HH; eauto.
+  - exfalso. congruence.
+  Qed.
 
   Definition npl :
     forall (p : BinNums.positive),
@@ -1250,12 +1260,20 @@ Module double.
   Proof.
     intros.
     unfold Fappli_IEEE.nan_pl.
-    destruct (BinInt.Z.ltb (BinNums.Zpos (Fcore_digits.digits2_pos p)) 53) eqn:?.
-    eapply Some.
-    eexists p.
-    eapply Heqb.
-    exact None.
+    destruct (Bool.bool_dec (BinInt.Z.ltb (BinNums.Zpos (Fcore_digits.digits2_pos p)) 53) true).
+    - eapply Some. eauto.
+    - exact None.
   Defined.
+
+  Lemma npl_correct : forall (n : Fappli_IEEE.nan_pl 53),
+      npl (`n) = Some n.
+  intros. unfold npl. break_match.
+  - destruct n. simpl in *. f_equal. f_equal.
+    eapply eq_proofs_unicity_on. clear. intros.
+    fwd eapply Bool.bool_dec as HH; destruct HH; eauto.
+  - exfalso. destruct n. simpl in *. congruence.
+  Qed.
+
 
   Definition from_tree (t : tree symbol.t) : option Floats.float :=
     match t with
@@ -1305,32 +1323,16 @@ Module double.
   Lemma to_from_tree : forall i, from_tree (to_tree i) = Some i.
   Proof.
     intros.
-    destruct i; simpl;
-      repeat rewrite bool.to_from_tree; eauto.
-
-    f_equal. f_equal.
-    rewrite pos_to_from_symbol.
-    unfold npl.
-    unfold Fappli_IEEE.nan_pl in *.
-    destruct n. simpl.
-    simpl.
-
-    (* HELP ME! *)
-    admit.
-
-    
-    rewrite pos_to_from_symbol.
-    rewrite Z_to_from_symbol.
-    destruct (float_bounded m e) eqn:?.
-
-    f_equal. f_equal.
-    eapply proof_irrelevance.
-    
-    unfold float_bounded in Heqo.
-    rewrite e0 in Heqo.
-    congruence.
-
-  Admitted.
+    destruct i; simpl.
+    - rewrite bool.to_from_tree. reflexivity.
+    - rewrite bool.to_from_tree. reflexivity.
+    - rewrite pos_to_from_symbol. simpl.
+      rewrite npl_correct. rewrite bool.to_from_tree. reflexivity.
+    - rewrite pos_to_from_symbol. rewrite Z_to_from_symbol.
+      rewrite bool.to_from_tree.
+      erewrite float_bounded_correct by eauto.
+      reflexivity.
+  Qed.
 
   Lemma to_tree_wf:
     forall i, Forall symbol.wf (to_tree i).
