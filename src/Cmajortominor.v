@@ -254,7 +254,7 @@ Definition transf_function (f : Cmajor.function) : res Cminor.function :=
     do body' <- transf_stmt (fn_body f);
     OK (Cminor.mkfunction (fn_sig f)
                           (fn_params f)
-                          (fn_vars f)
+                          (fn_vars f ++ cmcc_scratch ctx)
                           (fn_stackspace f)
                           body').
 
@@ -607,7 +607,7 @@ Qed.
 Lemma vars_transf :
   forall f f',
     transf_function ctx f = OK f' ->
-    Cminor.fn_vars f' = fn_vars f.
+    Cminor.fn_vars f' = fn_vars f ++ cmcc_scratch ctx.
 Proof.
 intros0 Htransf.
 unfold transf_function in Htransf.
@@ -822,6 +822,27 @@ Lemma set_locals_match_env : forall vars e e',
 induction vars; intros; simpl; eauto.
 Qed.
 
+Lemma set_locals_app : forall vars vars' e,
+    set_locals (vars ++ vars') e =
+    set_locals vars (set_locals vars' e).
+induction vars; intros; simpl; eauto.
+rewrite IHvars. reflexivity.
+Qed.
+
+Lemma set_locals_unchanged : forall vars e id,
+    ~ In id vars ->
+    (set_locals vars e) ! id = e ! id.
+induction vars; intros0 Hid; simpl; auto.
+simpl in *. rewrite PTree.gso by intuition. eauto.
+Qed.
+
+Lemma set_locals_scratch_match_env : forall e e',
+    match_env e e' ->
+    match_env e (set_locals (cmcc_scratch ctx) e').
+intros. unfold match_env in *. intros.
+rewrite set_locals_unchanged; eauto.
+Qed.
+
 Lemma set_optvar_match_env : forall optid v e e',
     match_env e e' ->
     match_env (set_optvar optid v e) (Cminor.set_optvar optid v e').
@@ -964,7 +985,9 @@ Proof.
     - erewrite stackspace_transf; eauto.
     - eapply body_transf. eauto.
     - erewrite vars_transf, params_transf; eauto.
-      eapply set_locals_match_env. eapply set_params_match_env.
+      rewrite set_locals_app. eapply set_locals_match_env.
+      eapply set_locals_scratch_match_env.
+      eapply set_params_match_env.
 
   * (* call external *)
     simpl in TF. invc TF.
