@@ -230,7 +230,9 @@ let pkg_sourcelifted = ["oeuf";"SourceLifted"]
 let pkg_compilation_unit = ["oeuf";"CompilationUnit"]
 (*let pkg_fast_ascii = ["oeuf";"FastAscii"]*)
 let pkg_opaque_types = ["oeuf";"OpaqueTypes"]
+let pkg_int_ops = ["oeuf";"IntOps"]
 let pkg_opaque_ops = ["oeuf";"OpaqueOps"]
+let pkg_opaque_ops_int = ["oeuf";"OpaqueOpsInt"]
 
 let pkg_binnums = ["Coq"; "Numbers"; "BinNums"]
 
@@ -365,26 +367,28 @@ let opaque_heads () =
             [resolve_symbol pkg_cc_integers_int "int"]) in
 
     let resolve_int = resolve_symbol pkg_cc_integers_int in
-    let resolve_op = resolve_symbol pkg_opaque_ops in
+    let resolve_int_op = resolve_symbol pkg_int_ops in
+    let resolve_oo = resolve_symbol pkg_opaque_ops in
+    let resolve_oo_int = resolve_symbol pkg_opaque_ops_int in
 
     let oo_int_unop name =
-        let unop = resolve_op "Ounop" in
-        let un_name = resolve_op ("Iu" ^ name) in
+        let unop = resolve_oo "Ounop" in
+        let un_name = resolve_oo_int ("Iu" ^ name) in
         mk' unop [un_name] in
 
     let oo_int_unop_arg name arg =
-        let unop = resolve_op "Ounop" in
-        let un_name = resolve_op ("Iu" ^ name) in
+        let unop = resolve_oo "Ounop" in
+        let un_name = resolve_oo_int ("Iu" ^ name) in
         mk' unop [mk' un_name [arg]] in
 
     let oo_int_binop name =
-        let binop = resolve_op "Obinop" in
-        let bin_name = resolve_op ("Ib" ^ name) in
+        let binop = resolve_oo "Obinop" in
+        let bin_name = resolve_oo_int ("Ib" ^ name) in
         mk' binop [bin_name] in
 
     let oo_int_cmpop name =
-        let cmpop = resolve_op "Ocmpop" in
-        let cmp_name = resolve_op ("Ic" ^ name) in
+        let cmpop = resolve_oo "Ocmpop" in
+        let cmp_name = resolve_oo_int ("Ic" ^ name) in
         mk' cmpop [cmp_name] in
 
     let int_repr = resolve_int "repr" in
@@ -439,22 +443,22 @@ let opaque_heads () =
 
         (resolve_int "zero", fun go args ->
             let zero = mk' (resolve_symbol pkg_binnums "Z0") [] in
-            OpaqueOp ([], ot_int, mk' (resolve_op "Orepr") [zero], []));
+            OpaqueOp ([], ot_int, mk' (resolve_oo "Orepr") [zero], []));
         (resolve_int "one", fun go args ->
             let one_p = resolve_symbol pkg_binnums "xH" in
             let one = mk' (resolve_symbol pkg_binnums "Zpos") [one_p] in
-            OpaqueOp ([], ot_int, mk' (resolve_op "Orepr") [one], []));
+            OpaqueOp ([], ot_int, mk' (resolve_oo "Orepr") [one], []));
         (resolve_int "repr", fun go args ->
             let [arg] = args in
-            OpaqueOp ([], ot_int, mk' (resolve_op "Orepr") [arg], []));
+            OpaqueOp ([], ot_int, mk' (resolve_oo "Orepr") [arg], []));
 
-        (resolve_op "int_test", fun go args ->
-            OpaqueOp ([ot_int], ty_bool, resolve_op "Otest", List.map go args));
+        (resolve_int_op "int_test", fun go args ->
+            OpaqueOp ([ot_int], ty_bool, resolve_oo "Otest", List.map go args));
 
-        (resolve_op "int_to_nat", fun go args ->
-            OpaqueOp ([ot_int], ty_nat, resolve_op "Oint_to_nat", List.map go args));
-        (resolve_op "int_to_list", fun go args ->
-            OpaqueOp ([ot_int], ty_list_int, resolve_op "Oint_to_list", List.map go args))
+        (resolve_int_op "int_to_nat", fun go args ->
+            OpaqueOp ([ot_int], ty_nat, resolve_oo "Oint_to_nat", List.map go args));
+        (resolve_int_op "int_to_list", fun go args ->
+            OpaqueOp ([ot_int], ty_list_int, resolve_oo "Oint_to_list", List.map go args))
     ]
 
 

@@ -1584,26 +1584,27 @@ End value.
 
 Module opaque_oper.
 
-Import oeuf.OpaqueOps.
+Require Import oeuf.OpaqueOps.
+Require oeuf.OpaqueOpsInt.
 
   Definition to_tree {l ty} (o : OpaqueOps.opaque_oper l ty) : tree symbol.t :=
     match o with
-    | Ounop (IuShlC z) =>
+    | Ounop (OpaqueOpsInt.IuShlC z) =>
             node [atom (symbol.of_string_unsafe "unop_shlc"); atom (Z_to_symbol z)]
-    | Ounop (IuShruC z) =>
+    | Ounop (OpaqueOpsInt.IuShruC z) =>
             node [atom (symbol.of_string_unsafe "unop_shruc"); atom (Z_to_symbol z)]
-    | Ounop (IuRorC z) =>
+    | Ounop (OpaqueOpsInt.IuRorC z) =>
             node [atom (symbol.of_string_unsafe "unop_rorc"); atom (Z_to_symbol z)]
-    | Ounop IuNot => node [atom (symbol.of_string_unsafe "unop_not")]
-    | Ounop IuNeg => node [atom (symbol.of_string_unsafe "unop_neg")]
-    | Obinop IbAnd => node [atom (symbol.of_string_unsafe "binop_and")]
-    | Obinop IbOr => node [atom (symbol.of_string_unsafe "binop_or")]
-    | Obinop IbXor => node [atom (symbol.of_string_unsafe "binop_xor")]
-    | Obinop IbAdd => node [atom (symbol.of_string_unsafe "binop_add")]
-    | Obinop IbSub => node [atom (symbol.of_string_unsafe "binop_sub")]
-    | Ocmpop IcEq => node [atom (symbol.of_string_unsafe "cmpop_eq")]
-    | Ocmpop IcULt => node [atom (symbol.of_string_unsafe "cmpop_ult")]
-    | Ocmpop IcSLt => node [atom (symbol.of_string_unsafe "cmpop_slt")]
+    | Ounop OpaqueOpsInt.IuNot => node [atom (symbol.of_string_unsafe "unop_not")]
+    | Ounop OpaqueOpsInt.IuNeg => node [atom (symbol.of_string_unsafe "unop_neg")]
+    | Obinop OpaqueOpsInt.IbAnd => node [atom (symbol.of_string_unsafe "binop_and")]
+    | Obinop OpaqueOpsInt.IbOr => node [atom (symbol.of_string_unsafe "binop_or")]
+    | Obinop OpaqueOpsInt.IbXor => node [atom (symbol.of_string_unsafe "binop_xor")]
+    | Obinop OpaqueOpsInt.IbAdd => node [atom (symbol.of_string_unsafe "binop_add")]
+    | Obinop OpaqueOpsInt.IbSub => node [atom (symbol.of_string_unsafe "binop_sub")]
+    | Ocmpop OpaqueOpsInt.IcEq => node [atom (symbol.of_string_unsafe "cmpop_eq")]
+    | Ocmpop OpaqueOpsInt.IcULt => node [atom (symbol.of_string_unsafe "cmpop_ult")]
+    | Ocmpop OpaqueOpsInt.IcSLt => node [atom (symbol.of_string_unsafe "cmpop_slt")]
     | Otest => node [atom (symbol.of_string_unsafe "test")]
     | Orepr z => node [atom (symbol.of_string_unsafe "repr"); atom (Z_to_symbol z)]
     | Oint_to_nat => node [atom (symbol.of_string_unsafe "int_to_nat")]
@@ -1619,71 +1620,79 @@ Import oeuf.OpaqueOps.
                 match l with
                 | [atom s_z] =>
                         Some ([Opaque Oint], (Opaque Oint,
-                            Ounop (IuShlC (Z_from_symbol s_z))))
+                            Ounop (OpaqueOpsInt.IuShlC (Z_from_symbol s_z))))
                 | _ => None end
 
             else if symbol.eq_dec tag (symbol.of_string_unsafe "unop_shruc") then
                 match l with
                 | [atom s_z] =>
                         Some ([Opaque Oint], (Opaque Oint,
-                            Ounop (IuShruC (Z_from_symbol s_z))))
+                            Ounop (OpaqueOpsInt.IuShruC (Z_from_symbol s_z))))
                 | _ => None end
 
             else if symbol.eq_dec tag (symbol.of_string_unsafe "unop_rorc") then
                 match l with
                 | [atom s_z] =>
                         Some ([Opaque Oint], (Opaque Oint,
-                            Ounop (IuRorC (Z_from_symbol s_z))))
+                            Ounop (OpaqueOpsInt.IuRorC (Z_from_symbol s_z))))
                 | _ => None end
 
             else if symbol.eq_dec tag (symbol.of_string_unsafe "unop_not") then
                 match l with
-                | [] => Some ([Opaque Oint], (Opaque Oint, Ounop IuNot))
+                | [] => Some ([Opaque Oint], (Opaque Oint, Ounop OpaqueOpsInt.IuNot))
                 | _ => None end
 
             else if symbol.eq_dec tag (symbol.of_string_unsafe "unop_neg") then
                 match l with
-                | [] => Some ([Opaque Oint], (Opaque Oint, Ounop IuNeg))
+                | [] => Some ([Opaque Oint], (Opaque Oint, Ounop OpaqueOpsInt.IuNeg))
                 | _ => None end
 
             else if symbol.eq_dec tag (symbol.of_string_unsafe "binop_and") then
                 match l with
-                | [] => Some ([Opaque Oint; Opaque Oint], (Opaque Oint, Obinop IbAnd))
+                | [] => Some ([Opaque Oint; Opaque Oint], (Opaque Oint,
+                        Obinop OpaqueOpsInt.IbAnd))
                 | _ => None end
 
             else if symbol.eq_dec tag (symbol.of_string_unsafe "binop_or") then
                 match l with
-                | [] => Some ([Opaque Oint; Opaque Oint], (Opaque Oint, Obinop IbOr))
+                | [] => Some ([Opaque Oint; Opaque Oint], (Opaque Oint,
+                        Obinop OpaqueOpsInt.IbOr))
                 | _ => None end
 
             else if symbol.eq_dec tag (symbol.of_string_unsafe "binop_xor") then
                 match l with
-                | [] => Some ([Opaque Oint; Opaque Oint], (Opaque Oint, Obinop IbXor))
+                | [] => Some ([Opaque Oint; Opaque Oint], (Opaque Oint,
+                        Obinop OpaqueOpsInt.IbXor))
                 | _ => None end
 
             else if symbol.eq_dec tag (symbol.of_string_unsafe "binop_add") then
                 match l with
-                | [] => Some ([Opaque Oint; Opaque Oint], (Opaque Oint, Obinop IbAdd))
+                | [] => Some ([Opaque Oint; Opaque Oint], (Opaque Oint,
+                        Obinop OpaqueOpsInt.IbAdd))
                 | _ => None end
 
             else if symbol.eq_dec tag (symbol.of_string_unsafe "binop_sub") then
                 match l with
-                | [] => Some ([Opaque Oint; Opaque Oint], (Opaque Oint, Obinop IbSub))
+                | [] => Some ([Opaque Oint; Opaque Oint], (Opaque Oint,
+                        Obinop OpaqueOpsInt.IbSub))
                 | _ => None end
 
             else if symbol.eq_dec tag (symbol.of_string_unsafe "cmpop_eq") then
                 match l with
-                | [] => Some ([Opaque Oint; Opaque Oint], (ADT Tbool, Ocmpop IcEq))
+                | [] => Some ([Opaque Oint; Opaque Oint], (ADT Tbool,
+                        Ocmpop OpaqueOpsInt.IcEq))
                 | _ => None end
 
             else if symbol.eq_dec tag (symbol.of_string_unsafe "cmpop_ult") then
                 match l with
-                | [] => Some ([Opaque Oint; Opaque Oint], (ADT Tbool, Ocmpop IcULt))
+                | [] => Some ([Opaque Oint; Opaque Oint], (ADT Tbool,
+                        Ocmpop OpaqueOpsInt.IcULt))
                 | _ => None end
 
             else if symbol.eq_dec tag (symbol.of_string_unsafe "cmpop_slt") then
                 match l with
-                | [] => Some ([Opaque Oint; Opaque Oint], (ADT Tbool, Ocmpop IcSLt))
+                | [] => Some ([Opaque Oint; Opaque Oint], (ADT Tbool,
+                        Ocmpop OpaqueOpsInt.IcSLt))
                 | _ => None end
 
             else if symbol.eq_dec tag (symbol.of_string_unsafe "test") then
