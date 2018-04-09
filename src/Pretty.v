@@ -1249,7 +1249,7 @@ Module double.
       forall (pf : Fappli_IEEE.bounded 53 1024 pm ze = true),
       float_bounded pm ze = Some pf.
   intros. unfold float_bounded. break_match.
-  - f_equal.  eapply eq_proofs_unicity_on. clear. intros.
+  - f_equal. eapply eq_proofs_unicity_on. clear. intros.
     fwd eapply Bool.bool_dec as HH; destruct HH; eauto.
   - exfalso. congruence.
   Qed.
@@ -1268,9 +1268,11 @@ Module double.
   Lemma npl_correct : forall (n : Fappli_IEEE.nan_pl 53),
       npl (`n) = Some n.
   intros. unfold npl. break_match.
-  - destruct n. simpl in *. f_equal. f_equal.
-    eapply eq_proofs_unicity_on. clear. intros.
-    fwd eapply Bool.bool_dec as HH; destruct HH; eauto.
+  - destruct n. simpl in *.
+    assert (e = e0).
+      { eapply eq_proofs_unicity_on.  clear. intros.
+        fwd eapply Bool.bool_dec as HH; destruct HH; eauto. }
+    rewrite H. reflexivity.
   - exfalso. destruct n. simpl in *. congruence.
   Qed.
 
