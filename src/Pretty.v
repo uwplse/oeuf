@@ -1609,6 +1609,8 @@ Require oeuf.OpaqueOpsInt.
     | Orepr z => node [atom (symbol.of_string_unsafe "repr"); atom (Z_to_symbol z)]
     | Oint_to_nat => node [atom (symbol.of_string_unsafe "int_to_nat")]
     | Oint_to_list => node [atom (symbol.of_string_unsafe "int_to_list")]
+    | Oint_to_double => node [atom (symbol.of_string_unsafe "int_to_double")]
+    | Odouble_to_int => node [atom (symbol.of_string_unsafe "double_to_int")]
     end.
 
   Definition from_tree (t : tree symbol.t)
@@ -1715,6 +1717,16 @@ Require oeuf.OpaqueOpsInt.
             else if symbol.eq_dec tag (symbol.of_string_unsafe "int_to_list") then
                 match l with
                 | [] => Some ([Opaque Oint], (ADT (Tlist (Topaque Oint)), Oint_to_list))
+                | _ => None end
+
+            else if symbol.eq_dec tag (symbol.of_string_unsafe "int_to_double") then
+                match l with
+                | [] => Some ([Opaque Oint], (Opaque Odouble, Oint_to_double))
+                | _ => None end
+
+            else if symbol.eq_dec tag (symbol.of_string_unsafe "double_to_int") then
+                match l with
+                | [] => Some ([Opaque Odouble], (Opaque Oint, Odouble_to_int))
                 | _ => None end
 
             else None

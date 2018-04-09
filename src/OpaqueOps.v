@@ -37,6 +37,7 @@ Local Open Scope option_monad.
 Require Export oeuf.OpaqueOpsCommon.
 
 Require oeuf.OpaqueOpsInt.
+Require oeuf.OpaqueOpsDouble.
 
 
 (* Opaque operation names and signatures *)
@@ -49,6 +50,9 @@ Inductive opaque_oper_name : Set :=
 | ONrepr (z : Z)
 | ONint_to_nat
 | ONint_to_list
+
+| ONint_to_double
+| ONdouble_to_int
 .
 
 Inductive opaque_oper : list type -> type -> Set :=
@@ -62,6 +66,9 @@ Inductive opaque_oper : list type -> type -> Set :=
 | Orepr (z : Z) : opaque_oper [] (Opaque Oint)
 | Oint_to_nat : opaque_oper [Opaque Oint] (ADT Tnat)
 | Oint_to_list : opaque_oper [Opaque Oint] (ADT (Tlist (Topaque Oint)))
+
+| Oint_to_double : opaque_oper [Opaque Oint] (Opaque Odouble)
+| Odouble_to_int : opaque_oper [Opaque Odouble] (Opaque Oint)
 .
 
 Definition opaque_oper_to_name {atys rty} (op : opaque_oper atys rty) : opaque_oper_name :=
@@ -73,6 +80,9 @@ Definition opaque_oper_to_name {atys rty} (op : opaque_oper atys rty) : opaque_o
     | Orepr z => ONrepr z
     | Oint_to_nat => ONint_to_nat
     | Oint_to_list => ONint_to_list
+
+    | Oint_to_double => ONint_to_double
+    | Odouble_to_int => ONdouble_to_int
     end.
 
 Definition opaque_oper_name_eq_dec (x y : opaque_oper_name) : { x = y } + { x <> y }.
@@ -92,6 +102,9 @@ Definition get_opaque_oper_impl {atys rty} (op : opaque_oper atys rty) :
     | Orepr z => OpaqueOpsInt.impl_repr z
     | Oint_to_nat => OpaqueOpsInt.impl_int_to_nat
     | Oint_to_list => OpaqueOpsInt.impl_int_to_list
+
+    | Oint_to_double => OpaqueOpsDouble.impl_int_to_double
+    | Odouble_to_int => OpaqueOpsDouble.impl_double_to_int
     end.
 
 Definition get_opaque_oper_impl' (op : opaque_oper_name) :
@@ -104,6 +117,9 @@ Definition get_opaque_oper_impl' (op : opaque_oper_name) :
     | ONrepr z => existT _ _ (existT _ _ (OpaqueOpsInt.impl_repr z))
     | ONint_to_nat => existT _ _ (existT _ _ OpaqueOpsInt.impl_int_to_nat)
     | ONint_to_list => existT _ _ (existT _ _ OpaqueOpsInt.impl_int_to_list)
+
+    | ONint_to_double => existT _ _ (existT _ _ OpaqueOpsDouble.impl_int_to_double)
+    | ONdouble_to_int => existT _ _ (existT _ _ OpaqueOpsDouble.impl_double_to_int)
     end.
 
 Lemma get_opaque_oper_impl_name : forall atys rty (op : opaque_oper atys rty),
