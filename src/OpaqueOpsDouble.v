@@ -46,51 +46,49 @@ Set Default Timeout 10.
 
 (* Opaque operation names and signatures *)
 
+Check Mem.store.
+
 Definition impl_int_to_double : opaque_oper_impl [Opaque Oint] (Opaque Odouble).
 simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _ _ _  _ _ _ _  _ _ _ _ _ _).
 
-(*
-- exact (fun args => int_test (hhead args)).
+- exact (fun args => Float.of_int (hhead args)).
 - refine (fun G args =>
     let x := unwrap_opaque (hhead args) in
-    if Int.eq x Int.zero
-        then VConstr CTfalse hnil
-        else VConstr CTtrue hnil).
+    VOpaque (oty := Odouble) (Float.of_int x)).
 - refine (fun args =>
     match args with
-    | [HighestValues.Opaque Oint x] => Some (
-           let ctor := if Int.eq x Int.zero then Cfalse else Ctrue in
-           HighestValues.Constr ctor [])
+    | [HighestValues.Opaque Oint x] =>
+        Some (HighestValues.Opaque Odouble (Float.of_int x))
     | _ => None
     end).
 - refine (fun args =>
     match args with
-    | [HigherValue.Opaque Oint x] => Some (
-            (* remember, true is 0 and false is 1 *)
-            let tag := if Int.eq x Int.zero then 1 else 0 in
-            HigherValue.Constr tag [])
+    | [HigherValue.Opaque Oint x] =>
+        Some (HigherValue.Opaque Odouble (Float.of_int x))
     | _ => None
     end).
 - refine (fun args =>
     match args with
-    | [HighValues.Opaque Oint x] => Some (
-           let tag := if Int.eq x Int.zero then Int.one else Int.zero in
-           HighValues.Constr tag [])
+    | [HighValues.Opaque Oint x] =>
+        Some (HighValues.Opaque Odouble (Float.of_int x))
     | _ => None
     end).
 - refine (fun m args =>
     match args with
     | [Vint x] =>
-            let tag := if Int.eq x Int.zero then Int.one else Int.zero in
-            build_constr m tag []
+            let '(m, b) := Mem.alloc m (-4) 8 in
+            Mem.store Mint32 m b (-4) (Vint (Int.repr 8)) >>= fun m =>
+            Mem.store Mfloat64 m b 0 (Vfloat (Float.of_int x)) >>= fun m =>
+            Some (m, Vptr b Int.zero)
     | _ => None
     end).
 - refine (fun ctx id args =>
     match args with
     | [e] =>
-            Sifthenelse (Ebinop (Ocmpu Ceq) e (Econst (Ointconst Int.zero)))
-                (build_constr_cminor (cmcc_malloc_id ctx) id Int.one [])
-                (build_constr_cminor (cmcc_malloc_id ctx) id Int.zero [])
+            let malloc := cm_func (cmcc_malloc_id ctx) in
+            Sseq
+                (Scall (Some id) (cm_malloc_sig) malloc [cm_int 8])
+                (Sstore Mfloat64 (Evar id) (Eunop Ofloatofint e))
     | _ => Sskip
     end).
 
@@ -110,32 +108,26 @@ simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _ _ _  _ _ _ _  _ _ _ _ _ _).
 
 - (* mem_inj_id *)
   intros. simpl in *. repeat (break_match_hyp; try discriminate; []). subst. inject_some.
-  eapply build_constr_mem_inj_id; eauto.
+  admit.
 
 - (* mem_inject *)
   intros. simpl in *. repeat (break_match_hyp; try discriminate; []). subst. inject_some.
   do 2 on >Forall2, invc. on >Val.inject, invc.
-  unfold build_constr in * |-. break_match_hyp. break_bind_option. inject_some.
+  break_bind_option. inject_some.
   rename m2 into m3, m0 into m2, m1 into m0, m into m1.
-  rename m1' into m0'.
 
-  eapply build_constr_mem_inject; eauto.
-  unfold build_constr.
-  find_rewrite. eapply require_bind_eq. { constructor. } intro.
-  simpl. find_rewrite. simpl.
-  find_rewrite. simpl.
-  reflexivity.
+  admit.
 
 
 - intros. simpl.
   rewrite hmap_hhead.  rewrite opaque_value_denote.
-  unfold int_test.  destruct (Int.eq _ _); reflexivity.
+  reflexivity.
 
 - intros. simpl in *.
   revert H.
   on _, invc_using (@case_hlist_cons type). on _, invc_using (@case_hlist_nil type).
   on _, invc_using case_value_opaque.
-  simpl. destruct (Int.eq _ _); reflexivity.
+  simpl. reflexivity.
 
 - intros. simpl in *.
 
@@ -145,7 +137,7 @@ simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _ _ _  _ _ _ _  _ _ _ _ _ _).
   on >Forall2, invc; try discriminate.
   inject_some.
 
-  eexists. split; eauto. destruct (Int.eq _ _); econstructor; eauto.
+  eexists. split; eauto. econstructor; eauto.
 
 - intros. simpl in *.
 
@@ -155,7 +147,7 @@ simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _ _ _  _ _ _ _  _ _ _ _ _ _).
   on >Forall2, invc; try discriminate.
   inject_some.
 
-  eexists. split; eauto. destruct (Int.eq _ _); econstructor; eauto.
+  eexists. split; eauto. econstructor; eauto.
 
 - intros. simpl in *.
 
@@ -167,45 +159,20 @@ simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _ _ _  _ _ _ _  _ _ _ _ _ _).
 
   on >opaque_type_value_inject, invc.
 
-  fwd eapply build_constr_ok with (m1 := m)
-    (tag := if Int.eq ov Int.zero then Int.one else Int.zero)
-    (args := []) (hargs := []) as HH; eauto.
-    { rewrite Zcomplements.Zlength_nil. eapply max_arg_count_big. lia. }
-    destruct HH as (ret' & m' & ? & ?).
-  exists m', ret'. split; eauto.
+  admit.
 
 - intros. simpl in *.
   do 4 (break_match_hyp; try discriminate).
   do 2 on >eval_exprlist, invc.
-  inject_some.
+  break_match_hyp. break_bind_option. inject_some.
 
   eexists. repeat eapply conj.
     { erewrite PTree.gss. reflexivity. }
     { intros. erewrite PTree.gso by eauto. reflexivity. }
 
-  eapply plus_left. 3: eapply E0_E0_E0. {
-    econstructor.
-    - econstructor; eauto.
-        { econstructor. simpl. reflexivity. }
-      simpl. unfold Val.cmpu. simpl. reflexivity.
-    - simpl.
-      instantiate (1 := Int.eq i Int.zero).
-      destruct (Int.eq _ _); econstructor.
-  }
+  eapply plus_left. 3: eapply E0_E0_E0. { econstructor. }
 
-  replace (if Int.eq i _ then _ else _) with
-      (build_constr_cminor (cmcc_malloc_id ctx) id
-        (if Int.eq i Int.zero then Int.one else Int.zero) []); cycle 1.
-    { destruct (Int.eq _ _); reflexivity. }
-
-  eapply plus_star. eapply build_constr_cminor_effect.
-  + eauto.
-  + econstructor.
-  + econstructor.
-  + rewrite Zlength_correct. simpl. eapply max_arg_count_big. lia.
-  + eauto.
-  + eauto.
-*)
+  admit.
 Admitted.
 
 
