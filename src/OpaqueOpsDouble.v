@@ -46,7 +46,173 @@ Set Default Timeout 10.
 
 (* Opaque operation names and signatures *)
 
-Check Mem.store.
+
+Definition build_double (m : mem) (f : float) :=
+    let '(m, b) := Mem.alloc m (-4) 8 in
+    Mem.store Mint32 m b (-4) (Vint (Int.repr 8)) >>= fun m =>
+    Mem.store Mfloat64 m b 0 (Vfloat f) >>= fun m =>
+    Some (m, Vptr b Int.zero).
+
+Definition build_double_cminor malloc_id id e :=
+    Sseq (Scall (Some id) cm_malloc_sig (cm_func malloc_id) [cm_int 8])
+         (Sstore Mfloat64 (Evar id) e).
+
+Lemma build_double_mem_inj_id : forall m1 f v m2,
+    build_double m1 f = Some (m2, v) ->
+    Mem.mem_inj inject_id m1 m2.
+intros0 Hbuild.
+unfold build_double in Hbuild. break_match. break_bind_option. inject_some.
+
+rename m2 into m3, m0 into m2, m1 into m0, m into m1.
+
+assert ((Mem.mem_contents m1) !! b = ZMap.init Undef).
+  { erewrite Mem.contents_alloc; eauto.
+    erewrite <- Mem.alloc_result; eauto.
+    erewrite PMap.gss. reflexivity. }
+
+rewrite <- inject_id_compose_self. eapply Mem.mem_inj_compose with (m2 := m1).
+- eapply alloc_mem_inj_id; eauto.
+- eapply store_new_block_mem_inj_id; eauto.
+  eapply store_new_block_mem_inj_id; eauto.
+  eapply Mem.mext_inj, Mem.extends_refl.
+Qed.
+
+Lemma build_double_mem_inject : forall m1 f m1' v1,
+    forall mi m2,
+    build_double m1 f = Some (m1', v1) ->
+    Mem.inject mi m1 m2 ->
+    MemInjProps.same_offsets mi ->
+    exists mi' m2' v2,
+        build_double m2 f = Some (m2', v2) /\
+        Mem.inject mi' m1' m2' /\
+        Val.inject mi' v1 v2 /\
+        mem_sim mi mi' m1 m1' m2 m2'.
+
+intros0 Hbuild Hmi Hoff.
+unfold build_double in * |-. break_match_hyp.
+break_bind_option. inject_some.
+rename m1' into m''', m into m1', m0 into m1''.
+rename b into b1.
+
+fwd eapply alloc_mem_sim as HH; eauto.
+  destruct HH as (mi' & m2' & b2 & ? & ? & ? & ?).
+
+fwd eapply Mem.store_mapped_inject with (m1 := m1') as HH; eauto.
+  destruct HH as (m2'' & ? & ?).
+
+fwd eapply Mem.store_mapped_inject with (m1 := m1'') as HH; eauto.
+  destruct HH as (m2''' & ? & ?).
+
+eexists mi', m2''', _.
+split; cycle 1.
+  { split; [|split]; eauto.
+    eapply mem_sim_compose; cycle 1.
+      { eapply mem_sim_refl; symmetry; eapply Mem.nextblock_store; eauto. }
+    eapply mem_sim_compose; cycle 1.
+      { eapply mem_sim_refl; symmetry; eapply Mem.nextblock_store; eauto. }
+    eauto. }
+
+unfold build_double.
+rewrite Z.add_0_r in *.
+on (Mem.alloc _ _ _ = _), fun H => rewrite H.
+on (Mem.store _ m2' _ _ _ = _), fun H => rewrite H.  simpl.
+on (Mem.store _ m2'' _ _ _ = _), fun H => rewrite H. simpl.
+rewrite Int.add_zero.
+reflexivity.
+Qed.
+
+Lemma build_double_ok : forall A B (ge : Genv.t A B) m1 f,
+    exists v m2,
+        build_double m1 f = Some (m2, v) /\
+        opaque_type_value_inject Odouble f v m2.
+intros.
+destruct (Mem.alloc m1 (-4) 8) as [m2 b] eqn:?.
+
+fwd eapply Mem.valid_access_store with
+    (m1 := m2) (b := b) (ofs := (-4)%Z) (chunk := Mint32)
+    (v := Vint (Int.repr 8))  as HH.
+  { eapply Mem.valid_access_implies with (p1 := Freeable); cycle 1.
+      { constructor. }
+    eapply Mem.valid_access_alloc_same; eauto.
+    - lia.
+    - unfold size_chunk. lia.
+    - simpl. eapply Zmod_divide; eauto; lia.
+  }
+  destruct HH as [m3 ?].
+
+fwd eapply Mem.valid_access_store
+    with (m1 := m3) (b := b) (ofs := 0%Z) (chunk := Mfloat64) (v := Vfloat f) as HH.
+  { eapply Mem.valid_access_implies with (p1 := Freeable); cycle 1.
+      { constructor. }
+    eapply Mem.store_valid_access_1; eauto.
+    eapply Mem.valid_access_alloc_same; eauto.
+    - clear. lia.
+    - unfold size_chunk. lia.
+    - simpl. eapply Zmod_divide; eauto; lia.
+  }
+  destruct HH as [m4 ?].
+
+eexists _, m4.  split.
+- unfold build_double.
+  find_rewrite.
+  find_rewrite. cbn [bind_option].
+  find_rewrite. cbn [bind_option].
+  reflexivity.
+- econstructor. exists Int.zero. split; eauto.
+  fwd eapply Mem.load_store_same with (ofs := 0%Z); eauto.
+Qed.
+
+Lemma build_double_cminor_effect : forall malloc_id m arg f v m',
+    forall ge fn id k sp e fp,
+    build_double m f = Some (m', v) ->
+    eval_expr ge sp e m arg (Vfloat f) ->
+    expr_no_access id arg ->
+    Genv.find_symbol ge malloc_id = Some fp ->
+    Genv.find_funct ge (Vptr fp Int.zero) = Some (External EF_malloc) ->
+    plus Cminor.step ge
+        (State fn (build_double_cminor malloc_id id arg) k sp e m)
+     E0 (State fn Sskip k sp (PTree.set id v e) m').
+intros0 Hbuild Heval Hacc Hmsym Hmfun.
+
+unfold build_double in Hbuild. break_match. break_bind_option. inject_some.
+
+assert ((Mem.mem_contents m0) !! b = ZMap.init Undef).
+  { erewrite Mem.contents_alloc; eauto.
+    erewrite <- Mem.alloc_result; eauto.
+    erewrite PMap.gss. reflexivity. }
+
+eapply plus_left. 3: eapply E0_E0_E0. { econstructor. }
+eapply star_left. 3: eapply E0_E0_E0. {
+  econstructor.
+  - econstructor. simpl. rewrite Hmsym. reflexivity.
+  - repeat econstructor.
+  - rewrite Hmfun. reflexivity.
+  - reflexivity.
+}
+eapply star_left. 3: eapply E0_E0_E0. {
+  econstructor. econstructor.
+  - rewrite Int.unsigned_repr; cycle 1.
+      { split; [ | eapply int_unsigned_big]; lia. }
+    eauto.
+  - eauto.
+}
+eapply star_left. 3: eapply E0_E0_E0. { econstructor. }
+eapply star_left. 3: eapply E0_E0_E0. { econstructor. }
+eapply star_left. 3: eapply E0_E0_E0. {
+  econstructor.
+  - econstructor. simpl. rewrite PTree.gss. reflexivity.
+  - eapply eval_expr_no_access; eauto.
+    eapply eval_expr_mem_inj_id; eauto.  { discriminate. }
+    rewrite <- inject_id_compose_self. eapply Mem.mem_inj_compose.
+    + eauto using alloc_mem_inj_id.
+    + eapply store_new_block_mem_inj_id; eauto.
+      eapply Mem.mext_inj. eapply Mem.extends_refl.
+  - eauto.
+}
+eapply star_refl.
+Qed.
+
+
 
 Definition impl_int_to_double : opaque_oper_impl [Opaque Oint] (Opaque Odouble).
 simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _ _ _  _ _ _ _  _ _ _ _ _ _).
@@ -75,20 +241,12 @@ simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _ _ _  _ _ _ _  _ _ _ _ _ _).
     end).
 - refine (fun m args =>
     match args with
-    | [Vint x] =>
-            let '(m, b) := Mem.alloc m (-4) 8 in
-            Mem.store Mint32 m b (-4) (Vint (Int.repr 8)) >>= fun m =>
-            Mem.store Mfloat64 m b 0 (Vfloat (Float.of_int x)) >>= fun m =>
-            Some (m, Vptr b Int.zero)
+    | [Vint x] => build_double m (Float.of_int x)
     | _ => None
     end).
 - refine (fun ctx id args =>
     match args with
-    | [e] =>
-            let malloc := cm_func (cmcc_malloc_id ctx) in
-            Sseq
-                (Scall (Some id) (cm_malloc_sig) malloc [cm_int 8])
-                (Sstore Mfloat64 (Evar id) (Eunop Ofloatofint e))
+    | [e] => build_double_cminor (cmcc_malloc_id ctx) id (Eunop Ofloatofint e)
     | _ => Sskip
     end).
 
@@ -108,15 +266,12 @@ simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _ _ _  _ _ _ _  _ _ _ _ _ _).
 
 - (* mem_inj_id *)
   intros. simpl in *. repeat (break_match_hyp; try discriminate; []). subst. inject_some.
-  admit.
+  eapply build_double_mem_inj_id; eauto.
 
 - (* mem_inject *)
   intros. simpl in *. repeat (break_match_hyp; try discriminate; []). subst. inject_some.
   do 2 on >Forall2, invc. on >Val.inject, invc.
-  break_bind_option. inject_some.
-  rename m2 into m3, m0 into m2, m1 into m0, m into m1.
-
-  admit.
+  eapply build_double_mem_inject; eauto.
 
 
 - intros. simpl.
@@ -159,21 +314,24 @@ simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _ _ _  _ _ _ _  _ _ _ _ _ _).
 
   on >opaque_type_value_inject, invc.
 
-  admit.
+  fwd eapply build_double_ok as HH; eauto. destruct HH as (v & m' & ? & ?).
+  exists m', v. split; eauto.
+  econstructor; eauto.
 
 - intros. simpl in *.
   do 4 (break_match_hyp; try discriminate).
   do 2 on >eval_exprlist, invc.
-  break_match_hyp. break_bind_option. inject_some.
+
+  fwd eapply build_double_cminor_effect
+      with (arg := Eunop Ofloatofint a1); eauto.
+    { econstructor; eauto. }
+    { repeat on (Forall (expr_no_access _) _), invc. eauto. }
 
   eexists. repeat eapply conj.
     { erewrite PTree.gss. reflexivity. }
     { intros. erewrite PTree.gso by eauto. reflexivity. }
-
-  eapply plus_left. 3: eapply E0_E0_E0. { econstructor. }
-
-  admit.
-Admitted.
+  eauto.
+Defined.
 
 
 
