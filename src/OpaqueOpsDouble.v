@@ -46,6 +46,69 @@ Set Default Timeout 10.
 
 (* Opaque operation names and signatures *)
 
+Inductive double_unop_name : Set :=
+| DuNeg
+.
+
+Definition double_unop_name_eq_dec (x y : double_unop_name) : { x = y } + { x <> y }.
+decide equality; eauto using Z.eq_dec.
+Defined.
+
+Inductive double_binop_name : Set :=
+| DbAdd
+| DbSub
+| DbMul
+| DbDiv
+.
+
+Definition double_binop_name_eq_dec (x y : double_binop_name) : { x = y } + { x <> y }.
+decide equality.
+Defined.
+
+
+Definition double_unop_denote op : float -> float :=
+    match op with
+    | DuNeg => Float.neg
+    end.
+
+Definition double_unop_to_cminor op x :=
+    match op with
+    | DuNeg => Eunop Cminor.Onegf x
+    end.
+
+Definition double_binop_denote op : float -> float -> float :=
+    match op with
+    | DbAdd => Float.add
+    | DbSub => Float.sub
+    | DbMul => Float.mul
+    | DbDiv => Float.div
+    end.
+
+Definition double_binop_to_cminor op x y :=
+    match op with
+    | DbAdd => Ebinop Cminor.Oaddf x y
+    | DbSub => Ebinop Cminor.Osubf x y
+    | DbMul => Ebinop Cminor.Omulf x y
+    | DbDiv => Ebinop Cminor.Odivf x y
+    end.
+
+Definition double_cmpop_denote op : float -> float -> bool :=
+    Float.cmp op.
+
+Definition double_cmpop_to_cminor op x y :=
+    Ebinop (Cminor.Ocmpf op) x y.
+
+Lemma double_cmpop_cminor_effect : forall ge sp e m op x y xf yf,
+    eval_expr ge sp e m x (Vfloat xf) ->
+    eval_expr ge sp e m y (Vfloat yf) ->
+    eval_expr ge sp e m (double_cmpop_to_cminor op x y)
+        (if double_cmpop_denote op xf yf then Vtrue else Vfalse).
+destruct op; intros.
+all: econstructor; eauto.
+Qed.
+
+
+
 
 Definition build_double (m : mem) (f : float) :=
     let '(m, b) := Mem.alloc m (-4) 8 in
@@ -805,4 +868,500 @@ simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _ _ _  _ _ _ _  _ _ _ _ _ _).
       rewrite double_to_int_conv_none by eauto. reflexivity.
   }
   eapply star_refl.
+Defined.
+
+
+
+
+
+Definition as_float v :=
+    match v with
+    | Vfloat f => Some f
+    | _ => None
+    end.
+
+Definition impl_unop (op : double_unop_name) :
+    opaque_oper_impl [Opaque Odouble] (Opaque Odouble).
+simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _ _ _  _ _ _ _  _ _ _ _ _ _).
+
+- exact (fun args => double_unop_denote op (hhead args)).
+- refine (fun G args =>
+    let x := unwrap_opaque (hhead args) in
+    VOpaque (oty := Odouble) (double_unop_denote op x)).
+- refine (fun args =>
+    match args with
+    | [HighestValues.Opaque Odouble x] =>
+           Some (HighestValues.Opaque Odouble (double_unop_denote op x))
+    | _ => None
+    end).
+- refine (fun args =>
+    match args with
+    | [HigherValue.Opaque Odouble x] =>
+           Some (HigherValue.Opaque Odouble (double_unop_denote op x))
+    | _ => None
+    end).
+- refine (fun args =>
+    match args with
+    | [HighValues.Opaque Odouble x] =>
+           Some (HighValues.Opaque Odouble (double_unop_denote op x))
+    | _ => None
+    end).
+- refine (fun m args =>
+    match args with
+    | [Vptr b ofs] =>
+            Mem.load Mfloat64 m b (Int.unsigned ofs) >>= fun v =>
+            as_float v >>= fun f =>
+            build_double m (double_unop_denote op f)
+    | _ => None
+    end).
+- refine (fun ctx id args =>
+    match args with
+    | [x] =>
+            let f := Eload Mfloat64 x in
+            build_double_cminor (cmcc_malloc_id ctx) id (double_unop_to_cminor op f)
+    | _ => Sskip
+    end).
+
+
+- (* no_fab_clos_higher *)
+  intros. simpl in *.
+  repeat (break_match; try discriminate; [ ]). subst. inject_some.
+  on >HigherValue.VIn, invc; try solve [exfalso; eauto].
+  simpl in *. discriminate.
+
+- (* change_fname_high *)
+  intros. simpl in *.
+  repeat (break_match_hyp; try discriminate; [ ]).
+  repeat on >Forall2, invc. simpl in *.
+  repeat (break_match; try contradiction; try discriminate).
+  fix_existT. subst. inject_some.
+  eexists; split; eauto. simpl. eauto.
+
+- (* mem_inj_id *)
+  intros. simpl in *. repeat (break_match; try discriminate; []). subst.
+  break_bind_option.
+  eapply build_double_mem_inj_id; eauto.
+
+
+- (* mem_inject *)
+  intros. simpl in *. repeat (break_match_hyp; try discriminate; []). subst.
+  do 2 on >Forall2, invc. on >Val.inject, invc.
+  break_bind_option.
+  fwd eapply Mem.load_inject as HH; eauto. destruct HH as (v' & ? & ?).
+    destruct v; on (as_float _ = _), invc. on >Val.inject, invc.
+  assert (delta = 0%Z) by (unfold same_offsets in *; eauto). subst delta.
+    rewrite Z.add_0_r in *. rewrite Int.add_zero.
+  find_rewrite. cbn [bind_option as_float].
+  eapply build_double_mem_inject; eauto.
+
+
+- intros. simpl.
+  rewrite hmap_hhead.
+  do 1 rewrite opaque_value_denote. reflexivity.
+
+- intros. simpl in *.
+  revert H.
+  do 1 on _, invc_using (@case_hlist_cons type). on _, invc_using (@case_hlist_nil type).
+  do 1 on _, invc_using case_value_opaque.
+  simpl. reflexivity.
+
+- intros. simpl in *.
+
+  on >Forall2, invc; try discriminate.
+  on >mv_higher, invc; try discriminate.
+  destruct oty; try discriminate.
+  on >Forall2, invc; try discriminate.
+  inject_some.
+
+  eexists. split; eauto. econstructor.
+
+- intros. simpl in *.
+
+  on >Forall2, invc; try discriminate.
+  on >mv_high, invc; try discriminate.
+  destruct oty; try discriminate.
+  on >Forall2, invc; try discriminate.
+  inject_some.
+
+  eexists. split; eauto. econstructor.
+
+- intros. simpl in *.
+
+  on >Forall2, invc; try discriminate.
+  on >@HighValues.value_inject, invc; try discriminate.
+  destruct oty; try discriminate.
+  on >Forall2, invc; try discriminate.
+  inject_some.
+
+  on >opaque_type_value_inject, invc. break_exists. break_and.
+    subst. find_rewrite. cbn [bind_option as_float].
+
+  fwd eapply build_double_ok as HH; eauto. destruct HH as (v & m' & ? & ?).
+  exists m', v. split; eauto.
+  econstructor; eauto.
+
+- intros. simpl in *.
+  repeat (break_match_hyp; try discriminate; []). subst. break_bind_option.
+  do 2 on >eval_exprlist, invc.
+  eexists. repeat eapply conj.
+    { erewrite PTree.gss. reflexivity. }
+    { intros. erewrite PTree.gso by eauto. reflexivity. }
+
+  rename f into fn, f0 into f.
+  assert (eval_expr ge sp e m (Eload Mfloat64 a1) (Vfloat f)).
+    { econstructor; eauto. destruct v; on (as_float _ = _), invc. eauto. }
+
+  eapply build_double_cminor_effect; eauto.
+  + destruct op; econstructor; eauto.
+  + repeat on (Forall (expr_no_access id) _), inv.
+    destruct op; eauto.
+Defined.
+
+Definition impl_binop (op : double_binop_name) :
+    opaque_oper_impl [Opaque Odouble; Opaque Odouble] (Opaque Odouble).
+simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _ _ _  _ _ _ _  _ _ _ _ _ _).
+
+- exact (fun args => double_binop_denote op (hhead args) (hhead (htail args))).
+- refine (fun G args =>
+    let x := unwrap_opaque (hhead args) in
+    let y := unwrap_opaque (hhead (htail args)) in
+    VOpaque (oty := Odouble) (double_binop_denote op x y)).
+- refine (fun args =>
+    match args with
+    | [HighestValues.Opaque Odouble x;
+       HighestValues.Opaque Odouble y] =>
+           Some (HighestValues.Opaque Odouble (double_binop_denote op x y))
+    | _ => None
+    end).
+- refine (fun args =>
+    match args with
+    | [HigherValue.Opaque Odouble x;
+       HigherValue.Opaque Odouble y] =>
+           Some (HigherValue.Opaque Odouble (double_binop_denote op x y))
+    | _ => None
+    end).
+- refine (fun args =>
+    match args with
+    | [HighValues.Opaque Odouble x;
+       HighValues.Opaque Odouble y] =>
+           Some (HighValues.Opaque Odouble (double_binop_denote op x y))
+    | _ => None
+    end).
+- refine (fun m args =>
+    match args with
+    | [Vptr b1 ofs1; Vptr b2 ofs2] =>
+            Mem.load Mfloat64 m b1 (Int.unsigned ofs1) >>= fun v1 =>
+            as_float v1 >>= fun f1 =>
+            Mem.load Mfloat64 m b2 (Int.unsigned ofs2) >>= fun v2 =>
+            as_float v2 >>= fun f2 =>
+            build_double m (double_binop_denote op f1 f2)
+    | _ => None
+    end).
+- refine (fun ctx id args =>
+    match args with
+    | [x; y] =>
+            let f1 := Eload Mfloat64 x in
+            let f2 := Eload Mfloat64 y in
+            build_double_cminor (cmcc_malloc_id ctx) id
+                (double_binop_to_cminor op f1 f2)
+    | _ => Sskip
+    end).
+
+
+- (* no_fab_clos_higher *)
+  intros. simpl in *.
+  repeat (break_match; try discriminate; [ ]). subst. inject_some.
+  on >HigherValue.VIn, invc; try solve [exfalso; eauto].
+  simpl in *. discriminate.
+
+- (* change_fname_high *)
+  intros. simpl in *.
+  repeat (break_match_hyp; try discriminate; [ ]).
+  repeat on >Forall2, invc. simpl in *.
+  repeat (break_match; try contradiction; try discriminate).
+  fix_existT. subst. inject_some.
+  eexists; split; eauto. simpl. eauto.
+
+- (* mem_inj_id *)
+  intros. simpl in *. repeat (break_match; try discriminate; []). subst.
+  break_bind_option.
+  eapply build_double_mem_inj_id; eauto.
+
+
+- (* mem_inject *)
+  intros. simpl in *. repeat (break_match_hyp; try discriminate; []). subst.
+  do 3 on >Forall2, invc. do 2 on >Val.inject, invc.
+  break_bind_option.
+  fwd eapply Mem.load_inject with (b1 := b) as HH; eauto. destruct HH as (v' & ? & ?).
+  fwd eapply Mem.load_inject with (b1 := b0) as HH; eauto. destruct HH as (v0' & ? & ?).
+    unfold as_float in * |-. do 2 break_match_hyp; try discriminate.
+    do 2 on >Val.inject, invc. inject_some.
+  assert (delta = 0%Z) by (unfold same_offsets in *; eauto). subst delta.
+  assert (delta0 = 0%Z) by (unfold same_offsets in *; eauto). subst delta0.
+    rewrite Z.add_0_r in *. rewrite 2 Int.add_zero.
+  find_rewrite. cbn [bind_option as_float].
+  find_rewrite. cbn [bind_option as_float].
+  eapply build_double_mem_inject; eauto.
+
+
+- intros. simpl.
+  rewrite hmap_hhead. rewrite hmap_htail, hmap_hhead.
+  do 2 rewrite opaque_value_denote. reflexivity.
+
+- intros. simpl in *.
+  revert H.
+  do 2 on _, invc_using (@case_hlist_cons type). on _, invc_using (@case_hlist_nil type).
+  do 2 on _, invc_using case_value_opaque.
+  simpl. reflexivity.
+
+- intros. simpl in *.
+
+  on >Forall2, invc; try discriminate.
+  on >mv_higher, invc; try discriminate.
+  destruct oty; try discriminate.
+  on >Forall2, invc; try discriminate.
+  on >mv_higher, invc; try discriminate.
+  destruct oty; try discriminate.
+  on >Forall2, invc; try discriminate.
+  inject_some.
+
+  eexists. split; eauto. econstructor.
+
+- intros. simpl in *.
+
+  on >Forall2, invc; try discriminate.
+  on >mv_high, invc; try discriminate.
+  destruct oty; try discriminate.
+  on >Forall2, invc; try discriminate.
+  on >mv_high, invc; try discriminate.
+  destruct oty; try discriminate.
+  on >Forall2, invc; try discriminate.
+  inject_some.
+
+  eexists. split; eauto. econstructor.
+
+- intros. simpl in *.
+
+  on >Forall2, invc; try discriminate.
+  on >@HighValues.value_inject, invc; try discriminate.
+  destruct oty; try discriminate.
+  on >Forall2, invc; try discriminate.
+  on >@HighValues.value_inject, invc; try discriminate.
+  destruct oty; try discriminate.
+  on >Forall2, invc; try discriminate.
+  inject_some.
+
+  do 2 on >opaque_type_value_inject, invc. break_exists. break_and.  subst.
+    find_rewrite. cbn [bind_option as_float].
+    find_rewrite. cbn [bind_option as_float].
+
+  fwd eapply build_double_ok as HH; eauto. destruct HH as (v & m' & ? & ?).
+  exists m', v. split; eauto.
+  econstructor; eauto.
+
+- intros. simpl in *.
+  repeat (break_match_hyp; try discriminate; []). subst. break_bind_option.
+  do 3 on >eval_exprlist, invc.
+  eexists. repeat eapply conj.
+    { erewrite PTree.gss. reflexivity. }
+    { intros. erewrite PTree.gso by eauto. reflexivity. }
+
+  assert (eval_expr ge sp e m (Eload Mfloat64 a1) (Vfloat f0)).
+    { econstructor; eauto. on (as_float v = _), fun H => destruct v; invc H. eauto. }
+  assert (eval_expr ge sp e m (Eload Mfloat64 a0) (Vfloat f1)).
+    { econstructor; eauto. on (as_float v0 = _), fun H => destruct v0; invc H. eauto. }
+
+  eapply build_double_cminor_effect; eauto.
+  + destruct op; econstructor; eauto.
+  + repeat on (Forall (expr_no_access id) _), invc.
+    destruct op; simpl; eauto.
+Defined.
+
+Definition impl_cmpop (op : comparison) :
+    opaque_oper_impl [Opaque Odouble; Opaque Odouble] (ADT Tbool).
+simple refine (MkOpaqueOperImpl _ _  _ _ _ _ _ _ _  _ _ _ _  _ _ _ _ _ _).
+
+- exact (fun args => double_cmpop_denote op (hhead args) (hhead (htail args))).
+- refine (fun G args =>
+    let x := unwrap_opaque (hhead args) in
+    let y := unwrap_opaque (hhead (htail args)) in
+    if double_cmpop_denote op x y
+        then VConstr CTtrue hnil
+        else VConstr CTfalse hnil).
+- refine (fun args =>
+    match args with
+    | [HighestValues.Opaque Odouble x;
+       HighestValues.Opaque Odouble y] => Some (
+           let ctor := if double_cmpop_denote op x y then Ctrue else Cfalse in
+           HighestValues.Constr ctor [])
+    | _ => None
+    end).
+- refine (fun args =>
+    match args with
+    | [HigherValue.Opaque Odouble x;
+       HigherValue.Opaque Odouble y] => Some (
+            (* remember, true is 0 and false is 1 *)
+            let tag := if double_cmpop_denote op x y then 0 else 1 in
+            HigherValue.Constr tag [])
+    | _ => None
+    end).
+- refine (fun args =>
+    match args with
+    | [HighValues.Opaque Odouble x;
+       HighValues.Opaque Odouble y] => Some (
+           let tag := if double_cmpop_denote op x y then Int.zero else Int.one in
+           HighValues.Constr tag [])
+    | _ => None
+    end).
+- refine (fun m args =>
+    match args with
+    | [Vptr b1 ofs1; Vptr b2 ofs2] =>
+            Mem.load Mfloat64 m b1 (Int.unsigned ofs1) >>= fun v1 =>
+            as_float v1 >>= fun f1 =>
+            Mem.load Mfloat64 m b2 (Int.unsigned ofs2) >>= fun v2 =>
+            as_float v2 >>= fun f2 =>
+            let tag := if double_cmpop_denote op f1 f2 then Int.zero else Int.one in
+            build_constr m tag []
+    | _ => None
+    end).
+- refine (fun ctx id args =>
+    match args with
+    | [x; y] =>
+            let f1 := Eload Mfloat64 x in
+            let f2 := Eload Mfloat64 y in
+            Sifthenelse (double_cmpop_to_cminor op f1 f2)
+                (build_constr_cminor (cmcc_malloc_id ctx) id Int.zero [])
+                (build_constr_cminor (cmcc_malloc_id ctx) id Int.one [])
+    | _ => Sskip
+    end).
+
+
+- (* no_fab_clos_higher *)
+  intros. simpl in *.
+  repeat (break_match; try discriminate; [ ]). subst. inject_some.
+  on >HigherValue.VIn, invc; try solve [exfalso; eauto].
+  simpl in *. discriminate.
+
+- (* change_fname_high *)
+  intros. simpl in *.
+  repeat (break_match_hyp; try discriminate; [ ]).
+  repeat on >Forall2, invc. simpl in *. do 2 (break_match_hyp; try contradiction).
+  fix_existT. subst. inject_some.
+  eexists; split; eauto. simpl. eauto.
+
+- (* mem_inj_id *)
+  intros. simpl in *. repeat (break_match_hyp; try discriminate; []). subst. inject_some.
+  break_bind_option.
+  eapply build_constr_mem_inj_id; eauto.
+
+- (* mem_inject *)
+  intros. simpl in *. repeat (break_match_hyp; try discriminate; []). subst. inject_some.
+  do 3 on >Forall2, invc. do 2 on >Val.inject, invc.
+  break_bind_option.
+  fwd eapply Mem.load_inject with (b1 := b) as HH; eauto. destruct HH as (v' & ? & ?).
+  fwd eapply Mem.load_inject with (b1 := b0) as HH; eauto. destruct HH as (v0' & ? & ?).
+    unfold as_float in * |-. destruct v, v0; try discriminate; [].
+    do 2 on >Val.inject, invc. inject_some.
+  assert (delta = 0%Z) by (unfold same_offsets in *; eauto). subst delta.
+  assert (delta0 = 0%Z) by (unfold same_offsets in *; eauto). subst delta0.
+    rewrite Z.add_0_r in *. rewrite 2 Int.add_zero.
+  find_rewrite. cbn [bind_option as_float].
+  find_rewrite. cbn [bind_option as_float].
+
+  eapply build_constr_mem_inject; eauto.
+
+
+- intros. simpl.
+  rewrite hmap_hhead. rewrite hmap_htail, hmap_hhead.
+  do 2 rewrite opaque_value_denote. break_if; reflexivity.
+
+- intros. simpl in *.
+  revert H.
+  do 2 on _, invc_using (@case_hlist_cons type). on _, invc_using (@case_hlist_nil type).
+  do 2 on _, invc_using case_value_opaque.
+  simpl. break_if; reflexivity.
+
+- intros. simpl in *.
+
+  on >Forall2, invc; try discriminate.
+  on >mv_higher, invc; try discriminate.
+  destruct oty; try discriminate.
+  on >Forall2, invc; try discriminate.
+  on >mv_higher, invc; try discriminate.
+  destruct oty; try discriminate.
+  on >Forall2, invc; try discriminate.
+  inject_some.
+
+  eexists. split; eauto. econstructor; eauto.
+  break_if; reflexivity.
+
+- intros. simpl in *.
+
+  on >Forall2, invc; try discriminate.
+  on >mv_high, invc; try discriminate.
+  destruct oty; try discriminate.
+  on >Forall2, invc; try discriminate.
+  on >mv_high, invc; try discriminate.
+  destruct oty; try discriminate.
+  on >Forall2, invc; try discriminate.
+  inject_some.
+
+  eexists. split; eauto. econstructor; eauto.
+  break_if; reflexivity.
+
+- intros. simpl in *.
+
+  on >Forall2, invc; try discriminate.
+  on >@HighValues.value_inject, invc; try discriminate.
+  destruct oty; try discriminate.
+  on >Forall2, invc; try discriminate.
+  on >@HighValues.value_inject, invc; try discriminate.
+  destruct oty; try discriminate.
+  on >Forall2, invc; try discriminate.
+  inject_some.
+
+  do 2 on >opaque_type_value_inject, invc.
+    break_exists. break_and.  subst.
+
+  find_rewrite. cbn [bind_option as_float].
+  find_rewrite. cbn [bind_option as_float].
+
+  fwd eapply build_constr_ok with (m1 := m)
+    (tag := if double_cmpop_denote op ov ov0 then Int.zero else Int.one)
+    (args := []) (hargs := []) as HH; eauto.
+    { rewrite Zcomplements.Zlength_nil. eapply max_arg_count_big. lia. }
+    destruct HH as (ret' & m' & ? & ?).
+  exists m', ret'. split; eauto.
+
+- intros. simpl in *.
+  do 6 (break_match_hyp; try discriminate).
+  do 3 on >eval_exprlist, invc.
+
+  break_bind_option.
+    destruct v, v0; try discriminate. cbn [as_float] in *. inject_some.
+
+  eexists. repeat eapply conj.
+    { erewrite PTree.gss. reflexivity. }
+    { intros. erewrite PTree.gso by eauto. reflexivity. }
+
+  eapply plus_left. 3: eapply E0_E0_E0. {
+    econstructor.
+    - eapply double_cmpop_cminor_effect; eauto.
+      all: econstructor; eauto.
+    - instantiate (1 := double_cmpop_denote op f0 f1).
+      break_if; econstructor.
+  }
+
+  replace (if double_cmpop_denote _ _ _ then _ else _) with
+      (build_constr_cminor (cmcc_malloc_id ctx) id
+        (if double_cmpop_denote op f0 f1 then Int.zero else Int.one) []); cycle 1.
+    { break_if; reflexivity. }
+
+  eapply plus_star. eapply build_constr_cminor_effect.
+  + eauto.
+  + econstructor.
+  + econstructor.
+  + rewrite Zlength_correct. simpl. eapply max_arg_count_big. lia.
+  + eauto.
+  + eauto.
 Defined.

@@ -1586,6 +1586,7 @@ Module opaque_oper.
 
 Require Import oeuf.OpaqueOps.
 Require oeuf.OpaqueOpsInt.
+Require oeuf.OpaqueOpsDouble.
 
   Definition to_tree {l ty} (o : OpaqueOps.opaque_oper l ty) : tree symbol.t :=
     match o with
@@ -1609,6 +1610,18 @@ Require oeuf.OpaqueOpsInt.
     | Orepr z => node [atom (symbol.of_string_unsafe "repr"); atom (Z_to_symbol z)]
     | Oint_to_nat => node [atom (symbol.of_string_unsafe "int_to_nat")]
     | Oint_to_list => node [atom (symbol.of_string_unsafe "int_to_list")]
+
+    | Ounopf OpaqueOpsDouble.DuNeg => node [atom (symbol.of_string_unsafe "unopf_neg")]
+    | Obinopf OpaqueOpsDouble.DbAdd => node [atom (symbol.of_string_unsafe "binopf_add")]
+    | Obinopf OpaqueOpsDouble.DbSub => node [atom (symbol.of_string_unsafe "binopf_sub")]
+    | Obinopf OpaqueOpsDouble.DbMul => node [atom (symbol.of_string_unsafe "binopf_mul")]
+    | Obinopf OpaqueOpsDouble.DbDiv => node [atom (symbol.of_string_unsafe "binopf_div")]
+    | Ocmpopf Integers.Ceq => node [atom (symbol.of_string_unsafe "cmpopf_eq")]
+    | Ocmpopf Integers.Cne => node [atom (symbol.of_string_unsafe "cmpopf_ne")]
+    | Ocmpopf Integers.Clt => node [atom (symbol.of_string_unsafe "cmpopf_lt")]
+    | Ocmpopf Integers.Cle => node [atom (symbol.of_string_unsafe "cmpopf_le")]
+    | Ocmpopf Integers.Cgt => node [atom (symbol.of_string_unsafe "cmpopf_gt")]
+    | Ocmpopf Integers.Cge => node [atom (symbol.of_string_unsafe "cmpopf_ge")]
     | Oint_to_double => node [atom (symbol.of_string_unsafe "int_to_double")]
     | Odouble_to_int => node [atom (symbol.of_string_unsafe "double_to_int")]
     end.
@@ -1717,6 +1730,74 @@ Require oeuf.OpaqueOpsInt.
             else if symbol.eq_dec tag (symbol.of_string_unsafe "int_to_list") then
                 match l with
                 | [] => Some ([Opaque Oint], (ADT (Tlist (Topaque Oint)), Oint_to_list))
+                | _ => None end
+
+
+
+            else if symbol.eq_dec tag (symbol.of_string_unsafe "unopf_neg") then
+                match l with
+                | [] => Some ([Opaque Odouble], (Opaque Odouble,
+                        Ounopf OpaqueOpsDouble.DuNeg))
+                | _ => None end
+
+            else if symbol.eq_dec tag (symbol.of_string_unsafe "binopf_add") then
+                match l with
+                | [] => Some ([Opaque Odouble; Opaque Odouble], (Opaque Odouble,
+                        Obinopf OpaqueOpsDouble.DbAdd))
+                | _ => None end
+
+            else if symbol.eq_dec tag (symbol.of_string_unsafe "binopf_sub") then
+                match l with
+                | [] => Some ([Opaque Odouble; Opaque Odouble], (Opaque Odouble,
+                        Obinopf OpaqueOpsDouble.DbSub))
+                | _ => None end
+
+            else if symbol.eq_dec tag (symbol.of_string_unsafe "binopf_mul") then
+                match l with
+                | [] => Some ([Opaque Odouble; Opaque Odouble], (Opaque Odouble,
+                        Obinopf OpaqueOpsDouble.DbMul))
+                | _ => None end
+
+            else if symbol.eq_dec tag (symbol.of_string_unsafe "binopf_div") then
+                match l with
+                | [] => Some ([Opaque Odouble; Opaque Odouble], (Opaque Odouble,
+                        Obinopf OpaqueOpsDouble.DbDiv))
+                | _ => None end
+
+            else if symbol.eq_dec tag (symbol.of_string_unsafe "cmpopf_eq") then
+                match l with
+                | [] => Some ([Opaque Odouble; Opaque Odouble], (ADT Tbool,
+                        Ocmpopf Integers.Ceq))
+                | _ => None end
+
+            else if symbol.eq_dec tag (symbol.of_string_unsafe "cmpopf_ne") then
+                match l with
+                | [] => Some ([Opaque Odouble; Opaque Odouble], (ADT Tbool,
+                        Ocmpopf Integers.Cne))
+                | _ => None end
+
+            else if symbol.eq_dec tag (symbol.of_string_unsafe "cmpopf_lt") then
+                match l with
+                | [] => Some ([Opaque Odouble; Opaque Odouble], (ADT Tbool,
+                        Ocmpopf Integers.Clt))
+                | _ => None end
+
+            else if symbol.eq_dec tag (symbol.of_string_unsafe "cmpopf_le") then
+                match l with
+                | [] => Some ([Opaque Odouble; Opaque Odouble], (ADT Tbool,
+                        Ocmpopf Integers.Cle))
+                | _ => None end
+
+            else if symbol.eq_dec tag (symbol.of_string_unsafe "cmpopf_gt") then
+                match l with
+                | [] => Some ([Opaque Odouble; Opaque Odouble], (ADT Tbool,
+                        Ocmpopf Integers.Cgt))
+                | _ => None end
+
+            else if symbol.eq_dec tag (symbol.of_string_unsafe "cmpopf_ge") then
+                match l with
+                | [] => Some ([Opaque Odouble; Opaque Odouble], (ADT Tbool,
+                        Ocmpopf Integers.Cge))
                 | _ => None end
 
             else if symbol.eq_dec tag (symbol.of_string_unsafe "int_to_double") then
