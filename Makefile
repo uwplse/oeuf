@@ -20,6 +20,7 @@ sanitize:
 
 driver: compcert.ini sanitize
 	ocamlbuild \
+                -cflag -annot \
                 -no-hygiene \
 		-use-menhir -pkg menhirLib \
 		-yaccflag --table \
