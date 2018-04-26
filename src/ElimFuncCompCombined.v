@@ -27,6 +27,9 @@ Definition compile_cu (cu : A.prog_type) : res B.prog_type :=
         OK cu
     @@@ TaggedComp.compile_cu ~~ "TaggedComp"
     @@@ ElimFuncComp1.compile_cu ~~ "ElimFuncComp1"
+    @@@ ElimFuncComp2.check1 ~~ "ElimFuncCompCheck1"
+    @@@ ElimFuncComp2.check2 ~~ "ElimFuncCompCheck2"
+    @@@ ElimFuncComp2.check3 ~~ "ElimFuncCompCheck3"
     @@@ ElimFuncComp2.compile_cu ~~ "ElimFuncComp2"
     @@  ElimFuncComp3.compile_cu
     @@@ ElimFuncComp4.compile_cu ~~ "ElimFuncComp4"
@@ -50,6 +53,20 @@ Definition fsim : forward_simulation (A.semantics aprog) (B.semantics bprog).
 
   eapply compose_forward_simulation. eauto using TaggedComp.fsim.
   eapply compose_forward_simulation. eauto using ElimFuncComp1.fsim.
+  match goal with
+  | [ H : ElimFuncComp2.check1 _ = Some _ |- _ ] =>
+    eapply ElimFuncComp2.check1_id in H
+  end.
+  match goal with
+  | [ H : ElimFuncComp2.check3 _ = Some _ |- _ ] =>
+    eapply ElimFuncComp2.check3_id in H
+  end.
+  match goal with
+  | [ H : ElimFuncComp2.check2 _ = Some _ |- _ ] =>
+    eapply ElimFuncComp2.check2_id in H
+  end.
+  subst.
+  
   eapply compose_forward_simulation. eauto using ElimFuncComp2.fsim.
   eapply compose_forward_simulation. eauto using ElimFuncComp3.fsim.
   eapply compose_forward_simulation. eauto using ElimFuncComp4.fsim.

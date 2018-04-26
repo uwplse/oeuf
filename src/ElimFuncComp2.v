@@ -103,6 +103,55 @@ Definition compile fname nfrees e : option B.expr :=
 Definition compile_cu' nfrees es :=
     map_partial (fun n_e => compile (fst n_e) nfrees (snd n_e)) (numbered es).
 
+Definition check1 (cu : list A.expr * list metadata) : option (list A.expr * list metadata) :=
+  let '(exprs, metas) := cu in
+  match eq_nat_dec (length exprs) (length metas) with
+  | left Heq => Some cu
+  | right _ => None
+  end.
+
+Definition check2 (cu : list A.expr * list metadata) : option (list A.expr * list metadata) :=
+  let '(exprs, metas) := cu in
+  let nfrees := map m_nfree metas in
+  match A.check_nfree_ok_list nfrees exprs with
+  | left Heq => Some cu
+  | right _ => None
+  end.
+
+Definition check3 (cu : list A.expr * list metadata) : option (list A.expr * list metadata) :=
+  let '(exprs, metas) := cu in
+  match A.check_elim_cases_no_arg_list exprs with
+  | left Heq => Some cu
+  | right _ => None
+  end.
+
+Lemma check1_id :
+  forall cu cu',
+    check1 cu = Some cu' ->
+    cu = cu'.
+Proof.
+  intros. unfold check1 in *.
+  repeat break_match_hyp; try congruence.
+Qed.
+
+Lemma check2_id :
+  forall cu cu',
+    check2 cu = Some cu' ->
+    cu = cu'.
+Proof.
+  intros. unfold check2 in *.
+  repeat break_match_hyp; try congruence.
+Qed.
+
+Lemma check3_id :
+  forall cu cu',
+    check3 cu = Some cu' ->
+    cu = cu'.
+Proof.
+  intros. unfold check3 in *.
+  repeat break_match_hyp; try congruence.
+Qed.
+
 Definition compile_cu (cu : list A.expr * list metadata) :
         option (list B.expr * list metadata) :=
     let '(exprs, metas) := cu in
