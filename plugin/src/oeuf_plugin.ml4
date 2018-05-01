@@ -90,6 +90,8 @@ type funcref =
       Near of int
     (* reference to the entry point of a previous block *)
     | Far of int
+    (* reference to a lifted lambda in a different block *)
+    | NearFar of int * int
 
 (* this mirrors the definition of SourceLifted.expr, including indices (but not
  * the parameters, `G` and `L`).  `member` is represented by `int`. *)
@@ -118,7 +120,7 @@ let expr_ty e =
 
 
 let rec iter_tys f stk e =
-    let go = iter_tys f (e :: stk) in
+    let _ = iter_tys f (e :: stk) in
     let f = f (e :: stk) in
     match e with
     | Var (ty, _) -> f ty
@@ -178,7 +180,11 @@ let is_simple_expr exp =
   match exp with
   | Var (_,_) -> true
   | _ -> false
-      
+
+(* Figure out whether to inline a particular call *)
+(* frees is free variables captured, arg is argument, and body is function body expression *)
+(* Mainly we don't want to evaluate expensive expressions multiple times, *)
+(* so we don't want to inline if a particular variable would be expanded to an expensive expression multiple times *)
 let rec inline_guard_rec body frees arg n =
   match frees with
   | [] ->
@@ -189,6 +195,7 @@ let rec inline_guard_rec body frees arg n =
 let inline_check body frees arg =
   inline_guard_rec body frees arg 1
 
+(* Given an expression and a variable number (n), change (var n) to (exp) everywhere it occurs in body *)
 let rec subst_var exp n body =
   match body with
   | Var (_,k) -> if k == n then exp else body
@@ -214,7 +221,29 @@ let rec subst_frees body frees n =
 				    
 let subst body frees arg =
   subst_arg (subst_frees body frees 1) arg
-      
+
+let update_funcref idx fr =
+  match fr with
+  | Near (loc_id) ->
+     NearFar (idx,loc_id)
+  | _ -> fr
+	    
+let rec update_funcrefs idx e =
+  match e with
+  | Var (_,k) -> e
+  | App (a,b,l,r) ->
+     App (a,b,update_funcrefs idx l,update_funcrefs idx r)
+  | Constr (a,b,c,d,es) ->
+     Constr (a,b,c,d,List.map (update_funcrefs idx) es)
+  | Close (a,b,c,fr,es) ->
+     let d = update_funcref idx fr in
+     Close (a,b,c,d,List.map (update_funcrefs idx) es)
+  | Elim (a,b,c,d,es,e) ->
+     Elim (a,b,c,d,List.map (update_funcrefs idx) es, update_funcrefs idx e)
+  | OpaqueOp (a,b,c,es) ->
+     OpaqueOp (a,b,c,List.map (update_funcrefs idx) es)
+    
+	    
 let try_inline i1 i2 fs f ty1 ty2 arg_ty free_tys ret_ty close_fn frees arg =
   match close_fn with     
   | Near (idx) ->
@@ -224,9 +253,17 @@ let try_inline i1 i2 fs f ty1 ty2 arg_ty free_tys ret_ty close_fn frees arg =
      if inline_check d.body frees arg then
        subst d.body frees arg
      else
+       (* fall back, default to not inline *)
        App (ty1,ty2, Close (arg_ty, free_tys, ret_ty, close_fn, frees), arg)
-  | _ ->
-     (* TODO: deal with Far calls *)
+  | Far (idx) ->
+     let locdefs = List.nth fs idx in
+     let d = List.nth locdefs 0 in
+     if inline_check d.body frees arg then
+       subst (update_funcrefs i1 d.body) frees arg
+     else
+       (* fall back, default to not inline *)
+       App (ty1,ty2, Close (arg_ty, free_tys, ret_ty, close_fn, frees), arg)
+  | NearFar (id1,id2) ->
      (* fall back, default to not inline *)
      App (ty1,ty2, Close (arg_ty, free_tys, ret_ty, close_fn, frees), arg)
       
@@ -271,6 +308,7 @@ let rec string_of_funcref fr =
     match fr with
     | Near idx -> Format.sprintf "Near(%d)" idx
     | Far idx -> Format.sprintf "Far(%d)" idx
+    | NearFar (id1,id2) -> Format.sprintf "NearFar(%d,%d)" id1 id2
 
 let rec string_of_expr e =
     let base =
@@ -760,7 +798,7 @@ let make_ident s =
     String.map go2 (String.trim (String.map go1 s))
 
 let reflect_expr ctx evars env name c : func list =
-    let env0 = env in
+    (*let env0 = env in*)
 
     let funcs : func list ref = ref [] in
 
@@ -892,7 +930,7 @@ let reflect_expr ctx evars env name c : func list =
     (* simplify away some annoying stuff, like applications of the motive
      * within eliminator calls. *)
     let c = Reduction.nf_betaiota env c in
-    let top = go env [] name true c in
+    let _ (*top*) = go env [] name true c in
     !funcs
 
 
@@ -994,7 +1032,7 @@ let c_genv_cons = init_once (fun () -> resolve_symbol pkg_sourcelifted "GenvCons
  * `t_sig` is the constr `type * list type * type`, used in genv indices *)
 let t_type = init_once (fun () -> resolve_symbol pkg_sourcevalues "type")
 let t_sig = init_once (fun () ->
-    let set = Constr.mkSet in
+(*  let set = Constr.mkSet in*)
     mk t_prod [
         mk t_prod [
             t_type ();
@@ -1287,10 +1325,10 @@ let define name body ty : Term.constr =
 
     let c = ref None in
     let (evars, env) = Lemmas.get_current_context () in
-    let spa1 = set_bool_option_value ["Printing";"All"] true in
+    let _ = set_bool_option_value ["Printing";"All"] true in
     let body_e = Constrextern.extern_constr true env evars body in
     let ty_e = Constrextern.extern_constr true env evars ty in
-    let spa2 = set_bool_option_value ["Printing";"All"] false in
+    let _ = set_bool_option_value ["Printing";"All"] false in
 
     (*
     Format.eprintf " == defining %s : %s ==\n" name (string_of_constr ty);
@@ -1522,6 +1560,8 @@ let emit_expr gctx ctx (g_tys : fn_sig list) (l_tys : ty list) e : Term.constr =
                             let mb0 = gctx.promoted_member idx in
                             let mb = emit_sig_member_cached ctx base_sgs mb0 g_tys sig_c in
                             mb
+		    | NearFar (id1,id2) ->
+		       raise (Reflect_error "currently unimplemented NearFar reflection")
                 in
 
                 mk c_close [
