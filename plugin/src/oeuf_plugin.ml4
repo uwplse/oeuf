@@ -305,7 +305,7 @@ let rec update_funcrefs idx e =
      OpaqueOp (a,b,c,List.map (update_funcrefs idx) es)
     
 	    
-let try_inline i1 i2 fs f ty1 ty2 arg_ty free_tys ret_ty close_fn frees arg =
+let try_inline i1 i2 fs f ty1 ty2 arg_ty free_tys ret_ty close_fn frees arg changed =
   match close_fn with     
   | Near (idx) ->
   (* Call to a local lambda *)
@@ -319,6 +319,7 @@ let try_inline i1 i2 fs f ty1 ty2 arg_ty free_tys ret_ty close_fn frees arg =
        let _ = Format.printf "new expr: %s\n" (string_of_expr nterm) in
        let _ = Format.printf "free variables: %s\n" (string_of_expr_list frees) in
        let _ = Format.printf "arg: %s\n" (string_of_expr arg) in
+       changed := true;
        nterm
      else
        (* fall back, default to not inline *)
@@ -336,44 +337,49 @@ let try_inline i1 i2 fs f ty1 ty2 arg_ty free_tys ret_ty close_fn frees arg =
        let _ = Format.printf "new expr: %s\n" (string_of_expr nterm) in
        let _ = Format.printf "free variables: %s\n" (string_of_expr_list frees) in
        let _ = Format.printf "arg: %s\n" (string_of_expr arg) in
+       changed := true;
        nterm
      else
        (* fall back, default to not inline *)
        orig
-     
   | NearFar (id1,id2) ->
+     (* TODO: attempt to inline these *)
      (* fall back, default to not inline *)
      App (ty1,ty2, Close (arg_ty, free_tys, ret_ty, close_fn, frees), arg)
       
-let rec inline_expr i1 i2 fs f e =
+let rec inline_expr i1 i2 fs f changed e =
   match e with
   | App (ty1,ty2,Close (arg_ty, free_tys, ret_ty, close_fn, frees),arg) ->
-     try_inline i1 i2 fs f ty1 ty2 arg_ty free_tys ret_ty close_fn frees arg
+     try_inline i1 i2 fs f ty1 ty2 arg_ty free_tys ret_ty close_fn frees arg changed 
   | App (ty1,ty2,cexpr,arg) ->
-     App (ty1,ty2,inline_expr i1 i2 fs f cexpr, inline_expr i1 i2 fs f arg)
+     App (ty1,ty2,inline_expr i1 i2 fs f changed cexpr, inline_expr i1 i2 fs f changed arg)
   | Var (_,_) -> e
   | Constr (a,b,c,d,es) ->
-     Constr (a,b,c,d, List.map (inline_expr i1 i2 fs f) es)
+     Constr (a,b,c,d, List.map (inline_expr i1 i2 fs f changed) es)
   | Close (a,b,c,d,es) ->
-     Close (a,b,c,d, List.map (inline_expr i1 i2 fs f) es)
+     Close (a,b,c,d, List.map (inline_expr i1 i2 fs f changed) es)
   | Elim (a,b,c,d,es,e) ->
-     Elim (a,b,c,d,List.map (inline_expr i1 i2 fs f) es, inline_expr i1 i2 fs f e)
+     Elim (a,b,c,d,List.map (inline_expr i1 i2 fs f changed) es, inline_expr i1 i2 fs f changed e)
   | OpaqueOp (a,b,c,es) ->
-     OpaqueOp (a,b,c,List.map (inline_expr i1 i2 fs f) es)
+     OpaqueOp (a,b,c,List.map (inline_expr i1 i2 fs f changed) es)
 
      
-let inline_func fs i1 i2 f =
+let inline_func fs i1 changed i2 f =
   { arg_ty = f.arg_ty;
     free_tys = f.free_tys;
     ret_ty = f.ret_ty;
-    body = inline_expr i1 i2 fs f f.body;
+    body = inline_expr i1 i2 fs f changed f.body;
     name = f.name;
     pub = f.pub
   }
      
-let inline fs : func list list =
-  List.mapi (fun i1 -> List.mapi (inline_func fs i1)) fs
-
+let rec inline fs : func list list =
+  let c = ref false in
+  let new_fs = List.mapi (fun i1 -> List.mapi (inline_func fs i1 c)) fs in
+  if !c then
+    inline new_fs
+  else
+    new_fs
 		
 (*** descriptions of supported data types ***)
 
