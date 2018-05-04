@@ -256,33 +256,53 @@ let rec inline_guard_rec body frees arg n =
 let inline_check body frees arg = 
   inline_guard_rec body frees arg 1
 
-(* Given an expression and a variable number (n), change (var n) to (exp) everywhere it occurs in body *)
-let rec subst_var exp n body =
+let rec subst exps body =
   match body with
-  | Var (_,k) -> if k == n then exp else body
+  | Var (_,k) ->
+     if k >= List.length exps then
+       raise (Reflect_error "var index out of range in subst")
+     else
+       List.nth exps k
   | App (a,b,l,r) ->
-     App (a,b,subst_var exp n l,subst_var exp n r)
+     App (a,b,subst exps l,subst exps r)
   | Constr (a,b,c,d,es) ->
-     Constr (a,b,c,d,List.map (subst_var exp n) es)
+     Constr (a,b,c,d,List.map (subst exps) es)
   | Close (a,b,c,d,es) ->
-     Close (a,b,c,d,List.map (subst_var exp n) es)
+     Close (a,b,c,d,List.map (subst exps) es)
   | Elim (a,b,c,d,es,e) ->
-     Elim (a,b,c,d,List.map (subst_var exp n) es, subst_var exp n e)
+     Elim (a,b,c,d,List.map (subst exps) es, subst exps e)
   | OpaqueOp (a,b,c,es) ->
-     OpaqueOp (a,b,c,List.map (subst_var exp n) es)
+     OpaqueOp (a,b,c,List.map (subst exps) es)
 		   
-let subst_arg body arg =
-  subst_var arg 0 body
+(* (\* Given an expression and a variable number (n), change (var n) to (exp) everywhere it occurs in body *\) *)
+(* let rec subst_var exp n body = *)
+(*   match body with *)
+(*   | Var (_,k) -> if k == n then exp else body *)
+(*   | App (a,b,l,r) -> *)
+(*      App (a,b,subst_var exp n l,subst_var exp n r) *)
+(*   | Constr (a,b,c,d,es) -> *)
+(*      Constr (a,b,c,d,List.map (subst_var exp n) es) *)
+(*   | Close (a,b,c,d,es) -> *)
+(*      Close (a,b,c,d,List.map (subst_var exp n) es) *)
+(*   | Elim (a,b,c,d,es,e) -> *)
+(*      Elim (a,b,c,d,List.map (subst_var exp n) es, subst_var exp n e) *)
+(*   | OpaqueOp (a,b,c,es) -> *)
+(*      OpaqueOp (a,b,c,List.map (subst_var exp n) es) *)
+		   
+(* let subst_arg body arg = *)
+(*   subst_var arg 0 body *)
 	    
-let rec subst_frees body frees n =
-  match frees with
-  | [] -> body
-  | hd :: tl ->
-     subst_frees (subst_var hd n body) tl (n + 1)
+(* let rec subst_frees body frees n = *)
+(*   match frees with *)
+(*   | [] -> body *)
+(*   | hd :: tl -> *)
+(*      subst_frees (subst_var hd n body) tl (n + 1) *)
 				    
-let subst body frees arg =
-  subst_arg (subst_frees body frees 1) arg
+(* let subst body frees arg = *)
+(*   subst_arg (subst_frees body frees 1) arg *)
 
+
+	    
 let update_funcref idx fr =
   match fr with
   | Near (loc_id) ->
@@ -313,7 +333,7 @@ let try_inline i1 i2 fs f ty1 ty2 arg_ty free_tys ret_ty close_fn frees arg chan
      let d = List.nth locdefs idx in
      if inline_check d.body frees arg then
        let orig = App (ty1,ty2, Close (arg_ty, free_tys, ret_ty, close_fn, frees), arg) in
-       let nterm = subst d.body frees arg in
+       let nterm = subst (arg :: frees) d.body in
        let _ = Format.printf "\norig expr: %s\n" (string_of_expr orig) in
        let _ = Format.printf "orig body: %s\n" (string_of_expr d.body) in
        let _ = Format.printf "new expr: %s\n" (string_of_expr nterm) in
@@ -330,7 +350,7 @@ let try_inline i1 i2 fs f ty1 ty2 arg_ty free_tys ret_ty close_fn frees arg chan
      let d = List.nth locdefs ((List.length locdefs) - 1) in
      if inline_check d.body frees arg then
        let updated_body = (update_funcrefs idx d.body) in 
-       let nterm = subst updated_body frees arg in
+       let nterm = subst (arg :: frees) updated_body in
        let _ = Format.printf "\norig expr: %s\n" (string_of_expr orig) in
        let _ = Format.printf "orig body: %s\n" (string_of_expr d.body) in
        let _ = Format.printf "updated body: %s\n" (string_of_expr updated_body) in
@@ -343,9 +363,23 @@ let try_inline i1 i2 fs f ty1 ty2 arg_ty free_tys ret_ty close_fn frees arg chan
        (* fall back, default to not inline *)
        orig
   | NearFar (id1,id2) ->
-     (* TODO: attempt to inline these *)
-     (* fall back, default to not inline *)
-     App (ty1,ty2, Close (arg_ty, free_tys, ret_ty, close_fn, frees), arg)
+     let orig = App (ty1,ty2, Close (arg_ty, free_tys, ret_ty, close_fn, frees), arg) in
+     let locdefs = List.nth fs id1 in
+     let d = List.nth locdefs id2 in
+     if inline_check d.body frees arg then
+       let updated_body = (update_funcrefs id1 d.body) in 
+       let nterm = subst (arg :: frees) updated_body in
+       let _ = Format.printf "\norig expr: %s\n" (string_of_expr orig) in
+       let _ = Format.printf "orig body: %s\n" (string_of_expr d.body) in
+       let _ = Format.printf "updated body: %s\n" (string_of_expr updated_body) in
+       let _ = Format.printf "new expr: %s\n" (string_of_expr nterm) in
+       let _ = Format.printf "free variables: %s\n" (string_of_expr_list frees) in
+       let _ = Format.printf "arg: %s\n" (string_of_expr arg) in
+       changed := true;
+       nterm
+     else
+       (* fall back, default to not inline *)
+       App (ty1,ty2, Close (arg_ty, free_tys, ret_ty, close_fn, frees), arg)
       
 let rec inline_expr i1 i2 fs f changed e =
   match e with
