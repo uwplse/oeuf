@@ -144,157 +144,6 @@ type func =
     ; pub : bool
     }
 
-(* Inlining: figure out whether you duplicate non-trivial expressions *)
-(* Count uses of argument and free-variables *)
-(* If used multiple times and origin is non-trivial, don't inline *)
-(* For now only implement Near calls *)
-(* Later evaluate whether we need Far calls *)
-
-(* 2 proposals: add NearFar refs, or flatten *)
-(* Stuart wants me to add NearFar refs *)
-      
-(* Inlining basic idea: walk over list of functions *)
-(* find non-recursive calls *)
-(* find function definition *)
-(* unfold call into function body *)
-(* Do we have to worry about cycles? I don't think so *)
-
-      
-(* Count uses of argument and free-variables *)
-(* If used multiple times and origin is non-trivial, don't inline *)
-
-(* Count number of occurrences of variable 'num' in 'exp' *)
-let rec var_occurs exp num =
-  match exp with
-  | Var (_,n) -> if num == n then 1 else 0
-  | App (_,_,l,r) -> (var_occurs l num) + (var_occurs r num)
-  | Constr (_,_,_,_,es) -> List.fold_left (+) 0 (List.map (fun x -> var_occurs x num) es)
-  | Close (_,_,_,_,es) -> List.fold_left (+) 0 (List.map (fun x -> var_occurs x num) es)
-  | Elim (_,_,_,_,es,e) -> List.fold_left (+) 0 (List.map (fun x -> var_occurs x num) (e :: es))
-  | OpaqueOp (_,_,_,es) -> List.fold_left (+) 0 (List.map (fun x -> var_occurs x num) es)
-
-(* If argument expressions are "simple", we can inline them even if there are multiple occurrences *)
-(* Variables are definitely simple *)
-(* TODO: are constrs/closures with all simple arguments also simple? *)
-let is_simple_expr exp =
-  match exp with
-  | Var (_,_) -> true
-  | _ -> false
-
-(* Figure out whether to inline a particular call *)
-(* frees is free variables captured, arg is argument, and body is function body expression *)
-(* Mainly we don't want to evaluate expensive expressions multiple times, *)
-(* so we don't want to inline if a particular variable would be expanded to an expensive expression multiple times *)
-let rec inline_guard_rec body frees arg n =
-  match frees with
-  | [] ->
-     (is_simple_expr arg) || ((var_occurs body 0) < 2)
-  | hd :: tl ->
-     ((is_simple_expr hd) || ((var_occurs body n) < 2)) && (inline_guard_rec body tl arg (n + 1))
-
-let inline_check body frees arg =
-  inline_guard_rec body frees arg 1
-
-(* Given an expression and a variable number (n), change (var n) to (exp) everywhere it occurs in body *)
-let rec subst_var exp n body =
-  match body with
-  | Var (_,k) -> if k == n then exp else body
-  | App (a,b,l,r) ->
-     App (a,b,subst_var exp n l,subst_var exp n r)
-  | Constr (a,b,c,d,es) ->
-     Constr (a,b,c,d,List.map (subst_var exp n) es)
-  | Close (a,b,c,d,es) ->
-     Close (a,b,c,d,List.map (subst_var exp n) es)
-  | Elim (a,b,c,d,es,e) ->
-     Elim (a,b,c,d,List.map (subst_var exp n) es, subst_var exp n e)
-  | OpaqueOp (a,b,c,es) ->
-     OpaqueOp (a,b,c,List.map (subst_var exp n) es)
-		   
-let subst_arg body arg =
-  subst_var arg 0 body
-	    
-let rec subst_frees body frees n =
-  match frees with
-  | [] -> body
-  | hd :: tl ->
-     subst_frees (subst_var hd n body) tl (n + 1)
-				    
-let subst body frees arg =
-  subst_arg (subst_frees body frees 1) arg
-
-let update_funcref idx fr =
-  match fr with
-  | Near (loc_id) ->
-     NearFar (idx,loc_id)
-  | _ -> fr
-	    
-let rec update_funcrefs idx e =
-  match e with
-  | Var (_,k) -> e
-  | App (a,b,l,r) ->
-     App (a,b,update_funcrefs idx l,update_funcrefs idx r)
-  | Constr (a,b,c,d,es) ->
-     Constr (a,b,c,d,List.map (update_funcrefs idx) es)
-  | Close (a,b,c,fr,es) ->
-     let d = update_funcref idx fr in
-     Close (a,b,c,d,List.map (update_funcrefs idx) es)
-  | Elim (a,b,c,d,es,e) ->
-     Elim (a,b,c,d,List.map (update_funcrefs idx) es, update_funcrefs idx e)
-  | OpaqueOp (a,b,c,es) ->
-     OpaqueOp (a,b,c,List.map (update_funcrefs idx) es)
-    
-	    
-let try_inline i1 i2 fs f ty1 ty2 arg_ty free_tys ret_ty close_fn frees arg =
-  match close_fn with     
-  | Near (idx) ->
-  (* Call to a local lambda *)
-     let locdefs = List.nth fs i1 in
-     let d = List.nth locdefs idx in
-     if inline_check d.body frees arg then
-       subst d.body frees arg
-     else
-       (* fall back, default to not inline *)
-       App (ty1,ty2, Close (arg_ty, free_tys, ret_ty, close_fn, frees), arg)
-  | Far (idx) ->
-     let locdefs = List.nth fs idx in
-     let d = List.nth locdefs 0 in
-     if inline_check d.body frees arg then
-       subst (update_funcrefs i1 d.body) frees arg
-     else
-       (* fall back, default to not inline *)
-       App (ty1,ty2, Close (arg_ty, free_tys, ret_ty, close_fn, frees), arg)
-  | NearFar (id1,id2) ->
-     (* fall back, default to not inline *)
-     App (ty1,ty2, Close (arg_ty, free_tys, ret_ty, close_fn, frees), arg)
-      
-let rec inline_expr i1 i2 fs f e =
-  match e with
-  | App (ty1,ty2,Close (arg_ty, free_tys, ret_ty, close_fn, frees),arg) ->
-     try_inline i1 i2 fs f ty1 ty2 arg_ty free_tys ret_ty close_fn frees arg
-  | App (ty1,ty2,cexpr,arg) ->
-     App (ty1,ty2,inline_expr i1 i2 fs f cexpr, inline_expr i1 i2 fs f arg)
-  | Var (_,_) -> e
-  | Constr (a,b,c,d,es) ->
-     Constr (a,b,c,d, List.map (inline_expr i1 i2 fs f) es)
-  | Close (a,b,c,d,es) ->
-     Close (a,b,c,d, List.map (inline_expr i1 i2 fs f) es)
-  | Elim (a,b,c,d,es,e) ->
-     Elim (a,b,c,d,List.map (inline_expr i1 i2 fs f) es, inline_expr i1 i2 fs f e)
-  | OpaqueOp (a,b,c,es) ->
-     OpaqueOp (a,b,c,List.map (inline_expr i1 i2 fs f) es)
-
-     
-let inline_func fs i1 i2 f =
-  { arg_ty = f.arg_ty;
-    free_tys = f.free_tys;
-    ret_ty = f.ret_ty;
-    body = inline_expr i1 i2 fs f f.body;
-    name = f.name;
-    pub = f.pub
-  }
-     
-let inline fs : func list list =
-  List.mapi (fun i1 -> List.mapi (inline_func fs i1)) fs
 
       
       
@@ -356,6 +205,176 @@ let rec string_of_func_list fs =
 
 
 
+(* Inlining: figure out whether you duplicate non-trivial expressions *)
+(* Count uses of argument and free-variables *)
+(* If used multiple times and origin is non-trivial, don't inline *)
+(* For now only implement Near calls *)
+(* Later evaluate whether we need Far calls *)
+
+(* 2 proposals: add NearFar refs, or flatten *)
+(* Stuart wants me to add NearFar refs *)
+      
+(* Inlining basic idea: walk over list of functions *)
+(* find non-recursive calls *)
+(* find function definition *)
+(* unfold call into function body *)
+(* Do we have to worry about cycles? I don't think so *)
+
+      
+(* Count uses of argument and free-variables *)
+(* If used multiple times and origin is non-trivial, don't inline *)
+
+(* Count number of occurrences of variable 'num' in 'exp' *)
+let rec var_occurs exp num =
+  match exp with
+  | Var (_,n) -> if num == n then 1 else 0
+  | App (_,_,l,r) -> (var_occurs l num) + (var_occurs r num)
+  | Constr (_,_,_,_,es) -> List.fold_left (+) 0 (List.map (fun x -> var_occurs x num) es)
+  | Close (_,_,_,_,es) -> List.fold_left (+) 0 (List.map (fun x -> var_occurs x num) es)
+  | Elim (_,_,_,_,es,e) -> List.fold_left (+) 0 (List.map (fun x -> var_occurs x num) (e :: es))
+  | OpaqueOp (_,_,_,es) -> List.fold_left (+) 0 (List.map (fun x -> var_occurs x num) es)
+
+(* If argument expressions are "simple", we can inline them even if there are multiple occurrences *)
+(* Variables are definitely simple *)
+(* TODO: are constrs/closures with all simple arguments also simple? *)
+let is_simple_expr exp =
+  match exp with
+  | Var (_,_) -> true
+  | _ -> false
+
+(* Figure out whether to inline a particular call *)
+(* frees is free variables captured, arg is argument, and body is function body expression *)
+(* Mainly we don't want to evaluate expensive expressions multiple times, *)
+(* so we don't want to inline if a particular variable would be expanded to an expensive expression multiple times *)
+let rec inline_guard_rec body frees arg n =
+  match frees with
+  | [] ->
+     (is_simple_expr arg) || ((var_occurs body 0) < 2)
+  | hd :: tl ->
+     ((is_simple_expr hd) || ((var_occurs body n) < 2)) && (inline_guard_rec body tl arg (n + 1))
+
+let inline_check body frees arg = 
+  inline_guard_rec body frees arg 1
+
+(* Given an expression and a variable number (n), change (var n) to (exp) everywhere it occurs in body *)
+let rec subst_var exp n body =
+  match body with
+  | Var (_,k) -> if k == n then exp else body
+  | App (a,b,l,r) ->
+     App (a,b,subst_var exp n l,subst_var exp n r)
+  | Constr (a,b,c,d,es) ->
+     Constr (a,b,c,d,List.map (subst_var exp n) es)
+  | Close (a,b,c,d,es) ->
+     Close (a,b,c,d,List.map (subst_var exp n) es)
+  | Elim (a,b,c,d,es,e) ->
+     Elim (a,b,c,d,List.map (subst_var exp n) es, subst_var exp n e)
+  | OpaqueOp (a,b,c,es) ->
+     OpaqueOp (a,b,c,List.map (subst_var exp n) es)
+		   
+let subst_arg body arg =
+  subst_var arg 0 body
+	    
+let rec subst_frees body frees n =
+  match frees with
+  | [] -> body
+  | hd :: tl ->
+     subst_frees (subst_var hd n body) tl (n + 1)
+				    
+let subst body frees arg =
+  subst_arg (subst_frees body frees 1) arg
+
+let update_funcref idx fr =
+  match fr with
+  | Near (loc_id) ->
+     NearFar (idx,loc_id)
+  | _ -> fr
+	    
+let rec update_funcrefs idx e =
+  match e with
+  | Var (_,k) -> e
+  | App (a,b,l,r) ->
+     App (a,b,update_funcrefs idx l,update_funcrefs idx r)
+  | Constr (a,b,c,d,es) ->
+     Constr (a,b,c,d,List.map (update_funcrefs idx) es)
+  | Close (a,b,c,fr,es) ->
+     let d = update_funcref idx fr in
+     Close (a,b,c,d,List.map (update_funcrefs idx) es)
+  | Elim (a,b,c,d,es,e) ->
+     Elim (a,b,c,d,List.map (update_funcrefs idx) es, update_funcrefs idx e)
+  | OpaqueOp (a,b,c,es) ->
+     OpaqueOp (a,b,c,List.map (update_funcrefs idx) es)
+    
+	    
+let try_inline i1 i2 fs f ty1 ty2 arg_ty free_tys ret_ty close_fn frees arg =
+  match close_fn with     
+  | Near (idx) ->
+  (* Call to a local lambda *)
+     let locdefs = List.nth fs i1 in
+     let d = List.nth locdefs idx in
+     if inline_check d.body frees arg then
+       let orig = App (ty1,ty2, Close (arg_ty, free_tys, ret_ty, close_fn, frees), arg) in
+       let nterm = subst d.body frees arg in
+       let _ = Format.printf "\norig expr: %s\n" (string_of_expr orig) in
+       let _ = Format.printf "orig body: %s\n" (string_of_expr d.body) in
+       let _ = Format.printf "new expr: %s\n" (string_of_expr nterm) in
+       let _ = Format.printf "free variables: %s\n" (string_of_expr_list frees) in
+       let _ = Format.printf "arg: %s\n" (string_of_expr arg) in
+       nterm
+     else
+       (* fall back, default to not inline *)
+       App (ty1,ty2, Close (arg_ty, free_tys, ret_ty, close_fn, frees), arg)
+  | Far (idx) ->
+     let orig = App (ty1,ty2, Close (arg_ty, free_tys, ret_ty, close_fn, frees), arg) in
+     let locdefs = List.nth fs idx in
+     let d = List.nth locdefs ((List.length locdefs) - 1) in
+     if inline_check d.body frees arg then
+       let updated_body = (update_funcrefs idx d.body) in 
+       let nterm = subst updated_body frees arg in
+       let _ = Format.printf "\norig expr: %s\n" (string_of_expr orig) in
+       let _ = Format.printf "orig body: %s\n" (string_of_expr d.body) in
+       let _ = Format.printf "updated body: %s\n" (string_of_expr updated_body) in
+       let _ = Format.printf "new expr: %s\n" (string_of_expr nterm) in
+       let _ = Format.printf "free variables: %s\n" (string_of_expr_list frees) in
+       let _ = Format.printf "arg: %s\n" (string_of_expr arg) in
+       nterm
+     else
+       (* fall back, default to not inline *)
+       orig
+     
+  | NearFar (id1,id2) ->
+     (* fall back, default to not inline *)
+     App (ty1,ty2, Close (arg_ty, free_tys, ret_ty, close_fn, frees), arg)
+      
+let rec inline_expr i1 i2 fs f e =
+  match e with
+  | App (ty1,ty2,Close (arg_ty, free_tys, ret_ty, close_fn, frees),arg) ->
+     try_inline i1 i2 fs f ty1 ty2 arg_ty free_tys ret_ty close_fn frees arg
+  | App (ty1,ty2,cexpr,arg) ->
+     App (ty1,ty2,inline_expr i1 i2 fs f cexpr, inline_expr i1 i2 fs f arg)
+  | Var (_,_) -> e
+  | Constr (a,b,c,d,es) ->
+     Constr (a,b,c,d, List.map (inline_expr i1 i2 fs f) es)
+  | Close (a,b,c,d,es) ->
+     Close (a,b,c,d, List.map (inline_expr i1 i2 fs f) es)
+  | Elim (a,b,c,d,es,e) ->
+     Elim (a,b,c,d,List.map (inline_expr i1 i2 fs f) es, inline_expr i1 i2 fs f e)
+  | OpaqueOp (a,b,c,es) ->
+     OpaqueOp (a,b,c,List.map (inline_expr i1 i2 fs f) es)
+
+     
+let inline_func fs i1 i2 f =
+  { arg_ty = f.arg_ty;
+    free_tys = f.free_tys;
+    ret_ty = f.ret_ty;
+    body = inline_expr i1 i2 fs f f.body;
+    name = f.name;
+    pub = f.pub
+  }
+     
+let inline fs : func list list =
+  List.mapi (fun i1 -> List.mapi (inline_func fs i1)) fs
+
+		
 (*** descriptions of supported data types ***)
 
 let init_once f =
@@ -1330,7 +1349,7 @@ let define name body ty : Term.constr =
     let ty_e = Constrextern.extern_constr true env evars ty in
     let _ = set_bool_option_value ["Printing";"All"] false in
 
-    (*
+    
     Format.eprintf " == defining %s : %s ==\n" name (string_of_constr ty);
     print_ctor_counts env (count_ctors body);
     Format.eprintf "DEFINE %s : %s = \n%s\n"
@@ -1338,7 +1357,6 @@ let define name body ty : Term.constr =
         (string_of_constr ty)
         (string_of_constr body);
     Format.pp_print_flush Format.err_formatter ();
-    *)
 
     Command.do_definition
         (Id.of_string name)
@@ -1399,9 +1417,10 @@ type emit_global_ctx =
     ; emit_refl : reflection -> unit
     ; current_index : unit -> int
     ; promoted_member : int -> Term.constr
+    ; nth_block : int -> func list
     }
 
-let mk_emit_global_ctx () =
+let mk_emit_global_ctx blocks =
     let refls = ref [] in
     let members = ref [] in
 
@@ -1428,6 +1447,7 @@ let mk_emit_global_ctx () =
         end)
         ; current_index = (fun () -> List.length !refls)
         ; promoted_member = (fun idx -> List.nth !members idx)
+	; nth_block = (fun idx -> List.nth blocks idx)
         } in
     ctx
 
@@ -1546,31 +1566,55 @@ let emit_expr gctx ctx (g_tys : fn_sig list) (l_tys : ty list) e : Term.constr =
                 ]
 
         | Close (arg_ty, free_tys, ret_ty, fr, free) -> begin
-                let arg_ty_c = emit_ty ctx arg_ty in
-                let free_tys_c = emit_ty_list ctx free_tys in
-                let ret_ty_c = emit_ty ctx ret_ty in
-                let sig_c = emit_sig ctx (arg_ty, free_tys, ret_ty) in
+            let arg_ty_c = emit_ty ctx arg_ty in
+            let free_tys_c = emit_ty_list ctx free_tys in
+            let ret_ty_c = emit_ty ctx ret_ty in
+            let sig_c = emit_sig ctx (arg_ty, free_tys, ret_ty) in
 
-                let mb =
-                    match fr with
-                    | Near idx ->
-                            let db_idx = List.length g_tys - 1 - idx in
-                            emit_sig_member_base ctx base_sgs g_tys db_idx
-                    | Far idx ->
-                            let mb0 = gctx.promoted_member idx in
-                            let mb = emit_sig_member_cached ctx base_sgs mb0 g_tys sig_c in
-                            mb
-		    | NearFar (id1,id2) ->
-		       raise (Reflect_error "currently unimplemented NearFar reflection")
-                in
+            let mb =
+              match fr with
+              | Near idx ->
+                 let db_idx = List.length g_tys - 1 - idx in
+                 emit_sig_member_base ctx base_sgs g_tys db_idx
+              | Far idx ->
+                 let mb0 = gctx.promoted_member idx in
+                 let mb = emit_sig_member_cached ctx base_sgs mb0 g_tys sig_c in
+                 mb
+	      | NearFar (id1,id2) ->
+		 (* id1 is top level index, or Far index *)
+		 (* id2 is defn level index, or Near index *)
+		 let curr_idx = gctx.current_index () in
+		 if (id1 >= curr_idx) then
+		   raise (Reflect_error "malformed NearFar ref")
+		 else
+		   let before_target = if id1 == 0 then mk c_nil [t_sig ()] else (gctx.nth_refl (id1 - 1)).sigs in
+		   let in_target = List.map (fun x -> (x.arg_ty, x.free_tys, x.ret_ty)) (List.rev (gctx.nth_block id1)) in
+		   (* get the correct Near index *)
+		   let near_idx = List.length (gctx.nth_block id1) - 1 - id2 in (* used to add length of g_tys here*)
+		   (* works, but only for primary function in block *)
+		   (* need to prepend g_tys *)
+		   let mb = emit_sig_member_base ctx before_target in_target near_idx in
+		   (* now mb is a member in a context which includes the callee *)
+		   (* we need to promote all the way to caller *)
+		   let lo = id1 + 1 in
+		   let hi = gctx.current_index () in
+		   let pty = List.nth in_target near_idx in
+		   let cty = emit_sig ctx pty in
+		   let rec promote x m =
+		     if x >= hi then m else let m' = mk' (gctx.nth_refl x).promote [cty;m] in promote (x + 1) m'
+		   in
+		   let mb = promote lo mb in
+		   (* now promote across everything in g_tys *)
+		   emit_sig_member_cached ctx base_sgs mb g_tys cty
+            in
 
-                mk c_close [
-                    g_tys_c; l_tys_c;
-                    arg_ty_c; free_tys_c; ret_ty_c;
-                    mb;
-                    snd (go_hlist free)
-                ]
-        end
+            mk c_close [
+                 g_tys_c; l_tys_c;
+                 arg_ty_c; free_tys_c; ret_ty_c;
+                 mb;
+                 snd (go_hlist free)
+               ]
+          end
 
         | Elim (case_tys, target_tyn, ret_ty, elim, cases, target) ->
                 let params = List.map emit_tyn (tyn_params target_tyn) in
@@ -1754,15 +1798,15 @@ let reflect_vernac c name =
     let blocks : func list list = reflect_block evars env c in
     let t_mid = Sys.time () in
     Format.eprintf "reflected %d blocks\n" (List.length blocks);
-    let iblocks = inline blocks in
+    let blocks = inline blocks in
     let t_mid2 = Sys.time () in
-    Format.eprintf "inlined %d blocks\n" (List.length iblocks);
+    Format.eprintf "inlined %d blocks\n" (List.length blocks);
     (*
     let result = emit_compilation_unit funcs in
     *)
-    let gctx = mk_emit_global_ctx () in
-    List.iter (fun blk -> define_block gctx blk) iblocks;
-    define_cu gctx name iblocks;
+    let gctx = mk_emit_global_ctx blocks in
+    List.iter (fun blk -> define_block gctx blk) blocks;
+    define_cu gctx name blocks;
     let t_end = Sys.time () in
     ()
 
