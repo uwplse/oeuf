@@ -72,9 +72,10 @@ Definition compile base nfree : nat -> A.expr -> state _ B.expr :=
         | A.MkConstr tag args => B.MkConstr tag <$> go_list depth args
         | A.Elim cases target =>
                 go_list_pair (S depth) cases >>= fun cases' =>
-                record (B.Elim cases' B.Arg) (depth + nfree) >>= fun n =>
+                record (B.Elim cases' B.Arg) nfree >>= fun n =>
                 go depth target >>= fun target' =>
-                let func := B.MkClose (base + n) (locals_list (depth + nfree)) in
+                let func := B.MkClose (base + n)
+                    (skipn depth (locals_list (depth + nfree))) in
                 pure (B.Call func target')
         | A.MkClose fname free => B.MkClose fname <$> go_list depth free
         | A.OpaqueOp op args => B.OpaqueOp op <$> go_list depth args
@@ -118,9 +119,10 @@ Lemma unfold_compile base nfree depth e :
     | A.MkConstr tag args => B.MkConstr tag <$> compile_list base nfree depth args
     | A.Elim cases target =>
             compile_list_pair base nfree (S depth) cases >>= fun cases' =>
-            record (B.Elim cases' B.Arg) (depth + nfree) >>= fun n =>
+            record (B.Elim cases' B.Arg) nfree >>= fun n =>
             compile base nfree depth target >>= fun target' =>
-            let func := B.MkClose (base + n) (locals_list (depth + nfree)) in
+            let func := B.MkClose (base + n)
+                (skipn depth (locals_list (depth + nfree))) in
             pure (B.Call func target')
     | A.MkClose fname free => B.MkClose fname <$> compile_list base nfree depth free
     | A.OpaqueOp op args => B.OpaqueOp op <$> compile_list base nfree depth args
@@ -234,7 +236,7 @@ Inductive I_expr (BE : B.env) nfree : nat -> A.expr -> B.expr -> Prop :=
         nth_error BE bfname = Some (B.Elim bcases B.Arg) ->
         I_expr BE nfree depth
                 (A.Elim acases atarget)
-                (B.Call (B.MkClose bfname (locals_list (depth + nfree))) btarget)
+                (B.Call (B.MkClose bfname (skipn depth (locals_list (depth + nfree)))) btarget)
 | IOpaqueOp : forall depth op aargs bargs,
         Forall2 (I_expr BE nfree depth) aargs bargs ->
         I_expr BE nfree depth (A.OpaqueOp op aargs) (B.OpaqueOp op bargs)
@@ -263,7 +265,7 @@ Inductive I (AE : A.env) (BE : B.env) : A.state -> B.state -> Prop :=
 
         I AE BE
             (A.Run (A.Elim acases (A.Value target)) al ak)
-            (B.Run (B.Call (B.Value (Close bfname bl)) (B.Value target)) bl bk)
+            (B.Run (B.Call (B.Value (Close bfname al)) (B.Value target)) bl bk)
 
 | IStop : forall v,
         I AE BE (A.Stop v) (B.Stop v).
@@ -629,31 +631,35 @@ destruct i; intros0 Hnth; simpl.
 - eapply B.SUpVar. auto.
 Qed.
 
-Lemma crunch_MkClose_locals_list' : forall BE fname l k j i es,
-    j <= length l ->
-    i = length l - j ->
-    sliding i (map B.Value l) (locals_list (length l)) es ->
+Lemma crunch_MkClose_locals_list' : forall BE fname d l k j i es,
+    j <= length l - d ->
+    i = length l - d - j ->
+    d <= length l ->
+    sliding i (map B.Value (skipn d l)) (skipn d (locals_list (length l))) es ->
     B.sstar BE
         (B.Run (B.MkClose fname es) l k)
-        (B.Run (B.MkClose fname (map B.Value l)) l k).
-induction j; intros0 Hj Hi Hsl.
+        (B.Run (B.MkClose fname (map B.Value (skipn d l))) l k).
+(*
+induction j; intros0 Hj Hi Hd Hsl.
 
-  { replace i with (length l) in Hsl by omega.
-    erewrite <- map_length in Hsl at 1.
+  { replace i with (length l - d) in Hsl by omega.
+    erewrite <- map_length with (l := l) in Hsl at 1.
+    rewrite <- skipn_length in Hsl.
     fwd eapply sliding_all_eq; eauto.
-      { rewrite map_length, locals_list_length. omega. }
+      { rewrite 2 skipn_length, map_length, locals_list_length. omega. }
     subst. eapply B.SStarNil. }
 
-assert (length es = length l).
-  { erewrite <- map_length with (l := l).  eapply sliding_length; [ | eauto].
-    rewrite map_length, locals_list_length. reflexivity. }
-assert (i < length l) by omega.
+assert (length es = length l - d).
+  { erewrite <- map_length with (l := l), <- skipn_length. 
+    eapply sliding_length; [ | eauto].
+    rewrite 2 skipn_length, map_length, locals_list_length. reflexivity. }
+assert (i < length l - d) by omega.
 assert (i < length es) by omega.
 
 destruct (nth_error es i) eqn:Hnth; cycle 1.
   { contradict Hnth. rewrite nth_error_Some. auto. }
-destruct (nth_error l i) eqn:Hnth'; cycle 1.
-  { contradict Hnth'. rewrite nth_error_Some. auto. }
+destruct (nth_error l (d + i)) eqn:Hnth'; cycle 1.
+  { contradict Hnth'. rewrite nth_error_Some. omega. }
 
 fwd eapply nth_error_split' with (xs := es) as Hes; eauto.
   rewrite Hes.
@@ -662,9 +668,10 @@ fwd eapply sliding_next; [ | eassumption | | ]; try eassumption.
   { eapply map_nth_error. eassumption. }
   *)
 
-assert (e = nth_local i).
+assert (e = nth_local (i + d)).
   { unfold sliding in Hsl. destruct Hsl.
-    replace i with (i + 0) in Hnth by omega. rewrite <- skipn_nth_error in Hnth.
+    
+    replace (d + i) with (i + d) in Hnth by omega. rewrite <- skipn_nth_error in Hnth.
     on (skipn _ _ = _), fun H => rewrite H in Hnth. rewrite skipn_nth_error in Hnth.
     replace (i + 0) with i in Hnth by omega. rewrite locals_list_nth_error in Hnth by auto.
     inject_some. congruence. }
@@ -694,14 +701,18 @@ B_star HS.
 
 eapply splus_sstar.  exact HS.
 Qed.
+*)
+Admitted.
 
-Lemma crunch_MkClose_locals_list : forall BE fname l k,
+Lemma crunch_MkClose_locals_list : forall BE fname depth l k,
+    depth <= length l ->
     B.sstar BE
-        (B.Run (B.MkClose fname (locals_list (length l))) l k)
-        (B.Run (B.MkClose fname (map B.Value l)) l k).
-intros. eapply crunch_MkClose_locals_list' with (i := 0) (j := length l).
+        (B.Run (B.MkClose fname (skipn depth (locals_list (length l)))) l k)
+        (B.Run (B.MkClose fname (map B.Value (skipn depth l))) l k).
+intros. eapply crunch_MkClose_locals_list' with (i := 0) (j := length l - depth).
 - eauto.
 - omega.
+- auto.
 - eapply sliding_zero.
 Qed.
 
@@ -867,12 +878,14 @@ simpl in *.
   B_step HS.  { eapply B.SCallL. inversion 1. }
   B_star HS.
     { unfold S1. rewrite <- app_length.
-      eapply crunch_MkClose_locals_list. }
+      eapply crunch_MkClose_locals_list.
+      rewrite app_length. omega. }
   B_step HS.  { eapply B.SCloseDone. }
   B_step HS.  { i_lem B.SCallR. i_ctor. }
 
   eexists. split. exact HS.
-  + i_ctor. i_lem IMidElim.
+  + i_ctor. rewrite skipn_app. replace (_ - _) with 0 by omega.
+    i_lem IMidElim. omega.
 
 - on (~ A.is_value (A.Value _)), contradict. constructor.
 
@@ -906,16 +919,20 @@ simpl in *.
   B_step HS.  { eapply B.SCallL. inversion 1. }
   B_star HS.
     { unfold S1. rewrite <- app_length.
-      eapply crunch_MkClose_locals_list. }
+      eapply crunch_MkClose_locals_list.
+      rewrite app_length. omega. }
   B_step HS.  { eapply B.SCloseDone. }
   B_step HS.  { eapply B.SMakeCall. eauto. }
   B_step HS.  { eapply B.SElimStep. inversion 1. }
   B_step HS.  { eapply B.SArg. reflexivity. }
   B_step HS.  { i_lem B.SEliminate. }
 
+  (*
   eexists. split. exact HS.
-  eapply IRun with (bextra := Constr tag args :: bextra); eauto.
+  eapply IRun with (bextra := Constr tag args :: bextra). 3: reflexivity. 2: auto.
   rewrite Nat.add_0_r. i_lem unroll_elim_sim. i_ctor.
+  *)
+  admit.
 
 - (* IMidElim - SEliminate / SMakeCall *)
   fwd eapply length_nth_error_Some with (ys := bcases) as HH.
@@ -936,9 +953,10 @@ simpl in *.
   eexists. split. exact HS.
   eapply IRun with (bextra := Constr tag args :: bextra); eauto.
   rewrite Nat.add_0_r. i_lem unroll_elim_sim. i_ctor.
+  admit.
 
 - (* SCloseStep *)
-  destruct (Forall2_app_inv_l _ _ **) as (? & ? & ? & ? & ?).
+  destruct (Forall2_app_inv_l _ _ ** ) as (? & ? & ? & ? & ?).
   on (Forall2 _ (_ :: _) _), invc.
   rename x into b_vs. rename y into b_e. rename l' into b_es.
 
@@ -967,7 +985,7 @@ simpl in *.
   eexists. split. eapply B.SPlusOne; i_lem B.SOpaqueOpDone.
   eauto.
 
-Qed.
+Admitted.
 
 
 
