@@ -334,11 +334,11 @@ let try_inline i1 i2 fs f ty1 ty2 arg_ty free_tys ret_ty close_fn frees arg chan
      if inline_check d.body frees arg then
        let orig = App (ty1,ty2, Close (arg_ty, free_tys, ret_ty, close_fn, frees), arg) in
        let nterm = subst (arg :: frees) d.body in
-       let _ = Format.printf "\norig expr: %s\n" (string_of_expr orig) in
-       let _ = Format.printf "orig body: %s\n" (string_of_expr d.body) in
-       let _ = Format.printf "new expr: %s\n" (string_of_expr nterm) in
-       let _ = Format.printf "free variables: %s\n" (string_of_expr_list frees) in
-       let _ = Format.printf "arg: %s\n" (string_of_expr arg) in
+       (* let _ = Format.printf "\norig expr: %s\n" (string_of_expr orig) in *)
+       (* let _ = Format.printf "orig body: %s\n" (string_of_expr d.body) in *)
+       (* let _ = Format.printf "new expr: %s\n" (string_of_expr nterm) in *)
+       (* let _ = Format.printf "free variables: %s\n" (string_of_expr_list frees) in *)
+       (* let _ = Format.printf "arg: %s\n" (string_of_expr arg) in *)
        changed := true;
        nterm
      else
@@ -351,12 +351,12 @@ let try_inline i1 i2 fs f ty1 ty2 arg_ty free_tys ret_ty close_fn frees arg chan
      if inline_check d.body frees arg then
        let updated_body = (update_funcrefs idx d.body) in 
        let nterm = subst (arg :: frees) updated_body in
-       let _ = Format.printf "\norig expr: %s\n" (string_of_expr orig) in
-       let _ = Format.printf "orig body: %s\n" (string_of_expr d.body) in
-       let _ = Format.printf "updated body: %s\n" (string_of_expr updated_body) in
-       let _ = Format.printf "new expr: %s\n" (string_of_expr nterm) in
-       let _ = Format.printf "free variables: %s\n" (string_of_expr_list frees) in
-       let _ = Format.printf "arg: %s\n" (string_of_expr arg) in
+       (* let _ = Format.printf "\norig expr: %s\n" (string_of_expr orig) in *)
+       (* let _ = Format.printf "orig body: %s\n" (string_of_expr d.body) in *)
+       (* let _ = Format.printf "updated body: %s\n" (string_of_expr updated_body) in *)
+       (* let _ = Format.printf "new expr: %s\n" (string_of_expr nterm) in *)
+       (* let _ = Format.printf "free variables: %s\n" (string_of_expr_list frees) in *)
+       (* let _ = Format.printf "arg: %s\n" (string_of_expr arg) in *)
        changed := true;
        nterm
      else
@@ -369,12 +369,12 @@ let try_inline i1 i2 fs f ty1 ty2 arg_ty free_tys ret_ty close_fn frees arg chan
      if inline_check d.body frees arg then
        let updated_body = (update_funcrefs id1 d.body) in 
        let nterm = subst (arg :: frees) updated_body in
-       let _ = Format.printf "\norig expr: %s\n" (string_of_expr orig) in
-       let _ = Format.printf "orig body: %s\n" (string_of_expr d.body) in
-       let _ = Format.printf "updated body: %s\n" (string_of_expr updated_body) in
-       let _ = Format.printf "new expr: %s\n" (string_of_expr nterm) in
-       let _ = Format.printf "free variables: %s\n" (string_of_expr_list frees) in
-       let _ = Format.printf "arg: %s\n" (string_of_expr arg) in
+       (* let _ = Format.printf "\norig expr: %s\n" (string_of_expr orig) in *)
+       (* let _ = Format.printf "orig body: %s\n" (string_of_expr d.body) in *)
+       (* let _ = Format.printf "updated body: %s\n" (string_of_expr updated_body) in *)
+       (* let _ = Format.printf "new expr: %s\n" (string_of_expr nterm) in *)
+       (* let _ = Format.printf "free variables: %s\n" (string_of_expr_list frees) in *)
+       (* let _ = Format.printf "arg: %s\n" (string_of_expr arg) in *)
        changed := true;
        nterm
      else
@@ -1390,13 +1390,13 @@ let define name body ty : Term.constr =
     let _ = set_bool_option_value ["Printing";"All"] false in
 
     
-    Format.eprintf " == defining %s : %s ==\n" name (string_of_constr ty);
-    print_ctor_counts env (count_ctors body);
-    Format.eprintf "DEFINE %s : %s = \n%s\n"
-        name
-        (string_of_constr ty)
-        (string_of_constr body);
-    Format.pp_print_flush Format.err_formatter ();
+    (* Format.eprintf " == defining %s : %s ==\n" name (string_of_constr ty); *)
+    (* print_ctor_counts env (count_ctors body); *)
+    (* Format.eprintf "DEFINE %s : %s = \n%s\n" *)
+    (*     name *)
+    (*     (string_of_constr ty) *)
+    (*     (string_of_constr body); *)
+    (* Format.pp_print_flush Format.err_formatter (); *)
 
     Command.do_definition
         (Id.of_string name)
