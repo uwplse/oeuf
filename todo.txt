@@ -1,0 +1,19 @@
+Oeuf Priorities (updated May 15, 2018)
+ - Infrastructure:
+    * Build system: make build deterministic and easy
+    * Coq/CompCert versions: port to latest version of Coq and CompCert
+    
+ - Frontend:
+    * Oeuf should support arbitrary user defined types (w/o recompiling all of Oeuf)
+    * Oeuf should support match expressions. First attempt may be with some lemmas and rewriting?
+
+ - Performance:
+    * Memory management: malloc and forget is awful. We should use a region based system, taking advantage of the fact that the heap is acyclic
+    * Non-recursive eliminators: when we don't use the recursive argument to an eliminator, we can special case this and get asymptotic speedup
+    * Native eliminators: an int_iter function is impossible currently, but would be extremely useful
+
+ - Shim Verification:
+    * Currently, verifying basic shims is a huge burden, and anything larger is impossible. This should be better (though how is open to debate)
+    
+ - Backend:
+    * Differential testing between Assembly semantics and assembly implementations (i.e. actual CPUs) would greatly increase our confidence
