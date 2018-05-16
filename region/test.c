@@ -29,14 +29,18 @@ int main() {
   /* for (long i = 0; i < TEST_SIZE; i++) { */
   /*   r[i] = new_region(); */
   /* } */
-  r = new_region();
   
   for (long j = 0; j < TEST_SIZE; j++) {
+    r = new_region();
     for (long i = 0; i < TEST_SIZE; i++) {
       ptrs[i] = allocate(r,sizeof(test_type));
     }
+    free_region(r);
+    if (rand()%22 == 0) {
+      clear_cache();
+    }
   }
-
+  clear_cache();
   /* for (long i = 0; i < TEST_SIZE; i++) { */
   /*   if (*(ptrs[i]) != i) { */
   /*     printf("i = %ld, *(ptrs[i]) = %ld\n", i, *(ptrs[i])); */
@@ -44,7 +48,7 @@ int main() {
   /*   assert(*(ptrs[i]) == i); */
   /* } */
 
-  free_region(r);
+  //free_region(r);
   
   /* for (long i = 0; i < TEST_SIZE; i++) { */
   /*   free_region(r[i]); */

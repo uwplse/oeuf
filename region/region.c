@@ -36,31 +36,58 @@ struct block {
 typedef struct block block;
 
 
-//usses mmap to get some memory from the OS
+//uses mmap to get some memory from the OS
 void* get_mem(size_t size) {
-
   void* p = mmap(0, size, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1 /* fd */, 0);
   assert(p != MAP_FAILED);
   return p;
 }
 
 
-//TODO: also keep a global cache of unused blocks, so we don't redo work
-void clear_cache() {
-  return;
+void unmap_entire_region(region* r) {
+  block* root = r;
+  while (root != NULL) {
+    block* next = root->next;
+    size_t size = root->size + sizeof(struct block);
+    munmap((void*)root, size);
+    root = next;
+  }
 }
 
+//keep a global linked list cache of blocks
+block* cache;
+
+void clear_cache() {
+  free_region(cache);
+  cache = NULL;
+}
+
+//precondition: cache != NULL
+region* pop_cache() {
+  region* h = cache;
+  if (cache->next != NULL) {
+    cache->next->end = cache->end;
+  }
+  cache = cache->next;
+  h->next = NULL;
+  h->end = NULL;
+  h->ofs = 0;
+  return h;
+}
 
 region* new_region() {
-  //grab some new mem from the OS
-  void* p = get_mem(BIG_ALLOC_SIZE);
-  block* b = (block*)p;
-  b->size = (BIG_ALLOC_SIZE - sizeof(block)); //size 
-  b->ofs = 0;
-  b->next = NULL;
-  b->end = NULL;
-
-  return b;
+  if (cache == NULL) {
+    //grab some new mem from the OS
+    void* p = get_mem(BIG_ALLOC_SIZE);
+    block* b = (block*)p;
+    b->size = (BIG_ALLOC_SIZE - sizeof(block)); //size 
+    b->ofs = 0;
+    b->next = NULL;
+    b->end = NULL;
+    return b;
+  } else {
+    return pop_cache();
+  }
 }
 
 //doesn't support allocations of size 0
@@ -106,12 +133,12 @@ void* allocate(region* root, size_t size) {
 }
 
 void free_region(region* r) {
-  block* root = r;
-  while (root != NULL) {
-    block* next = root->next;
-    size_t size = root->size + sizeof(struct block);
-    munmap((void*)root, size);
-    root = next;
+  if (cache == NULL) {
+    cache = r;
+  } else {
+    cache->end->next = r;
+    cache->end = r->end;
   }
 }
+
     
