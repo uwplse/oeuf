@@ -3,8 +3,7 @@
 
 #include <stddef.h>
 
-void init();
-void double_alloc_size();
+void set_block_size(size_t size);
 
 void* get_mem(size_t size);
 
