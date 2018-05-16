@@ -24,6 +24,18 @@
 //determined by rough expriment
 #define BIG_ALLOC_SIZE (1 << 15)
 
+//block header struct
+//in practice this will be followed with space to hand out with allocation
+struct block {
+    size_t size; //how many bytes can this block hold (not including header)
+    size_t ofs; //ofs = size means full
+    struct block* next;
+    struct block* end; //only used in head block
+};
+
+typedef struct block block;
+
+
 //usses mmap to get some memory from the OS
 void* get_mem(size_t size) {
 
