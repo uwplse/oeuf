@@ -21,28 +21,15 @@
 
 */
 
-
-size_t BIG_ALLOC_SIZE; 
-
-//start the world
-void set_block_size(size_t size) {
-  BIG_ALLOC_SIZE = size;
-}
-
+//determined by rough expriment
+#define BIG_ALLOC_SIZE (1 << 15)
 
 //usses mmap to get some memory from the OS
-//TODO: this is probably slow 
 void* get_mem(size_t size) {
 
-  void* p = malloc(size);
-  assert(p != NULL);
+  void* p = mmap(0, size, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1 /* fd */, 0);
+  assert(p != MAP_FAILED);
   return p;
-    
-  //int fd = open("/dev/zero", O_RDWR);
-  //void* p = mmap(0, size, PROT_READ|PROT_WRITE, MAP_PRIVATE, -1 /* fd */, 0);
-  //close(fd);
-  //assert(p != MAP_FAILED);
-  //return p;
 }
 
 
@@ -69,10 +56,10 @@ region* new_region() {
 //you don't need it, I don't support it, we're all happy
 void* allocate(region* root, size_t size) {
   //don't do this, it's dumb
-  assert(size != 0);
-  assert(size <= BIG_ALLOC_SIZE);
-  assert(size % 4 == 0);
-    
+    //assert(size != 0);
+    //assert(size <= BIG_ALLOC_SIZE);
+    //assert(size % 4 == 0);
+
   //go to the end of the list
   block* r = root;
   if (root->end != NULL) {
@@ -90,6 +77,8 @@ void* allocate(region* root, size_t size) {
 
   //uncommon case: make a new block
 
+  //TODO: handle blocks larger than BIG_ALLOC_SIZE here
+
   //make new last block
   block* new_block = new_region();
 
@@ -106,12 +95,10 @@ void* allocate(region* root, size_t size) {
 
 void free_region(region* r) {
   block* root = r;
-    
   while (root != NULL) {
     block* next = root->next;
-    //size_t size = root->size + sizeof(struct block);
-    free((void*)root);
-    //munmap((void*)root, size);
+    size_t size = root->size + sizeof(struct block);
+    munmap((void*)root, size);
     root = next;
   }
 }
