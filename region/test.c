@@ -22,6 +22,11 @@ int main() {
     ptrs[i] = NULL;
   }
 
+  size_t sizes[TEST_SIZE];
+  for (long i = 0; i < TEST_SIZE; i++) {
+      sizes[i] = rand()%128;
+  }
+  
 
   clock_t start = clock();
   region* r;
@@ -33,7 +38,7 @@ int main() {
   for (long j = 0; j < TEST_SIZE; j++) {
     r = new_region();
     for (long i = 0; i < TEST_SIZE; i++) {
-      ptrs[i] = allocate(r,sizeof(test_type));
+	ptrs[i] = allocate(r,sizes[i]);
     }
     free_region(r);
     if (rand()%22 == 0) {
@@ -63,7 +68,7 @@ int main() {
 
   for (long j = 0; j < TEST_SIZE; j++) {
     for (long i = 0; i < TEST_SIZE; i++) {
-  	mptrs[i] = (test_type*)malloc(sizeof(test_type));
+  	mptrs[i] = (test_type*)malloc(sizes[i]);
     }
     for (long i = 0; i < TEST_SIZE; i++) {
       free(mptrs[i]);

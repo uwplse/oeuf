@@ -22,6 +22,7 @@
 */
 
 //determined by rough expriment
+//power of 2 seems good, this is 8 pages on a system with 4096 byte pages
 #define BIG_ALLOC_SIZE (1 << 15)
 
 //block header struct
@@ -90,47 +91,61 @@ region* new_region() {
   }
 }
 
-//doesn't support allocations of size 0
-//doesn't support giant allocations
-//you don't need it, I don't support it, we're all happy
-void* allocate(region* root, size_t size) {
-  //don't do this, it's dumb
-    //assert(size != 0);
-    //assert(size <= BIG_ALLOC_SIZE);
-    //assert(size % 4 == 0);
+void* make_new_block(region* root, region* r, size_t size) {
+    if (size < BIG_ALLOC_SIZE - sizeof(block)) {
+	//make new last block
+	block* new_block = new_region();
 
-  //go to the end of the list
-  block* r = root;
-  if (root->end != NULL) {
-    r = root->end;
-  }
-
-  size_t rofs = r->ofs;
-  size_t rsize = r->size;
-  //common case: give out memory from current block
-  if (rofs + size <= rsize) {
-    r->ofs = rofs + size; //remember that we've allocated
-    char* block_base = (char*) (r+1); //advance past header
-    return (void*)(block_base + rofs);
-  }
-
-  //uncommon case: make a new block
-
-  //TODO: handle blocks larger than BIG_ALLOC_SIZE here
-
-  //make new last block
-  block* new_block = new_region();
-
-  //append new block to the end of the list
-  r->next = new_block;
-  //remember the new end of the list from the beginning
-  root->end = new_block;
-  //allocate the needed space from the new block
-  new_block->ofs = size;
+	//append new block to the end of the list
+	r->next = new_block;
+	//remember the new end of the list from the beginning
+	root->end = new_block;
+	//allocate the needed space from the new block
+	new_block->ofs = size;
     
-  char* base = (char*)(new_block + 1);
-  return (void*)(base);
+	char* base = (char*)(new_block + 1);
+	return (void*)(base);
+    } else {
+	size_t alloc_size = size + sizeof(block);
+	alloc_size = (((alloc_size + 7) >> 3) << 3);
+	void* p = get_mem(alloc_size);
+	block* b = (block*)p;
+	b->size = (alloc_size - sizeof(block)); //size 
+	b->ofs = 0;
+	b->end = NULL;
+	b->next = NULL;
+	r->next = b;
+	root->end = b;
+	char* base = (char*)(b + 1);
+	return (void*)(base);
+    }
 }
+
+
+inline void* allocate(region* root, size_t s) {
+    //align all accesses to 8 bytes
+    size_t size = (size != 0) ? (((s+7) >> 3) << 3) : 8;
+
+    //go to the end of the list
+    block* r = root;
+    if (root->end != NULL) {
+	r = root->end;
+    }
+
+    size_t rofs = r->ofs;
+    size_t rsize = r->size;
+    //common case: give out memory from current block
+    if (rofs + size <= rsize) {
+	r->ofs = rofs + size; //remember that we've allocated
+	char* block_base = (char*) (r+1); //advance past block header
+	return (void*)(block_base + rofs);
+    } else {
+	//uncommon case: make a new block
+	return make_new_block(root,r,size);
+    }
+
+}
+
 
 void free_region(region* r) {
   if (cache == NULL) {
