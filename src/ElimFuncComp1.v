@@ -30,6 +30,9 @@ Fixpoint locals_list' n acc :=
 Definition locals_list n := locals_list' n [].
 
 
+Definition upvar_list n := map B.UpVar (count_up n).
+
+
 
 Section compile.
 
@@ -40,112 +43,114 @@ Definition record (e : B.expr) (nfree : nat) : state (list (B.expr * nat)) nat :
 
 Notation pure := ret_state.
 
-(* `nfree` is the number of free variables in the original function.
-   `depth` is the number of `A.Elim`s we're currently under.  Each Elim is
-   lifted to a function, which binds an additional variable.
+(* base: Number of previously existing functions.  Does not count newly-lifted
+    elim funcs.
+   nfree: Number of free variables in the original function.
+   under: `true` if we're compiling a case of a lifted elim.  This has two
+    effects.
+    (1) All variables are shifted up by 1, to make room for the new "target"
+        argument.
+    (2) Further lifting of elims captures only the `nfree` upvars, not `Arg`,
+        since `Arg` is the newly-introduced "target".
  *)
-Definition compile base nfree : nat -> A.expr -> state _ B.expr :=
-    let fix go depth e {struct e} :=
-        let fix go_list depth es :=
+Definition compile base nfree : bool -> A.expr -> state _ B.expr :=
+    let fix go (under : bool) e {struct e} :=
+        let fix go_list under es :=
             match es with
             | [] => pure []
-            | e :: es => @cons _ <$> go depth e <*> go_list depth es
+            | e :: es => @cons _ <$> go under e <*> go_list under es
             end in
-        let go_pair depth p :=
+        let go_pair under p :=
             let '(e, r) := p in
-            go depth e >>= fun e' => pure (e', r) in
-        let fix go_list_pair depth ps :=
+            go under e >>= fun e' => pure (e', r) in
+        let fix go_list_pair under ps :=
             match ps with
             | [] => pure []
-            | p :: ps => @cons _ <$> go_pair depth p <*> go_list_pair depth ps
+            | p :: ps => @cons _ <$> go_pair under p <*> go_list_pair under ps
             end in
 
         match e with
         | A.Value v => pure (B.Value v)
-        | A.Arg =>
-                match depth with
-                | 0 => pure (B.Arg)
-                | S n => pure (B.UpVar n)
-                end
-        | A.UpVar n => pure (B.UpVar (depth + n))
-        | A.Call f a => B.Call <$> go depth f <*> go depth a
-        | A.MkConstr tag args => B.MkConstr tag <$> go_list depth args
+        | A.Arg => if under then pure (B.UpVar 0) else pure B.Arg
+        | A.UpVar n => if under then pure (B.UpVar (S n)) else pure (B.UpVar n)
+        | A.Call f a => B.Call <$> go under f <*> go under a
+        | A.MkConstr tag args => B.MkConstr tag <$> go_list under args
         | A.Elim cases target =>
-                go_list_pair (S depth) cases >>= fun cases' =>
+                go_list_pair true cases >>= fun cases' =>
                 record (B.Elim cases' B.Arg) nfree >>= fun n =>
-                go depth target >>= fun target' =>
+                go under target >>= fun target' =>
                 let func := B.MkClose (base + n)
-                    (skipn depth (locals_list (depth + nfree))) in
+                    (if under
+                        then upvar_list (S nfree)
+                        else B.Arg :: upvar_list nfree) in
                 pure (B.Call func target')
-        | A.MkClose fname free => B.MkClose fname <$> go_list depth free
-        | A.OpaqueOp op args => B.OpaqueOp op <$> go_list depth args
+        | A.MkClose fname free => B.MkClose fname <$> go_list under free
+        | A.OpaqueOp op args => B.OpaqueOp op <$> go_list under args
         end in go.
 
-Definition compile_list base nfree : nat -> list A.expr -> state _ (list B.expr) :=
+Definition compile_list base nfree : bool -> list A.expr -> state _ (list B.expr) :=
     let go := compile base nfree in
-    let fix go_list depth es :=
+    let fix go_list under es :=
         match es with
         | [] => pure []
-        | e :: es => @cons _ <$> go depth e <*> go_list depth es
+        | e :: es => @cons _ <$> go under e <*> go_list under es
         end in go_list.
 
-Definition compile_pair base nfree : nat -> (A.expr * A.rec_info) -> state _ (B.expr * B.rec_info) :=
+Definition compile_pair base nfree : bool -> (A.expr * A.rec_info) -> state _ (B.expr * B.rec_info) :=
     let go := compile base nfree in
-    let go_pair depth (p : A.expr * A.rec_info) :=
+    let go_pair under (p : A.expr * A.rec_info) :=
         let '(e, r) := p in
-        go depth e >>= fun e' => pure (e', r)
+        go under e >>= fun e' => pure (e', r)
     in go_pair.
 
 Definition compile_list_pair base nfree :
-        nat -> list (A.expr * A.rec_info) -> state _ (list (B.expr * B.rec_info)) :=
+        bool -> list (A.expr * A.rec_info) -> state _ (list (B.expr * B.rec_info)) :=
     let go_pair := compile_pair base nfree in
-    let fix go_list_pair depth ps :=
+    let fix go_list_pair under ps :=
         match ps with
         | [] => pure []
-        | p :: ps => @cons _ <$> go_pair depth p <*> go_list_pair depth ps
+        | p :: ps => @cons _ <$> go_pair under p <*> go_list_pair under ps
         end in go_list_pair.
 
-Lemma unfold_compile base nfree depth e :
-    compile base nfree depth e =
+Lemma unfold_compile base nfree under e :
+    compile base nfree under e =
     match e with
     | A.Value v => pure (B.Value v)
-    | A.Arg =>
-            match depth with
-            | 0 => pure (B.Arg)
-            | S n => pure (B.UpVar n)
-            end
-    | A.UpVar n => pure (B.UpVar (depth + n))
-    | A.Call f a => B.Call <$> compile base nfree depth f <*> compile base nfree depth a
-    | A.MkConstr tag args => B.MkConstr tag <$> compile_list base nfree depth args
+    | A.Arg => if under then pure (B.UpVar 0) else pure B.Arg
+    | A.UpVar n => if under then pure (B.UpVar (S n)) else pure (B.UpVar n)
+    | A.Call f a => B.Call <$> compile base nfree under f <*> compile base nfree under a
+    | A.MkConstr tag args => B.MkConstr tag <$> compile_list base nfree under args
     | A.Elim cases target =>
-            compile_list_pair base nfree (S depth) cases >>= fun cases' =>
+            compile_list_pair base nfree true cases >>= fun cases' =>
             record (B.Elim cases' B.Arg) nfree >>= fun n =>
-            compile base nfree depth target >>= fun target' =>
+            compile base nfree under target >>= fun target' =>
             let func := B.MkClose (base + n)
-                (skipn depth (locals_list (depth + nfree))) in
+                    (if under
+                        then upvar_list (S nfree)
+                        else B.Arg :: upvar_list nfree) in
             pure (B.Call func target')
-    | A.MkClose fname free => B.MkClose fname <$> compile_list base nfree depth free
-    | A.OpaqueOp op args => B.OpaqueOp op <$> compile_list base nfree depth args
+    | A.MkClose fname free => B.MkClose fname <$> compile_list base nfree under free
+    | A.OpaqueOp op args => B.OpaqueOp op <$> compile_list base nfree under args
     end.
-revert e depth.
+revert e under.
 mut_induction e using A.expr_rect_mut' with
-    (Pl := fun es => forall depth,
-        compile_list base nfree depth es =
+    (Pl := fun es => forall under,
+        compile_list base nfree under es =
         match es with
         | [] => pure []
-        | e :: es => @cons _ <$> compile base nfree depth e <*> compile_list base nfree depth es
+        | e :: es => @cons _ <$> compile base nfree under e <*> compile_list base nfree under es
         end)
-    (Pp := fun p => forall depth,
-        compile_pair base nfree depth p =
+    (Pp := fun p => forall under,
+        compile_pair base nfree under p =
         let '(e, r) := p in
-        compile base nfree depth e >>= fun e' => pure (e', r))
-    (Plp := fun ps => forall depth,
-        compile_list_pair base nfree depth ps =
+        compile base nfree under e >>= fun e' => pure (e', r))
+    (Plp := fun ps => forall under,
+        compile_list_pair base nfree under ps =
         match ps with
         | [] => pure []
         | p :: ps => @cons _
-                <$> compile_pair base nfree depth p
-                <*> compile_list_pair base nfree depth ps
+                <$> compile_pair base nfree under p
+                <*> compile_list_pair base nfree under ps
         end);
 try solve [reflexivity].
 
@@ -156,7 +161,7 @@ Fixpoint compile_cu' base exprs metas :=
     match exprs, metas with
     | [], [] => pure []
     | e :: exprs, m :: metas =>
-            compile base (S (m_nfree m)) 0 e >>= fun e' =>
+            compile base (m_nfree m) false e >>= fun e' =>
             compile_cu' base exprs metas >>= fun es' =>
             pure (e' :: es')
     | _, _ => pure []
@@ -209,47 +214,55 @@ Definition compile_cu (cu : list A.expr * list metadata) :
 End compile_cu.
 
 
-Inductive I_expr (BE : B.env) nfree : nat -> A.expr -> B.expr -> Prop :=
-| IValue : forall depth v, I_expr BE nfree depth (A.Value v) (B.Value v)
-| IArg0 : I_expr BE nfree 0 A.Arg B.Arg
-| IArgS : forall depth, I_expr BE nfree (S depth) A.Arg (B.UpVar depth)
-| IUpVar : forall depth n, I_expr BE nfree depth (A.UpVar n) (B.UpVar (depth + n))
-| ICall : forall depth af aa bf ba,
-        I_expr BE nfree depth af bf ->
-        I_expr BE nfree depth aa ba ->
-        I_expr BE nfree depth (A.Call af aa) (B.Call bf ba)
-| IMkConstr : forall depth tag aargs bargs,
-        Forall2 (I_expr BE nfree depth) aargs bargs ->
-        I_expr BE nfree depth (A.MkConstr tag aargs) (B.MkConstr tag bargs)
-| IElim : forall depth acases atarget bcases btarget,
-        Forall2 (fun ap bp => I_expr BE nfree depth (fst ap) (fst bp) /\
+Inductive I_expr (BE : B.env) nfree : bool -> A.expr -> B.expr -> Prop :=
+| IValue : forall under v, I_expr BE nfree under (A.Value v) (B.Value v)
+| IArgF : I_expr BE nfree false A.Arg B.Arg
+| IArgT : I_expr BE nfree true A.Arg (B.UpVar 0)
+| IUpVarF : forall n, I_expr BE nfree false (A.UpVar n) (B.UpVar n)
+| IUpVarT : forall n, I_expr BE nfree true (A.UpVar n) (B.UpVar (S n))
+| ICall : forall under af aa bf ba,
+        I_expr BE nfree under af bf ->
+        I_expr BE nfree under aa ba ->
+        I_expr BE nfree under (A.Call af aa) (B.Call bf ba)
+| IMkConstr : forall under tag aargs bargs,
+        Forall2 (I_expr BE nfree under) aargs bargs ->
+        I_expr BE nfree under (A.MkConstr tag aargs) (B.MkConstr tag bargs)
+| IElimF : forall acases atarget bcases btarget bfname,
+        Forall2 (fun ap bp => I_expr BE nfree true (fst ap) (fst bp) /\
                 snd ap = snd bp) acases bcases ->
-        I_expr BE nfree depth atarget btarget ->
-        I_expr BE nfree depth (A.Elim acases atarget) (B.Elim bcases btarget)
+        I_expr BE nfree false atarget btarget ->
+        nth_error BE bfname = Some (B.Elim bcases B.Arg) ->
+        I_expr BE nfree false
+                (A.Elim acases atarget)
+                (B.Call (B.MkClose bfname (B.Arg :: upvar_list nfree)) btarget)
+| IElimT : forall acases atarget bcases btarget bfname,
+        Forall2 (fun ap bp => I_expr BE nfree true (fst ap) (fst bp) /\
+                snd ap = snd bp) acases bcases ->
+        I_expr BE nfree true atarget btarget ->
+        nth_error BE bfname = Some (B.Elim bcases B.Arg) ->
+        I_expr BE nfree true
+                (A.Elim acases atarget)
+                (B.Call (B.MkClose bfname (upvar_list (S nfree))) btarget)
 | IMkClose : forall depth fname aargs bargs,
         Forall2 (I_expr BE nfree depth) aargs bargs ->
         I_expr BE nfree depth (A.MkClose fname aargs) (B.MkClose fname bargs)
-| IElimCall : forall depth acases atarget bcases btarget bfname,
-        Forall2 (fun ap bp => I_expr BE nfree (S depth) (fst ap) (fst bp) /\
-                snd ap = snd bp) acases bcases ->
-        I_expr BE nfree depth atarget btarget ->
-        nth_error BE bfname = Some (B.Elim bcases B.Arg) ->
-        I_expr BE nfree depth
-                (A.Elim acases atarget)
-                (B.Call (B.MkClose bfname (skipn depth (locals_list (depth + nfree)))) btarget)
 | IOpaqueOp : forall depth op aargs bargs,
         Forall2 (I_expr BE nfree depth) aargs bargs ->
         I_expr BE nfree depth (A.OpaqueOp op aargs) (B.OpaqueOp op bargs)
 .
 
 Inductive I (AE : A.env) (BE : B.env) : A.state -> B.state -> Prop :=
-| IRun : forall ae al ak be bextra bl bk nfree,
-        I_expr BE nfree (length bextra) ae be ->
+| IRun : forall ae al ak be bl bk nfree under,
+        I_expr BE nfree under ae be ->
         (forall v,
             I AE BE (ak v) (bk v)) ->
-        length al = nfree ->
-        bextra ++ al = bl ->
+        length al = S nfree ->
+        (if under then exists aa, bl = aa :: al else bl = al) ->
         I AE BE (A.Run ae al ak) (B.Run be bl bk)
+| IStop : forall v,
+        I AE BE (A.Stop v) (B.Stop v)
+.
+(*
 
 | IMidElim : forall acases al ak bfname bcases bextra bl bk target nfree,
         (* This is the state where we've finished evaluating the elim target on
@@ -269,36 +282,38 @@ Inductive I (AE : A.env) (BE : B.env) : A.state -> B.state -> Prop :=
 
 | IStop : forall v,
         I AE BE (A.Stop v) (B.Stop v).
+            *)
 
 
 
 
 
-Lemma I_expr_weaken : forall BE BE' nfree depth ae be,
-    I_expr BE nfree depth ae be ->
-    I_expr (BE ++ BE') nfree depth ae be.
+Lemma I_expr_weaken : forall BE BE' nfree under ae be,
+    I_expr BE nfree under ae be ->
+    I_expr (BE ++ BE') nfree under ae be.
 intros ? ? ? ?.
-intro ae. revert ae depth.
+intro ae. revert ae under.
 mut_induction ae using A.expr_rect_mut' with
-    (Pl := fun aes => forall depth bes,
-        Forall2 (I_expr BE nfree depth) aes bes ->
-        Forall2 (I_expr (BE ++ BE') nfree depth) aes bes)
-    (Pp := fun (ap : A.expr * A.rec_info) => forall (bp : B.expr * B.rec_info) depth,
-        I_expr BE nfree depth (fst ap) (fst bp) ->
-        I_expr (BE ++ BE') nfree depth (fst ap) (fst bp))
+    (Pl := fun aes => forall under bes,
+        Forall2 (I_expr BE nfree under) aes bes ->
+        Forall2 (I_expr (BE ++ BE') nfree under) aes bes)
+    (Pp := fun (ap : A.expr * A.rec_info) => forall (bp : B.expr * B.rec_info) under,
+        I_expr BE nfree under (fst ap) (fst bp) ->
+        I_expr (BE ++ BE') nfree under (fst ap) (fst bp))
     (Plp := fun (aps : list (A.expr * A.rec_info)) =>
-        forall (bps : list (B.expr * B.rec_info)) depth,
-        Forall2 (fun ap bp => I_expr BE nfree depth (fst ap) (fst bp)) aps bps ->
-        Forall2 (fun ap bp => I_expr (BE ++ BE') nfree depth (fst ap) (fst bp)) aps bps);
+        forall (bps : list (B.expr * B.rec_info)) under,
+        Forall2 (fun ap bp => I_expr BE nfree under (fst ap) (fst bp)) aps bps ->
+        Forall2 (fun ap bp => I_expr (BE ++ BE') nfree under (fst ap) (fst bp)) aps bps);
 intros0 II.
 
 - invc II. econstructor.
 - invc II; econstructor.
-- invc II. econstructor.
+- invc II; econstructor.
 - invc II. econstructor; eauto.
 - invc II. econstructor; eauto.
 - invc II.
-  + econstructor; eauto.
+  + econstructor; eauto; cycle 1.
+      { eapply nth_error_app_Some. eassumption. }
     on (Forall2 _ _ _), invc_using Forall2_conj_inv.
     eapply Forall2_conj; eauto.
   + econstructor; eauto; cycle 1.
@@ -354,7 +369,11 @@ mut_induction e using A.expr_rect_mut' with
 - break_bind_state. exists []. eauto using app_nil_r.
 - break_match; break_bind_state.
   all: exists []; eauto using app_nil_r.
-- break_bind_state. exists []. eauto using app_nil_r.
+
+- break_bind_state. exists [].
+  replace s' with s; cycle 1.
+    { break_match; break_bind_state; reflexivity. }
+  eauto using app_nil_r.
 
 - (* Call *) break_bind_state.
   specialize (IHe1 ?? ?? ?? ?? ** ).
@@ -400,29 +419,34 @@ mut_induction e using A.expr_rect_mut' with
 - finish_mut_induction compile_state_monotonic using list pair list_pair.
 Qed exporting.
 
-Theorem compile_I_expr : forall BE0 nfree depth e s e' s',
-    compile (length BE0) nfree depth e s = (e', s') ->
-    I_expr (BE0 ++ map fst s') nfree depth e e'.
-intros BE0 nfree depth e. revert e depth.
+Theorem compile_I_expr : forall BE0 nfree under e s e' s',
+    compile (length BE0) nfree under e s = (e', s') ->
+    I_expr (BE0 ++ map fst s') nfree under e e'.
+intros BE0 nfree under e. revert e under.
 induction e using A.expr_rect_mut with
-    (Pl := fun es => forall depth s es' s',
-        compile_list (length BE0) nfree depth es s = (es', s') ->
-        Forall2 (I_expr (BE0 ++ map fst s') nfree depth) es es')
-    (Pp := fun p => forall depth s p' s',
-        compile_pair (length BE0) nfree depth p s = (p', s') ->
-        I_expr (BE0 ++ map fst s') nfree depth (fst p) (fst p') /\ snd p = snd p')
-    (Plp := fun ps => forall depth s ps' s',
-        compile_list_pair (length BE0) nfree depth ps s = (ps', s') ->
-        Forall2 (fun p p' => I_expr (BE0 ++ map fst s') nfree depth (fst p) (fst p') /\
+    (Pl := fun es => forall under s es' s',
+        compile_list (length BE0) nfree under es s = (es', s') ->
+        Forall2 (I_expr (BE0 ++ map fst s') nfree under) es es')
+    (Pp := fun p => forall under s p' s',
+        compile_pair (length BE0) nfree under p s = (p', s') ->
+        I_expr (BE0 ++ map fst s') nfree under (fst p) (fst p') /\ snd p = snd p')
+    (Plp := fun ps => forall under s ps' s',
+        compile_list_pair (length BE0) nfree under ps s = (ps', s') ->
+        Forall2 (fun p p' => I_expr (BE0 ++ map fst s') nfree under (fst p) (fst p') /\
             snd p = snd p') ps ps');
 intros0 Hcomp; try (unfold_compile_in Hcomp; invc Hcomp).
 
 - (* Value *) econstructor.
+
 - (* Arg *)
-  destruct depth.
+  destruct under.
   + on (ret_state _ _ = _), invc. econstructor.
   + on (ret_state _ _ = _), invc. econstructor.
-- (* UpVar *) econstructor.
+
+- (* UpVar *)
+  destruct under.
+  + on (ret_state _ _ = _), invc. econstructor.
+  + on (ret_state _ _ = _), invc. econstructor.
 
 - (* Call *)
   break_bind_state.
@@ -451,7 +475,19 @@ intros0 Hcomp; try (unfold_compile_in Hcomp; invc Hcomp).
     destruct HH as [s23 Hs23].
   subst.
 
-  econstructor.
+  destruct under; econstructor.
+
+  + specialize (IHe ?? ?? ?? ?? ** ). invc_using Forall2_conj_inv IHe.
+    eapply Forall2_conj; eauto.
+    rewrite ?map_app, ?app_assoc. do 2 eapply I_expr_weaken_list_pair.
+    rewrite <- app_assoc, <- map_app. eauto.
+  + eapply IHe0. eassumption.
+  + rewrite ?map_app, app_assoc. eapply nth_error_app_Some.
+    rewrite nth_error_app2 by omega. replace (_ + x0 - _) with x0 by omega.
+    pose proof (record_nth_error ?? ?? ?? ?? ?? ** ) as HH.
+    rewrite <- ?map_app.  erewrite map_nth_error with (f := fst); [ | eauto ].
+    reflexivity.
+
   + specialize (IHe ?? ?? ?? ?? ** ). invc_using Forall2_conj_inv IHe.
     eapply Forall2_conj; eauto.
     rewrite ?map_app, ?app_assoc. do 2 eapply I_expr_weaken_list_pair.
@@ -623,6 +659,20 @@ Lemma nth_local_not_value : forall i, ~ B.is_value (nth_local i).
 destruct i; inversion 1.
 Qed.
 
+Lemma crunch_upvar : forall BE i l k v,
+    nth_error l (S i) = Some v ->
+    B.sstep BE (B.Run (B.UpVar i) l k) (k v).
+intros0 Hnth.
+eapply B.SUpVar. eauto.
+Qed.
+
+Lemma crunch_arg : forall BE l k v,
+    nth_error l 0 = Some v ->
+    B.sstep BE (B.Run B.Arg l k) (k v).
+intros0 Hnth.
+eapply B.SArg. eauto.
+Qed.
+
 Lemma crunch_nth_local : forall BE i l k v,
     nth_error l i = Some v ->
     B.sstep BE (B.Run (nth_local i) l k) (k v).
@@ -631,51 +681,38 @@ destruct i; intros0 Hnth; simpl.
 - eapply B.SUpVar. auto.
 Qed.
 
-Lemma crunch_MkClose_locals_list' : forall BE fname d l k j i es,
-    j <= length l - d ->
-    i = length l - d - j ->
-    d <= length l ->
-    sliding i (map B.Value (skipn d l)) (skipn d (locals_list (length l))) es ->
+Lemma crunch_MkClose_frees' : forall BE fname l k vs es0 j i es,
+    i = length es0 - j ->
+    j <= length es0 ->
+    length vs = length es0 ->
+    Forall2 (fun e v => forall k,
+        B.sstar BE (B.Run e l k) (k v)) es0 vs ->
+    Forall (fun e => ~ B.is_value e) es0 ->
+    sliding i (map B.Value vs) es0 es ->
     B.sstar BE
         (B.Run (B.MkClose fname es) l k)
-        (B.Run (B.MkClose fname (map B.Value (skipn d l))) l k).
-(*
-induction j; intros0 Hj Hi Hd Hsl.
+        (B.Run (B.MkClose fname (map B.Value vs)) l k).
+induction j; intros0 Hi Hj Hlen Heval Hnv Hsl.
 
-  { replace i with (length l - d) in Hsl by omega.
-    erewrite <- map_length with (l := l) in Hsl at 1.
-    rewrite <- skipn_length in Hsl.
+  { replace i with (length vs) in Hsl by omega.
+    rewrite <- map_length with (l := vs) in Hsl at 1.
     fwd eapply sliding_all_eq; eauto.
-      { rewrite 2 skipn_length, map_length, locals_list_length. omega. }
-    subst. eapply B.SStarNil. }
+      { rewrite map_length. omega. }
+    subst es. apply B.SStarNil. }
 
-assert (length es = length l - d).
-  { erewrite <- map_length with (l := l), <- skipn_length. 
-    eapply sliding_length; [ | eauto].
-    rewrite 2 skipn_length, map_length, locals_list_length. reflexivity. }
-assert (i < length l - d) by omega.
-assert (i < length es) by omega.
+assert (length es = length vs).
+  { erewrite <- map_length with (l := vs).
+    eapply sliding_length. 2: eassumption.
+    rewrite map_length. auto. }
 
 destruct (nth_error es i) eqn:Hnth; cycle 1.
-  { contradict Hnth. rewrite nth_error_Some. auto. }
-destruct (nth_error l (d + i)) eqn:Hnth'; cycle 1.
+  { contradict Hnth. rewrite nth_error_Some. lia. }
+assert (nth_error es0 i = Some e).
+  { erewrite <- sliding_nth_error_ge with (j := i); eauto. }
+destruct (nth_error vs i) eqn:Hnth'; cycle 1.
   { contradict Hnth'. rewrite nth_error_Some. omega. }
-
 fwd eapply nth_error_split' with (xs := es) as Hes; eauto.
   rewrite Hes.
-(*
-fwd eapply sliding_next; [ | eassumption | | ]; try eassumption.
-  { eapply map_nth_error. eassumption. }
-  *)
-
-assert (e = nth_local (i + d)).
-  { unfold sliding in Hsl. destruct Hsl.
-    
-    replace (d + i) with (i + d) in Hnth by omega. rewrite <- skipn_nth_error in Hnth.
-    on (skipn _ _ = _), fun H => rewrite H in Hnth. rewrite skipn_nth_error in Hnth.
-    replace (i + 0) with i in Hnth by omega. rewrite locals_list_nth_error in Hnth by auto.
-    inject_some. congruence. }
-  subst e.
 
 B_start HS.
 
@@ -685,36 +722,117 @@ B_step HS.
       on (firstn _ _ = _), fun H => rewrite H.
       eapply Forall_firstn. eapply Forall_map_intro.
       eapply Forall_forall. intros. constructor.
-    + eapply nth_local_not_value.
+    + pattern e. eapply Forall_nth_error; eauto.
   }
 
-B_step HS.
-  { eapply crunch_nth_local. eauto. }
+B_star HS.
+  { fwd eapply Forall2_nth_error with (1 := Heval) as HH; eauto.  eapply HH. }
 
 B_star HS.
-  { eapply IHj.
-    - omega.
-    - reflexivity.
-    - replace (length l - j) with (S i) by omega.  eapply sliding_next; eauto.
-      eapply map_nth_error. auto.
+  { eapply IHj with (i := S i); try first [ eassumption | lia ].
+    eapply sliding_next; eauto.
+    - lia.
+    - eapply map_nth_error. auto.
   }
 
 eapply splus_sstar.  exact HS.
 Qed.
-*)
-Admitted.
 
-Lemma crunch_MkClose_locals_list : forall BE fname depth l k,
-    depth <= length l ->
+Lemma crunch_MkClose_frees : forall BE fname l k vs es,
+    length vs = length es ->
+    Forall2 (fun e v => forall k,
+        B.sstar BE (B.Run e l k) (k v)) es vs ->
+    Forall (fun e => ~ B.is_value e) es ->
     B.sstar BE
-        (B.Run (B.MkClose fname (skipn depth (locals_list (length l)))) l k)
-        (B.Run (B.MkClose fname (map B.Value (skipn depth l))) l k).
-intros. eapply crunch_MkClose_locals_list' with (i := 0) (j := length l - depth).
-- eauto.
-- omega.
-- auto.
+        (B.Run (B.MkClose fname es) l k)
+        (B.Run (B.MkClose fname (map B.Value vs)) l k).
+intros. eapply crunch_MkClose_frees' with
+    (i := 0) (j := length es) (es0 := es) (es := es) (vs := vs); eauto.
+- lia.
 - eapply sliding_zero.
 Qed.
+
+Lemma upvar_list_length : forall n,
+    length (upvar_list n) = n.
+intros. unfold upvar_list.
+rewrite map_length.
+rewrite count_up_length.
+reflexivity.
+Qed.
+
+Lemma crunch_MkClose_upvar_list : forall BE fname a l k,
+    B.sstar BE
+        (B.Run (B.MkClose fname (upvar_list (length l))) (a :: l) k)
+        (B.Run (B.MkClose fname (map B.Value l)) (a :: l) k).
+intros.
+
+eapply crunch_MkClose_frees.
+- rewrite upvar_list_length. reflexivity.
+
+- eapply nth_error_Forall2.
+    { rewrite upvar_list_length. reflexivity. }
+  intros0 He Hv.
+
+  unfold upvar_list in *. eapply map_nth_error' in He.
+    destruct He as (? & ? & ?).
+  rewrite count_up_nth_error in *; cycle 1.
+    { rewrite <- nth_error_Some. congruence. }
+  subst. inject_some.
+
+  intros. eapply sstep_sstar.
+  econstructor. simpl. auto.
+
+- eapply nth_error_Forall.
+  intros0 He.
+  unfold upvar_list in *. eapply map_nth_error' in He.
+    destruct He as (? & ? & ?).
+  rewrite count_up_nth_error in *; cycle 1.
+    { replace (length l) with (length (count_up (length l))); cycle 1.
+        { rewrite count_up_length. reflexivity. }
+      rewrite <- nth_error_Some. congruence. }
+  subst. inversion 1.
+Qed.
+
+Lemma crunch_MkClose_arg_upvar_list : forall BE fname a l k,
+    B.sstar BE
+        (B.Run (B.MkClose fname (B.Arg :: upvar_list (length l))) (a :: l) k)
+        (B.Run (B.MkClose fname (map B.Value (a :: l))) (a :: l) k).
+intros.
+
+eapply crunch_MkClose_frees.
+- simpl. rewrite upvar_list_length. reflexivity.
+
+- eapply nth_error_Forall2.
+    { simpl. rewrite upvar_list_length. reflexivity. }
+  intros0 He Hv.
+
+  destruct i; simpl in He, Hv.
+
+  + inject_some.
+    intros. eapply sstep_sstar. econstructor. reflexivity.
+
+  + unfold upvar_list in *. eapply map_nth_error' in He.
+      destruct He as (? & ? & ?).
+    rewrite count_up_nth_error in *; cycle 1.
+      { rewrite <- nth_error_Some. congruence. }
+    subst. inject_some.
+
+    intros. eapply sstep_sstar.
+    econstructor. simpl. auto.
+
+- econstructor.
+  + inversion 1.
+  + eapply nth_error_Forall.
+    intros0 He.
+    unfold upvar_list in *. eapply map_nth_error' in He.
+      destruct He as (? & ? & ?).
+    rewrite count_up_nth_error in *; cycle 1.
+      { replace (length l) with (length (count_up (length l))); cycle 1.
+          { rewrite count_up_length. reflexivity. }
+        rewrite <- nth_error_Some. congruence. }
+    subst. inversion 1.
+Qed.
+
 
 Lemma unroll_elim_length : forall case args rec mk_rec e',
     A.unroll_elim case args rec mk_rec = Some e' ->
@@ -788,7 +906,7 @@ Ltac i_ctor := intros; econstructor; simpl; eauto.
 Ltac i_lem H := intros; eapply H; simpl; eauto.
 
 Theorem I_sim : forall AE BE0 BE1 NFREES a a' b,
-    Forall3 (fun a b nfree => I_expr (BE0 ++ BE1) (S nfree) 0 a b) AE BE0 NFREES ->
+    Forall3 (fun a b nfree => I_expr (BE0 ++ BE1) nfree false a b) AE BE0 NFREES ->
     A.nfree_ok_state NFREES a ->
     I AE (BE0 ++ BE1) a b ->
     A.sstep AE a a' ->
@@ -802,40 +920,39 @@ induction ae using A.expr_ind''; intros0 Henv Hnfree II Astep;
 invc Astep; invc II; try on (I_expr _ _ _ _ _), invc;
 simpl in *.
 
-- (* SArg *)
+- (* SArg - false *)
   break_match; try discriminate. inject_some.
-  destruct bextra; try discriminate.
 
   eexists. split. eapply B.SPlusOne; i_lem B.SArg.
   auto.
 
-- (* SArg -> SUpVar *)
+- (* SArg - true *)
+  break_match; try discriminate. inject_some.
+  break_exists. subst bl.
+
+  eexists. split. eapply B.SPlusOne; i_lem B.SUpVar.
+  auto.
+
+- (* SUpVar - false *)
   break_match; try discriminate. inject_some.
 
-  eexists. split. eapply B.SPlusOne; eapply B.SUpVar.
-  + replace (S depth) with (length bextra + 0) by lia.
-    rewrite nth_error_app2 by lia. replace (_ + 0 - _) with 0 by lia.
-    reflexivity.
-  + auto.
+  eexists. split. eapply B.SPlusOne; i_lem B.SUpVar.
+  auto.
 
-- (* SUpVar *)
+- (* SUpVar - true *)
   break_match; try discriminate. inject_some.
+  break_exists. subst bl.
 
-  eexists. split. eapply B.SPlusOne; eapply B.SUpVar.
-  + replace (S _) with (length bextra + S n) by lia.
-    rewrite nth_error_app2 by lia. replace (_ + _ - _) with (S n) by lia.
-    simpl. eauto.
-  + auto.
+  eexists. split. eapply B.SPlusOne; i_lem B.SUpVar.
+  auto.
 
 - (* SCallL *)
   eexists. split. eapply B.SPlusOne; i_lem B.SCallL.
-  i_ctor. i_ctor. i_ctor; [i_ctor|].
-  rewrite Nat.add_0_r. auto.
+  i_ctor. i_ctor. i_ctor. i_ctor.
 
 - (* SCallR *)
   eexists. split. eapply B.SPlusOne; i_lem B.SCallR.
-  i_ctor. i_ctor. i_ctor; [|i_ctor].
-  rewrite Nat.add_0_r. auto.
+  i_ctor. i_ctor. i_ctor. i_ctor.
 
 - (* SMakeCall *)
   on (I_expr _ _ _ (A.Value (Close _ _)) _), invc.
@@ -849,7 +966,7 @@ simpl in *.
   eexists. split. eapply B.SPlusOne; i_lem B.SMakeCall.
   + i_lem nth_error_app_Some.
   + (* on entry to a new function body, we are no longer under any Elims *)
-    eapply IRun with (bextra := []); eauto.
+    eapply IRun with (under := false); eauto.
     invc Hnfree. simpl in *. A.refold_nfree_ok_value NFREES. break_and.
     congruence.
 
@@ -861,13 +978,26 @@ simpl in *.
   eexists. split. eapply B.SPlusOne; i_lem B.SConstrStep.
   + list_magic_on (vs, (b_vs, tt)).
   + i_ctor. i_ctor. i_ctor.
-    rewrite Nat.add_0_r. i_lem Forall2_app. i_ctor. i_ctor.
+     i_lem Forall2_app. i_ctor. i_ctor.
 
 - (* SConstrDone *)
   fwd eapply I_expr_map_value; eauto. subst.
   eexists. split. eapply B.SPlusOne; i_lem B.SConstrDone.
   eauto.
 
+- (* SElimStep - false *)
+  admit.
+
+- (* SElimStep - true *)
+  admit.
+
+- (* SEliminate - false *)
+  admit.
+
+- (* SEliminate - true *)
+  admit.
+
+  (*
 - (* SElimStep *)
   eexists. split. eapply B.SPlusOne; i_lem B.SElimStep.
   + i_ctor. i_ctor.
@@ -954,6 +1084,7 @@ simpl in *.
   eapply IRun with (bextra := Constr tag args :: bextra); eauto.
   rewrite Nat.add_0_r. i_lem unroll_elim_sim. i_ctor.
   admit.
+  *)
 
 - (* SCloseStep *)
   destruct (Forall2_app_inv_l _ _ ** ) as (? & ? & ? & ? & ?).
@@ -963,7 +1094,7 @@ simpl in *.
   eexists. split. eapply B.SPlusOne; i_lem B.SCloseStep.
   + list_magic_on (vs, (b_vs, tt)).
   + i_ctor. i_ctor. i_ctor.
-    rewrite Nat.add_0_r. i_lem Forall2_app. i_ctor. i_ctor.
+    i_lem Forall2_app. i_ctor. i_ctor.
 
 - (* SCloseDone *)
   fwd eapply I_expr_map_value; eauto. subst.
@@ -978,7 +1109,7 @@ simpl in *.
   eexists. split. eapply B.SPlusOne; i_lem B.SOpaqueOpStep.
   + list_magic_on (vs, (b_vs, tt)).
   + i_ctor. i_ctor. i_ctor.
-    rewrite Nat.add_0_r. i_lem Forall2_app. i_ctor. i_ctor.
+    i_lem Forall2_app. i_ctor. i_ctor.
 
 - (* SOpaqueOpDone *)
   fwd eapply I_expr_map_value; eauto. subst.
@@ -998,7 +1129,7 @@ Inductive I' AE BE NFREES : A.state -> B.state -> Prop :=
 Check I_sim.
 
 Definition env_ok AE BE NFREES :=
-    Forall3 (fun a b nfree => I_expr BE (S nfree) 0 a b) AE (firstn (length AE) BE) NFREES /\
+    Forall3 (fun a b nfree => I_expr BE nfree false a b) AE (firstn (length AE) BE) NFREES /\
     Forall (A.nfree_ok NFREES) AE.
 
 Theorem I'_sim : forall AE BE NFREES a a' b,
@@ -1040,7 +1171,7 @@ Qed.
 Lemma compile_cu'_I_expr : forall BE0 aes ms s bes s',
     length aes = length ms ->
     compile_cu' (length BE0) aes ms s = (bes, s') ->
-    Forall3 (fun ae be nfree => I_expr (BE0 ++ map fst s') (S nfree) 0 ae be)
+    Forall3 (fun ae be nfree => I_expr (BE0 ++ map fst s') nfree false ae be)
         aes bes (map m_nfree ms).
 induction aes; destruct ms; intros0 Hlen Hcomp; try discriminate; simpl in *; break_bind_state.
   { constructor. }
@@ -1179,7 +1310,7 @@ Lemma env_ok_nth_error : forall A B NFREES fname abody bbody nfree,
     nth_error A fname = Some abody ->
     nth_error B fname = Some bbody ->
     nth_error NFREES fname = Some nfree ->
-    I_expr B (S nfree) 0 abody bbody /\ A.nfree_ok NFREES abody.
+    I_expr B nfree false abody bbody /\ A.nfree_ok NFREES abody.
 intros0 Henv Ha Hb Hnf.
 invc Henv.
 fwd i_lem Forall3_nth_error.
@@ -1223,7 +1354,7 @@ Section Preservation.
 
       eexists. split.
       + econstructor.
-        -- eapply IRun with (bextra := []) (nfree := S (length free)).
+        -- eapply IRun with (under := false) (nfree := length free).
            4: reflexivity. 3: reflexivity. 2: i_ctor.
            simpl. replace (length free) with (m_nfree m). eassumption.
         -- i_ctor.
