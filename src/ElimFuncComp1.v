@@ -259,9 +259,23 @@ Inductive I (AE : A.env) (BE : B.env) : A.state -> B.state -> Prop :=
         length al = S nfree ->
         (if under then exists aa, bl = aa :: al else bl = al) ->
         I AE BE (A.Run ae al ak) (B.Run be bl bk)
+
+| IElimValue : forall acases al ak bcases bfname bl bk nfree target (under : bool),
+        Forall2 (fun ap bp => I_expr BE nfree true (fst ap) (fst bp) /\
+                snd ap = snd bp) acases bcases ->
+        nth_error BE bfname = Some (B.Elim bcases B.Arg) ->
+        (forall v,
+            I AE BE (ak v) (bk v)) ->
+        length al = S nfree ->
+        (if under then exists aa, bl = aa :: al else bl = al) ->
+        I AE BE
+            (A.Run (A.Elim acases (A.Value target)) al ak)
+            (B.Run (B.Call (B.Value (Close bfname al)) (B.Value target)) bl bk)
+
 | IStop : forall v,
         I AE BE (A.Stop v) (B.Stop v)
 .
+
 (*
 
 | IMidElim : forall acases al ak bfname bcases bextra bl bk target nfree,
@@ -985,106 +999,112 @@ simpl in *.
   eexists. split. eapply B.SPlusOne; i_lem B.SConstrDone.
   eauto.
 
+
 - (* SElimStep - false *)
-  admit.
+  destruct al as [| aa al]; try discriminate.
+
+  B_start HS.
+  B_step HS.  { eapply B.SCallL. inversion 1. }
+  B_star HS.
+    { unfold S1.
+      cbn [length] in *. replace nfree with (length al) by congruence.
+      eapply crunch_MkClose_arg_upvar_list. }
+  B_step HS.  { eapply B.SCloseDone. }
+  B_step HS.  { eapply B.SCallR. constructor. eauto. }
+
+  eexists. split. exact HS.
+  i_ctor; simpl. 2: eauto.
+  i_lem IElimValue.
+  instantiate (1 := false). simpl. eauto.
 
 - (* SElimStep - true *)
-  admit.
+  destruct al as [| aa al]; try discriminate.
+  break_exists. subst bl.
+
+  B_start HS.
+  B_step HS.  { eapply B.SCallL. inversion 1. }
+  B_star HS.
+    { unfold S1.
+      replace (S nfree) with (length (aa :: al)) by congruence.
+      eapply crunch_MkClose_upvar_list. }
+  B_step HS.  { eapply B.SCloseDone. }
+  B_step HS.  { eapply B.SCallR. constructor. eauto. }
+
+  eexists. split. exact HS.
+  i_ctor; simpl. 2: eauto.
+  i_lem IElimValue.
+  instantiate (1 := true). simpl. eauto.
+
+- (* IElimValue SElimStep *)
+  contradict H5. constructor.
+
 
 - (* SEliminate - false *)
-  admit.
+  destruct al as [| aa al]; try discriminate.
+  on >I_expr, invc.
+
+  B_start HS.
+  B_step HS.  { eapply B.SCallL. inversion 1. }
+  B_star HS.
+    { unfold S1.
+      cbn [length] in *. replace nfree with (length al) by congruence.
+      eapply crunch_MkClose_arg_upvar_list. }
+  B_step HS.  { eapply B.SCloseDone. }
+  B_step HS.  { eapply B.SMakeCall. eauto. }
+  B_step HS.  { eapply B.SElimStep. inversion 1. }
+  B_step HS.  { eapply B.SArg. reflexivity. }
+  B_step HS.  {
+    eapply B.SEliminate.
+    (* TODO - nth_error bcases + unroll elim *)
+    - admit.
+    - admit.
+  }
+
+  eexists. split. exact HS.
+  eapply IRun with (under := true); eauto.
+  admit. (* TODO - e' = be' *)
 
 - (* SEliminate - true *)
-  admit.
-
-  (*
-- (* SElimStep *)
-  eexists. split. eapply B.SPlusOne; i_lem B.SElimStep.
-  + i_ctor. i_ctor.
-    rewrite Nat.add_0_r. i_ctor. i_ctor.
-
-- (* SElimStep / SCallL + SMkClose *)
-  B_start HS.
-  B_step HS.  { eapply B.SCallL. inversion 1. }
-  B_star HS.
-    { unfold S1. rewrite <- app_length.
-      eapply crunch_MkClose_locals_list.
-      rewrite app_length. omega. }
-  B_step HS.  { eapply B.SCloseDone. }
-  B_step HS.  { i_lem B.SCallR. i_ctor. }
-
-  eexists. split. exact HS.
-  + i_ctor. rewrite skipn_app. replace (_ - _) with 0 by omega.
-    i_lem IMidElim. omega.
-
-- on (~ A.is_value (A.Value _)), contradict. constructor.
-
-- (* SEliminate *)
-  on (I_expr _ _ _ _ btarget), invc.
-  fwd eapply length_nth_error_Some with (ys := bcases) as HH.
-    { eapply Forall2_length. eauto. }
-    { eassumption. }
-    destruct HH as [[bcase brec] Hbcase].
-  fwd eapply Forall2_nth_error with (xs := cases); [eassumption.. |].
-    cbv beta in *. break_and. simpl in *. subst brec.
-  fwd eapply unroll_elim_length; eauto.
-  fwd eapply unroll_elim_ok as HH; eauto.  destruct HH as [be' Hbe'].
-
-  eexists. split. eapply B.SPlusOne; i_lem B.SEliminate.
-  i_ctor.  rewrite Nat.add_0_r.
-  i_lem unroll_elim_sim.  i_ctor.
-
-- (* SEliminate / SMakeCall *)
-  on (I_expr _ _ _ _ btarget), invc.
-  fwd eapply length_nth_error_Some with (ys := bcases) as HH.
-    { eapply Forall2_length. eauto. }
-    { eassumption. }
-    destruct HH as [[bcase brec] Hbcase].
-  fwd eapply Forall2_nth_error with (xs := cases); [eassumption.. |].
-    cbv beta in *. break_and. simpl in *. subst brec.
-  fwd eapply unroll_elim_length; eauto.
-  fwd eapply unroll_elim_ok as HH; eauto.  destruct HH as [be' Hbe'].
+  destruct al as [| aa al]; try discriminate.
+  on >I_expr, invc.
+  break_exists. subst bl.
 
   B_start HS.
   B_step HS.  { eapply B.SCallL. inversion 1. }
   B_star HS.
-    { unfold S1. rewrite <- app_length.
-      eapply crunch_MkClose_locals_list.
-      rewrite app_length. omega. }
+    { unfold S1.
+      replace (S nfree) with (length (aa :: al)) by congruence.
+      eapply crunch_MkClose_upvar_list. }
   B_step HS.  { eapply B.SCloseDone. }
   B_step HS.  { eapply B.SMakeCall. eauto. }
   B_step HS.  { eapply B.SElimStep. inversion 1. }
   B_step HS.  { eapply B.SArg. reflexivity. }
-  B_step HS.  { i_lem B.SEliminate. }
+  B_step HS.  {
+    eapply B.SEliminate.
+    (* TODO - nth_error bcases + unroll elim *)
+    - admit.
+    - admit.
+  }
 
-  (*
   eexists. split. exact HS.
-  eapply IRun with (bextra := Constr tag args :: bextra). 3: reflexivity. 2: auto.
-  rewrite Nat.add_0_r. i_lem unroll_elim_sim. i_ctor.
-  *)
-  admit.
+  eapply IRun with (under := true); eauto.
+  admit. (* TODO - e' = be' *)
 
-- (* IMidElim - SEliminate / SMakeCall *)
-  fwd eapply length_nth_error_Some with (ys := bcases) as HH.
-    { eapply Forall2_length. eauto. }
-    { eassumption. }
-    destruct HH as [[bcase brec] Hbcase].
-  fwd eapply Forall2_nth_error with (xs := cases); [eassumption.. |].
-    cbv beta in *. break_and. simpl in *. subst brec.
-  fwd eapply unroll_elim_length; eauto.
-  fwd eapply unroll_elim_ok as HH; eauto.  destruct HH as [be' Hbe'].
-
+- (* IElimValue SEliminate *)
   B_start HS.
   B_step HS.  { eapply B.SMakeCall. eauto. }
   B_step HS.  { eapply B.SElimStep. inversion 1. }
   B_step HS.  { eapply B.SArg. reflexivity. }
-  B_step HS.  { i_lem B.SEliminate. }
+  B_step HS.  {
+    eapply B.SEliminate.
+    (* TODO - nth_error bcases + unroll elim *)
+    - admit.
+    - admit.
+  }
 
   eexists. split. exact HS.
-  eapply IRun with (bextra := Constr tag args :: bextra); eauto.
-  rewrite Nat.add_0_r. i_lem unroll_elim_sim. i_ctor.
-  admit.
-  *)
+  eapply IRun with (under := true); eauto.
+  admit. (* TODO - e' = be' *)
 
 - (* SCloseStep *)
   destruct (Forall2_app_inv_l _ _ ** ) as (? & ? & ? & ? & ?).
@@ -1095,6 +1115,7 @@ simpl in *.
   + list_magic_on (vs, (b_vs, tt)).
   + i_ctor. i_ctor. i_ctor.
     i_lem Forall2_app. i_ctor. i_ctor.
+
 
 - (* SCloseDone *)
   fwd eapply I_expr_map_value; eauto. subst.
