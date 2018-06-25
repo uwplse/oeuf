@@ -249,6 +249,15 @@ Inductive I_expr (BE : B.env) nfree : bool -> A.expr -> B.expr -> Prop :=
 | IOpaqueOp : forall depth op aargs bargs,
         Forall2 (I_expr BE nfree depth) aargs bargs ->
         I_expr BE nfree depth (A.OpaqueOp op aargs) (B.OpaqueOp op bargs)
+
+(* Special case, used for recursive calls to eliminators. *)
+| IElimElim : forall acases atarget bcases btarget,
+        Forall2 (fun ap bp => I_expr BE nfree true (fst ap) (fst bp) /\
+                snd ap = snd bp) acases bcases ->
+        I_expr BE nfree true atarget btarget ->
+        I_expr BE nfree true
+                (A.Elim acases atarget)
+                (B.Elim bcases btarget)
 .
 
 Inductive I (AE : A.env) (BE : B.env) : A.state -> B.state -> Prop :=
@@ -332,6 +341,9 @@ intros0 II.
     eapply Forall2_conj; eauto.
   + econstructor; eauto; cycle 1.
       { eapply nth_error_app_Some. eassumption. }
+    on (Forall2 _ _ _), invc_using Forall2_conj_inv.
+    eapply Forall2_conj; eauto.
+  + econstructor; eauto.
     on (Forall2 _ _ _), invc_using Forall2_conj_inv.
     eapply Forall2_conj; eauto.
 - invc II. econstructor; eauto.
@@ -1035,6 +1047,12 @@ simpl in *.
   i_lem IElimValue.
   instantiate (1 := true). simpl. eauto.
 
+- (* IElimElim SElimStep *)
+  eexists. split. eapply B.SPlusOne; i_lem B.SElimStep.
+  i_ctor. i_ctor.
+  + i_ctor. i_ctor.
+  + assumption.
+
 - (* IElimValue SElimStep *)
   contradict H5. constructor.
 
@@ -1042,6 +1060,13 @@ simpl in *.
 - (* SEliminate - false *)
   destruct al as [| aa al]; try discriminate.
   on >I_expr, invc.
+
+  fwd eapply Forall2_nth_error_ex with (xs := cases) (ys := bcases) as HH; try eassumption.
+    destruct HH as ((bcase & brec) & ? & Hcase & Hrec).
+    cbn in Hcase, Hrec.  subst brec.
+
+  fwd eapply unroll_elim_ok as HH; eauto using unroll_elim_length.
+    destruct HH as (be' & ?).
 
   B_start HS.
   B_step HS.  { eapply B.SCallL. inversion 1. }
@@ -1055,19 +1080,26 @@ simpl in *.
   B_step HS.  { eapply B.SArg. reflexivity. }
   B_step HS.  {
     eapply B.SEliminate.
-    (* TODO - nth_error bcases + unroll elim *)
-    - admit.
-    - admit.
+    - eassumption.
+    - eassumption.
   }
 
   eexists. split. exact HS.
   eapply IRun with (under := true); eauto.
-  admit. (* TODO - e' = be' *)
+  eapply unroll_elim_sim; eauto.
+  cbn. i_ctor.
 
 - (* SEliminate - true *)
   destruct al as [| aa al]; try discriminate.
   on >I_expr, invc.
   break_exists. subst bl.
+
+  fwd eapply Forall2_nth_error_ex with (xs := cases) (ys := bcases) as HH; try eassumption.
+    destruct HH as ((bcase & brec) & ? & Hcase & Hrec).
+    cbn in Hcase, Hrec.  subst brec.
+
+  fwd eapply unroll_elim_ok as HH; eauto using unroll_elim_length.
+    destruct HH as (be' & ?).
 
   B_start HS.
   B_step HS.  { eapply B.SCallL. inversion 1. }
@@ -1081,30 +1113,51 @@ simpl in *.
   B_step HS.  { eapply B.SArg. reflexivity. }
   B_step HS.  {
     eapply B.SEliminate.
-    (* TODO - nth_error bcases + unroll elim *)
-    - admit.
-    - admit.
+    - eassumption.
+    - eassumption.
   }
 
   eexists. split. exact HS.
   eapply IRun with (under := true); eauto.
-  admit. (* TODO - e' = be' *)
+  eapply unroll_elim_sim; eauto.
+  cbn. i_ctor.
+
+- (* IElimElim SEliminate *)
+  on >I_expr, invc.
+
+  fwd eapply Forall2_nth_error_ex with (xs := cases) (ys := bcases) as HH; try eassumption.
+    destruct HH as ((bcase & brec) & ? & Hcase & Hrec).
+    cbn in Hcase, Hrec.  subst brec.
+
+  fwd eapply unroll_elim_ok as HH; eauto using unroll_elim_length.
+    destruct HH as (be' & ?).
+
+  eexists. split. eapply B.SPlusOne; i_lem B.SEliminate.
+  i_ctor.
+  + i_lem unroll_elim_sim. i_ctor.
+  + assumption.
 
 - (* IElimValue SEliminate *)
+  fwd eapply Forall2_nth_error_ex with (xs := cases) (ys := bcases) as HH; try eassumption.
+    destruct HH as ((bcase & brec) & ? & Hcase & Hrec).
+    cbn in Hcase, Hrec.  subst brec.
+
+  fwd eapply unroll_elim_ok as HH; eauto using unroll_elim_length.
+    destruct HH as (be' & ?).
+
   B_start HS.
   B_step HS.  { eapply B.SMakeCall. eauto. }
   B_step HS.  { eapply B.SElimStep. inversion 1. }
   B_step HS.  { eapply B.SArg. reflexivity. }
   B_step HS.  {
     eapply B.SEliminate.
-    (* TODO - nth_error bcases + unroll elim *)
-    - admit.
-    - admit.
+    - eassumption.
+    - eassumption.
   }
 
   eexists. split. exact HS.
   eapply IRun with (under := true); eauto.
-  admit. (* TODO - e' = be' *)
+  i_lem unroll_elim_sim. i_ctor.
 
 - (* SCloseStep *)
   destruct (Forall2_app_inv_l _ _ ** ) as (? & ? & ? & ? & ?).
@@ -1137,7 +1190,7 @@ simpl in *.
   eexists. split. eapply B.SPlusOne; i_lem B.SOpaqueOpDone.
   eauto.
 
-Admitted.
+Qed.
 
 
 
