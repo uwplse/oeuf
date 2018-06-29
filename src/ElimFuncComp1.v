@@ -77,7 +77,7 @@ Definition compile base nfree : bool -> A.expr -> state _ B.expr :=
         | A.MkConstr tag args => B.MkConstr tag <$> go_list under args
         | A.Elim cases target =>
                 go_list_pair true cases >>= fun cases' =>
-                record (B.Elim cases' B.Arg) nfree >>= fun n =>
+                record (B.Elim cases' B.Arg) (S nfree) >>= fun n =>
                 go under target >>= fun target' =>
                 let func := B.MkClose (base + n)
                     (if under
@@ -122,7 +122,7 @@ Lemma unfold_compile base nfree under e :
     | A.MkConstr tag args => B.MkConstr tag <$> compile_list base nfree under args
     | A.Elim cases target =>
             compile_list_pair base nfree true cases >>= fun cases' =>
-            record (B.Elim cases' B.Arg) nfree >>= fun n =>
+            record (B.Elim cases' B.Arg) (S nfree) >>= fun n =>
             compile base nfree under target >>= fun target' =>
             let func := B.MkClose (base + n)
                     (if under
